@@ -62,14 +62,14 @@ This project uses Nitro via `vite.config.ts` — no custom `vercel.json` is requ
 If deploying from `/Users/blakelywoodford/Development/projects`:
 
 1. Import the repo in Vercel.
-2. Set **Root Directory** to `personal`.
-3. Build command: `pnpm build` (runs from `personal/`).
+2. Set **Root Directory** to `personal-site`.
+3. Build command: `pnpm build` (runs from `personal-site/`).
 4. Deploy.
 
 ### CLI deploy
 
 ```bash
-cd personal
+cd personal-site
 vercel link
 vercel deploy        # preview
 vercel deploy --prod # production
