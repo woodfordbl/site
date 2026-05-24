@@ -1,43 +1,50 @@
 # Personal Site
 
-TanStack Start personal site with ShadCN UI (Base UI primitives), Tabler icons, and Nitro for Vercel deployment.
+Personal site for [Blake Woodford](https://github.com/woodfordbl), built with TanStack Start and deployed on Vercel.
+
+**Live site:** [site-five-bice-36.vercel.app](https://site-five-bice-36.vercel.app)
 
 ## Stack
 
-- **Framework:** TanStack Start + TanStack Router
-- **UI:** ShadCN UI on Base UI (`@base-ui/react`)
-- **Icons:** Tabler (`@tabler/icons-react`)
+- **Framework:** [TanStack Start](https://tanstack.com/start) + TanStack Router
+- **UI:** [ShadCN UI](https://ui.shadcn.com/) on [Base UI](https://base-ui.com/) (`@base-ui/react`)
+- **Icons:** [Tabler](https://tabler.io/icons) (`@tabler/icons-react`)
 - **Styling:** Tailwind CSS v4
-- **Linting:** Ultracite + Biome
-- **Deployment:** Nitro (Vercel-compatible SSR)
+- **Linting:** [Ultracite](https://www.ultracite.ai/) + Biome
+- **Deployment:** [Nitro](https://nitro.build/) (Vercel-compatible SSR)
 
 ## Development
+
+Requires [Node.js 22+](https://nodejs.org/) and [pnpm 10.22.0](https://pnpm.io/) (see `packageManager` in `package.json`).
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) (or the next available port).
+Open [http://localhost:3000](http://localhost:3000).
 
-## Build
+## Scripts
 
-```bash
-pnpm build
-pnpm preview
-```
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start the dev server |
+| `pnpm build` | Production build (TanStack Start + Nitro) |
+| `pnpm preview` | Preview the production build locally |
+| `pnpm check` | Lint and format validation (Ultracite) |
+| `pnpm fix` | Auto-fix lint and formatting issues |
+| `pnpm typecheck` | TypeScript check (`tsc --noEmit`) |
+| `pnpm test` | Run Vitest tests |
 
 ## Linting and formatting
 
-This project uses [Ultracite](https://www.ultracite.ai/) with Biome:
+This project uses Ultracite with Biome. Cursor auto-formats on save via `.vscode/settings.json`, and `.cursor/hooks.json` runs `pnpm fix` after agent edits.
 
 ```bash
-pnpm check   # lint without fixing
-pnpm fix     # format and auto-fix
+pnpm check
+pnpm fix
 pnpm dlx ultracite doctor
 ```
-
-Cursor auto-formats on save via `.vscode/settings.json`, and `.cursor/hooks.json` runs `pnpm fix` after agent edits.
 
 ## Adding ShadCN components
 
@@ -57,35 +64,26 @@ import { Button } from "@/components/ui/button"
 </Button>
 ```
 
-## Deploy to Vercel
+## CI and deployment
 
-This project uses Nitro via `vite.config.ts` — no custom `vercel.json` is required.
+GitHub Actions runs on every pull request and push to `main`:
 
-### Option A: Standalone repo
+- **lint** — `pnpm check`
+- **typecheck** — `pnpm typecheck`
+- **build** — `pnpm build`
 
-1. Push this directory to GitHub as its own repository.
-2. Import the project in [Vercel](https://vercel.com/new).
-3. Vercel auto-detects TanStack Start + Nitro. Use these defaults:
-   - **Build command:** `pnpm build`
-   - **Output directory:** leave empty (Nitro handles output in `.output`)
-4. Deploy.
+[Vercel](https://vercel.com/blake-7563s-projects/site) handles preview and production deploys via the GitHub integration. Production domain aliasing is gated by Vercel Deployment Checks that require the same three GitHub Actions jobs to pass.
 
-### Option B: Monorepo (parent `projects` repo)
+`main` is protected: merges require `lint`, `typecheck`, and `build` to succeed.
 
-If deploying from `/Users/blakelywoodford/Development/projects`:
+No environment variables are required for the current setup.
 
-1. Import the repo in Vercel.
-2. Set **Root Directory** to `personal-site`.
-3. Build command: `pnpm build` (runs from `personal-site/`).
-4. Deploy.
-
-### CLI deploy
+## Deploy locally with Vercel CLI
 
 ```bash
-cd personal-site
 vercel link
 vercel deploy        # preview
 vercel deploy --prod # production
 ```
 
-No environment variables are required for the current blank-page setup.
+Nitro is configured in `vite.config.ts` — no custom `vercel.json` is required.
