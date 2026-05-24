@@ -8,6 +8,7 @@ TanStack Start personal site with ShadCN UI (Base UI primitives), Tabler icons, 
 - **UI:** ShadCN UI on Base UI (`@base-ui/react`)
 - **Icons:** Tabler (`@tabler/icons-react`)
 - **Styling:** Tailwind CSS v4
+- **Linting:** Ultracite + Biome
 - **Deployment:** Nitro (Vercel-compatible SSR)
 
 ## Development
@@ -25,6 +26,18 @@ Open [http://localhost:3000](http://localhost:3000) (or the next available port)
 pnpm build
 pnpm preview
 ```
+
+## Linting and formatting
+
+This project uses [Ultracite](https://www.ultracite.ai/) with Biome:
+
+```bash
+pnpm check   # lint without fixing
+pnpm fix     # format and auto-fix
+pnpm dlx ultracite doctor
+```
+
+Cursor auto-formats on save via `.vscode/settings.json`, and `.cursor/hooks.json` runs `pnpm fix` after agent edits.
 
 ## Adding ShadCN components
 
