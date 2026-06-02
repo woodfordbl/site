@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, normalize, relative } from "node:path";
+import { join, normalize } from "node:path";
 
 const SOURCE_FILE_PATTERN = /\.(ts|tsx|mjs)$/;
 const GLOB_RECURSIVE_SUFFIX = /\*\*$/;

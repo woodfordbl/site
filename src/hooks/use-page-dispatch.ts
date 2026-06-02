@@ -257,7 +257,7 @@ export function usePageDispatch(pages: PageSummary[] = []) {
   return useCallback(
     (command: PageCommand) => {
       if (command.type === "page.create") {
-        void queryClient
+        queryClient
           .ensureQueryData(pageListQueryOptions)
           .then((freshServerPages) => {
             const dispatchPages = mergeDispatchPages(
@@ -266,6 +266,9 @@ export function usePageDispatch(pages: PageSummary[] = []) {
             );
             const { effects } = pageReducer(command, dispatchPages);
             applyEffects(effects, dispatchPages);
+          })
+          .catch(() => {
+            // Page create falls back to mergedPages when the list query fails.
           });
         return;
       }

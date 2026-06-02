@@ -209,6 +209,7 @@ export function useBlockFieldActions({
     capabilities.rowSplit,
     editStrategy,
     onEnter,
+    row?.effectiveBlock.parentId,
     rowId,
     slashMenuOpen,
     useCanvas,

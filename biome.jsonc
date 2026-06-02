@@ -37,11 +37,34 @@
       }
     },
     {
-      "includes": ["src/routes/$.tsx"],
+      "includes": ["src/routes/$.tsx", "src/routes/p.$pageId.tsx"],
       "linter": {
         "rules": {
           "style": {
             "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/components/pages/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/docs-*.mjs"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "useTopLevelRegex": "off"
+          },
+          "style": {
+            "useForOf": "off"
           }
         }
       }

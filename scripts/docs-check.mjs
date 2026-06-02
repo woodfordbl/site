@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { latestCodeMtime, loadManifest } from "./docs-manifest-lookup.mjs";
 import { collectBrokenDocReferences } from "./docs-ref-check.mjs";
