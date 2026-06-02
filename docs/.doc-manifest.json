@@ -1,0 +1,59 @@
+{
+  "mappings": [
+    {
+      "globs": ["src/lib/canvas/**", "src/components/canvas/**"],
+      "docs": [
+        "docs/architecture/canvas-editor.md",
+        "docs/reference/canvas-commands.md"
+      ]
+    },
+    {
+      "globs": ["src/lib/pages/**", "src/components/pages/**"],
+      "docs": ["docs/architecture/pages.md", "docs/reference/page-commands.md"]
+    },
+    {
+      "globs": [
+        "src/hooks/use-canvas*.ts",
+        "src/hooks/use-page*.ts",
+        "src/hooks/use-slash*.ts",
+        "src/hooks/use-block-field*.ts",
+        "src/hooks/use-canvas-row*.ts",
+        "src/hooks/use-migrate-user-page-routes.ts",
+        "src/hooks/use-sync-page-url*.ts",
+        "src/hooks/use-resolved-page.ts",
+        "src/hooks/use-active-page-ref.ts"
+      ],
+      "docs": [
+        "docs/architecture/canvas-editor.md",
+        "docs/reference/canvas-commands.md",
+        "docs/architecture/pages.md",
+        "docs/reference/page-commands.md"
+      ]
+    },
+    {
+      "globs": ["src/lib/schemas/block*.ts", "src/lib/blocks/**"],
+      "docs": [
+        "docs/architecture/block-model.md",
+        "docs/architecture/block-types.md"
+      ]
+    },
+    {
+      "globs": ["src/db/**", "src/lib/content/**", "src/lib/local-draft/**"],
+      "docs": ["docs/architecture/local-first-persistence.md"]
+    },
+    {
+      "globs": [
+        "src/lib/canvas/resolve-structural-action.ts",
+        "src/lib/canvas/structural-context.ts"
+      ],
+      "docs": ["docs/reference/structural-actions.md"]
+    },
+    {
+      "globs": [
+        "src/components/canvas/page-canvas-footer.tsx",
+        "src/lib/content/save-page.ts"
+      ],
+      "docs": ["docs/architecture/author-dev-mode.md"]
+    }
+  ]
+}

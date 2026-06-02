@@ -1,6 +1,13 @@
 node_modules
 .DS_Store
-.cursor
+# Cursor: commit hooks + agents; ignore local state and debug logs
+.cursor/*
+!.cursor/hooks.json
+!.cursor/hooks/
+!.cursor/hooks/**
+!.cursor/agents/
+!.cursor/agents/**
+.cursor/hooks-state/
 dist
 dist-ssr
 *.local
