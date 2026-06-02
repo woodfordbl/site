@@ -38,7 +38,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Linting and formatting
 
-This project uses Ultracite with Biome. Cursor auto-formats on save via `.vscode/settings.json`, and `.cursor/hooks.json` runs `pnpm fix` after agent edits.
+This project uses Ultracite with Biome. Cursor auto-formats on save via `.vscode/settings.json`. `.cursor/hooks.json` runs `pnpm fix` after each agent file edit, tracks structural paths for doc sync, and on turn end may delegate the **docs-sync** subagent when `pnpm docs:check` fails. See [docs/contributing/updating-docs.md](docs/contributing/updating-docs.md).
 
 ```bash
 pnpm check

@@ -1,0 +1,82 @@
+import { getSlashMenuItems } from "@/components/blocks/registry.ts";
+import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import {
+  getTextFromBlock,
+  stripSlashCommandText,
+} from "@/lib/blocks/create-block.ts";
+import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
+import type { CanvasCommand } from "@/lib/canvas/commands.ts";
+import type { MarkdownShortcutMatch } from "@/lib/canvas/markdown-shortcuts.ts";
+
+export function markdownMatchToSlashItem(
+  match: MarkdownShortcutMatch
+): SlashMenuItem {
+  const items = getSlashMenuItems();
+
+  if (match.kind === "heading") {
+    const item = items.find(
+      (entry) => entry.id === "heading" && entry.headingLevel === match.level
+    );
+    if (!item) {
+      throw new Error(
+        `Missing slash menu item for heading level ${match.level}`
+      );
+    }
+    return item;
+  }
+
+  if (match.kind === "list") {
+    const item = items.find(
+      (entry) => entry.id === "list" && entry.listVariant === match.variant
+    );
+    if (!item) {
+      throw new Error(
+        `Missing slash menu item for list variant ${match.variant}`
+      );
+    }
+    return item;
+  }
+
+  if (match.kind === "checklist") {
+    const item = items.find((entry) => entry.id === "checklist");
+    if (!item) {
+      throw new Error("Missing slash menu item for checklist");
+    }
+    return item;
+  }
+
+  const item = items.find((entry) => entry.id === "divider");
+  if (!item) {
+    throw new Error("Missing slash menu item for divider");
+  }
+  return item;
+}
+
+export function applyBlockConversion(
+  row: CanvasRow,
+  item: SlashMenuItem,
+  dispatch: (command: CanvasCommand) => void,
+  options?: { text?: string }
+): void {
+  const cleanedText =
+    options?.text ??
+    stripSlashCommandText(getTextFromBlock(row.effectiveBlock));
+
+  if (item.id === "list" || item.id === "checklist") {
+    dispatch({
+      type: "container.wrap",
+      rowId: row.rowId,
+      containerType: item.id,
+      variant: item.listVariant ?? "bullet",
+      childText: cleanedText,
+    });
+  } else {
+    dispatch({
+      type: "slash.convert",
+      rowId: row.rowId,
+      to: item.id,
+      text: cleanedText,
+      headingLevel: item.headingLevel,
+    });
+  }
+}
