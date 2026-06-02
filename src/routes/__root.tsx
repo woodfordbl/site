@@ -1,10 +1,27 @@
-import { TanStackDevtools } from "@tanstack/react-devtools";
-import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  Scripts,
+} from "@tanstack/react-router";
+
+import { AppDevtools } from "@/components/dev/app-devtools.tsx";
+import { AppProviders } from "@/db/provider.tsx";
+import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
+import { hasAnyLocalDrafts } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { loadDirtyPageIds } from "@/lib/local-draft/load-dirty-page-ids.ts";
+import type { RouterContext } from "@/router-context.ts";
 
 import appCss from "../styles.css?url";
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<RouterContext>()({
+  beforeLoad: async () => {
+    const dirtyPageIds = await loadDirtyPageIds();
+    return {
+      hasAnyLocalDrafts: hasAnyLocalDrafts(dirtyPageIds),
+    };
+  },
+  loader: ({ context }) =>
+    context.queryClient.ensureQueryData(pageListQueryOptions),
   head: () => ({
     meta: [
       {
@@ -41,18 +58,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
-        <TanStackDevtools
-          config={{
-            position: "bottom-right",
-          }}
-          plugins={[
-            {
-              name: "Tanstack Router",
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-          ]}
-        />
+        <AppProviders>{children}</AppProviders>
+        {import.meta.env.DEV ? <AppDevtools /> : null}
         <Scripts />
       </body>
     </html>
