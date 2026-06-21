@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { buildBlockTree } from "@/db/queries/merge-blocks.ts";
-import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import {
   resolveInsertSiblingIndex,
   resolveRowPlacementPlan,
@@ -9,14 +8,9 @@ import {
 } from "@/lib/blocks/row-placement.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
-function canvasRow(
-  blockId: string,
-  sortOrder: number,
-  parentId?: string
-): CanvasRow {
+function canvasRow(blockId: string, parentId?: string): CanvasRow {
   return {
     rowId: blockId,
-    sortOrder,
     effectiveBlock: {
       id: blockId,
       type: "text",
@@ -65,9 +59,9 @@ describe("row-placement", () => {
 
   it("inserts immediately after the target row", () => {
     const siblings = [
-      canvasRow("hero", 0),
-      canvasRow("bio", ORDER_STEP),
-      canvasRow("note-block", 1500),
+      canvasRow("hero"),
+      canvasRow("bio"),
+      canvasRow("note-block"),
     ];
 
     expect(resolveInsertSiblingIndex(siblings, 1, "after")).toBe(2);
@@ -75,11 +69,11 @@ describe("row-placement", () => {
 
   it("inserts immediately after a user row in a stack without skipping to the end", () => {
     const siblings = [
-      canvasRow("hero", 0),
-      canvasRow("bio", ORDER_STEP),
-      canvasRow("block-a", 1500),
-      canvasRow("block-b", 1750),
-      canvasRow("block-c", 1875),
+      canvasRow("hero"),
+      canvasRow("bio"),
+      canvasRow("block-a"),
+      canvasRow("block-b"),
+      canvasRow("block-c"),
     ];
 
     expect(resolveInsertSiblingIndex(siblings, 3, "after")).toBe(4);
@@ -87,11 +81,11 @@ describe("row-placement", () => {
 
   it("inserts immediately before a user row in a stack", () => {
     const siblings = [
-      canvasRow("hero", 0),
-      canvasRow("bio", ORDER_STEP),
-      canvasRow("block-a", 1500),
-      canvasRow("block-b", 1750),
-      canvasRow("block-c", 1875),
+      canvasRow("hero"),
+      canvasRow("bio"),
+      canvasRow("block-a"),
+      canvasRow("block-b"),
+      canvasRow("block-c"),
     ];
 
     expect(resolveInsertSiblingIndex(siblings, 3, "before")).toBe(3);

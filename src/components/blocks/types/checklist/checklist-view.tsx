@@ -3,14 +3,16 @@ import type { ReactNode } from "react";
 import { ContainerChildren } from "@/components/blocks/container-children.tsx";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
 import { blockIndentStyle, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import {
   listItemSpacingClass,
   listShellSpacingClass,
 } from "@/lib/blocks/block-spacing.ts";
-import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
-import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import type {
+  BlockContainerProps,
+  BlockMode,
+} from "@/lib/canvas/block-spec.types.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface ChecklistShellProps {
@@ -18,13 +20,7 @@ interface ChecklistShellProps {
 }
 
 function ChecklistShell({ children }: ChecklistShellProps) {
-  return (
-    <ul
-      className={cn("list-none text-muted-foreground", listShellSpacingClass)}
-    >
-      {children}
-    </ul>
-  );
+  return <ul className={cn("list-none", listShellSpacingClass)}>{children}</ul>;
 }
 
 interface ChecklistItemShellProps {
@@ -91,52 +87,12 @@ function ChecklistItemMarker({ child, mode }: ChecklistItemMarkerProps) {
   );
 }
 
-interface ChecklistViewProps {
-  fieldRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
-  mode: BlockMode;
-  onSlash?: (
-    query: string,
-    caret: FieldSelection,
-    convertRowId?: string
-  ) => void;
-  onSlashClose?: () => void;
-  onSlashDismiss?: () => void;
-  onSlashLinkBack?: () => void;
-  onSlashMenuConfirm?: () => void;
-  onSlashMenuNavigate?: (direction: "up" | "down") => void;
-  row: CanvasRow;
-  slashCaret?: FieldSelection;
-  slashMenuOpen?: boolean;
-  slashPhase?: "root" | "link";
-}
-
-export function ChecklistView({
-  row,
-  mode,
-  fieldRef,
-  onSlash,
-  onSlashClose,
-  onSlashDismiss,
-  onSlashLinkBack,
-  onSlashMenuConfirm,
-  onSlashMenuNavigate,
-  slashCaret,
-  slashMenuOpen,
-  slashPhase,
-}: ChecklistViewProps) {
+export function ChecklistView({ row, mode }: BlockContainerProps) {
   return (
     <ChecklistShell>
       <ContainerChildren
         contentClassName="flex items-start gap-2"
-        fieldRef={fieldRef}
-        hoverGroup="list-item-row"
         mode={mode}
-        onSlash={onSlash}
-        onSlashClose={onSlashClose}
-        onSlashDismiss={onSlashDismiss}
-        onSlashLinkBack={onSlashLinkBack}
-        onSlashMenuConfirm={onSlashMenuConfirm}
-        onSlashMenuNavigate={onSlashMenuNavigate}
         renderBeforeContent={(child) => (
           <ChecklistItemMarker child={child} mode={mode} />
         )}
@@ -149,9 +105,6 @@ export function ChecklistView({
           </ChecklistItemShell>
         )}
         row={row}
-        slashCaret={slashCaret}
-        slashMenuOpen={slashMenuOpen}
-        slashPhase={slashPhase}
       />
     </ChecklistShell>
   );

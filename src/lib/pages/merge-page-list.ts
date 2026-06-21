@@ -5,6 +5,10 @@ import {
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
 
+/**
+ * Merges shipped summaries with local overrides; sets `routeBy` (`slug` vs `id` for user-only rows).
+ * @see docs/architecture/pages.md#navigation
+ */
 export function mergePageList(
   serverPages: PageSummary[],
   localPages: LocalPage[]
@@ -26,12 +30,18 @@ export function mergePageList(
         slug: local.slug,
         title: local.title,
         parentId: local.parentId,
+        sidebarOrder: local.sidebarOrder,
+        icon: local.icon ?? serverPage.icon,
         routeBy: "slug",
       });
       continue;
     }
 
-    merged.push({ ...serverPage, routeBy: "slug" });
+    merged.push({
+      ...serverPage,
+      sidebarOrder: serverPage.sidebarOrder,
+      routeBy: "slug",
+    });
   }
 
   for (const localPage of localPages) {
@@ -45,6 +55,8 @@ export function mergePageList(
         slug: localPage.slug,
         title: localPage.title,
         parentId: localPage.parentId,
+        sidebarOrder: localPage.sidebarOrder,
+        icon: localPage.icon,
         routeBy: "id",
       });
     }

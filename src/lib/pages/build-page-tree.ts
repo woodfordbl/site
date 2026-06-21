@@ -1,12 +1,14 @@
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { MAX_PAGE_DEPTH } from "@/lib/pages/page-depth.ts";
+import { comparePageSiblings } from "@/lib/pages/page-sidebar-order.ts";
 import {
   getPageSegment,
   normalizePageSlug,
   parsePagePath,
 } from "@/lib/pages/slugify.ts";
 
+/** Nested sidebar tree node (`children` sorted by `comparePageSiblings`). */
 export interface PageRow {
   children: PageRow[];
   page: PageSummary;
@@ -36,15 +38,14 @@ function mergeSiblingScope(
   pages: PageSummary[],
   parentId: string | null
 ): PageRow[] {
-  const siblings = pagesInScope(pages, parentId).sort((left, right) =>
-    left.title.localeCompare(right.title, undefined, { sensitivity: "base" })
-  );
+  const siblings = pagesInScope(pages, parentId).sort(comparePageSiblings);
 
   return siblings.map((page, index) =>
     buildPageRow(page, index, mergeSiblingScope(pages, page.id))
   );
 }
 
+/** Builds the nested sidebar tree from flat `PageSummary` rows (`parentId` scopes). */
 export function buildPageTree(pages: PageSummary[]): PageRow[] {
   return mergeSiblingScope(pages, null);
 }
@@ -142,6 +143,10 @@ export function replacePageSlugPrefix(
   return `${newPrefix}/${suffix}`;
 }
 
+/**
+ * Replaces the last slug segment from a title, deduped among siblings; home stays `/`.
+ * @see docs/architecture/pages.md#title-editing
+ */
 export function buildSlugFromTitle(
   page: PageSummary,
   pages: PageSummary[],
@@ -162,7 +167,11 @@ export function buildSlugFromTitle(
     parentPrefix = "/";
   }
 
-  const segment = slugifySegment(title.trim() || DEFAULT_PAGE_TITLE);
+  const siblings = siblingPages(page, pages);
+  const segment = dedupePageSegment(
+    slugifySegment(title.trim() || DEFAULT_PAGE_TITLE),
+    siblings
+  );
 
   if (!parentPrefix) {
     return `/${segment}`;

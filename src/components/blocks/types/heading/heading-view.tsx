@@ -7,15 +7,14 @@ import { cn } from "@/lib/utils.ts";
 
 type HeadingViewProps = BlockViewProps<"heading">;
 
-export function HeadingView({ props, className }: HeadingViewProps) {
+export function HeadingView({ props }: HeadingViewProps) {
   const Tag = `h${props.level}` as const;
 
   return (
     <Tag
       className={cn(
         headingSurfaceClassName,
-        headingTypographyClassNames[props.level],
-        className
+        headingTypographyClassNames[props.level]
       )}
     >
       {props.text || "\u00A0"}

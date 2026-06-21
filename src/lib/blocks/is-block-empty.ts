@@ -1,37 +1,20 @@
-import type { Block } from "@/lib/schemas/block.ts";
-
-function isBlank(value: string | undefined): boolean {
-  return (value ?? "").trim().length === 0;
-}
+import {
+  type BlockFor,
+  getBlockDef,
+  isContainerBlockType,
+} from "@/lib/blocks/block-defs.ts";
+import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 export function isBlockEmpty(block: Block): boolean {
-  switch (block.type) {
-    case "heading":
-      return isBlank(block.props.text);
-    case "text":
-      return isBlank(block.props.text);
-    case "quote":
-      return isBlank(block.props.text);
-    case "callout":
-      return isBlank(block.props.text);
-    case "checklistItem":
-      return isBlank(block.props.text);
-    case "list":
-    case "checklist":
-      return true;
-    case "pageLink":
-      return false;
-    case "divider":
-      return true;
-    default: {
-      const _exhaustive: never = block;
-      return _exhaustive;
-    }
-  }
+  const isEmpty = getBlockDef(block.type).isEmpty as (
+    candidate: BlockFor<BlockType>
+  ) => boolean;
+  return isEmpty(block);
 }
 
+/** Containers are empty rows when they have no children; leaves defer to the def. */
 export function isRowEmpty(block: Block, childCount: number): boolean {
-  if (block.type === "list" || block.type === "checklist") {
+  if (isContainerBlockType(block.type)) {
     return childCount === 0;
   }
   return isBlockEmpty(block);

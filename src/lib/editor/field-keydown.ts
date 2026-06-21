@@ -178,6 +178,29 @@ export function handleBlockIndentKeyDown(
   return false;
 }
 
+export type StructuralDeleteKeyResult =
+  | { handled: true; caretAtStart: boolean; key: "Backspace" | "Delete" }
+  | { handled: false };
+
+/** Backspace/Delete becomes a structural command when the caret is at start or the block is empty. */
+export function resolveStructuralDeleteKey(
+  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  isEmpty: boolean
+): StructuralDeleteKeyResult {
+  if (event.key !== "Backspace" && event.key !== "Delete") {
+    return { handled: false };
+  }
+
+  const field = event.currentTarget;
+  const caretAtStart = field.selectionStart === 0 && field.selectionEnd === 0;
+
+  if (!(caretAtStart || isEmpty)) {
+    return { handled: false };
+  }
+
+  return { handled: true, caretAtStart, key: event.key };
+}
+
 export function handleEmptyDeleteKeyDown(
   event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
   isEmpty: boolean,

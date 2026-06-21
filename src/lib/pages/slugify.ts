@@ -64,18 +64,23 @@ export function pageSlugsEqual(left: string, right: string): boolean {
   return normalizePageSlug(left) === normalizePageSlug(right);
 }
 
-export function pageNavTargetById(pageId: string): {
-  params: { pageId: string };
-  to: "/p/$pageId";
+/**
+ * TanStack Router target for user-only pages (`routeBy: "id"`): `/p/$` splat.
+ * @see docs/architecture/pages.md#navigation
+ */
+export function pageNavTargetForUserPage(slug: string): {
+  params: { _splat: string };
+  to: "/p/$";
 } {
-  return { to: "/p/$pageId", params: { pageId } };
+  return { to: "/p/$", params: { _splat: pageSlugParam(slug) } };
 }
 
 export type PageNavTarget =
   | { params?: undefined; to: "/" }
   | { params: { _splat: string }; to: "/$" }
-  | { params: { pageId: string }; to: "/p/$pageId" };
+  | { params: { _splat: string }; to: "/p/$" };
 
+/** Shipped / lazy-seeded page route: home → `/`, else `/$` splat. @see docs/architecture/pages.md#navigation */
 export function pageNavTarget(slug: string): PageNavTarget {
   const param = pageSlugParam(slug);
 

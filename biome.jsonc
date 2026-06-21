@@ -37,7 +37,7 @@
       }
     },
     {
-      "includes": ["src/routes/$.tsx", "src/routes/p.$pageId.tsx"],
+      "includes": ["src/routes/$.tsx", "src/routes/p.$.tsx"],
       "linter": {
         "rules": {
           "style": {
@@ -52,6 +52,17 @@
         "rules": {
           "a11y": {
             "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/measure-gutter-alignment.mjs"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredDependencies": "off",
+            "noUnresolvedImports": "off"
           }
         }
       }

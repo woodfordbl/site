@@ -7,10 +7,12 @@ Start here for canvas, pages, and data-layer behavior.
 - [Architecture overview](./architecture/overview.md)
 - [Block model](./architecture/block-model.md) — `parentId`, list containers, indent
 - [Canvas editor](./architecture/canvas-editor.md) — command bus, reducer, focus
+- [Drag-and-drop](./architecture/drag-and-drop.md) — shared HTML5 DnD toolkit (canvas + sidebar)
 - [Pages](./architecture/pages.md) — user pages, empty canvas, routing
 - [Local-first persistence](./architecture/local-first-persistence.md) — server JSON vs local page documents, lazy seed, hash/revert
 - [Author dev mode](./architecture/author-dev-mode.md) — save to `content/pages/*.json`
-- [Block types](./architecture/block-types.md) — BlockSpec / ContainerSpec
+- [Block types](./architecture/block-types.md) — BlockSpec / ContainerSpec; how-to: [Adding a block type](./architecture/block-types.md#adding-a-block-type)
+- [Table blocks](./architecture/table-blocks.md) — grid model, keyboard, row/column DnD
 - [BlockNote comparison](./architecture/blocknote-comparison.md)
 - [Editor tracks](./architecture/editor-tracks.md)
 
@@ -23,4 +25,5 @@ Start here for canvas, pages, and data-layer behavior.
 ## Contributing
 
 - [Updating docs](./contributing/updating-docs.md) — architecture/reference markdown, `docs:check`, hooks
+- [New documentation](./contributing/new-documentation.md) — when to add pages, templates, manifest wiring
 - [Inline API docs](./contributing/inline-api-docs.md) — colocated JSDoc on exported symbols

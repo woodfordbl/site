@@ -15,6 +15,7 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { allocateUserPageSlug } from "@/lib/pages/allocate-page-slug.ts";
+import { appendChildPageLinkFromShard } from "@/lib/pages/append-page-link-on-parent.ts";
 import {
   assertPageCanHaveChild,
   pagesById,
@@ -28,7 +29,14 @@ import {
   resolvePageDeleteTargets,
 } from "@/lib/pages/page-delete.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
-import { normalizePageSlug, pageNavTargetById } from "@/lib/pages/slugify.ts";
+import { persistPageReposition } from "@/lib/pages/persist-page-reposition.ts";
+import { planPageReposition } from "@/lib/pages/reposition-page.ts";
+import { purgeSlugTombstonesForUserPageCreate } from "@/lib/pages/resolve-user-page-by-slug.ts";
+import {
+  normalizePageSlug,
+  pageNavTarget,
+  pageNavTargetForUserPage,
+} from "@/lib/pages/slugify.ts";
 import { syncPageUrl } from "@/lib/pages/sync-url.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
@@ -67,6 +75,7 @@ function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
     id: summary.id,
     slug: summary.slug,
     title: summary.title,
+    icon: summary.icon,
     parentId: summary.parentId,
     serverBaselineHash: LOCAL_DELETE_BASELINE_HASH,
     deletedAt: now,
@@ -108,6 +117,14 @@ function resolveCreatePage(
   return { parentId, slug, title };
 }
 
+/**
+ * Maps `PageCommand` to `PageEffect` (create, update, delete, reposition).
+ * `page.create` purges same-scope slug tombstones before insert, then adds `navigate`
+ * with `userPage: true` unless `navigate: false`.
+ * @see docs/reference/page-commands.md
+ * Invalid `page.reposition` plans return `{ effects: [] }`.
+ * @see docs/reference/page-commands.md
+ */
 export function pageReducer(
   command: PageCommand,
   pages: PageSummary[] = []
@@ -129,7 +146,9 @@ export function pageReducer(
           },
           ...(command.navigate === false
             ? []
-            : [{ type: "navigate", pageId: id } satisfies PageEffect]),
+            : [
+                { type: "navigate", slug, userPage: true } satisfies PageEffect,
+              ]),
         ],
       };
     }
@@ -160,6 +179,31 @@ export function pageReducer(
         ),
       };
     }
+    case "page.reposition": {
+      try {
+        const plan = planPageReposition({
+          appendPageLinkOnParent: command.appendPageLinkOnParent ?? false,
+          insertBeforePageId: command.insertBeforePageId,
+          pageId: command.pageId,
+          parentId: command.parentId,
+          pages,
+        });
+
+        return {
+          effects: [
+            {
+              type: "page.reposition",
+              plan,
+              seed: command.seed,
+              parentSeed: command.parentSeed,
+              seedsByPageId: command.seedsByPageId,
+            },
+          ],
+        };
+      } catch {
+        return { effects: [] };
+      }
+    }
     default:
       return { effects: [] };
   }
@@ -180,6 +224,102 @@ function mergeDispatchPages(
   return mergePageList(serverPages, localPages);
 }
 
+function applyPagePersistEffect(
+  effect: Extract<PageEffect, { type: "page.persist" }>,
+  dispatchPages: PageSummary[],
+  now: string
+): void {
+  const slug = normalizePageSlug(effect.slug);
+
+  if (effect.create) {
+    const defaultBlock = createEmptyBlock("text");
+    const blocksToSeed: Block[] =
+      effect.initialBlocks && effect.initialBlocks.length > 0
+        ? effect.initialBlocks
+        : [defaultBlock];
+
+    purgeSlugTombstonesForUserPageCreate(slug, effect.parentId ?? null);
+
+    localPagesCollection.insert({
+      id: effect.pageId,
+      slug,
+      title: effect.title,
+      parentId: effect.parentId ?? null,
+      serverBaselineHash: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    seedPageBlocks(effect.pageId, blocksToSeed);
+    return;
+  }
+
+  persistPageMetadata({
+    pageId: effect.pageId,
+    previousSlug: effect.previousSlug,
+    slug: effect.slug,
+    title: effect.title,
+    pages: dispatchPages,
+  });
+}
+
+function seedParentPageForReposition(
+  effect: Extract<PageEffect, { type: "page.reposition" }>,
+  dispatchPages: PageSummary[],
+  now: string
+): void {
+  const parentId = effect.plan.parentPageIdForLink;
+  if (!(effect.parentSeed && parentId)) {
+    return;
+  }
+
+  const parentExists = localPagesCollection.toArray.some(
+    (page) => page.id === parentId
+  );
+  if (parentExists) {
+    return;
+  }
+
+  const parentSummary = dispatchPages.find((page) => page.id === parentId);
+  localPagesCollection.insert({
+    id: parentId,
+    slug: parentSummary?.slug ?? "/",
+    title: parentSummary?.title ?? "",
+    parentId: parentSummary?.parentId ?? null,
+    icon: parentSummary?.icon,
+    serverBaselineHash: effect.parentSeed.serverBaselineHash,
+    createdAt: now,
+    updatedAt: now,
+  });
+  seedPageBlocks(parentId, effect.parentSeed.blocks);
+}
+
+function applyPageRepositionEffect(
+  effect: Extract<PageEffect, { type: "page.reposition" }>,
+  dispatchPages: PageSummary[],
+  now: string
+): void {
+  seedParentPageForReposition(effect, dispatchPages, now);
+
+  persistPageReposition({
+    plan: effect.plan,
+    pages: dispatchPages,
+    seed: effect.seed,
+    seedsByPageId: effect.seedsByPageId,
+  });
+
+  const parentId = effect.plan.parentPageIdForLink;
+  if (effect.plan.appendPageLinkOnParent && parentId) {
+    appendChildPageLinkFromShard({
+      childPageId: effect.plan.pageId,
+      parentPageId: parentId,
+    });
+  }
+}
+
+/**
+ * Applies `PageCommand` effects to collections and the router (`navigate` uses `userPage` for new user pages).
+ * @see docs/reference/page-commands.md
+ */
 export function usePageDispatch(pages: PageSummary[] = []) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -200,49 +340,25 @@ export function usePageDispatch(pages: PageSummary[] = []) {
 
       for (const effect of effects) {
         switch (effect.type) {
-          case "page.persist": {
-            const slug = normalizePageSlug(effect.slug);
-
-            if (effect.create) {
-              const defaultBlock = createEmptyBlock("text");
-              const blocksToSeed: Block[] =
-                effect.initialBlocks && effect.initialBlocks.length > 0
-                  ? effect.initialBlocks
-                  : [defaultBlock];
-
-              localPagesCollection.insert({
-                id: effect.pageId,
-                slug,
-                title: effect.title,
-                parentId: effect.parentId ?? null,
-                serverBaselineHash: null,
-                createdAt: now,
-                updatedAt: now,
-              });
-              seedPageBlocks(effect.pageId, blocksToSeed);
-              break;
-            }
-
-            persistPageMetadata({
-              pageId: effect.pageId,
-              previousSlug: effect.previousSlug,
-              slug: effect.slug,
-              title: effect.title,
-              pages: dispatchPages,
-            });
+          case "page.persist":
+            applyPagePersistEffect(effect, dispatchPages, now);
             break;
-          }
           case "page.delete":
             deleteLocalPage(effect.pageId, dispatchPages);
             break;
+          case "page.reposition":
+            applyPageRepositionEffect(effect, dispatchPages, now);
+            break;
           case "navigate":
             if (effect.mode === "history") {
-              syncPageUrl(effect.slug);
+              syncPageUrl(effect.slug, { userPage: effect.userPage });
               break;
             }
 
             navigate({
-              ...pageNavTargetById(effect.pageId),
+              ...(effect.userPage
+                ? pageNavTargetForUserPage(effect.slug)
+                : pageNavTarget(effect.slug)),
               replace: true,
             });
             break;
@@ -268,7 +384,8 @@ export function usePageDispatch(pages: PageSummary[] = []) {
             applyEffects(effects, dispatchPages);
           })
           .catch(() => {
-            // Page create falls back to mergedPages when the list query fails.
+            const { effects } = pageReducer(command, mergedPages);
+            applyEffects(effects, mergedPages);
           });
         return;
       }

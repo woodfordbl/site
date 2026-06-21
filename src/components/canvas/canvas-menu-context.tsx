@@ -19,23 +19,33 @@ import {
   type DropdownMenuHandle,
 } from "@/components/ui/dropdown-menu.tsx";
 
+/**
+ * Menu state is split in two: open/payload (consumed by every gutter to style
+ * its trigger) and the slash session (rebuilt per slash keystroke, consumed
+ * only by the menu root + slash content). Keeping them separate stops slash
+ * typing from re-rendering every gutter.
+ */
 interface CanvasMenuContextValue {
   blockActionsSession: BlockActionsSession | null;
   closeMenu: () => void;
   handle: DropdownMenuHandle<CanvasMenuPayload>;
-  notifySlashUpdate: () => void;
   open: boolean;
   openBlockActions: (session: BlockActionsSession) => void;
   openSlashMenu: (session: SlashMenuSession) => void;
   payload: CanvasMenuPayload | null;
   setSlashSession: (session: SlashMenuSession) => void;
-  slashAnchorRef: React.RefObject<HTMLElement | null>;
-  slashSession: SlashMenuSession | null;
-  slashUpdateVersion: number;
   triggerId: string | null;
 }
 
+interface CanvasSlashSessionContextValue {
+  slashAnchorRef: React.RefObject<HTMLElement | null>;
+  slashSession: SlashMenuSession | null;
+}
+
 const CanvasMenuContext = createContext<CanvasMenuContextValue | null>(null);
+
+const CanvasSlashSessionContext =
+  createContext<CanvasSlashSessionContextValue | null>(null);
 
 export function CanvasMenuProvider({
   children,
@@ -54,7 +64,6 @@ export function CanvasMenuProvider({
     useState<BlockActionsSession | null>(null);
   const [slashSession, setSlashSessionState] =
     useState<SlashMenuSession | null>(null);
-  const [slashUpdateVersion, setSlashUpdateVersion] = useState(0);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
@@ -88,10 +97,6 @@ export function CanvasMenuProvider({
     slashAnchorRef.current = session.anchorElement;
   }, []);
 
-  const notifySlashUpdate = useCallback(() => {
-    setSlashUpdateVersion((current) => current + 1);
-  }, []);
-
   const value = useMemo(
     () => ({
       handle,
@@ -99,14 +104,10 @@ export function CanvasMenuProvider({
       triggerId,
       payload,
       blockActionsSession,
-      slashSession,
-      slashAnchorRef,
-      slashUpdateVersion,
       closeMenu,
       openBlockActions,
       openSlashMenu,
       setSlashSession,
-      notifySlashUpdate,
     }),
     [
       handle,
@@ -114,19 +115,23 @@ export function CanvasMenuProvider({
       triggerId,
       payload,
       blockActionsSession,
-      slashSession,
-      slashUpdateVersion,
       closeMenu,
       openBlockActions,
       openSlashMenu,
       setSlashSession,
-      notifySlashUpdate,
     ]
+  );
+
+  const slashValue = useMemo(
+    () => ({ slashAnchorRef, slashSession }),
+    [slashSession]
   );
 
   return (
     <CanvasMenuContext.Provider value={value}>
-      {children}
+      <CanvasSlashSessionContext.Provider value={slashValue}>
+        {children}
+      </CanvasSlashSessionContext.Provider>
     </CanvasMenuContext.Provider>
   );
 }
@@ -135,6 +140,16 @@ export function useCanvasMenu(): CanvasMenuContextValue {
   const context = useContext(CanvasMenuContext);
   if (!context) {
     throw new Error("useCanvasMenu must be used within CanvasMenuProvider");
+  }
+  return context;
+}
+
+export function useCanvasSlashSession(): CanvasSlashSessionContextValue {
+  const context = useContext(CanvasSlashSessionContext);
+  if (!context) {
+    throw new Error(
+      "useCanvasSlashSession must be used within CanvasMenuProvider"
+    );
   }
   return context;
 }

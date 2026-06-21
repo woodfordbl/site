@@ -1,8 +1,19 @@
 import { normalizePageSlug, pageSlugParam } from "@/lib/pages/slugify.ts";
 
-export function syncPageUrl(slug: string): void {
+/**
+ * Updates the address bar for a metadata slug without a router navigation.
+ * Default: `/` or `/{segments}`; `{ userPage: true }` → `/p/{segments}` for `routeBy: "id"`.
+ * @see docs/architecture/pages.md#navigation
+ */
+export function syncPageUrl(
+  slug: string,
+  options?: { userPage?: boolean }
+): void {
   const normalized = normalizePageSlug(slug);
-  const path = normalized === "/" ? "/" : `/${pageSlugParam(slug)}`;
+  let path = normalized === "/" ? "/" : `/${pageSlugParam(slug)}`;
+  if (options?.userPage) {
+    path = `/p/${pageSlugParam(slug)}`;
+  }
 
   if (window.location.pathname === path) {
     return;

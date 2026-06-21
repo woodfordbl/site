@@ -1,0 +1,598 @@
+{
+  "id": "dev-block-showcase",
+  "slug": "/dev/block-showcase",
+  "title": "Block Showcase",
+  "parentId": null,
+  "blocks": [
+    {
+      "id": "showcase-title",
+      "type": "heading",
+      "props": {
+        "level": 1,
+        "text": "Block Showcase"
+      }
+    },
+    {
+      "id": "showcase-section-headings",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Headings"
+      }
+    },
+    {
+      "id": "showcase-h1",
+      "type": "heading",
+      "props": {
+        "level": 1,
+        "text": "Heading 1 — Page title scale"
+      }
+    },
+    {
+      "id": "showcase-h2",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Heading 2 — Section title scale"
+      }
+    },
+    {
+      "id": "showcase-h3",
+      "type": "heading",
+      "props": {
+        "level": 3,
+        "text": "Heading 3 — Subsection scale"
+      }
+    },
+    {
+      "id": "showcase-h4",
+      "type": "heading",
+      "props": {
+        "level": 4,
+        "text": "Heading 4 — Minor heading scale"
+      }
+    },
+    {
+      "id": "showcase-section-text",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Text"
+      }
+    },
+    {
+      "id": "showcase-text",
+      "type": "text",
+      "props": {
+        "text": "Body text block with a longer paragraph so line height, wrapping, and spacing are easy to judge against headings and neighboring blocks."
+      }
+    },
+    {
+      "id": "showcase-section-quote",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Quote"
+      }
+    },
+    {
+      "id": "showcase-quote",
+      "type": "quote",
+      "props": {
+        "text": "Design is not just what it looks like and feels like. Design is how it works."
+      }
+    },
+    {
+      "id": "showcase-section-callout",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Callout"
+      }
+    },
+    {
+      "id": "showcase-callout-tabler",
+      "type": "callout",
+      "props": {
+        "text": "Callout with the default Tabler info icon.",
+        "icon": "tabler:IconInfoCircle"
+      }
+    },
+    {
+      "id": "showcase-callout-emoji",
+      "type": "callout",
+      "props": {
+        "text": "Callout with an emoji icon instead of Tabler.",
+        "icon": "💡"
+      }
+    },
+    {
+      "id": "showcase-section-divider",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Divider"
+      }
+    },
+    {
+      "id": "showcase-divider",
+      "type": "divider",
+      "props": {}
+    },
+    {
+      "id": "showcase-section-bullet-list",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Bullet list"
+      }
+    },
+    {
+      "id": "showcase-bullet-list",
+      "type": "list",
+      "props": {
+        "variant": "bullet"
+      }
+    },
+    {
+      "id": "showcase-bullet-item-1",
+      "type": "text",
+      "parentId": "showcase-bullet-list",
+      "indent": 0,
+      "props": {
+        "text": "Top-level bullet item"
+      }
+    },
+    {
+      "id": "showcase-bullet-item-2",
+      "type": "text",
+      "parentId": "showcase-bullet-list",
+      "indent": 1,
+      "props": {
+        "text": "Indented once"
+      }
+    },
+    {
+      "id": "showcase-bullet-item-3",
+      "type": "text",
+      "parentId": "showcase-bullet-list",
+      "indent": 2,
+      "props": {
+        "text": "Indented twice"
+      }
+    },
+    {
+      "id": "showcase-section-ordered-list",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Numbered list"
+      }
+    },
+    {
+      "id": "showcase-ordered-list",
+      "type": "list",
+      "props": {
+        "variant": "ordered"
+      }
+    },
+    {
+      "id": "showcase-ordered-item-1",
+      "type": "text",
+      "parentId": "showcase-ordered-list",
+      "indent": 0,
+      "props": {
+        "text": "First numbered item"
+      }
+    },
+    {
+      "id": "showcase-ordered-item-2",
+      "type": "text",
+      "parentId": "showcase-ordered-list",
+      "indent": 0,
+      "props": {
+        "text": "Second numbered item"
+      }
+    },
+    {
+      "id": "showcase-ordered-item-3",
+      "type": "text",
+      "parentId": "showcase-ordered-list",
+      "indent": 0,
+      "props": {
+        "text": "Third numbered item"
+      }
+    },
+    {
+      "id": "showcase-section-checklist",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Checklist"
+      }
+    },
+    {
+      "id": "showcase-checklist",
+      "type": "checklist",
+      "props": {}
+    },
+    {
+      "id": "showcase-checklist-item-1",
+      "type": "checklistItem",
+      "parentId": "showcase-checklist",
+      "props": {
+        "checked": true,
+        "text": "Completed checklist item"
+      }
+    },
+    {
+      "id": "showcase-checklist-item-2",
+      "type": "checklistItem",
+      "parentId": "showcase-checklist",
+      "props": {
+        "checked": false,
+        "text": "Unchecked checklist item"
+      }
+    },
+    {
+      "id": "showcase-checklist-item-3",
+      "type": "checklistItem",
+      "parentId": "showcase-checklist",
+      "props": {
+        "checked": false,
+        "text": "Another open task"
+      }
+    },
+    {
+      "id": "showcase-section-cols-2",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Columns (2)"
+      }
+    },
+    {
+      "id": "showcase-cols-2",
+      "type": "columns",
+      "props": {}
+    },
+    {
+      "id": "showcase-col-2-left",
+      "type": "column",
+      "parentId": "showcase-cols-2",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-2-right",
+      "type": "column",
+      "parentId": "showcase-cols-2",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-2-left-text",
+      "type": "text",
+      "parentId": "showcase-col-2-left",
+      "props": {
+        "text": "Left column — plain text block."
+      }
+    },
+    {
+      "id": "showcase-col-2-right-callout",
+      "type": "callout",
+      "parentId": "showcase-col-2-right",
+      "props": {
+        "text": "Right column — callout block.",
+        "icon": "tabler:IconBulb"
+      }
+    },
+    {
+      "id": "showcase-section-cols-3",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Columns (3)"
+      }
+    },
+    {
+      "id": "showcase-cols-3",
+      "type": "columns",
+      "props": {}
+    },
+    {
+      "id": "showcase-col-3-a",
+      "type": "column",
+      "parentId": "showcase-cols-3",
+      "props": {
+        "width": 1.5
+      }
+    },
+    {
+      "id": "showcase-col-3-b",
+      "type": "column",
+      "parentId": "showcase-cols-3",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-3-c",
+      "type": "column",
+      "parentId": "showcase-cols-3",
+      "props": {
+        "width": 0.5
+      }
+    },
+    {
+      "id": "showcase-col-3-a-text",
+      "type": "text",
+      "parentId": "showcase-col-3-a",
+      "props": {
+        "text": "Wide column (flex 1.5)"
+      }
+    },
+    {
+      "id": "showcase-col-3-b-text",
+      "type": "text",
+      "parentId": "showcase-col-3-b",
+      "props": {
+        "text": "Medium column (flex 1)"
+      }
+    },
+    {
+      "id": "showcase-col-3-c-text",
+      "type": "text",
+      "parentId": "showcase-col-3-c",
+      "props": {
+        "text": "Narrow (0.5)"
+      }
+    },
+    {
+      "id": "showcase-section-cols-4",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Columns (4)"
+      }
+    },
+    {
+      "id": "showcase-cols-4",
+      "type": "columns",
+      "props": {}
+    },
+    {
+      "id": "showcase-col-4-a",
+      "type": "column",
+      "parentId": "showcase-cols-4",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-4-b",
+      "type": "column",
+      "parentId": "showcase-cols-4",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-4-c",
+      "type": "column",
+      "parentId": "showcase-cols-4",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-4-d",
+      "type": "column",
+      "parentId": "showcase-cols-4",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-4-a-text",
+      "type": "text",
+      "parentId": "showcase-col-4-a",
+      "props": {
+        "text": "Column one"
+      }
+    },
+    {
+      "id": "showcase-col-4-b-text",
+      "type": "text",
+      "parentId": "showcase-col-4-b",
+      "props": {
+        "text": "Column two"
+      }
+    },
+    {
+      "id": "showcase-col-4-c-text",
+      "type": "text",
+      "parentId": "showcase-col-4-c",
+      "props": {
+        "text": "Column three"
+      }
+    },
+    {
+      "id": "showcase-col-4-d-text",
+      "type": "text",
+      "parentId": "showcase-col-4-d",
+      "props": {
+        "text": "Column four"
+      }
+    },
+    {
+      "id": "showcase-section-cols-nested",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Columns with nested content"
+      }
+    },
+    {
+      "id": "showcase-cols-nested",
+      "type": "columns",
+      "props": {}
+    },
+    {
+      "id": "showcase-col-nested-a",
+      "type": "column",
+      "parentId": "showcase-cols-nested",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-nested-b",
+      "type": "column",
+      "parentId": "showcase-cols-nested",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-col-nested-c",
+      "type": "column",
+      "parentId": "showcase-cols-nested",
+      "props": {
+        "width": 1
+      }
+    },
+    {
+      "id": "showcase-nested-list",
+      "type": "list",
+      "parentId": "showcase-col-nested-a",
+      "props": {
+        "variant": "bullet"
+      }
+    },
+    {
+      "id": "showcase-nested-list-item-1",
+      "type": "text",
+      "parentId": "showcase-nested-list",
+      "indent": 0,
+      "props": {
+        "text": "Nested bullet in column"
+      }
+    },
+    {
+      "id": "showcase-nested-list-item-2",
+      "type": "text",
+      "parentId": "showcase-nested-list",
+      "indent": 1,
+      "props": {
+        "text": "Nested indent"
+      }
+    },
+    {
+      "id": "showcase-col-nested-b-quote",
+      "type": "quote",
+      "parentId": "showcase-col-nested-b",
+      "props": {
+        "text": "Quote inside a column."
+      }
+    },
+    {
+      "id": "showcase-col-nested-b-text",
+      "type": "text",
+      "parentId": "showcase-col-nested-b",
+      "props": {
+        "text": "Followed by body text in the same column."
+      }
+    },
+    {
+      "id": "showcase-col-nested-c-media",
+      "type": "media",
+      "parentId": "showcase-col-nested-c",
+      "props": {
+        "kind": "image",
+        "source": "url",
+        "src": "https://picsum.photos/seed/showcase/800/450",
+        "alt": "Sample image in a column"
+      }
+    },
+    {
+      "id": "showcase-section-media",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Media"
+      }
+    },
+    {
+      "id": "showcase-media-image",
+      "type": "media",
+      "props": {
+        "kind": "image",
+        "source": "url",
+        "src": "https://picsum.photos/seed/showcase/800/450",
+        "alt": "Sample showcase image"
+      }
+    },
+    {
+      "id": "showcase-media-video",
+      "type": "media",
+      "props": {
+        "kind": "video",
+        "source": "url",
+        "src": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        "alt": "Sample flower video"
+      }
+    },
+    {
+      "id": "showcase-section-embed",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Embed"
+      }
+    },
+    {
+      "id": "showcase-embed-youtube",
+      "type": "embed",
+      "props": {
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "title": "YouTube embed sample",
+        "showTitle": true
+      }
+    },
+    {
+      "id": "showcase-embed-image",
+      "type": "embed",
+      "props": {
+        "url": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200"
+      }
+    },
+    {
+      "id": "showcase-embed-bookmark",
+      "type": "embed",
+      "props": {
+        "url": "https://example.com",
+        "title": "Example bookmark",
+        "description": "OG preview unfurls on edit; use Change view for title/URL captions."
+      }
+    },
+    {
+      "id": "showcase-section-page-link",
+      "type": "heading",
+      "props": {
+        "level": 2,
+        "text": "Page link"
+      }
+    },
+    {
+      "id": "showcase-page-link",
+      "type": "pageLink",
+      "props": {
+        "pageId": "home",
+        "variant": "linked"
+      }
+    }
+  ]
+}

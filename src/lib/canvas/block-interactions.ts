@@ -1,4 +1,4 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
 import {
   defaultChildTypeForContainer,

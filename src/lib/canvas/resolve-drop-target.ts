@@ -1,56 +1,304 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { flattenRows } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
+import {
+  type DropTarget,
+  normalizeDropTarget,
+} from "@/lib/canvas/drop-target.ts";
+import { resolveTableLayoutDrop } from "@/lib/canvas/resolve-table-drop-target.ts";
+import { collectRects } from "@/lib/dnd/rects.ts";
 
-export interface DropTarget {
-  edge: "before" | "after";
-  rowId: string;
-}
+export type { DropTarget } from "@/lib/canvas/drop-target.ts";
 
-export function normalizeDropTarget(
-  rows: CanvasRow[],
-  rowId: string,
-  edge: "before" | "after"
-): DropTarget {
-  if (edge === "before") {
-    return { rowId, edge: "before" };
-  }
+/** Attribute marking canvas rows so the DnD surface can snapshot their rects. */
+export const CANVAS_ROW_ATTRIBUTE = "data-canvas-row-id";
 
-  const ordered = flattenRows(rows);
-  const index = ordered.findIndex((row) => row.rowId === rowId);
-  const nextRow = index >= 0 ? ordered[index + 1] : undefined;
-
-  if (nextRow) {
-    return { rowId: nextRow.rowId, edge: "before" };
-  }
-
-  return { rowId, edge: "after" };
-}
+/** Minimum vertical band (px) for column start/end drop targets. */
+const COLUMN_SCOPE_EDGE_PX = 20;
 
 function resolveDropEdge(clientY: number, rect: DOMRect): "before" | "after" {
   return clientY < rect.top + rect.height / 2 ? "before" : "after";
 }
 
-export function collectCanvasRowRects(): Map<string, DOMRect> {
-  const map = new Map<string, DOMRect>();
-  for (const element of document.querySelectorAll("[data-canvas-row-id]")) {
-    const rowId = element.getAttribute("data-canvas-row-id");
-    if (rowId) {
-      map.set(rowId, element.getBoundingClientRect());
+function isRowDescendantOf(
+  rows: CanvasRow[],
+  candidateRowId: string,
+  ancestorRowId: string
+): boolean {
+  const ancestor = findRowById(rows, ancestorRowId);
+  if (!ancestor) {
+    return false;
+  }
+  for (const nested of flattenRows([ancestor])) {
+    if (nested.rowId === candidateRowId) {
+      return true;
     }
   }
-  return map;
+  return false;
 }
 
-export function resolveDropTargetFromPointer(
+function isColumnDropBlocked(
   rows: CanvasRow[],
+  columnRowId: string,
+  draggingRowId: string
+): boolean {
+  return (
+    columnRowId === draggingRowId ||
+    isRowDescendantOf(rows, draggingRowId, columnRowId)
+  );
+}
+
+function isContainerShellRow(row: CanvasRow): boolean {
+  const type = row.effectiveBlock.type;
+  return (
+    (type === "column" ||
+      type === "columns" ||
+      type === "list" ||
+      type === "checklist" ||
+      type === "table") &&
+    row.children.length > 0
+  );
+}
+
+function rectContainsPoint(
+  rect: DOMRect,
+  clientX: number,
+  clientY: number
+): boolean {
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
+export function collectCanvasRowRects(): Map<string, DOMRect> {
+  return collectRects(CANVAS_ROW_ATTRIBUTE);
+}
+
+function columnScopeStartTarget(columnRowId: string): DropTarget {
+  return { rowId: columnRowId, edge: "before", atScopeStart: true };
+}
+
+interface ColumnDropArgs {
+  clientY: number;
+  draggingRowId: string;
+  rowRects: Map<string, DOMRect>;
+  rows: CanvasRow[];
+}
+
+/** First/last edge bands of a column: scope-start above, append-after below. */
+function resolveColumnEdgeBandDrop(
+  columnRow: CanvasRow,
+  { clientY, draggingRowId, rowRects, rows }: ColumnDropArgs
+): { target: DropTarget | null } | null {
+  const firstChild = columnRow.children[0];
+  const lastChild = columnRow.children.at(-1);
+  const firstRect = firstChild ? rowRects.get(firstChild.rowId) : undefined;
+  const lastRect = lastChild ? rowRects.get(lastChild.rowId) : undefined;
+
+  if (firstRect && clientY < firstRect.top + COLUMN_SCOPE_EDGE_PX) {
+    return { target: columnScopeStartTarget(columnRow.rowId) };
+  }
+
+  if (lastRect && clientY > lastRect.bottom - COLUMN_SCOPE_EDGE_PX) {
+    if (lastChild && lastChild.rowId !== draggingRowId) {
+      return { target: normalizeDropTarget(rows, lastChild.rowId, "after") };
+    }
+    return { target: null };
+  }
+
+  return null;
+}
+
+/** Hit-test column children bottom-up (later siblings paint above earlier ones). */
+function resolveColumnChildDrop(
+  columnRow: CanvasRow,
+  { clientY, draggingRowId, rowRects, rows }: ColumnDropArgs
+): { target: DropTarget | null } | null {
+  const children = columnRow.children;
+
+  for (let index = children.length - 1; index >= 0; index -= 1) {
+    const child = children[index];
+    const rect = child ? rowRects.get(child.rowId) : undefined;
+    if (!(child && rect)) {
+      continue;
+    }
+    if (clientY < rect.top || clientY > rect.bottom) {
+      continue;
+    }
+    if (child.rowId === draggingRowId) {
+      return { target: null };
+    }
+    return {
+      target: normalizeDropTarget(
+        rows,
+        child.rowId,
+        resolveDropEdge(clientY, rect)
+      ),
+    };
+  }
+
+  return null;
+}
+
+/** Resolve a drop target inside one column using column-local Y bands and child rows. */
+export function resolveColumnContentDrop(
+  rows: CanvasRow[],
+  columnRowId: string,
   clientY: number,
   rowRects: Map<string, DOMRect>,
-  draggingRowId: string | null
+  draggingRowId: string
 ): DropTarget | null {
-  if (!draggingRowId || rows.length === 0) {
+  const columnRow = findRowById(rows, columnRowId);
+  if (!columnRow || columnRow.effectiveBlock.type !== "column") {
+    return null;
+  }
+  if (isColumnDropBlocked(rows, columnRowId, draggingRowId)) {
     return null;
   }
 
+  if (columnRow.children.length === 0) {
+    return columnScopeStartTarget(columnRowId);
+  }
+
+  const args: ColumnDropArgs = { clientY, draggingRowId, rowRects, rows };
+
+  const bandDrop = resolveColumnEdgeBandDrop(columnRow, args);
+  if (bandDrop) {
+    return bandDrop.target;
+  }
+
+  const childDrop = resolveColumnChildDrop(columnRow, args);
+  if (childDrop) {
+    return childDrop.target;
+  }
+
+  const firstChild = columnRow.children[0];
+  const lastChild = columnRow.children.at(-1);
+  const firstRect = firstChild ? rowRects.get(firstChild.rowId) : undefined;
+  const lastRect = lastChild ? rowRects.get(lastChild.rowId) : undefined;
+
+  if (lastRect && lastChild && clientY > lastRect.bottom) {
+    return lastChild.rowId === draggingRowId
+      ? null
+      : normalizeDropTarget(rows, lastChild.rowId, "after");
+  }
+
+  if (firstRect && clientY < firstRect.top) {
+    return columnScopeStartTarget(columnRowId);
+  }
+
+  return null;
+}
+
+function resolveEmptyColumnDrop(
+  rows: CanvasRow[],
+  columnRowId: string,
+  draggingRowId: string
+): DropTarget | null {
+  const columnRow = findRowById(rows, columnRowId);
+  if (!columnRow || columnRow.effectiveBlock.type !== "column") {
+    return null;
+  }
+  if (columnRow.children.length > 0) {
+    return null;
+  }
+  if (isColumnDropBlocked(rows, columnRowId, draggingRowId)) {
+    return null;
+  }
+  return { rowId: columnRowId, edge: "before", atScopeStart: true };
+}
+
+/** Column-aware drop resolution when the pointer is inside a columns layout. */
+function resolveColumnsLayoutDrop(
+  rows: CanvasRow[],
+  clientX: number,
+  clientY: number,
+  rowRects: Map<string, DOMRect>,
+  draggingRowId: string
+): DropTarget | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  for (const layout of document.querySelectorAll("[data-columns-layout]")) {
+    const layoutRect = layout.getBoundingClientRect();
+    if (
+      clientY < layoutRect.top ||
+      clientY > layoutRect.bottom ||
+      clientX < layoutRect.left ||
+      clientX > layoutRect.right
+    ) {
+      continue;
+    }
+
+    for (const columnEl of layout.querySelectorAll("[data-column-id]")) {
+      const columnId = columnEl.getAttribute("data-column-id");
+      if (!columnId) {
+        continue;
+      }
+      const colRect = columnEl.getBoundingClientRect();
+      if (
+        clientX < colRect.left ||
+        clientX > colRect.right ||
+        clientY < colRect.top ||
+        clientY > colRect.bottom
+      ) {
+        continue;
+      }
+
+      const contentDrop = resolveColumnContentDrop(
+        rows,
+        columnId,
+        clientY,
+        rowRects,
+        draggingRowId
+      );
+      if (contentDrop) {
+        return contentDrop;
+      }
+
+      const emptyDrop = resolveEmptyColumnDrop(rows, columnId, draggingRowId);
+      if (emptyDrop) {
+        return emptyDrop;
+      }
+    }
+  }
+  return null;
+}
+
+/** Drop resolution for a row the pointer is inside (null = invalid drop). */
+function resolveRowHitDrop(
+  rows: CanvasRow[],
+  row: CanvasRow,
+  rect: DOMRect,
+  clientY: number,
+  draggingRowId: string
+): DropTarget | null {
+  if (row.rowId === draggingRowId) {
+    return null;
+  }
+
+  if (isRowDescendantOf(rows, draggingRowId, row.rowId)) {
+    return null;
+  }
+
+  const emptyColumn = resolveEmptyColumnDrop(rows, row.rowId, draggingRowId);
+  if (emptyColumn) {
+    return emptyColumn;
+  }
+
+  return normalizeDropTarget(rows, row.rowId, resolveDropEdge(clientY, rect));
+}
+
+function resolveVerticalRowDrop(
+  rows: CanvasRow[],
+  clientX: number,
+  clientY: number,
+  rowRects: Map<string, DOMRect>,
+  draggingRowId: string
+): DropTarget | null {
   const firstTopLevel = rows[0];
   const lastTopLevel = rows.at(-1);
   if (!(firstTopLevel && lastTopLevel)) {
@@ -71,26 +319,58 @@ export function resolveDropTargetFromPointer(
   const ordered = flattenRows(rows);
   for (let index = ordered.length - 1; index >= 0; index -= 1) {
     const row = ordered[index];
-    if (!row) {
+    if (!row || isContainerShellRow(row)) {
       continue;
     }
 
     const rect = rowRects.get(row.rowId);
-    if (!rect) {
+    if (!(rect && rectContainsPoint(rect, clientX, clientY))) {
       continue;
     }
 
-    if (clientY < rect.top || clientY > rect.bottom) {
-      continue;
-    }
-
-    if (row.rowId === draggingRowId) {
-      return null;
-    }
-
-    const rawEdge = resolveDropEdge(clientY, rect);
-    return normalizeDropTarget(rows, row.rowId, rawEdge);
+    return resolveRowHitDrop(rows, row, rect, clientY, draggingRowId);
   }
 
   return null;
+}
+
+export function resolveDropTargetFromPointer(
+  rows: CanvasRow[],
+  clientX: number,
+  clientY: number,
+  rowRects: Map<string, DOMRect>,
+  draggingRowId: string | null
+): DropTarget | null {
+  if (!draggingRowId || rows.length === 0) {
+    return null;
+  }
+
+  const tableDrop = resolveTableLayoutDrop(
+    rows,
+    clientX,
+    clientY,
+    draggingRowId
+  );
+  if (tableDrop) {
+    return tableDrop;
+  }
+
+  const columnsDrop = resolveColumnsLayoutDrop(
+    rows,
+    clientX,
+    clientY,
+    rowRects,
+    draggingRowId
+  );
+  if (columnsDrop) {
+    return columnsDrop;
+  }
+
+  return resolveVerticalRowDrop(
+    rows,
+    clientX,
+    clientY,
+    rowRects,
+    draggingRowId
+  );
 }

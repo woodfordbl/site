@@ -1,41 +1,41 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import {
+  applyPageBlockDiff,
+  beginPageBlockTransaction,
+  commitPageBlockTransaction,
   deleteAllBlocksForPage,
-  replacePageBlocks,
+  deletePageBlocksInTx,
+  insertPageBlockAt,
+  type PageBlockTransaction,
+  patchBlockOrder,
   seedPageBlocks,
+  updatePageBlockInTx,
   upsertPageBlock,
 } from "@/db/queries/block-collection-ops.ts";
+import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
 import {
   buildBlockTree,
   type CanvasRow,
   findRowById,
-} from "@/db/queries/merge-blocks.ts";
-import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
+  reconcileRowTrees,
+} from "@/lib/blocks/block-tree.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import { normalizeEditablePageBlocks } from "@/lib/blocks/ensure-minimum-blocks.ts";
-import {
-  deleteBlockByRowId,
-  insertBlockAtPlacement,
-  moveBlockByRowId,
-  updateBlockByRowId,
-} from "@/lib/blocks/page-block-mutations.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
+import { CanvasPageSession } from "@/lib/canvas/page-session.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 export interface ServerPageSource {
   blocks: Block[];
+  icon?: string;
   id: string;
   parentId: string | null;
   slug: string;
   title: string;
-}
-
-export interface UsePageCanvasOptions {
-  focusedBlockId?: string | null;
 }
 
 function createId(): string {
@@ -46,30 +46,12 @@ function blockIds(blocks: Block[]): string[] {
   return blocks.map((block) => block.id);
 }
 
-function applyFocusedDraft(
-  blocks: Block[],
-  focusedBlockId: string | null,
-  focusedDraft: Block | null
-): Block[] {
-  if (!(focusedBlockId && focusedDraft?.id === focusedBlockId)) {
-    return blocks;
-  }
-
-  return blocks.map((block) =>
-    block.id === focusedBlockId ? focusedDraft : block
-  );
-}
-
 function existingBlockIds(blocks: Array<{ id: string }>): Set<string> {
   return new Set(blocks.map((block) => block.id));
 }
 
-export function usePageCanvas(
-  serverPage: ServerPageSource,
-  options?: UsePageCanvasOptions
-) {
+export function usePageCanvas(serverPage: ServerPageSource) {
   const { id: pageId } = serverPage;
-  const focusedBlockId = options?.focusedBlockId ?? null;
 
   const {
     blocks: collectionBlocks,
@@ -79,7 +61,10 @@ export function usePageCanvas(
     localPage,
   } = usePageBlocks(pageId);
 
-  const serverBaselineHash = hashPageBlocks(serverPage.blocks);
+  const serverBaselineHash = useMemo(
+    () => hashPageBlocks(serverPage.blocks),
+    [serverPage.blocks]
+  );
   const isStale =
     localPage?.serverBaselineHash != null &&
     localPage.serverBaselineHash !== serverBaselineHash;
@@ -87,27 +72,45 @@ export function usePageCanvas(
   const sourceBlocks =
     hasSeededBlocks || localPage != null ? collectionBlocks : serverPage.blocks;
 
-  const [focusedDraft, setFocusedDraft] = useState<Block | null>(null);
   const generatedBlankBlockRef = useRef<{
     block: Extract<Block, { type: "text" }>;
     pageId: string;
   } | null>(null);
 
-  useEffect(() => {
-    setFocusedDraft((draft) =>
-      draft && draft.id === focusedBlockId ? draft : null
+  const sessionRef = useRef<CanvasPageSession | null>(null);
+  const collectionTxRef = useRef<PageBlockTransaction | null>(null);
+  const inBlockTransactionRef = useRef(false);
+  const transactionStartBlocksRef = useRef<Block[] | null>(null);
+
+  const createBlankBlock = useCallback((): Extract<Block, { type: "text" }> => {
+    const generated = generatedBlankBlockRef.current;
+    const sourceIds = existingBlockIds(
+      sessionRef.current?.getBlocks() ?? sourceBlocks
     );
-  }, [focusedBlockId]);
+    if (generated?.pageId === pageId && !sourceIds.has(generated.block.id)) {
+      return generated.block;
+    }
+
+    const next = createEmptyBlock("text") as Extract<Block, { type: "text" }>;
+    generatedBlankBlockRef.current = { block: next, pageId };
+    return next;
+  }, [pageId, sourceBlocks]);
+
+  useEffect(() => {
+    if (inBlockTransactionRef.current) {
+      return;
+    }
+
+    sessionRef.current = CanvasPageSession.hydrate(
+      sourceBlocks,
+      localPage?.blockOrder
+    );
+  }, [localPage?.blockOrder, sourceBlocks]);
 
   const activeBlocks = useMemo(() => {
-    const withDraft = applyFocusedDraft(
-      sourceBlocks,
-      focusedBlockId,
-      focusedDraft
-    );
-    const sourceIds = existingBlockIds(withDraft);
+    const sourceIds = existingBlockIds(sourceBlocks);
 
-    return normalizeEditablePageBlocks(withDraft, {
+    return normalizeEditablePageBlocks(sourceBlocks, {
       createBlankBlock: () => {
         const generated = generatedBlankBlockRef.current;
         if (
@@ -125,30 +128,51 @@ export function usePageCanvas(
         return next;
       },
     }).blocks;
-  }, [focusedBlockId, focusedDraft, pageId, sourceBlocks]);
+  }, [pageId, sourceBlocks]);
 
   const activeBlocksRef = useRef(activeBlocks);
   activeBlocksRef.current = activeBlocks;
   const transactionBlocksRef = useRef<Block[] | null>(null);
   const transactionDeletedIdsRef = useRef<Set<string> | null>(null);
 
-  const getBlocksForMutation = useCallback(
-    (): Block[] => transactionBlocksRef.current ?? activeBlocksRef.current,
-    []
-  );
-
-  const runBlockTransaction = useCallback((run: () => void) => {
-    transactionBlocksRef.current = null;
-    transactionDeletedIdsRef.current = new Set();
-    try {
-      run();
-    } finally {
-      transactionBlocksRef.current = null;
-      transactionDeletedIdsRef.current = null;
+  const getSession = useCallback((): CanvasPageSession => {
+    if (!sessionRef.current) {
+      sessionRef.current = CanvasPageSession.hydrate(
+        sourceBlocks,
+        localPage?.blockOrder
+      );
     }
+    return sessionRef.current;
+  }, [localPage?.blockOrder, sourceBlocks]);
+
+  const getBlocksForMutation = useCallback((): Block[] => {
+    if (transactionBlocksRef.current) {
+      return transactionBlocksRef.current;
+    }
+    if (inBlockTransactionRef.current && sessionRef.current) {
+      return sessionRef.current.getBlocks();
+    }
+    return activeBlocksRef.current;
   }, []);
 
-  const rows = useMemo(() => buildBlockTree(activeBlocks), [activeBlocks]);
+  const previousRowsRef = useRef<CanvasRow[]>([]);
+  const rows = useMemo(() => {
+    const reconciled = reconcileRowTrees(
+      previousRowsRef.current,
+      buildBlockTree(activeBlocks)
+    );
+    previousRowsRef.current = reconciled;
+    return reconciled;
+  }, [activeBlocks]);
+
+  const canPersistToCollection = hasSeededBlocks || localPage != null;
+
+  const blockExistsInCollection = useCallback(
+    (blockId: string): boolean =>
+      existingLocalBlocks.some((item) => item.id === blockId) &&
+      !transactionDeletedIdsRef.current?.has(blockId),
+    [existingLocalBlocks]
+  );
 
   const ensurePageMeta = useCallback(
     (blockOrder?: string[]) => {
@@ -178,14 +202,21 @@ export function usePageCanvas(
     ]
   );
 
-  const persistBlocks = useCallback(
-    (blocks: Block[], options?: { singleBlockId?: string }): Block[] => {
-      const normalized = normalizeEditablePageBlocks(blocks);
+  const persistBlocksOutsideTransaction = useCallback(
+    (
+      previousBlocks: Block[],
+      blocks: Block[],
+      options?: { singleBlockId?: string }
+    ): Block[] => {
+      const normalized = normalizeEditablePageBlocks(blocks, {
+        createBlankBlock,
+      });
       const nextBlocks = normalized.blocks;
 
       if (!(hasSeededBlocks || localPage)) {
         ensurePageMeta(blockIds(nextBlocks));
         seedPageBlocks(pageId, nextBlocks);
+        getSession().replaceAllBlocks(nextBlocks);
         return nextBlocks;
       }
 
@@ -209,86 +240,227 @@ export function usePageCanvas(
           upsertPageBlock(
             pageId,
             block,
-            existingLocalBlocks.some((item) => item.id === block.id) &&
-              !transactionDeletedIdsRef.current?.has(block.id)
+            existingLocalBlocks.some((item) => item.id === block.id)
           );
+          getSession().updateBlock(block.id, block);
         }
         return nextBlocks;
       }
 
-      replacePageBlocks(pageId, nextBlocks, existingLocalBlocks, {
-        deletedInTransaction: transactionDeletedIdsRef.current ?? undefined,
-      });
+      applyPageBlockDiff(
+        pageId,
+        previousBlocks,
+        nextBlocks,
+        existingLocalBlocks
+      );
+      getSession().replaceAllBlocks(nextBlocks);
       return nextBlocks;
     },
-    [ensurePageMeta, existingLocalBlocks, hasSeededBlocks, localPage, pageId]
+    [
+      createBlankBlock,
+      ensurePageMeta,
+      existingLocalBlocks,
+      getSession,
+      hasSeededBlocks,
+      localPage,
+      pageId,
+    ]
   );
 
   const saveBlocks = useCallback(
     (nextBlocks: Block[]) => {
-      transactionBlocksRef.current = persistBlocks(nextBlocks);
+      const previousBlocks = getBlocksForMutation();
+      transactionBlocksRef.current = persistBlocksOutsideTransaction(
+        previousBlocks,
+        nextBlocks
+      );
     },
-    [persistBlocks]
+    [getBlocksForMutation, persistBlocksOutsideTransaction]
+  );
+
+  const persistPageBlocks = useCallback(
+    (nextBlocks: Block[]) => {
+      const session = getSession();
+      const previousBlocks =
+        transactionStartBlocksRef.current ?? session.getBlocks();
+
+      if (collectionTxRef.current) {
+        session.replaceAllBlocks(nextBlocks);
+        applyPageBlockDiff(
+          pageId,
+          previousBlocks,
+          nextBlocks,
+          existingLocalBlocks,
+          {
+            deletedInTransaction: transactionDeletedIdsRef.current ?? undefined,
+            tx: collectionTxRef.current,
+          }
+        );
+        transactionBlocksRef.current = session.getBlocks();
+        return;
+      }
+
+      saveBlocks(nextBlocks);
+    },
+    [existingLocalBlocks, getSession, pageId, saveBlocks]
+  );
+
+  const runBlockTransaction = useCallback(
+    (run: () => void) => {
+      const session = getSession();
+      transactionBlocksRef.current = null;
+      transactionStartBlocksRef.current = session.getBlocks();
+      transactionDeletedIdsRef.current = new Set();
+      inBlockTransactionRef.current = true;
+
+      if (canPersistToCollection) {
+        collectionTxRef.current = beginPageBlockTransaction(
+          pageId,
+          session.getBlockOrder(),
+          transactionDeletedIdsRef.current
+        );
+      }
+
+      try {
+        run();
+
+        const blankResult = session.ensureTrailingBlank({
+          createBlankBlock,
+        });
+        if (
+          blankResult.changed &&
+          blankResult.inserted &&
+          collectionTxRef.current
+        ) {
+          const flatIndex = session
+            .getBlockOrder()
+            .indexOf(blankResult.inserted.id);
+          if (flatIndex !== -1) {
+            insertPageBlockAt(
+              pageId,
+              blankResult.inserted,
+              flatIndex,
+              collectionTxRef.current
+            );
+          }
+        }
+
+        transactionBlocksRef.current = session.getBlocks();
+      } finally {
+        const pending = transactionBlocksRef.current;
+        if (pending && !canPersistToCollection) {
+          ensurePageMeta(blockIds(pending));
+          seedPageBlocks(pageId, pending);
+        } else if (collectionTxRef.current) {
+          commitPageBlockTransaction(collectionTxRef.current);
+        }
+
+        collectionTxRef.current = null;
+        transactionBlocksRef.current = null;
+        transactionStartBlocksRef.current = null;
+        transactionDeletedIdsRef.current = null;
+        inBlockTransactionRef.current = false;
+      }
+    },
+    [
+      canPersistToCollection,
+      createBlankBlock,
+      ensurePageMeta,
+      getSession,
+      pageId,
+    ]
   );
 
   const saveRowById = useCallback(
     (rowId: string, block: Block) => {
-      if (rowId === focusedBlockId) {
-        setFocusedDraft(block);
+      const session = getSession();
+      session.updateBlock(rowId, block);
+
+      if (collectionTxRef.current) {
+        updatePageBlockInTx(
+          pageId,
+          block,
+          blockExistsInCollection(block.id),
+          collectionTxRef.current
+        );
+        transactionBlocksRef.current = session.getBlocks();
+        return;
       }
 
       const seeded = getBlocksForMutation();
-      const nextBlocks = updateBlockByRowId(seeded, rowId, block);
-      transactionBlocksRef.current = persistBlocks(nextBlocks, {
-        singleBlockId: block.id,
-      });
+      transactionBlocksRef.current = persistBlocksOutsideTransaction(
+        seeded,
+        session.getBlocks(),
+        { singleBlockId: block.id }
+      );
     },
-    [getBlocksForMutation, focusedBlockId, persistBlocks]
+    [
+      blockExistsInCollection,
+      getBlocksForMutation,
+      getSession,
+      pageId,
+      persistBlocksOutsideTransaction,
+    ]
   );
 
   const insertRowAtPosition = useCallback(
     (position: RowPlacement, block: Block): string => {
-      const seeded = getBlocksForMutation();
-      const seededRows = buildBlockTree(seeded);
+      const session = getSession();
       const nextBlock = block.id ? block : { ...block, id: createId() };
-      const nextBlocks = insertBlockAtPlacement(
-        seeded,
-        seededRows,
+      const { block: inserted, flatIndex } = session.insertBlock(
         position,
         nextBlock
       );
-      transactionBlocksRef.current = nextBlocks;
 
-      saveBlocks(nextBlocks);
-      return nextBlock.id;
+      if (collectionTxRef.current && flatIndex !== -1) {
+        insertPageBlockAt(pageId, inserted, flatIndex, collectionTxRef.current);
+      }
+
+      transactionBlocksRef.current = session.getBlocks();
+      return inserted.id;
     },
-    [getBlocksForMutation, saveBlocks]
+    [getSession, pageId]
   );
 
   const deleteRowById = useCallback(
     (rowId: string) => {
-      if (rowId === focusedBlockId) {
-        setFocusedDraft(null);
+      const session = getSession();
+      const removedIds = session.deleteBlock(rowId);
+
+      if (collectionTxRef.current && removedIds.length > 0) {
+        deletePageBlocksInTx(pageId, removedIds, collectionTxRef.current);
       }
 
-      const seeded = getBlocksForMutation();
-      const seededRows = buildBlockTree(seeded);
-      const nextBlocks = deleteBlockByRowId(seeded, seededRows, rowId);
-      transactionBlocksRef.current = nextBlocks;
-      saveBlocks(nextBlocks);
+      transactionBlocksRef.current = session.getBlocks();
     },
-    [focusedBlockId, getBlocksForMutation, saveBlocks]
+    [getSession, pageId]
   );
 
   const moveRowById = useCallback(
     (rowId: string, position: RowPlacement) => {
-      const seeded = getBlocksForMutation();
-      const seededRows = buildBlockTree(seeded);
-      const nextBlocks = moveBlockByRowId(seeded, seededRows, rowId, position);
-      transactionBlocksRef.current = nextBlocks;
-      saveBlocks(nextBlocks);
+      const session = getSession();
+      session.moveBlock(rowId, position);
+
+      if (collectionTxRef.current) {
+        patchBlockOrder(
+          pageId,
+          session.getBlockOrder(),
+          collectionTxRef.current
+        );
+        const moved = session.getBlocks().find((block) => block.id === rowId);
+        if (moved) {
+          updatePageBlockInTx(
+            pageId,
+            moved,
+            blockExistsInCollection(rowId),
+            collectionTxRef.current
+          );
+        }
+      }
+
+      transactionBlocksRef.current = session.getBlocks();
     },
-    [getBlocksForMutation, saveBlocks]
+    [blockExistsInCollection, getSession, pageId]
   );
 
   const insertRow = useCallback(
@@ -318,13 +490,16 @@ export function usePageCanvas(
     [rows]
   );
 
-  const getPlacementRows = useCallback(() => rows, [rows]);
+  const getPlacementRows = useCallback(() => {
+    if (inBlockTransactionRef.current && sessionRef.current) {
+      return sessionRef.current.getRows();
+    }
+    return rows;
+  }, [rows]);
 
   const revertToServer = useCallback(() => {
     const now = new Date().toISOString();
     const blocks = serverPage.blocks;
-
-    setFocusedDraft(null);
 
     if (localPage) {
       localPagesCollection.update(pageId, (draft) => {
@@ -335,6 +510,7 @@ export function usePageCanvas(
 
     deleteAllBlocksForPage(existingLocalBlocks);
     seedPageBlocks(pageId, blocks);
+    sessionRef.current = CanvasPageSession.hydrate(blocks);
   }, [
     existingLocalBlocks,
     localPage,
@@ -355,22 +531,20 @@ export function usePageCanvas(
   }, [localPage, pageId, serverBaselineHash]);
 
   const resetToServer = useCallback(() => {
-    setFocusedDraft(null);
-
     if (localPage) {
       localPagesCollection.delete(pageId);
     }
 
     deleteAllBlocksForPage(existingLocalBlocks);
     markPageClean(pageId);
-  }, [existingLocalBlocks, localPage, pageId]);
+    sessionRef.current = CanvasPageSession.hydrate(serverPage.blocks);
+  }, [existingLocalBlocks, localPage, pageId, serverPage.blocks]);
 
   const hasLocalChanges = localPage != null || hasSeededBlocks;
 
   return useMemo(
     () => ({
       rows,
-      serverBlocks: serverPage.blocks,
       isReady,
       isStale,
       hasLocalChanges,
@@ -385,11 +559,11 @@ export function usePageCanvas(
       revertToServer,
       acknowledgeServerBaseline,
       resetToServer,
+      persistPageBlocks,
       runBlockTransaction,
     }),
     [
       rows,
-      serverPage.blocks,
       isReady,
       isStale,
       hasLocalChanges,
@@ -404,6 +578,7 @@ export function usePageCanvas(
       revertToServer,
       acknowledgeServerBaseline,
       resetToServer,
+      persistPageBlocks,
       runBlockTransaction,
     ]
   );

@@ -1,6 +1,6 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { findRowContext } from "@/db/queries/merge-blocks.ts";
-import { isContainerBlockType } from "@/lib/canvas/block-spec.types.ts";
+import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowContext } from "@/lib/blocks/block-tree.ts";
 import type { FocusState } from "@/lib/canvas/effects.ts";
 import {
   findCanvasTextField,

@@ -1,10 +1,10 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import {
   placementAfterRow,
   resolveRowPlacementPlan,
 } from "@/lib/blocks/row-placement.ts";
-import { isContainerBlockType } from "@/lib/canvas/block-spec.types.ts";
 import type { CanvasEffect } from "@/lib/canvas/effects.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildBlockTree } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import {
   deleteBlockByRowId,
   insertBlockAtPlacement,
@@ -30,7 +30,7 @@ describe("applyCanvasEffects list lift", () => {
     ];
     const rows = buildBlockTree(blocks);
     const result = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "row.split", rowId: "item-b", start: 0, end: 0 }
     );
 
@@ -70,7 +70,7 @@ describe("applyCanvasEffects list lift", () => {
         },
         revertToServer: vi.fn(),
         acknowledgeServerBaseline: vi.fn(),
-        saveAuthorPage: vi.fn(),
+        savePageBlocks: vi.fn(),
       },
       rows,
       setFocus

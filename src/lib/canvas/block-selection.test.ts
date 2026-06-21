@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBlockTree } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import {
   emptyBlockSelection,
   expandListContainerSelection,
@@ -202,7 +202,7 @@ describe("selection commands", () => {
     ];
     const rows = buildBlockTree(serverBlocks);
     const result = canvasReducer(
-      { rows, serverBlocks },
+      { rows },
       {
         type: "selection.delete",
         rowIds: [rows[0]?.rowId ?? "", rows[1]?.rowId ?? ""],
@@ -231,7 +231,7 @@ describe("selection commands", () => {
     };
 
     const result = canvasReducer(
-      { rows, serverBlocks },
+      { rows },
       {
         type: "rows.paste",
         targetRowId: target.rowId,

@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import {
   resolveRowPlacementPlan,
   resolveScopeStartPlacement,

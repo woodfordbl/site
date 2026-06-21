@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBlockTree } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
@@ -12,7 +12,7 @@ describe("canvasReducer", () => {
   it("row.insert emits insert effect", () => {
     const rows = buildBlockTree(serverBlocks);
     const result = canvasReducer(
-      { rows, serverBlocks },
+      { rows },
       {
         type: "row.insert",
         position: { parentId: null, atScopeStart: true },
@@ -29,7 +29,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks },
+      { rows },
       { type: "indent.adjust", rowId: row.rowId, delta: 1 }
     );
     expect(result.effects[0]?.type).toBe("persist");
@@ -43,7 +43,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks },
+      { rows },
       { type: "row.split", rowId: row.rowId, start: 2, end: 2 }
     );
     const persist = result.effects.find((e) => e.type === "persist");
@@ -68,7 +68,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       { type: "row.split", rowId: row.rowId, start: 5, end: 5 }
     );
     const insert = result.effects.find((e) => e.type === "insert");
@@ -76,6 +76,34 @@ describe("canvasReducer", () => {
     if (insert?.type === "insert") {
       expect(insert.block.type).toBe("text");
       expect(insert.block.props).toEqual({ text: "" });
+    }
+  });
+
+  it("row.split at caret 0 on heading inserts text block before", () => {
+    const rows = buildBlockTree([
+      { id: "p1", type: "heading", props: { level: 1, text: "Title" } },
+    ]);
+    const row = rows[0];
+    expect(row).toBeDefined();
+    if (!row) {
+      return;
+    }
+    const result = canvasReducer(
+      { rows },
+      { type: "row.split", rowId: row.rowId, start: 0, end: 0 }
+    );
+    const insert = result.effects.find((e) => e.type === "insert");
+    expect(insert?.type).toBe("insert");
+    if (insert?.type === "insert") {
+      expect(insert.block.type).toBe("text");
+      expect(insert.block.props).toEqual({ text: "" });
+      expect(insert.focus).toBe(false);
+    }
+    const focus = result.effects.find((e) => e.type === "focus");
+    expect(focus?.type).toBe("focus");
+    if (focus?.type === "focus") {
+      expect(focus.rowId).toBe(row.rowId);
+      expect(focus.placement).toBe("start");
     }
   });
 
@@ -89,7 +117,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       { type: "row.split", rowId: row.rowId, start: 2, end: 2 }
     );
     const insert = result.effects.find((e) => e.type === "insert");
@@ -108,7 +136,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks },
+      { rows },
       { type: "row.split", rowId: row.rowId, start: 0, end: 0 }
     );
     expect(result.effects.some((e) => e.type === "persist")).toBe(false);
@@ -145,7 +173,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       { type: "row.split", rowId: itemRow.rowId, start: 0, end: 0 }
     );
     expect(
@@ -193,7 +221,7 @@ describe("canvasReducer", () => {
     }
 
     const afterSibling = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       { type: "row.split", rowId: itemRow.rowId, start: 5, end: 5 }
     );
     const newItemInsert = afterSibling.effects.find((e) => e.type === "insert");
@@ -220,7 +248,7 @@ describe("canvasReducer", () => {
     const rowsAfterSibling = buildBlockTree(blocksAfterSibling);
 
     const afterLift = canvasReducer(
-      { rows: rowsAfterSibling, serverBlocks: blocksAfterSibling },
+      { rows: rowsAfterSibling },
       { type: "row.split", rowId: newItemId, start: 0, end: 0 }
     );
     const lifted = afterLift.effects.find(
@@ -268,7 +296,7 @@ describe("canvasReducer", () => {
     }
 
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       { type: "row.split", rowId: itemB.rowId, start: 0, end: 0 }
     );
 
@@ -314,7 +342,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       { type: "block.liftAsText", rowId: itemRow.rowId }
     );
     const deletes = result.effects.filter((e) => e.type === "delete");
@@ -352,7 +380,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "block.mergeTextIntoPreviousSibling", rowId: textRow.rowId }
     );
     const persist = result.effects.find((e) => e.type === "persist");
@@ -382,7 +410,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "block.mergeTextIntoPreviousSibling", rowId: secondRow.rowId }
     );
     const focus = result.effects.find((e) => e.type === "focus");
@@ -403,7 +431,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       { type: "slash.convert", rowId: row.rowId, to: "heading", text: "" }
     );
     const persist = result.effects.find((e) => e.type === "persist");
@@ -424,7 +452,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       {
         type: "slash.convert",
         rowId: row.rowId,
@@ -450,7 +478,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       {
         type: "container.wrap",
         rowId: row.rowId,
@@ -487,7 +515,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       {
         type: "container.wrap",
         rowId: row.rowId,
@@ -531,7 +559,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "row.split", rowId: itemRow.rowId, start: 3, end: 3 }
     );
     const insert = result.effects.find((e) => e.type === "insert");
@@ -559,7 +587,7 @@ describe("canvasReducer", () => {
     }
 
     const down = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "row.moveAdjacent", rowId: rowB.rowId, direction: "down" }
     );
     const moveDown = down.effects.find(
@@ -572,7 +600,7 @@ describe("canvasReducer", () => {
     }
 
     const up = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "row.moveAdjacent", rowId: rowB.rowId, direction: "up" }
     );
     const moveUp = up.effects.find(
@@ -613,7 +641,7 @@ describe("canvasReducer", () => {
     }
 
     const down = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "row.focusAdjacent", rowId: itemOne.rowId, direction: "down" }
     );
     const downFocus = down.effects.find((e) => e.type === "focus");
@@ -624,7 +652,7 @@ describe("canvasReducer", () => {
     }
 
     const upFromFirst = canvasReducer(
-      { rows, serverBlocks: blocks },
+      { rows },
       { type: "row.focusAdjacent", rowId: itemOne.rowId, direction: "up" }
     );
     const upFocus = upFromFirst.effects.find((e) => e.type === "focus");
@@ -665,7 +693,7 @@ describe("canvasReducer", () => {
     }
 
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       {
         type: "row.convert",
         rowId: itemB.rowId,
@@ -725,7 +753,7 @@ describe("canvasReducer", () => {
     }
 
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       {
         type: "row.convert",
         rowId: itemRow.rowId,
@@ -771,7 +799,7 @@ describe("canvasReducer", () => {
     }
 
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       {
         type: "row.convert",
         rowId: itemRow.rowId,
@@ -816,7 +844,7 @@ describe("canvasReducer", () => {
     }
 
     const result = canvasReducer(
-      { rows, serverBlocks: listBlocks },
+      { rows },
       {
         type: "container.wrap",
         rowId: itemB.rowId,
@@ -853,7 +881,7 @@ describe("canvasReducer", () => {
       return;
     }
     const result = canvasReducer(
-      { rows, serverBlocks: rows.map((r) => r.effectiveBlock) },
+      { rows },
       {
         type: "container.wrap",
         rowId: row.rowId,

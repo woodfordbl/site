@@ -230,10 +230,18 @@ function scanLine(line, docPath, lineNumber, issues, root) {
   }
 }
 
-export function collectBrokenDocReferences(root) {
+/**
+ * @param {string} root
+ * @param {{ docFiles?: string[] }} [options] — repo-relative paths; when set, only those docs are scanned
+ */
+export function collectBrokenDocReferences(root, options = {}) {
   const issues = [];
+  const docPaths =
+    options.docFiles?.length > 0
+      ? options.docFiles.map((doc) => join(root, doc))
+      : collectMarkdownDocFiles(root);
 
-  for (const docPath of collectMarkdownDocFiles(root)) {
+  for (const docPath of docPaths) {
     const content = readFileSync(docPath, "utf-8");
     const lines = content.split("\n");
 

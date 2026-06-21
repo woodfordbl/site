@@ -1,18 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { normalizeDropTarget } from "@/lib/canvas/drop-target.ts";
 import {
-  normalizeDropTarget,
+  resolveColumnContentDrop,
   resolveDropTargetFromPointer,
 } from "@/lib/canvas/resolve-drop-target.ts";
 
-function row(
-  rowId: string,
-  sortOrder: number,
-  children: CanvasRow[] = []
-): CanvasRow {
+function row(rowId: string, children: CanvasRow[] = []): CanvasRow {
   return {
     rowId,
-    sortOrder,
     effectiveBlock: {
       id: rowId,
       type: "text",
@@ -22,22 +18,34 @@ function row(
   };
 }
 
-function rect(top: number, height: number): DOMRect {
+function columnRow(rowId: string, children: CanvasRow[] = []): CanvasRow {
+  return {
+    rowId,
+    effectiveBlock: {
+      id: rowId,
+      type: "column",
+      props: { width: 1 },
+    },
+    children,
+  };
+}
+
+function rect(top: number, height: number, left = 0, width = 100): DOMRect {
   return {
     top,
     bottom: top + height,
-    left: 0,
-    right: 100,
-    width: 100,
+    left,
+    right: left + width,
+    width,
     height,
-    x: 0,
+    x: left,
     y: top,
     toJSON: () => ({}),
   } as DOMRect;
 }
 
 describe("normalizeDropTarget", () => {
-  const rows = [row("a", 0), row("b", 1000), row("c", 2000)];
+  const rows = [row("a"), row("b"), row("c")];
 
   it("keeps before on the hovered row", () => {
     expect(normalizeDropTarget(rows, "b", "before")).toEqual({
@@ -59,10 +67,32 @@ describe("normalizeDropTarget", () => {
       edge: "after",
     });
   });
+
+  it("keeps after on the last row in a column without targeting the next column", () => {
+    const columnsTree: CanvasRow[] = [
+      {
+        rowId: "cols",
+        effectiveBlock: { id: "cols", type: "columns", props: {} },
+        children: [
+          columnRow("col-a", [row("a1"), row("a2")]),
+          columnRow("col-b", [row("b1")]),
+        ],
+      },
+    ];
+
+    expect(normalizeDropTarget(columnsTree, "a2", "after")).toEqual({
+      rowId: "a2",
+      edge: "after",
+    });
+    expect(normalizeDropTarget(columnsTree, "a1", "after")).toEqual({
+      rowId: "a2",
+      edge: "before",
+    });
+  });
 });
 
 describe("resolveDropTargetFromPointer", () => {
-  const rows = [row("a", 0), row("b", 1000), row("c", 2000)];
+  const rows = [row("a"), row("b"), row("c")];
   const rowRects = new Map<string, DOMRect>([
     ["a", rect(100, 40)],
     ["b", rect(150, 40)],
@@ -70,56 +100,60 @@ describe("resolveDropTargetFromPointer", () => {
   ]);
 
   it("returns null when not dragging", () => {
-    expect(resolveDropTargetFromPointer(rows, 120, rowRects, null)).toBeNull();
+    expect(
+      resolveDropTargetFromPointer(rows, 50, 120, rowRects, null)
+    ).toBeNull();
   });
 
   it("returns null when rows are empty", () => {
-    expect(resolveDropTargetFromPointer([], 120, rowRects, "a")).toBeNull();
+    expect(resolveDropTargetFromPointer([], 50, 120, rowRects, "a")).toBeNull();
   });
 
   it("snaps above the first top-level row to before", () => {
-    expect(resolveDropTargetFromPointer(rows, 50, rowRects, "b")).toEqual({
+    expect(resolveDropTargetFromPointer(rows, 50, 50, rowRects, "b")).toEqual({
       rowId: "a",
       edge: "before",
     });
   });
 
   it("snaps below the last top-level row to after", () => {
-    expect(resolveDropTargetFromPointer(rows, 300, rowRects, "a")).toEqual({
+    expect(resolveDropTargetFromPointer(rows, 50, 300, rowRects, "a")).toEqual({
       rowId: "c",
       edge: "after",
     });
   });
 
   it("resolves before on midpoint hit-test", () => {
-    expect(resolveDropTargetFromPointer(rows, 110, rowRects, "c")).toEqual({
+    expect(resolveDropTargetFromPointer(rows, 50, 110, rowRects, "c")).toEqual({
       rowId: "a",
       edge: "before",
     });
   });
 
   it("resolves after to next row before on lower half", () => {
-    expect(resolveDropTargetFromPointer(rows, 130, rowRects, "c")).toEqual({
+    expect(resolveDropTargetFromPointer(rows, 50, 130, rowRects, "c")).toEqual({
       rowId: "b",
       edge: "before",
     });
   });
 
   it("keeps after on the last row lower half", () => {
-    expect(resolveDropTargetFromPointer(rows, 230, rowRects, "a")).toEqual({
+    expect(resolveDropTargetFromPointer(rows, 50, 230, rowRects, "a")).toEqual({
       rowId: "c",
       edge: "after",
     });
   });
 
   it("returns null when hovering the dragged row", () => {
-    expect(resolveDropTargetFromPointer(rows, 110, rowRects, "a")).toBeNull();
+    expect(
+      resolveDropTargetFromPointer(rows, 50, 110, rowRects, "a")
+    ).toBeNull();
   });
 
   it("resolves nested list rows in document order", () => {
     const nestedRows = [
-      row("list", 0, [row("item-a", 100), row("item-b", 200)]),
-      row("after-list", 1000),
+      row("list", [row("item-a"), row("item-b")]),
+      row("after-list"),
     ];
     const nestedRects = new Map<string, DOMRect>([
       ["list", rect(100, 80)],
@@ -129,10 +163,99 @@ describe("resolveDropTargetFromPointer", () => {
     ]);
 
     expect(
-      resolveDropTargetFromPointer(nestedRows, 115, nestedRects, "after-list")
+      resolveDropTargetFromPointer(
+        nestedRows,
+        50,
+        115,
+        nestedRects,
+        "after-list"
+      )
     ).toEqual({
       rowId: "item-a",
       edge: "before",
+    });
+  });
+});
+
+describe("resolveColumnContentDrop", () => {
+  const columnsTree: CanvasRow[] = [
+    {
+      rowId: "cols",
+      effectiveBlock: { id: "cols", type: "columns", props: {} },
+      children: [
+        columnRow("col-a", [row("a1"), row("a2")]),
+        columnRow("col-b", [row("b1")]),
+      ],
+    },
+  ];
+
+  it("targets column scope start above the first block", () => {
+    const rowRects = new Map<string, DOMRect>([
+      ["a1", rect(120, 40, 0)],
+      ["a2", rect(170, 40, 0)],
+    ]);
+
+    expect(
+      resolveColumnContentDrop(columnsTree, "col-a", 125, rowRects, "b1")
+    ).toEqual({
+      rowId: "col-a",
+      edge: "before",
+      atScopeStart: true,
+    });
+  });
+
+  it("targets after the last block in the column scope end band", () => {
+    const rowRects = new Map<string, DOMRect>([
+      ["a1", rect(120, 40, 0)],
+      ["a2", rect(170, 40, 0)],
+    ]);
+
+    expect(
+      resolveColumnContentDrop(columnsTree, "col-a", 205, rowRects, "b1")
+    ).toEqual({
+      rowId: "a2",
+      edge: "after",
+    });
+  });
+
+  it("resolves within-column reorder using child rows only", () => {
+    const rowRects = new Map<string, DOMRect>([
+      ["a1", rect(120, 40, 0, 200)],
+      ["a2", rect(170, 40, 0, 200)],
+      ["b1", rect(120, 40, 220, 200)],
+    ]);
+
+    expect(
+      resolveColumnContentDrop(columnsTree, "col-a", 155, rowRects, "b1")
+    ).toEqual({
+      rowId: "a2",
+      edge: "before",
+    });
+  });
+});
+
+describe("resolveDropTargetFromPointer horizontal filtering", () => {
+  it("selects the left column row when the pointer x is over the left column", () => {
+    const columnsTree: CanvasRow[] = [
+      {
+        rowId: "cols",
+        effectiveBlock: { id: "cols", type: "columns", props: {} },
+        children: [
+          columnRow("col-a", [row("a1")]),
+          columnRow("col-b", [row("b1")]),
+        ],
+      },
+    ];
+    const rowRects = new Map<string, DOMRect>([
+      ["a1", rect(120, 40, 0, 200)],
+      ["b1", rect(120, 40, 220, 200)],
+    ]);
+
+    expect(
+      resolveDropTargetFromPointer(columnsTree, 80, 155, rowRects, "b1")
+    ).toEqual({
+      rowId: "a1",
+      edge: "after",
     });
   });
 });

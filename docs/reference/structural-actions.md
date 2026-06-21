@@ -1,6 +1,8 @@
 # Structural actions
 
-Priority order in `resolveStructuralAction`:
+Backspace/Delete in a field becomes structural via `resolveStructuralDeleteKey` in [`field-keydown.ts`](../../src/lib/editor/field-keydown.ts) (caret at start, or empty block); the keyboard priority chain (slash menu → modifier arrows → arrows → indent → markdown → Enter → structural delete) lives in [`editable-surface.tsx`](../../src/components/editor/editable-surface.tsx).
+
+Priority order in `resolveStructuralAction` ([`resolve-structural-action.ts`](../../src/lib/canvas/resolve-structural-action.ts)):
 
 0. `pageLink` or `divider` + Backspace/Delete → `row.delete` + focus adjacent row
 1. Empty + indent > 0 → `indent.adjust` -1
@@ -16,6 +18,6 @@ Priority order in `resolveStructuralAction`:
 
 Container merge and lift policy use [`block-container-config.ts`](../../src/lib/canvas/block-container-config.ts) and [`block-interactions.ts`](../../src/lib/canvas/block-interactions.ts) (list and checklist: empty Enter lifts out; empty Delete with a previous sibling deletes in place; first or sole empty item Delete lifts out; same-type child stays inside; disallowed conversions lift out).
 
-Page sidebar duplicate/rename/delete do not go through this resolver; they use page commands and `persistPageMetadata` instead.
+Page sidebar duplicate/rename/delete do not go through this resolver; they use page commands and `persistPageMetadata` instead. Sidebar and canvas **drag reorder** use the [drag-and-drop toolkit](../architecture/drag-and-drop.md) (`resolve-drop-target`, `page.reposition`) — not `resolveStructuralAction`.
 
 Structural commands that change document order persist `blockOrder` and bump page `updatedAt` in the same transaction as block rows; `createdAt` is unchanged.

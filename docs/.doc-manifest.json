@@ -1,15 +1,112 @@
 {
+  "hookGate": {
+    "majorExactPaths": [
+      "docs/.doc-manifest.json",
+      "src/lib/content/save-page.ts",
+      "src/components/canvas/page-canvas-footer.tsx"
+    ],
+    "majorBasenames": [
+      "reducer.ts",
+      "commands.ts",
+      "effects.ts",
+      "block.ts",
+      "block-props.ts",
+      "resolve-structural-action.ts",
+      "structural-context.ts",
+      "use-page-dispatch.ts",
+      "use-canvas-row-actions.ts"
+    ]
+  },
   "mappings": [
     {
       "globs": ["src/lib/canvas/**", "src/components/canvas/**"],
       "docs": [
         "docs/architecture/canvas-editor.md",
+        "docs/architecture/drag-and-drop.md",
         "docs/reference/canvas-commands.md"
+      ],
+      "majorGlobs": [
+        "src/components/blocks/types/columns/**",
+        "src/components/blocks/types/media/**",
+        "src/components/blocks/types/embed/**",
+        "src/lib/canvas/columns-layout.ts",
+        "src/lib/canvas/table-layout.ts",
+        "src/lib/canvas/resolve-table-drop-target.ts",
+        "src/components/blocks/types/table/**",
+        "src/lib/canvas/resolve-drop-target.ts",
+        "src/components/canvas/canvas-slash-context.tsx",
+        "src/components/dnd/**",
+        "src/lib/dnd/**"
+      ]
+    },
+    {
+      "globs": [
+        "src/lib/dnd/**",
+        "src/components/dnd/**",
+        "src/hooks/use-pointer-click-vs-drag.ts"
+      ],
+      "docs": ["docs/architecture/drag-and-drop.md"],
+      "majorGlobs": [
+        "src/components/dnd/dnd-surface.tsx",
+        "src/components/dnd/use-dnd.ts",
+        "src/lib/dnd/drag-store.ts",
+        "src/lib/dnd/drag-channel.ts"
+      ]
+    },
+    {
+      "globs": [
+        "src/lib/canvas/table-layout.ts",
+        "src/lib/canvas/resolve-table-drop-target.ts",
+        "src/components/blocks/types/table/**"
+      ],
+      "docs": [
+        "docs/architecture/table-blocks.md",
+        "docs/architecture/block-model.md",
+        "docs/architecture/block-types.md",
+        "docs/architecture/drag-and-drop.md",
+        "docs/reference/canvas-commands.md"
+      ],
+      "majorGlobs": [
+        "src/lib/canvas/table-layout.ts",
+        "src/lib/canvas/resolve-table-drop-target.ts",
+        "src/components/blocks/types/table/**"
       ]
     },
     {
       "globs": ["src/lib/pages/**", "src/components/pages/**"],
-      "docs": ["docs/architecture/pages.md", "docs/reference/page-commands.md"]
+      "docs": [
+        "docs/architecture/pages.md",
+        "docs/architecture/drag-and-drop.md",
+        "docs/reference/page-commands.md"
+      ],
+      "majorGlobs": [
+        "src/components/pages/page-list.tsx",
+        "src/components/pages/page-sidebar.tsx",
+        "src/components/pages/page-sidebar-chrome.tsx",
+        "src/components/pages/page-sidebar-hover-reveal.tsx",
+        "src/components/ui/collapsible.tsx",
+        "src/lib/pages/page-sidebar-pin-cookie.ts",
+        "src/lib/pages/page-sidebar-layout-cookie.ts",
+        "src/components/ui/sidebar.tsx",
+        "src/components/ui/resizable.tsx",
+        "src/lib/pages/resolve-page-list-drop-target.ts",
+        "src/lib/pages/reposition-page.ts",
+        "src/lib/pages/persist-page-reposition.ts",
+        "src/lib/pages/persist-page-metadata.ts",
+        "src/lib/pages/append-page-link-on-parent.ts",
+        "src/lib/pages/resolve-user-page-by-slug.ts",
+        "src/lib/pages/preload-page-icon-picker.ts",
+        "src/lib/pages/page-icon-emojibase.ts",
+        "src/lib/pages/page-icon.ts",
+        "src/lib/pages/page-icon-catalog.ts",
+        "src/lib/pages/page-icon-emoji-catalog.ts",
+        "src/components/pages/warm-page-icon-picker-cache-effect.tsx",
+        "src/components/pages/page-icon-picker.tsx",
+        "src/components/pages/page-icon-display.tsx",
+        "src/components/pages/tabler-glyph.tsx",
+        "src/components/pages/page-icon-picker-emoji-panel.tsx",
+        "src/components/pages/page-icon-picker-icon-panel.tsx"
+      ]
     },
     {
       "globs": [
@@ -35,11 +132,62 @@
       "docs": [
         "docs/architecture/block-model.md",
         "docs/architecture/block-types.md"
-      ]
+      ],
+      "majorGlobs": ["src/lib/blocks/block-defs.ts"]
     },
     {
-      "globs": ["src/db/**", "src/lib/content/**", "src/lib/local-draft/**"],
-      "docs": ["docs/architecture/local-first-persistence.md"]
+      "globs": [
+        "src/components/blocks/**",
+        "src/lib/editor/**",
+        "src/components/editor/**"
+      ],
+      "docs": [
+        "docs/architecture/block-types.md",
+        "docs/architecture/canvas-editor.md"
+      ],
+      "majorGlobs": ["src/components/blocks/registry.ts"]
+    },
+    {
+      "globs": [
+        "src/lib/media/**",
+        "src/hooks/use-asset-object-url.ts",
+        "src/hooks/use-unfurl-embed-url.ts"
+      ],
+      "docs": ["docs/architecture/block-types.md"]
+    },
+    {
+      "globs": [
+        "src/routes/**",
+        "src/lib/schemas/page.ts",
+        "src/lib/content/page-store.server.ts",
+        "src/lib/content/page-head.ts",
+        "src/hooks/use-local-pages.ts",
+        "src/hooks/use-slug-page-resolution.ts"
+      ],
+      "docs": ["docs/architecture/pages.md"]
+    },
+    {
+      "globs": [
+        "src/hooks/use-inline-custom-block-keys.ts",
+        "src/hooks/use-auto-focus.ts"
+      ],
+      "docs": ["docs/architecture/canvas-editor.md"]
+    },
+    {
+      "globs": [
+        "src/db/**",
+        "src/lib/content/**",
+        "src/lib/local-draft/**",
+        "src/lib/cookies/**",
+        "src/lib/schemas/local-*.ts"
+      ],
+      "docs": ["docs/architecture/local-first-persistence.md"],
+      "majorGlobs": [
+        "src/db/provider.tsx",
+        "src/db/assets/**",
+        "src/lib/content/save-media-assets.ts",
+        "src/lib/content/prepare-page-document-for-author-save.ts"
+      ]
     },
     {
       "globs": [

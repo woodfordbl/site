@@ -1,7 +1,11 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { findRowContext, flattenRows } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowContext, flattenRows } from "@/lib/blocks/block-tree.ts";
 import { isRowEmpty } from "@/lib/blocks/is-block-empty.ts";
 import { acceptsEmptyMergeFromAfter } from "@/lib/canvas/block-container-config.ts";
+import {
+  findFocusableAdjacentRow,
+  flattenCanvasRows,
+} from "@/lib/canvas/focusable-rows.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import { getBlockParentId } from "@/lib/schemas/block.ts";
 
@@ -15,6 +19,7 @@ export interface StructuralContext {
   parentId: string | null;
   parentRow: CanvasRow | null;
   previousCanvasRow: CanvasRow | null;
+  previousFocusableCanvasRow: CanvasRow | null;
   previousSibling: CanvasRow | null;
   rowId: string;
 }
@@ -34,9 +39,21 @@ export function buildStructuralContext(
 
   const { row, parent, siblings, index } = ctx;
   const flatRows = flattenRows(rows);
+  const focusableFlatRows = flattenCanvasRows(rows);
   const flatIndex = flatRows.findIndex((r) => r.rowId === rowId);
   const previousCanvasRow =
     flatIndex > 0 ? (flatRows[flatIndex - 1] ?? null) : null;
+  const focusableFlatIndex = focusableFlatRows.findIndex(
+    (r) => r.rowId === rowId
+  );
+  const previousFocusableCanvasRow =
+    focusableFlatIndex > 0
+      ? (findFocusableAdjacentRow(
+          focusableFlatRows,
+          focusableFlatIndex,
+          "up"
+        ) ?? null)
+      : null;
   const previousSibling = index > 0 ? (siblings[index - 1] ?? null) : null;
   const nextSibling =
     index < siblings.length - 1 ? (siblings[index + 1] ?? null) : null;
@@ -49,6 +66,7 @@ export function buildStructuralContext(
     previousSibling,
     nextSibling,
     previousCanvasRow,
+    previousFocusableCanvasRow,
     caretAtStart: options.caretAtStart,
     isEmpty: isRowEmpty(row.effectiveBlock, row.children.length),
     key: options.key,

@@ -35,15 +35,35 @@ export function clearSession(root) {
 }
 
 /**
+ * @param {string} relativePath
+ */
+function isTrackedDocPath(relativePath) {
+  return (
+    relativePath === "AGENTS.md" ||
+    (relativePath.startsWith("docs/") && relativePath.endsWith(".md"))
+  );
+}
+
+/**
  * @param {string} root
  * @param {string} relativePath
  */
 export function trackPath(root, relativePath) {
+  const session = readSession(root);
+
+  if (isTrackedDocPath(relativePath)) {
+    if (!session.paths.includes(relativePath)) {
+      session.paths.push(relativePath);
+    }
+    session.paths.sort();
+    writeSession(root, session);
+    return;
+  }
+
   const docs = getDocsForPath(root, relativePath);
   if (docs.length === 0) {
     return;
   }
-  const session = readSession(root);
   if (!session.paths.includes(relativePath)) {
     session.paths.push(relativePath);
   }

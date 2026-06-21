@@ -12,7 +12,7 @@ UI → CanvasCommand → canvasReducer → CanvasEffect[] → applyCanvasEffects
 |-------|-----|----------|
 | `*Edit` / `EditableSurface` | Emit commands | Cross-row policy |
 | `canvasReducer` | All row/list/indent policy | React, localStorage |
-| `usePageCanvas` | Lazy-seed + block-level persist; reads `usePageBlocks` (live query) | Keyboard interpretation |
+| `usePageCanvas` | Lazy-seed + session-backed structural persist; reads `usePageBlocks` (live query) | Keyboard interpretation |
 | `useCanvasRowActions` | Insert/move/paste placement | Content edits |
 
 ### Block identity on structural edits
@@ -24,17 +24,25 @@ Keep the **same block id** when converting or repositioning an existing row (bul
 | `persist` (update block fields / `parentId`) | `delete` + `insert` with the same id |
 | `move` (reorder in `blockOrder`) | Recreating the row to change placement |
 
-Delete + insert is for **new** rows (gutter insert, split remainder, new containers). Container lift-out uses [`planLiftContainerChildConversion`](../../src/lib/canvas/container-child-conversion.ts): `persist` the child as top-level text, delete the list container only when needed, `move` to document position, `focus` the same row id. `container.wrap` builds list/checklist shells via `buildWrappedContainerBlock` / `buildContainerChildBlock` in [`create-block.ts`](../../src/lib/blocks/create-block.ts) (normal block ids only; no sentinel suffixes). Enter at caret 0 inside a list/checklist child dispatches `block.liftAsText` when policy requires lift-out. Same-transaction deletes are tracked in `replacePageBlocks` (`deletedInTransaction`) so re-inserts use collection `insert`, not `update`.
+Delete + insert is for **new** rows (gutter insert, split remainder, new containers). Container lift-out uses [`planLiftContainerChildConversion`](../../src/lib/canvas/container-child-conversion.ts): `persist` the child as top-level text, delete the list container only when needed, `move` to document position, `focus` the same row id. `container.wrap` builds list/checklist shells via `buildWrappedContainerBlock` / `buildContainerChildBlock` in [`create-block.ts`](../../src/lib/blocks/create-block.ts) (normal block ids only; no sentinel suffixes). Enter at caret 0 inside a list/checklist child dispatches `block.liftAsText` when policy requires lift-out. Same-transaction deletes are tracked in block collection transactions (`deletedInTransaction`) so re-inserts use collection `insert`, not `update`.
+
+## Session + persistence
+
+[`CanvasPageSession`](../../src/lib/canvas/page-session.ts) mirrors the flat block array and row tree during edit. [`usePageCanvas`](../../src/db/queries/use-page-canvas.ts) hydrates the session from `usePageBlocks` and runs **`runBlockTransaction`** around each reducer dispatch: effects mutate the session, then **one** [`commitPageBlockTransaction`](../../src/db/queries/block-collection-ops.ts) writes incremental inserts/deletes/order patches (hot path) or [`applyPageBlockDiff`](../../src/db/queries/block-collection-ops.ts) (bulk paste/columns). There is no draft overlay — every keystroke writes through the same TanStack DB transaction path. While a transaction is open, `getPlacementRows` reads session rows so placement math matches in-flight mutations.
+
+## Contexts and re-renders
+
+[`canvas-editor-context.tsx`](../../src/components/canvas/canvas-editor-context.tsx) splits editor state by volatility so a keystroke does not invalidate every row: `CanvasEditorContext` holds identity-stable **actions** only (`CanvasEditorActions`, built in [`useCanvasEditor`](../../src/hooks/use-canvas-editor.ts); callbacks read live rows via `getRows()` instead of closing over them); volatile state lives in `CanvasSelectionContext`, `CanvasFocusContext`, and `CanvasEditorStateContext` (rows + clipboard, consumed only by menu surfaces). [`buildBlockTree`](../../src/lib/blocks/block-tree.ts) groups blocks by parent in one pass; `reconcileRowTrees` reuses unchanged row objects across rebuilds, so the memoized per-row components (`CanvasRowView`, `BlockTreeNode` — `React.memo`) bail out and a keystroke re-renders only the edited row.
 
 ## Row placement
 
 Gutter +, drag-drop, and paste call `useCanvasRowActions` (`insertAfter`, `insertBefore`, `moveAfter`, `moveBefore`, `pasteAfter`). Placement resolves anchor row + edge in `src/lib/blocks/row-placement.ts`, then dispatches `row.insert` / `row.move` / `rows.paste`. The effect layer applies the placement to the current flat block array in `src/lib/blocks/page-block-mutations.ts`.
 
-The resulting full array is the next document order. Structural edits persist through `replacePageBlocks`, which writes both the block rows and `localPagesCollection.blockOrder` in one transaction. Do not rely on localStorage/TanStack collection enumeration order for row order; reads must apply `blockOrder` before building the row tree.
+The resulting full array is the next document order. Hot structural edits persist through incremental ops inside one transaction per dispatch; bulk edits use `applyPageBlockDiff`, which writes both block rows and `localPagesCollection.blockOrder` atomically. Do not rely on localStorage/TanStack collection enumeration order for row order; reads must apply `blockOrder` before building the row tree.
 
 ## Focus
 
-Reducer emits `focus` effects; `PageCanvasEditor` applies them through `tryApplyCanvasFocus` in [`apply-pending-focus.ts`](../../src/lib/canvas/apply-pending-focus.ts). Effects may set `placement` (`start` / `end`) or an explicit caret `offset` (character index); when `offset` is set it wins over placement for the active field.
+Reducer emits `focus` effects; [`useCanvasEditor`](../../src/hooks/use-canvas-editor.ts) applies them through `tryApplyCanvasFocus` in [`apply-pending-focus.ts`](../../src/lib/canvas/apply-pending-focus.ts). Effects may set `placement` (`start` / `end`) or an explicit caret `offset` (character index); when `offset` is set it wins over placement for the active field.
 
 Focusable row navigation (Option+↑/↓, Shift+↑/↓ range, `row.focusAdjacent`, `row.moveAdjacent`) skips container shell rows and targets leaf rows only. Shared helpers live in [`focusable-rows.ts`](../../src/lib/canvas/focusable-rows.ts) (`flattenCanvasRows`, `findFocusableAdjacentRow`). `row.moveAdjacent` in the reducer resolves the neighbor then dispatches `row.move`.
 
@@ -42,7 +50,7 @@ When a row is lifted out of a list container, focus is deferred until the row re
 
 ## Slash menu
 
-Schema-driven block items from `BLOCK_SPECS` in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts). `getSlashMenuItems()` expands `heading` into Heading 1–4 entries (`headingLevel` on selection) and `list` into bullet and numbered entries (`listVariant` on selection). Page items come from [`src/lib/pages/page-slash-menu.ts`](../../src/lib/pages/page-slash-menu.ts) and [`src/lib/canvas/slash-menu-list.ts`](../../src/lib/canvas/slash-menu-list.ts): **New Page** (`page.create` with `navigate: false` + `pageLink` conversion) and **Link To Page** (inline search panel in the same popover). Root list rows use editor-driven highlight (`selectedIndex` via `handleSlashMenuKeyDown` in [`EditableSurface`](../../src/components/editor/editable-surface.tsx)); the field stays focused while filtering `/query` (typing filters, arrow keys navigate, Enter confirms, Escape dismisses and leaves `/query` in the block without reopening until the leading `/` is removed). Focus moves into the link search field when picking a page; Escape returns to the root list. Slash menu renders in a Popover anchored to the active field (`initialFocus={false}`); block-actions uses `DropdownMenu` via `createDropdownMenuHandle()` from the gutter. Both shells mount in [`CanvasMenuRoot`](../../src/components/canvas/canvas-menu-root.tsx) (single portal for slash popover + block-actions dropdown). Row-scoped slash orchestration lives in `useCanvasSlashMenu`; selection dispatches `slash.convert`, `container.wrap`, or page commands via `canvas-row.tsx`.
+Schema-driven block items from `BLOCK_SPECS` in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts). Multi-variant blocks declare `slashItems` on the spec — Heading 1–4 (`headingLevel` on selection), bullet/numbered list (`listVariant`), 2/3/4 columns (`columnCount`); other specs derive one entry from `label` + `slashAliases` (including **Table**, default 3×3 via `table.create`). Page items come from [`src/lib/pages/page-slash-menu.ts`](../../src/lib/pages/page-slash-menu.ts) and [`src/lib/canvas/slash-menu-list.ts`](../../src/lib/canvas/slash-menu-list.ts): **New Page** (`page.create` with `navigate: false` + `slash.convert` to `pageLink` with `pageLinkVariant: "child"`) and **Link To Page** (`slash.convert` with `pageLinkVariant: "linked"` after picking a target in the inline search panel). Root list rows use editor-driven highlight (`selectedIndex` via `handleSlashMenuKeyDown` in [`EditableSurface`](../../src/components/editor/editable-surface.tsx)); the field stays focused while filtering `/query` (typing filters, arrow keys navigate, Enter confirms, Escape dismisses and leaves `/query` in the block without reopening until the leading `/` is removed). Focus moves into the link search field when picking a page; Escape returns to the root list. One canvas-level controller owns the menu: [`CanvasSlashProvider`](../../src/components/canvas/canvas-slash-context.tsx) keys the session by the row being typed in (container children included); edit surfaces wire up through `useRowSlash(rowId, enabled)` read by `useBlockFieldActions` — no slash props are threaded through `BlockTreeNode` or container views. The popover anchors to `document.activeElement` captured at slash input time (`initialFocus={false}`); block-actions uses `DropdownMenu` via `createDropdownMenuHandle()` from the gutter. Both shells mount in [`CanvasMenuRoot`](../../src/components/canvas/canvas-menu-root.tsx) (single portal for slash popover + block-actions dropdown). Menu context is split in [`canvas-menu-context.tsx`](../../src/components/canvas/canvas-menu-context.tsx) so slash typing does not re-render gutters: `useCanvasMenu` (open/payload/actions) vs `useCanvasSlashSession` (slash session + anchor). Selection dispatches `slash.convert`, `container.wrap`, or page commands via `applyBlockConversion` ([`apply-block-conversion.ts`](../../src/lib/canvas/apply-block-conversion.ts)).
 
 ## Block rendering
 
@@ -50,7 +58,7 @@ Schema-driven block items from `BLOCK_SPECS` in [`src/components/blocks/registry
 |-------|------|
 | `BlockTreeNode` | Routes container vs leaf rows via `isContainerSpec` |
 | `BlockRenderer` | Looks up `BLOCK_SPECS[block.type]`; renders `View` or `Edit` |
-| `*View` / `*Edit` | Per-type UI under `src/components/blocks/types/` |
+| `*View` / `*Edit` | Per-type UI under `src/components/blocks/types/`; `pageLink` rows show the target page icon via `PageIconDisplay` + `usePageSummary` |
 | Container `Shell` | Registered as `Container` on the spec (e.g. list → `ListView`) |
 
 Leaf edit components receive canvas keyboard wiring from `useBlockFieldActions` according to their `behavior.editStrategy`. Block and container specs live in [`registry.ts`](../../src/components/blocks/registry.ts); container helpers in [`block-container-config.ts`](../../src/lib/canvas/block-container-config.ts). See [block-types](./block-types.md).
@@ -64,6 +72,10 @@ Leaf edit components receive canvas keyboard wiring from `useBlockFieldActions` 
 | Quote | `quote` |
 | Callout | `callout` |
 | Checklist | `checklist` |
+| 2 / 3 / 4 columns | `columns` (`columns.create` with `count`) |
+| Table | `table` (`table.create`, default 3×3) |
+| Media | `media` (upload or URL for image/gif/video; local uploads in IndexedDB) |
+| Embed | `embed` (YouTube/Vimeo iframe, direct image URL, or OG bookmark preview) |
 | Divider | `divider` |
 
 ## Block selection
@@ -85,18 +97,18 @@ Grab handles in the gutter expose block actions and multi-select:
 | Escape | Clear block selection |
 | Click outside grab / menu | Clear block selection; block menu closes immediately |
 
-**Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children.
+**Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL also get **Change view** — checkboxes for **Show title** and **Show URL** (plain captions below the preview; default off). Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children.
 
 Text fields keep native copy/paste while focused. Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. The block-actions menu closes immediately (no exit animation) when focus leaves the menu or grab trigger.
 
 ## Drag and drop
 
-Grab-handle drag calls `moveAfter` / `moveBefore` (dispatches `row.move`). Drag start clears block selection so the source row is not highlighted during the move. Row id travels on a custom drag type (`application/x-canvas-row-id`), not `text/plain`, so editor fields do not show a text-insertion caret while hovering. While dragging:
+Grab-handle drag calls `moveAfter` / `moveBefore` (dispatches `row.move`). Drag start clears block selection so the source row is not highlighted during the move. Row id travels on a custom drag type (`application/x-canvas-row-id`), not `text/plain`, so editor fields do not show a text-insertion caret while hovering. Plumbing lives in the shared [drag-and-drop toolkit](./drag-and-drop.md) (`DndSurface` + `useDragSource` on the gutter). [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) wraps the canvas in `DndSurface` + [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) so nested table column surfaces can still bind row drags to the canvas channel (`useCanvasRowSurface`). While dragging:
 
-- A ghost preview clones the row content (`setCanvasRowDragImage`).
-- A canvas-level drop zone in `PageCanvasEditor` resolves the insertion target from pointer Y via `resolveDropTargetFromPointer` (row rects from `[data-canvas-row-id]`). The same resolver runs on `dragover` and `drop` so the line and committed move always match.
-- Drop targets show a single `--selection` insertion line before/after the resolved row (`normalizeDropTarget` dedupes adjacent edges). Nested list rows win over their parent container when rects overlap (deepest row first).
-- When the pointer is above the first top-level row or below the last top-level row (including over the page footer), the target snaps to the beginning or end of the page row list.
+- A native drag image clones `[data-canvas-row-content]` via [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts) (`native-clone` on [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)).
+- [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) (`useDropZone`) resolves the insertion target from pointer position via [`resolveDropTargetFromPointer`](../../src/lib/canvas/resolve-drop-target.ts) (row rects from `[data-canvas-row-id]` cached by the surface). The same resolver runs on each batched `dragover` and on `drop` so the line and committed move always match.
+- Drop targets show a single `--selection` insertion line before/after the resolved row ([`normalizeDropTarget`](../../src/lib/canvas/drop-target.ts) dedupes adjacent edges). Nested list rows win over their parent container when rects overlap (deepest row first). Empty **column** shells accept drops via `row.moveToPosition` with `atScopeStart`; horizontal pointer position resolves across `[data-column-id]` regions inside `[data-columns-layout]`. **Table** body rows reorder via [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) and [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) (`useCanvasRowSurface`); column reorder uses a nested `TableColumnDnD` surface inside [`TableView`](../../src/components/blocks/types/table/table-view.tsx) — see [table-blocks](./table-blocks.md#structure-handles).
+- When the pointer is above the first top-level row or below the last top-level row (including the empty space below the block list), the target snaps to the beginning or end of the page row list.
 - Editor fields ignore pointer events until the drag ends.
 
 ## Keyboard
@@ -107,7 +119,7 @@ Grab-handle drag calls `moveAfter` / `moveBefore` (dispatches `row.move`). Drag 
 | Option+↑ / Option+↓ (focused field) | `row.moveAdjacent` (reorder before/after focusable neighbor) |
 | Shift+↑ / Shift+↓ (focused field) | Extend block selection to the focusable neighbor (blurs field; same anchor rules as Shift+click) |
 | Tab | `indent.adjust` |
-| Enter | `row.split` at caret (text after caret → new block of same type); at end of row → empty `text` block after; at caret 0 on non-empty top-level row → empty row before, focus stays on original row; **list child at caret 0** lifts out as top-level `text` (empty or not) |
+| Enter | `row.split` at caret (text after caret → new block of same type); at end of row → empty `text` block after; at caret 0 on non-empty row → empty row before (always `text` for headings; same type otherwise), focus stays on original row; **list child at caret 0** lifts out as top-level `text` (empty or not) |
 | Shift+Enter | Newline in multiline `text` / `quote` / `callout` fields (`field-sizing-content`); list exit uses Enter/Backspace structural paths, not Shift+Enter |
 | Backspace/Delete | `resolveStructuralAction` (sole empty top-level row is kept; empty list item with previous sibling → `row.delete` + focus previous; first or sole empty list item → `block.liftAsText`, sole item replaces the list row) |
 
@@ -143,23 +155,44 @@ Editable canvases keep a normal empty `text` row available through `normalizeEdi
 - **Minimum row** — zero blocks get one empty `text` row with a normal block id.
 - **Trailing row** — when the last top-level block is not empty `text`, append one normal empty `text` row at the end. User-created blank rows beyond that are preserved.
 
-When content edits or structural edits need a new blank row, `usePageCanvas` persists the normalized full block list through the same `replacePageBlocks` + `blockOrder` path as gutter inserts. See [pages](./pages.md#empty-canvas).
+When a structural edit needs a new trailing blank, the session's `ensureTrailingBlank` inserts it inside the same block transaction as the edit, so `blockOrder` includes the blank row like any other row. See [pages](./pages.md#empty-canvas).
 
 ## Page footer
 
-When editing a page, the canvas footer (`PageCanvasFooter`) sits below the block list:
+`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height under [`PageHeader`](../../src/components/pages/page-header.tsx) inside the inset card. The author toolbar (`PageCanvasFooter`) is **not** an in-flow footer — it is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset):
 
 | Button | When | Action |
 |--------|------|--------|
-| **Save to source** | `import.meta.env.DEV` | Writes `content/pages/{slug-path}.json` via `savePage` with the resolved local title/slug/parentId, then deletes the local page document |
+| **Save** | `import.meta.env.DEV` | Writes `content/pages/{slug-path}.json` via `savePage` with the resolved local title/slug/parentId, then deletes the local page document |
 | **Reset** | Local page document exists | Confirms, then `resetToServer` — discards localStorage overrides |
+| **Revert** / **Keep** | Server baseline drifted (`isStale`) | `StaleBanner` reverts to the server blocks or keeps local edits |
 
 See [author-dev-mode](./author-dev-mode.md) for the save workflow.
 
 ## Page routes
 
-Shipped and lazy-seeded pages load through the splat route (`src/routes/$.tsx`) so multi-segment slugs such as `/work/projects` resolve server JSON. User-created pages load through `src/routes/p.$pageId.tsx` with an `isUserCreatedPage` guard. Legacy user slug paths on the splat route redirect to `/p/$pageId`.
+Shipped and lazy-seeded pages load through [`src/routes/$.tsx`](../../src/routes/$.tsx) (`/` or `/$` splat) so multi-segment slugs such as `/work/projects` resolve server JSON. User-created pages load on [`src/routes/p.$.tsx`](../../src/routes/p.$.tsx) (`/p/$` metadata slug splat, e.g. `/p/notes` — not `/p/{pageId}`); [`useResolvedUserPage`](../../src/hooks/use-resolved-page.ts) uses [`resolveActiveUserPageBySlug`](../../src/lib/pages/resolve-user-page-by-slug.ts) so delete tombstones with the same slug do not block the route. Hitting `/$` for a user-only slug briefly mounts [`UserSlugPageClient`](../../src/routes/$.tsx), then `replace`-redirects to `/p/…`. [`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts) (via [`MigrateUserPageRoutesEffect`](../../src/components/pages/migrate-user-page-routes-effect.tsx) in `AppProviders`) repairs shadowed or duplicate user metadata slugs only (`site-user-page-slugs-v1`) — [pages — Route migration](./pages.md#route-migration). Shipped-page passive tabs pick up slug renames through [`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts) (`/$` paths only). Active-tab title renames call [`syncPageUrl`](../../src/lib/pages/sync-url.ts) on blur with `{ userPage: true }` when `routeBy === "id"`; user pages keep a stable `/p/…` URL while the title field is focused.
+
+## Page effects
+
+Page lifecycle commands (`PageCommand` in [`commands.ts`](../../src/lib/canvas/commands.ts)) map to the **`PageEffect`** union in [`effects.ts`](../../src/lib/canvas/effects.ts) via [`pageReducer`](../../src/hooks/use-page-dispatch.ts); [`usePageDispatch`](../../src/hooks/use-page-dispatch.ts) applies them to `localPagesCollection` and the router. Canvas block edits use **`CanvasEffect`** only (same file).
+
+| Effect | Role |
+|--------|------|
+| `page.persist` | Insert or update page metadata (`create: true` runs [`purgeSlugTombstonesForUserPageCreate`](../../src/lib/pages/resolve-user-page-by-slug.ts), then seeds `initialBlocks` into `localBlocksCollection`); title/slug renames cascade descendant prefixes; `syncPageUrl` only when `persistPageMetadata` is called with `syncUrl: true` (title blur) or from `persistPageReposition` |
+| `page.delete` | Hard-delete user pages or tombstone shipped pages locally |
+| `page.reposition` | Sidebar DnD: [`planPageReposition`](../../src/lib/pages/reposition-page.ts) → [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts); optional `seed` / `parentSeed` ([`PageMetadataSeed`](../../src/lib/pages/persist-page-metadata.ts)); optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts) on nest drops |
+| `navigate` | `{ slug, mode?: "router" \| "history", userPage?: boolean }` — default `router` uses TanStack Router with [`pageNavTargetForUserPage`](../../src/lib/pages/slugify.ts) when `userPage` (new user pages → `/p/{slug}`), else [`pageNavTarget`](../../src/lib/pages/slugify.ts) (`replace: true`); `history` calls [`syncPageUrl`](../../src/lib/pages/sync-url.ts) with the same `userPage` flag |
+
+`page.create` emits `page.persist` plus `navigate` with `userPage: true` unless `navigate: false` (slash **New Page**). `page.update` emits `page.persist` only. `page.reposition` is emitted only from sidebar drops — not from `canvasReducer`.
 
 ## Sidebar page list
 
-Top-level pages render as ghost navigation buttons with a right-click context menu (duplicate, inline rename, delete). See [pages](./pages.md#page-list).
+The workspace [`PageSidebar`](../../src/components/pages/page-sidebar.tsx) renders [`PageList`](../../src/components/pages/page-list.tsx): a nested tree from `buildPageTree` (not canvas rows). Rows are ghost navigation links with whole-row HTML5 drag-and-drop (click-vs-drag shared with the canvas gutter), chevron expand for children, and a right-click context menu (duplicate, inline rename, delete). Home (`slug: /`) is not draggable. See [drag-and-drop](./drag-and-drop.md) for shared toolkit wiring and the surface table below.
+
+| Surface | Drag target | Drag preview | Resolver |
+|---------|-------------|--------------|----------|
+| Canvas blocks | `[data-canvas-row-id]` rows | [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts) on row content | [`resolveDropTargetFromPointer`](../../src/lib/canvas/resolve-drop-target.ts) — before/after half-row edges |
+| Sidebar pages | `[data-page-list-row-id]` row chrome | [`setEmptyDragImage`](../../src/lib/dnd/drag-image.ts) + [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) / [`PageListDragPreview`](../../src/components/pages/page-list-drag-preview.tsx) | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) — top/middle/bottom bands (sibling vs nest) + horizontal unnest |
+
+Sidebar drops dispatch **`page.reposition`** via [`usePageDispatch`](../../src/hooks/use-page-dispatch.ts) (`pageReducer` → `page.reposition` effect), not `CanvasCommand`. [`PageListLive`](../../src/components/pages/page-list.tsx) wraps the tree in [`DndSurface`](../../src/components/dnd/dnd-surface.tsx); the list `<nav>` spreads `useDropZone` props. Rects come from [`collectRects`](../../src/lib/dnd/rects.ts) on `[data-page-list-row-id]`. Failed planning returns no effects. Nest drops can append a child `pageLink` on the parent page’s canvas; between-row drops update `parentId` and `sidebarOrder` only. Visible rows respect `expandedIds` via [`flattenVisiblePageRows`](../../src/lib/pages/flatten-visible-page-rows.ts). Row indent updates only after drop. Full UX: [pages — Sidebar drag-and-drop](./pages.md#sidebar-drag-and-drop) and [page-commands — `page.reposition`](../reference/page-commands.md#page-reposition).

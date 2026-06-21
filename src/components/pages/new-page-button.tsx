@@ -1,28 +1,53 @@
 import { IconPlus } from "@tabler/icons-react";
 
-import { Button } from "@/components/ui/button.tsx";
+import {
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar.tsx";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
+import { cn } from "@/lib/utils.ts";
 
 function NewPageButtonLive() {
   const { pages } = useMergedPageListItems();
   const dispatch = usePageDispatch(pages);
 
   return (
-    <Button
-      className="w-full justify-start"
-      onClick={() =>
-        dispatch({ type: "page.create", title: DEFAULT_PAGE_TITLE })
-      }
-      size="sm"
-      type="button"
-      variant="ghost"
-    >
-      <IconPlus aria-hidden />
-      New page
-    </Button>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        className={cn(pageListRowPaddingLeft(0), "text-sidebar-foreground/70")}
+        onClick={() =>
+          dispatch({ type: "page.create", title: DEFAULT_PAGE_TITLE })
+        }
+        render={<button type="button" />}
+        tooltip="New page"
+      >
+        <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
+          <IconPlus aria-hidden className="size-4 shrink-0" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left">New page</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function NewPageButtonStatic() {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        className={cn(pageListRowPaddingLeft(0), "text-sidebar-foreground/70")}
+        render={<span aria-hidden />}
+        tooltip="New page"
+      >
+        <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
+          <IconPlus aria-hidden className="size-4 shrink-0" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left">New page</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 
@@ -30,7 +55,7 @@ export function NewPageButton() {
   const isClient = useIsClient();
 
   if (!isClient) {
-    return null;
+    return <NewPageButtonStatic />;
   }
 
   return <NewPageButtonLive />;

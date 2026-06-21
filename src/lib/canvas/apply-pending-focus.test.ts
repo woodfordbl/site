@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBlockTree, type CanvasRow } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { shouldDeferCanvasFocus } from "@/lib/canvas/apply-pending-focus.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
@@ -20,14 +20,12 @@ describe("shouldDeferCanvasFocus", () => {
     const itemRow: CanvasRow = {
       rowId: "item-1",
       effectiveBlock: liftedText,
-      sortOrder: 0,
       children: [],
     };
     const rows: CanvasRow[] = [
       {
         rowId: "list-1",
         effectiveBlock: listBlock,
-        sortOrder: 0,
         children: [itemRow],
       },
     ];

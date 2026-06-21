@@ -1,14 +1,15 @@
 import { BlockGutter } from "@/components/canvas/block-gutter.tsx";
-import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
-import type { CanvasRowHoverGroup } from "@/components/canvas/canvas-row-shell.tsx";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import {
+  useCanvasEditorContext,
+  useCanvasSelection,
+} from "@/components/canvas/canvas-editor-context.tsx";
+import type { BlockActionsSession } from "@/components/canvas/canvas-menu-types.ts";
+import { getCanvasGutterAlignClassName } from "@/lib/blocks/block-spacing.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
-import { setCanvasRowDragImage } from "@/lib/canvas/drag-ghost.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 interface RowGutterProps {
-  hideWhenDescendantRowHovered?: boolean;
-  hoverGroup?: CanvasRowHoverGroup;
   onInsert?: (edge: "before" | "after") => void;
   row: CanvasRow;
 }
@@ -27,6 +28,31 @@ function turnIntoValueFromBlock(block: Block): string | undefined {
   return;
 }
 
+function buildEmbedViewOptions(
+  row: CanvasRow
+): BlockActionsSession["viewOptions"] | undefined {
+  const block = row.effectiveBlock;
+  if (block.type !== "embed" || block.props.url.trim().length === 0) {
+    return;
+  }
+
+  return {
+    label: "Change view",
+    items: [
+      {
+        id: "showTitle",
+        label: "Show title",
+        checked: block.props.showTitle ?? false,
+      },
+      {
+        id: "showUrl",
+        label: "Show URL",
+        checked: block.props.showUrl ?? false,
+      },
+    ],
+  };
+}
+
 function canTurnIntoBlock(row: CanvasRow): boolean {
   const { type } = row.effectiveBlock;
   return (
@@ -37,49 +63,48 @@ function canTurnIntoBlock(row: CanvasRow): boolean {
   );
 }
 
-export function RowGutter({
-  row,
-  onInsert,
-  hoverGroup,
-  hideWhenDescendantRowHovered,
-}: RowGutterProps) {
+export function RowGutter({ row, onInsert }: RowGutterProps) {
   const {
-    isRowSelected,
-    toggleRowSelection,
-    selectRow,
-    clearSelection,
-    setDraggingRowId,
+    deleteRow,
+    deleteSelection,
+    dispatch,
+    duplicateRow,
     insertAfter,
     insertBefore,
-    dispatch,
-    deleteRow,
-    duplicateRow,
+    clearSelection,
+    selectRow,
+    toggleRowSelection,
   } = useCanvasEditorContext();
+  const { isRowSelected, selectedRowIds } = useCanvasSelection();
 
   return (
     <BlockGutter
+      alignClassName={getCanvasGutterAlignClassName(row.effectiveBlock)}
       canTurnInto={canTurnIntoBlock(row)}
-      hideWhenDescendantRowHovered={hideWhenDescendantRowHovered}
-      hoverGroup={hoverGroup}
       isSelected={isRowSelected(row.rowId)}
       onConvert={(item) => {
         applyBlockConversion(row, item, dispatch);
         dispatch({ type: "focus.set", rowId: row.rowId, placement: "start" });
       }}
-      onDelete={() => deleteRow(row.rowId)}
-      onDragEnd={() => setDraggingRowId(null)}
-      onDragInteractionStart={() => clearSelection()}
-      onDragStart={(event) => {
-        setDraggingRowId(row.rowId);
-        setCanvasRowDragImage(event.nativeEvent, row.rowId);
+      onDelete={() => {
+        if (selectedRowIds.length > 1) {
+          deleteSelection();
+          return;
+        }
+        deleteRow(row.rowId);
       }}
+      onDragInteractionStart={() => clearSelection()}
       onDuplicate={() => duplicateRow(row.rowId)}
       onInsert={
         onInsert ??
         ((edge) =>
           edge === "before" ? insertBefore(row.rowId) : insertAfter(row.rowId))
       }
-      onMenuOpen={() => selectRow(row.rowId)}
+      onMenuOpen={() => {
+        if (!isRowSelected(row.rowId)) {
+          selectRow(row.rowId);
+        }
+      }}
       onSelect={(event) => {
         toggleRowSelection(row.rowId, {
           shiftKey: event.shiftKey,
@@ -88,6 +113,7 @@ export function RowGutter({
       }}
       rowId={row.rowId}
       turnIntoValue={turnIntoValueFromBlock(row.effectiveBlock)}
+      viewOptions={buildEmbedViewOptions(row)}
     />
   );
 }

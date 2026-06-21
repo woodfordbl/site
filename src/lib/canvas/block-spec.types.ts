@@ -1,23 +1,17 @@
-import type { ComponentType, RefObject } from "react";
-
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { ComponentType } from "react";
+import {
+  type BlockFor,
+  type ContainerBlockType,
+  isContainerBlockType,
+  isLeafBlockType,
+  type LeafBlockType,
+  type PropsFor,
+} from "@/lib/blocks/block-defs.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockEditKeyboardProps } from "@/lib/editor/block-edit-props.ts";
-import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
-import type { Block, BlockType } from "@/lib/schemas/block.ts";
+import type { BlockType } from "@/lib/schemas/block.ts";
 
 export type BlockMode = "view" | "edit";
-
-export type BlockParent = BlockType | "canvas";
-
-/** Renders a shell; children are separate rows. */
-export type ContainerBlockType = "list" | "checklist";
-
-/** Renders its own content via View + Edit. */
-export type LeafBlockType = Exclude<BlockType, ContainerBlockType>;
-
-export type BlockFor<T extends BlockType> = Extract<Block, { type: T }>;
-
-export type PropsFor<T extends BlockType> = BlockFor<T>["props"];
 
 export type EditStrategy =
   | "inline-text"
@@ -52,14 +46,12 @@ export interface ContainerDefinition {
   onEmptyChildEnter: "lift-out" | "insert-sibling";
 }
 
-export interface BlockBehavior<T extends BlockType> {
+export interface BlockBehavior {
   capabilities: BlockCapabilities;
   editStrategy: EditStrategy;
-  isEmpty: (block: BlockFor<T>) => boolean;
 }
 
 export interface BlockViewProps<T extends LeafBlockType> {
-  className?: string;
   props: PropsFor<T>;
 }
 
@@ -71,21 +63,15 @@ export interface BlockEditPropsBase<T extends LeafBlockType> {
 
 export interface BlockEditProps<T extends LeafBlockType>
   extends BlockEditPropsBase<T>,
-    BlockEditKeyboardProps {}
+    BlockEditKeyboardProps {
+  /** Container type when this block renders inside a container (list item placeholders, etc.). */
+  parentType?: BlockType;
+  row?: CanvasRow;
+}
 
 export interface BlockContainerProps {
-  fieldRef?: RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
   mode: BlockMode;
-  onSlash?: (query: string, caret: FieldSelection) => void;
-  onSlashClose?: () => void;
-  onSlashDismiss?: () => void;
-  onSlashLinkBack?: () => void;
-  onSlashMenuConfirm?: () => void;
-  onSlashMenuNavigate?: (direction: "up" | "down") => void;
   row: CanvasRow;
-  slashCaret?: FieldSelection;
-  slashMenuOpen?: boolean;
-  slashPhase?: "root" | "link";
 }
 
 export type BlockViewComponent<T extends LeafBlockType> = ComponentType<
@@ -100,12 +86,13 @@ export type BlockEditComponent<T extends LeafBlockType> = ComponentType<
 export type BlockContainerComponent = () => ComponentType<BlockContainerProps>;
 
 export interface BlockSpecBase<T extends BlockType> {
-  allowedParents?: BlockParent[] | "canvas" | "*";
-  behavior: BlockBehavior<T>;
+  behavior: BlockBehavior;
   createDefault: () => BlockFor<T>;
   icon: ComponentType<{ className?: string }>;
   label: string;
   slashAliases: readonly string[];
+  /** Overrides the derived single slash item (multi-variant blocks: heading levels, list variants, column counts). */
+  slashItems?: SlashMenuItem[];
   type: T;
 }
 
@@ -129,6 +116,7 @@ export type BlockSpec<T extends BlockType> = T extends LeafBlockType
 
 export interface SlashMenuItem {
   aliases: string[];
+  columnCount?: 2 | 3 | 4;
   headingLevel?: 1 | 2 | 3 | 4;
   icon: ComponentType<{ className?: string }>;
   id: BlockType;
@@ -136,16 +124,8 @@ export interface SlashMenuItem {
   keywords: string[];
   label: string;
   listVariant?: "bullet" | "ordered";
-}
-
-export function isLeafBlockType(type: BlockType): type is LeafBlockType {
-  return type !== "list" && type !== "checklist";
-}
-
-export function isContainerBlockType(
-  type: BlockType
-): type is ContainerBlockType {
-  return type === "list" || type === "checklist";
+  tableColumns?: number;
+  tableRows?: number;
 }
 
 export function isLeafSpec(spec: {

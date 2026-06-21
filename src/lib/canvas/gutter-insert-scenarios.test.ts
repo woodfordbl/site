@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { buildBlockTree, flattenRows } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree, flattenRows } from "@/lib/blocks/block-tree.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import { insertBlockAtPlacement } from "@/lib/blocks/page-block-mutations.ts";
 import { resolveRowPlacementPlan } from "@/lib/blocks/row-placement.ts";

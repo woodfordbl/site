@@ -4,7 +4,7 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { allocateUserPageSlug } from "@/lib/pages/allocate-page-slug.ts";
 
 describe("allocateUserPageSlug", () => {
-  it("dedupes among user-created siblings only", () => {
+  it("dedupes among all siblings including shipped pages", () => {
     const pages: PageSummary[] = [
       {
         id: "server-new-page",

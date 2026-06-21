@@ -1,15 +1,13 @@
 import type { ReactNode } from "react";
 
 import { ContainerChildren } from "@/components/blocks/container-children.tsx";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
 import { blockIndentStyle, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import {
   listItemSpacingClass,
   listMarkerCellClassName,
   listShellSpacingClass,
 } from "@/lib/blocks/block-spacing.ts";
-import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
-import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
+import type { BlockContainerProps } from "@/lib/canvas/block-spec.types.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface ListShellProps {
@@ -20,11 +18,7 @@ interface ListShellProps {
 export function ListShell({ children, variant }: ListShellProps) {
   const Tag = variant === "ordered" ? "ol" : "ul";
   return (
-    <Tag
-      className={cn("list-none text-muted-foreground", listShellSpacingClass)}
-    >
-      {children}
-    </Tag>
+    <Tag className={cn("list-none", listShellSpacingClass)}>{children}</Tag>
   );
 }
 
@@ -40,7 +34,7 @@ function ListMarker({ index, variant }: ListMarkerProps) {
         aria-hidden
         className={cn(
           listMarkerCellClassName,
-          "min-w-4 select-none tabular-nums leading-none"
+          "min-w-4 select-none text-muted-foreground tabular-nums leading-none"
         )}
       >
         {index + 1}.
@@ -51,7 +45,10 @@ function ListMarker({ index, variant }: ListMarkerProps) {
   return (
     <span
       aria-hidden
-      className={cn(listMarkerCellClassName, "select-none leading-none")}
+      className={cn(
+        listMarkerCellClassName,
+        "select-none text-muted-foreground leading-none"
+      )}
     >
       •
     </span>
@@ -74,39 +71,7 @@ export function ListItemShell({ children, indent }: ListItemShellProps) {
   );
 }
 
-interface ListViewProps {
-  fieldRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
-  mode: BlockMode;
-  onSlash?: (
-    query: string,
-    caret: FieldSelection,
-    convertRowId?: string
-  ) => void;
-  onSlashClose?: () => void;
-  onSlashDismiss?: () => void;
-  onSlashLinkBack?: () => void;
-  onSlashMenuConfirm?: () => void;
-  onSlashMenuNavigate?: (direction: "up" | "down") => void;
-  row: CanvasRow;
-  slashCaret?: FieldSelection;
-  slashMenuOpen?: boolean;
-  slashPhase?: "root" | "link";
-}
-
-export function ListView({
-  row,
-  mode,
-  fieldRef,
-  onSlash,
-  onSlashClose,
-  onSlashDismiss,
-  onSlashLinkBack,
-  onSlashMenuConfirm,
-  onSlashMenuNavigate,
-  slashCaret,
-  slashMenuOpen,
-  slashPhase,
-}: ListViewProps) {
+export function ListView({ row, mode }: BlockContainerProps) {
   const variant =
     row.effectiveBlock.type === "list"
       ? row.effectiveBlock.props.variant
@@ -116,15 +81,7 @@ export function ListView({
     <ListShell variant={variant}>
       <ContainerChildren
         contentClassName="flex items-start gap-2"
-        fieldRef={fieldRef}
-        hoverGroup="list-item-row"
         mode={mode}
-        onSlash={onSlash}
-        onSlashClose={onSlashClose}
-        onSlashDismiss={onSlashDismiss}
-        onSlashLinkBack={onSlashLinkBack}
-        onSlashMenuConfirm={onSlashMenuConfirm}
-        onSlashMenuNavigate={onSlashMenuNavigate}
         renderBeforeContent={(_child, index) => (
           <ListMarker index={index} variant={variant} />
         )}
@@ -137,9 +94,6 @@ export function ListView({
           </ListItemShell>
         )}
         row={row}
-        slashCaret={slashCaret}
-        slashMenuOpen={slashMenuOpen}
-        slashPhase={slashPhase}
       />
     </ListShell>
   );

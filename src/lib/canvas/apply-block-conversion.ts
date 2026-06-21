@@ -1,5 +1,5 @@
 import { getSlashMenuItems } from "@/components/blocks/registry.ts";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import {
   getTextFromBlock,
   stripSlashCommandText,
@@ -69,6 +69,21 @@ export function applyBlockConversion(
       containerType: item.id,
       variant: item.listVariant ?? "bullet",
       childText: cleanedText,
+    });
+  } else if (item.id === "columns") {
+    dispatch({
+      type: "columns.create",
+      rowId: row.rowId,
+      count: item.columnCount ?? 2,
+      text: cleanedText,
+    });
+  } else if (item.id === "table") {
+    dispatch({
+      type: "table.create",
+      rowId: row.rowId,
+      columns: item.tableColumns ?? 3,
+      rows: item.tableRows ?? 3,
+      text: cleanedText,
     });
   } else {
     dispatch({

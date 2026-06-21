@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBlockTree } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import {
   isLegacyEditorBlockId,
   normalizeEditablePageBlocks,

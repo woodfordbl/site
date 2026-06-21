@@ -1,82 +1,74 @@
 import { spawnSync } from "node:child_process";
+import { evaluateDocsHookGate } from "./docs-hook-gate.mjs";
 import { clearSession, readSession } from "./docs-hook-session.mjs";
 
 const root = process.cwd();
 
-let input = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => {
-  input += chunk;
-});
-process.stdin.on("end", () => {
-  let status = "completed";
-  let loopCount = 0;
+function parseStopPayload(raw) {
+  const payload = { status: "completed", loopCount: 0 };
   try {
-    const payload = JSON.parse(input);
-    if (typeof payload.status === "string") {
-      status = payload.status;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.status === "string") {
+      payload.status = parsed.status;
     }
-    if (typeof payload.loop_count === "number") {
-      loopCount = payload.loop_count;
+    if (typeof parsed.loop_count === "number") {
+      payload.loopCount = parsed.loop_count;
     }
   } catch {
     // use defaults
   }
+  return payload;
+}
 
-  if (status !== "completed") {
-    process.stdout.write("{}\n");
-    process.exit(0);
+function runScopedDocsCheck(paths) {
+  if (paths.length === 0) {
+    return { ok: true, output: "" };
   }
 
-  const session = readSession(root);
-  const check = spawnSync("pnpm", ["docs:check"], {
+  const check = spawnSync("pnpm", ["docs:check", "--files", ...paths], {
     cwd: root,
     encoding: "utf-8",
     shell: process.platform === "win32",
   });
-  const checkOk = check.status === 0;
-  const checkOutput = [check.stdout, check.stderr]
+  return {
+    ok: check.status === 0,
+    output: [check.stdout, check.stderr].filter(Boolean).join("\n").trim(),
+  };
+}
+
+function buildBlockedMessage(checkOutput) {
+  return [
+    "Documentation sync is still blocked after a docs-sync pass.",
+    "",
+    checkOutput ? `pnpm docs:check output:\n${checkOutput}` : "",
+    "",
+    "Stop and report what is blocking docs:check to the user. Do not retry automatically.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildSyncPrompt(session, check) {
+  const brief = spawnSync(
+    "node",
+    ["scripts/docs-sync-brief.mjs", "--session"],
+    {
+      cwd: root,
+      encoding: "utf-8",
+      shell: process.platform === "win32",
+    }
+  );
+  const briefText = [brief.stdout, brief.stderr]
     .filter(Boolean)
     .join("\n")
     .trim();
-  const hasStructural = session.paths.length > 0;
-
-  if (checkOk && !hasStructural) {
-    clearSession(root);
-    process.stdout.write("{}\n");
-    process.exit(0);
-  }
-
-  if (checkOk && hasStructural) {
-    clearSession(root);
-    process.stdout.write("{}\n");
-    process.exit(0);
-  }
-
-  if (loopCount >= 1 && !checkOk) {
-    const msg = [
-      "Documentation sync is still blocked after a docs-sync pass.",
-      "",
-      checkOutput ? `pnpm docs:check output:\n${checkOutput}` : "",
-      "",
-      "Stop and report what is blocking docs:check to the user. Do not retry automatically.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    process.stdout.write(`${JSON.stringify({ followup_message: msg })}\n`);
-    process.exit(0);
-  }
 
   const lines = [
     "Structural code changes require documentation updates before this task is complete.",
     "",
-    "Delegate to the **docs-sync** subagent now. Do not mark the task complete until `pnpm docs:check` passes.",
+    "Delegate to the **docs-sync** subagent now. Start with `pnpm docs:sync-brief` (brief below). Do not mark the task complete until full `pnpm docs:check` passes.",
     "",
-    "References:",
-    "- docs/contributing/updating-docs.md — checklist",
-    "- docs/contributing/inline-api-docs.md — colocated JSDoc on changed exports",
-    "- docs/.doc-manifest.json — glob → doc map",
-    "- docs/README.md — index",
+    "docs-sync must create net-new architecture/reference pages when the brief lists unmapped structural code — follow docs/contributing/new-documentation.md (manifest + majorGlobs hook gate + README + cross-links).",
   ];
 
   if (session.paths.length > 0) {
@@ -91,17 +83,60 @@ process.stdin.on("end", () => {
       lines.push(`- ${d}`);
     }
   }
-  if (!checkOk && checkOutput) {
-    lines.push("", "pnpm docs:check output:", checkOutput);
+  if (!check.ok && check.output) {
+    lines.push("", "pnpm docs:check output:", check.output);
+  }
+  if (briefText) {
+    lines.push("", "---", "", briefText);
   }
 
-  lines.push(
-    "",
-    "docs-sync must: (1) git diff for changed exports, (2) update architecture/reference markdown, (3) refresh JSDoc on changed exports per inline-api-docs.md, (4) run pnpm docs:check until green."
-  );
+  return lines.join("\n");
+}
+
+function exitSilently() {
+  process.stdout.write("{}\n");
+  process.exit(0);
+}
+
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  input += chunk;
+});
+process.stdin.on("end", () => {
+  const { status, loopCount } = parseStopPayload(input);
+
+  if (status !== "completed") {
+    exitSilently();
+    return;
+  }
+
+  const session = readSession(root);
+  const gate = evaluateDocsHookGate(root, session.paths);
+
+  if (!gate.shouldRun) {
+    clearSession(root);
+    exitSilently();
+    return;
+  }
+
+  const check = runScopedDocsCheck(session.paths);
+
+  if (check.ok) {
+    clearSession(root);
+    exitSilently();
+    return;
+  }
+
+  if (loopCount >= 1) {
+    process.stdout.write(
+      `${JSON.stringify({ followup_message: buildBlockedMessage(check.output) })}\n`
+    );
+    process.exit(0);
+  }
 
   process.stdout.write(
-    `${JSON.stringify({ followup_message: lines.join("\n") })}\n`
+    `${JSON.stringify({ followup_message: buildSyncPrompt(session, check) })}\n`
   );
   process.exit(0);
 });

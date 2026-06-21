@@ -8,16 +8,19 @@ interface StaleBannerProps {
 export function StaleBanner({ onAcknowledge, onRevert }: StaleBannerProps) {
   return (
     <>
-      <Button onClick={onRevert} size="sm" type="button" variant="secondary">
-        Revert
+      <span className="text-muted-foreground text-xs">
+        This page changed on the site since you edited it.
+      </span>
+      <Button onClick={onRevert} size="xs" type="button" variant="secondary">
+        Use site version
       </Button>
       <Button
         onClick={onAcknowledge}
-        size="sm"
+        size="xs"
         type="button"
         variant="secondary"
       >
-        Keep
+        Keep my edits
       </Button>
     </>
   );

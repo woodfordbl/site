@@ -1,38 +1,48 @@
 import type { MouseEvent, ReactNode } from "react";
 
-import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import {
+  useCanvasEditorContext,
+  useCanvasSelection,
+} from "@/components/canvas/canvas-editor-context.tsx";
+import { useDropTarget } from "@/components/dnd/use-dnd.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
 import { cn } from "@/lib/utils.ts";
-
-export type CanvasRowHoverGroup = "canvas-row" | "list-item-row";
-
-const canvasRowGroupClass: Record<CanvasRowHoverGroup, string> = {
-  "canvas-row": "group/canvas-row",
-  "list-item-row": "group/list-item-row",
-};
 
 interface CanvasRowShellProps {
   children: ReactNode;
   className?: string;
   contentClassName?: string;
+  /** Top-level block spacing applied to the content column when a gutter is shown. */
+  contentSpacingClassName?: string;
   gutter?: ReactNode;
-  gutterClassName?: string;
-  hoverGroup?: CanvasRowHoverGroup;
+  /** Vertically centers gutter controls with short, non-text rows (e.g. divider). */
+  gutterAlignCenter?: boolean;
   row: CanvasRow;
 }
 
 export function CanvasRowShell({
   row,
   gutter,
-  gutterClassName,
+  gutterAlignCenter = false,
+  contentSpacingClassName,
   children,
   className,
   contentClassName,
-  hoverGroup = "canvas-row",
 }: CanvasRowShellProps) {
-  const { isRowSelected, dropTarget, toggleRowSelection } =
-    useCanvasEditorContext();
+  const { toggleRowSelection } = useCanvasEditorContext();
+  const { isRowSelected } = useCanvasSelection();
   const isSelected = isRowSelected(row.rowId);
+
+  const dropEdge = useDropTarget((target: DropTarget | null) => {
+    if (target?.rowId !== row.rowId) {
+      return null;
+    }
+    if (target.atScopeStart) {
+      return "before" as const;
+    }
+    return target.edge;
+  });
 
   const handleContentPointerDown = (event: MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !event.shiftKey) {
@@ -43,22 +53,14 @@ export function CanvasRowShell({
     event.stopPropagation();
     toggleRowSelection(row.rowId, { shiftKey: true });
   };
-  const showBefore =
-    dropTarget?.rowId === row.rowId && dropTarget.edge === "before";
-  const showAfter =
-    dropTarget?.rowId === row.rowId && dropTarget.edge === "after";
+  const showBefore = dropEdge === "before";
+  const showAfter = dropEdge === "after";
 
   return (
     <div
-      className={cn(
-        canvasRowGroupClass[hoverGroup],
-        "relative overflow-visible",
-        className
-      )}
-      data-canvas-list-item-row={
-        hoverGroup === "list-item-row" ? "" : undefined
-      }
+      className={cn("relative overflow-visible", className)}
       data-canvas-row-id={row.rowId}
+      data-canvas-row-shell
     >
       {showBefore ? (
         <div
@@ -66,26 +68,43 @@ export function CanvasRowShell({
           className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 bg-selection"
         />
       ) : null}
-      {gutter ? (
-        <div
-          className={cn(
-            "pointer-events-none absolute right-full",
-            gutterClassName ?? "top-0"
-          )}
-        >
-          <div className="pointer-events-auto">{gutter}</div>
-        </div>
-      ) : null}
       <div
         className={cn(
-          "min-h-0 min-w-0 rounded-lg transition-colors",
-          isSelected && "bg-selection",
-          contentClassName
+          "flex min-w-0",
+          gutterAlignCenter ? "items-center" : "items-start",
+          contentSpacingClassName,
+          gutter &&
+            "[&:has([data-canvas-row-content]_[data-canvas-row-shell]:hover)>_[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-0!",
+          gutter &&
+            "[&:focus-within>[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-100",
+          gutter &&
+            "[&:hover>[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-100"
         )}
-        data-canvas-row-content
-        onPointerDownCapture={handleContentPointerDown}
+        data-canvas-row-layout
       >
-        {children}
+        {gutter ? (
+          <div
+            className={cn(
+              "pointer-events-none -ml-12 w-12 shrink-0",
+              "[&_.canvas-block-gutter]:opacity-0 [&_.canvas-block-gutter]:transition-opacity [&_.canvas-block-gutter]:duration-150 [&_.canvas-block-gutter]:ease-[var(--ease-out-strong)]",
+              "hover:[&_.canvas-block-gutter]:opacity-100"
+            )}
+            data-canvas-row-gutter-host
+          >
+            <div className="pointer-events-auto h-fit">{gutter}</div>
+          </div>
+        ) : null}
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 rounded-lg transition-colors",
+            isSelected && "bg-selection",
+            contentClassName
+          )}
+          data-canvas-row-content
+          onPointerDownCapture={handleContentPointerDown}
+        >
+          {children}
+        </div>
       </div>
       {showAfter ? (
         <div

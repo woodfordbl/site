@@ -3,7 +3,10 @@
 import { useEffect } from "react";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasMenuBlockActions } from "@/components/canvas/canvas-menu-block-actions.tsx";
-import { useCanvasMenu } from "@/components/canvas/canvas-menu-context.tsx";
+import {
+  useCanvasMenu,
+  useCanvasSlashSession,
+} from "@/components/canvas/canvas-menu-context.tsx";
 import { CanvasMenuSlashContent } from "@/components/canvas/canvas-menu-slash-content.tsx";
 import {
   DropdownMenu,
@@ -20,7 +23,12 @@ function useDismissBlockActionsMenu() {
       return;
     }
 
-    const dismiss = (event: Event) => {
+    const dismiss = () => {
+      closeMenu();
+      clearSelection();
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) {
         return;
@@ -31,29 +39,38 @@ function useDismissBlockActionsMenu() {
       if (target.closest("[data-canvas-row-select]")) {
         return;
       }
-      closeMenu();
-      clearSelection();
+      dismiss();
     };
 
-    document.addEventListener("pointerdown", dismiss, true);
-    document.addEventListener("focusin", dismiss, true);
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (event.shiftKey && target.closest("[data-canvas-row-content]")) {
+        return;
+      }
+      if (target.closest("[data-canvas-row-menu]")) {
+        return;
+      }
+      if (target.closest("[data-canvas-row-select]")) {
+        return;
+      }
+      dismiss();
+    };
+
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("pointerdown", handlePointerDown, true);
     return () => {
-      document.removeEventListener("pointerdown", dismiss, true);
-      document.removeEventListener("focusin", dismiss, true);
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
     };
   }, [clearSelection, closeMenu, open, payload]);
 }
 
 export function CanvasMenuRoot() {
-  const {
-    closeMenu,
-    handle,
-    open,
-    payload,
-    slashAnchorRef,
-    slashSession,
-    triggerId,
-  } = useCanvasMenu();
+  const { closeMenu, handle, open, payload, triggerId } = useCanvasMenu();
+  const { slashAnchorRef, slashSession } = useCanvasSlashSession();
 
   useDismissBlockActionsMenu();
 

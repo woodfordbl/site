@@ -1,24 +1,9 @@
 {
   "version": 1,
   "hooks": {
-    "sessionStart": [
-      {
-        "command": ".cursor/hooks/docs-session-clear.sh"
-      }
-    ],
     "afterFileEdit": [
       {
         "command": "pnpm fix --skip=correctness/noUnusedImports"
-      },
-      {
-        "command": ".cursor/hooks/docs-track-edit.sh"
-      }
-    ],
-    "stop": [
-      {
-        "command": ".cursor/hooks/docs-on-stop.sh",
-        "loop_limit": 2,
-        "timeout": 60
       }
     ]
   }
