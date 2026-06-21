@@ -5,6 +5,11 @@
 - Every block has `id`, `type`, optional `parentId`, optional `indent` (0–4)
 - **List** blocks are containers only (`props.variant: bullet | ordered`)
 - **Checklist** blocks are containers only (empty props)
+- **Columns** blocks are containers only (empty props); children are **column** blocks only
+- **Column** blocks are generic-scope containers (`allowedChildTypes: *`); children are normal canvas rows (text, heading, nested list, etc.)
+- **Table** blocks are containers (`hasHeaderRow`, `columnWidths[]`); children are **tableRow** only
+- **Table row** blocks are containers (empty props); children are **tableCell** only (sibling order = column index)
+- **Table cell** blocks are leaves with `props.text` (plain text only in v1)
 - List items are normal **text** blocks with `parentId = list.id`
 - Checklist items are **checklistItem** blocks with `parentId = checklist.id` and `props.checked`
 - Indent is only on `block.indent`, never embedded in list props
@@ -30,16 +35,30 @@ page (canvas)
 │   └── text (parentId: list, indent: 1)
 ├── heading (parentId: null, props.level: 1 | 2 | 3 | 4)
 ├── quote (parentId: null, props.text)
-├── callout (parentId: null, props.text)
+├── callout (parentId: null, props.text, optional props.icon — emoji or `tabler:IconName`)
 ├── checklist (parentId: null)
 │   └── checklistItem (parentId: checklist, props.text, props.checked)
-├── pageLink (parentId: null, props.pageId → live title/slug)
+├── pageLink (parentId: null, props.pageId → live title/slug; optional props.variant: `child` | `linked`)
+├── columns (parentId: null)
+│   ├── column (parentId: columns, optional props.width flex ratio)
+│   │   ├── text / heading / … (parentId: column)
+│   │   └── list (parentId: column) …
+│   └── column …
+├── table (parentId: null | column, props.hasHeaderRow, props.columnWidths flex ratios)
+│   ├── tableRow (parentId: table)
+│   │   ├── tableCell (parentId: tableRow, props.text)
+│   │   └── tableCell …
+│   └── tableRow …
+├── media (parentId: null | column, props.kind: image | video, props.source: url | asset, props.src, optional props.widthPercent 25–100)
+├── embed (parentId: null | column, props.url; optional title/description/imageUrl; showTitle/showUrl captions)
 └── divider (parentId: null, horizontal rule)
 ```
 
+The canvas builds this forest with `buildBlockTree` in [`src/lib/blocks/block-tree.ts`](../../src/lib/blocks/block-tree.ts) (`CanvasRow`: `rowId`, `effectiveBlock`, `children`), grouping already-ordered blocks by parent in one pass and caching per-block normalization. `reconcileRowTrees` provides structural sharing across rebuilds — unchanged rows keep object identity so memoized row components bail out.
+
 ## Containers
 
-Container behavior is registered on `BLOCK_SPECS[type].container` in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts). Shared config and helpers live in [`src/lib/canvas/block-container-config.ts`](../../src/lib/canvas/block-container-config.ts), while reducer planners read the policy through `block-interactions.ts`. Slash and Turn into conversions share the same command path; dismissed slash commands stay in the text but do not reopen the menu until the `/` prefix is removed ([canvas-editor](./canvas-editor.md#slash-menu)).
+Container types are declared in `CONTAINER_BLOCK_TYPES` ([`src/lib/blocks/block-defs.ts`](../../src/lib/blocks/block-defs.ts)); container policy is `BLOCK_CONTAINER_CONFIG` in [`src/lib/canvas/block-container-config.ts`](../../src/lib/canvas/block-container-config.ts) — a complete `Record<ContainerBlockType, ContainerDefinition>` (no registry fallbacks). `BLOCK_SPECS[type].container` in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts) references the same entries; reducer planners read the policy through `block-interactions.ts`. Slash and Turn into conversions share the same command path; dismissed slash commands stay in the text but do not reopen the menu until the `/` prefix is removed ([canvas-editor](./canvas-editor.md#slash-menu)).
 
 Each container defines:
 

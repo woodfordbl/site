@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as PPageIdRouteImport } from './routes/p.$pageId'
+import { Route as PSplatRouteImport } from './routes/p.$'
 
 const SplatRoute = SplatRouteImport.update({
   id: '/$',
@@ -23,40 +23,40 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PPageIdRoute = PPageIdRouteImport.update({
-  id: '/p/$pageId',
-  path: '/p/$pageId',
+const PSplatRoute = PSplatRouteImport.update({
+  id: '/p/$',
+  path: '/p/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
-  '/p/$pageId': typeof PPageIdRoute
+  '/p/$': typeof PSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
-  '/p/$pageId': typeof PPageIdRoute
+  '/p/$': typeof PSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
-  '/p/$pageId': typeof PPageIdRoute
+  '/p/$': typeof PSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/$' | '/p/$pageId'
+  fullPaths: '/' | '/$' | '/p/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$' | '/p/$pageId'
-  id: '__root__' | '/' | '/$' | '/p/$pageId'
+  to: '/' | '/$' | '/p/$'
+  id: '__root__' | '/' | '/$' | '/p/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
-  PPageIdRoute: typeof PPageIdRoute
+  PSplatRoute: typeof PSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -75,11 +75,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/p/$pageId': {
-      id: '/p/$pageId'
-      path: '/p/$pageId'
-      fullPath: '/p/$pageId'
-      preLoaderRoute: typeof PPageIdRouteImport
+    '/p/$': {
+      id: '/p/$'
+      path: '/p/$'
+      fullPath: '/p/$'
+      preLoaderRoute: typeof PSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -88,7 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
-  PPageIdRoute: PPageIdRoute,
+  PSplatRoute: PSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

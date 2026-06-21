@@ -1,6 +1,6 @@
 import { IconListNumbers } from "@tabler/icons-react";
 import { describe, expect, it } from "vitest";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import {
   canInsertSiblingInContainer,
@@ -57,6 +57,24 @@ describe("getSlashMenuItems", () => {
 
     expect(items.some((item) => item.id === "checklist")).toBe(true);
   });
+
+  it("includes column count entries for columns query", () => {
+    const items = filterSlashMenuItems("columns");
+
+    expect(items.filter((item) => item.id === "columns")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "columns-2", columnCount: 2 }),
+        expect.objectContaining({ key: "columns-3", columnCount: 3 }),
+        expect.objectContaining({ key: "columns-4", columnCount: 4 }),
+      ])
+    );
+  });
+
+  it("matches column slash aliases", () => {
+    const items = filterSlashMenuItems("cols3");
+
+    expect(items.some((item) => item.key === "columns-3")).toBe(true);
+  });
 });
 
 describe("container block specs", () => {
@@ -97,7 +115,6 @@ describe("applyBlockConversion", () => {
   it("dispatches container.wrap with ordered variant", () => {
     const row: CanvasRow = {
       rowId: "row-1",
-      sortOrder: 0,
       effectiveBlock: {
         id: "block-1",
         type: "text",

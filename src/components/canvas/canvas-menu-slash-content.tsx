@@ -1,7 +1,7 @@
 import { IconArrowUpRight } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useCanvasMenu } from "@/components/canvas/canvas-menu-context.tsx";
+import { useCanvasSlashSession } from "@/components/canvas/canvas-menu-context.tsx";
 import { SlashMenuItemLabel } from "@/components/canvas/slash-menu-item-label.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { getMarkdownShortcutHint } from "@/lib/canvas/markdown-shortcuts.ts";
@@ -42,7 +42,7 @@ function SlashMenuRow({
 }
 
 export function CanvasMenuSlashContent() {
-  const { slashSession } = useCanvasMenu();
+  const { slashSession } = useCanvasSlashSession();
   const session = slashSession;
   const [linkQuery, setLinkQuery] = useState("");
   const linkSearchRef = useRef<HTMLInputElement>(null);

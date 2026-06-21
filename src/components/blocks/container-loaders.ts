@@ -1,9 +1,9 @@
 import type { ComponentType } from "react";
 
+import type { ContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import type {
   BlockContainerComponent,
   BlockContainerProps,
-  ContainerBlockType,
 } from "@/lib/canvas/block-spec.types.ts";
 
 const containerLoaders = new Map<ContainerBlockType, BlockContainerComponent>();

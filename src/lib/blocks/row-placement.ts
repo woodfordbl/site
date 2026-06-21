@@ -1,5 +1,5 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { findRowContext } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowContext } from "@/lib/blocks/block-tree.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 export interface RowPlacement {

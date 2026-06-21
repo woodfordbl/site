@@ -64,6 +64,8 @@ function computeMigrationSlug(page: LocalPage, pages: PageSummary[]): string {
   return normalizePageSlug(deduped);
 }
 
+/** One-time slug repairs for user pages that shadow shipped paths or duplicate another user slug. */
+/** Renames user pages that shadow shipped slugs or duplicate another user slug. @see docs/architecture/pages.md#route-migration */
 export function planUserPageSlugMigrations(
   serverPages: PageSummary[],
   localPages: LocalPage[]
@@ -102,27 +104,4 @@ export function planUserPageSlugMigrations(
   }
 
   return migrations;
-}
-
-export function findLegacyUserSlugRedirect(
-  pathname: string,
-  localPages: LocalPage[]
-): string | null {
-  if (pathname === "/" || pathname.startsWith("/p/")) {
-    return null;
-  }
-
-  const normalizedPath = normalizePageSlug(pathname);
-
-  for (const page of localPages) {
-    if (!isUserCreatedPage(page) || isLocallyDeletedPage(page)) {
-      continue;
-    }
-
-    if (pageSlugsEqual(page.slug, normalizedPath)) {
-      return page.id;
-    }
-  }
-
-  return null;
 }

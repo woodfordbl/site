@@ -1,5 +1,6 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { findRowById, flattenRows } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
+import type { Block } from "@/lib/schemas/block.ts";
 
 export interface BlockSelectionState {
   anchorRowId: string | null;
@@ -291,11 +292,34 @@ export function selectAllRows(rows: CanvasRow[]): BlockSelectionState {
   };
 }
 
-export function blocksFromSelectedRows(
+/**
+ * Resolve a selection to copyable blocks: rows whose ancestor is also selected
+ * collapse into that ancestor's subtree, and each kept root contributes its
+ * full subtree (container shells plus children, document order, original ids —
+ * paste remaps ids and reparents).
+ */
+export function subtreeBlocksFromSelectedRows(
   rows: CanvasRow[],
   selectedRowIds: readonly string[]
-): CanvasRow[] {
-  return rowIdsInDocumentOrder(rows, selectedRowIds)
-    .map((rowId) => findRowById(rows, rowId))
-    .filter((row): row is CanvasRow => row !== undefined);
+): Block[] {
+  const selected = new Set(selectedRowIds);
+  const blocks: Block[] = [];
+
+  const visit = (row: CanvasRow): void => {
+    if (selected.has(row.rowId)) {
+      for (const flat of flattenRows([row])) {
+        blocks.push(flat.effectiveBlock);
+      }
+      return;
+    }
+    for (const child of row.children) {
+      visit(child);
+    }
+  };
+
+  for (const row of rows) {
+    visit(row);
+  }
+
+  return blocks;
 }

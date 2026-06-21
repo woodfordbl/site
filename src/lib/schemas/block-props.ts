@@ -19,6 +19,8 @@ export const quotePropsSchema = z.object({
 
 export const calloutPropsSchema = z.object({
   text: z.string(),
+  /** Emoji or `tabler:IconName` — same encoding as page icons. */
+  icon: z.string().optional(),
 });
 
 export const checklistPropsSchema = z.object({});
@@ -28,11 +30,67 @@ export const checklistItemPropsSchema = z.object({
   text: z.string(),
 });
 
+/** `pageLink` block props: target page id and optional slash-origin variant. */
 export const pageLinkPropsSchema = z.object({
   pageId: z.string(),
+  /** `child` = slash **New Page**; `linked` = **Link To Page**. */
+  variant: z.enum(["linked", "child"]).optional(),
 });
 
 export const dividerPropsSchema = z.object({});
+
+export const columnsPropsSchema = z.object({});
+
+/** Flex-grow ratio for resizable column widths (default 1). */
+export const columnPropsSchema = z.object({
+  width: z.number().positive().optional(),
+});
+
+export const mediaKindSchema = z.enum(["image", "video"]);
+export const mediaSourceSchema = z.enum(["url", "asset"]);
+
+/** `media` block props: image/gif/video from URL or content-addressed IndexedDB asset id. */
+export const mediaPropsSchema = z.object({
+  kind: mediaKindSchema,
+  source: mediaSourceSchema,
+  /** URL string when `source: "url"`; SHA-256 content hash when `source: "asset"`. */
+  src: z.string(),
+  mimeType: z.string().optional(),
+  fileName: z.string().optional(),
+  alt: z.string().optional(),
+  /** Display width as a percentage of the row (25–100). Omitted means full width. */
+  widthPercent: z.number().min(25).max(100).optional(),
+});
+
+export const DEFAULT_TABLE_COLUMN_WIDTH = 120;
+
+/** `table` block props: header row flag and column widths in pixels. */
+export const tablePropsSchema = z.object({
+  hasHeaderRow: z.boolean().default(true),
+  columnWidths: z
+    .array(z.number().positive())
+    .default([
+      DEFAULT_TABLE_COLUMN_WIDTH,
+      DEFAULT_TABLE_COLUMN_WIDTH,
+      DEFAULT_TABLE_COLUMN_WIDTH,
+    ]),
+});
+
+export const tableRowPropsSchema = z.object({});
+
+export const tableCellPropsSchema = z.object({
+  text: z.string(),
+});
+
+/** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
+export const embedPropsSchema = z.object({
+  url: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  imageUrl: z.string().optional(),
+  showTitle: z.boolean().optional(),
+  showUrl: z.boolean().optional(),
+});
 
 export type HeadingProps = z.infer<typeof headingPropsSchema>;
 export type TextProps = z.infer<typeof textPropsSchema>;
@@ -43,18 +101,12 @@ export type ChecklistProps = z.infer<typeof checklistPropsSchema>;
 export type ChecklistItemProps = z.infer<typeof checklistItemPropsSchema>;
 export type PageLinkProps = z.infer<typeof pageLinkPropsSchema>;
 export type DividerProps = z.infer<typeof dividerPropsSchema>;
-
-export const blockPropsSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("heading"), props: headingPropsSchema }),
-  z.object({ type: z.literal("text"), props: textPropsSchema }),
-  z.object({ type: z.literal("list"), props: listPropsSchema }),
-  z.object({ type: z.literal("quote"), props: quotePropsSchema }),
-  z.object({ type: z.literal("callout"), props: calloutPropsSchema }),
-  z.object({ type: z.literal("checklist"), props: checklistPropsSchema }),
-  z.object({
-    type: z.literal("checklistItem"),
-    props: checklistItemPropsSchema,
-  }),
-  z.object({ type: z.literal("pageLink"), props: pageLinkPropsSchema }),
-  z.object({ type: z.literal("divider"), props: dividerPropsSchema }),
-]);
+export type ColumnsProps = z.infer<typeof columnsPropsSchema>;
+export type ColumnProps = z.infer<typeof columnPropsSchema>;
+export type MediaKind = z.infer<typeof mediaKindSchema>;
+export type MediaSource = z.infer<typeof mediaSourceSchema>;
+export type MediaProps = z.infer<typeof mediaPropsSchema>;
+export type EmbedProps = z.infer<typeof embedPropsSchema>;
+export type TableProps = z.infer<typeof tablePropsSchema>;
+export type TableRowProps = z.infer<typeof tableRowPropsSchema>;
+export type TableCellProps = z.infer<typeof tableCellPropsSchema>;

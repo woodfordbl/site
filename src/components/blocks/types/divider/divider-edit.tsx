@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 
+import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
+import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
-import { handleBlockModifierArrowKeyDown } from "@/lib/editor/field-keydown.ts";
 import { cn } from "@/lib/utils.ts";
 
 type DividerEditProps = BlockEditProps<"divider">;
@@ -20,62 +21,26 @@ export function DividerEdit({
 }: DividerEditProps) {
   const focusRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!autoFocus) {
-      return;
-    }
-
+  const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
-    onAutoFocusHandled?.();
-  }, [autoFocus, onAutoFocusHandled]);
+  }, []);
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (
-        handleBlockModifierArrowKeyDown(event, {
-          onExtendSelectionDown,
-          onExtendSelectionUp,
-          onMoveRowDown,
-          onMoveRowUp,
-        })
-      ) {
-        return;
-      }
+  useAutoFocus({
+    enabled: autoFocus,
+    onFocus: applyAutoFocus,
+    onHandled: onAutoFocusHandled,
+  });
 
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        onNavigateDown?.();
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        onNavigateUp?.();
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        onEnter?.({ start: 0, end: 0 });
-        return;
-      }
-
-      if (event.key === "Backspace" || event.key === "Delete") {
-        event.preventDefault();
-        onStructuralKey?.(true, event.key);
-      }
-    },
-    [
-      onEnter,
-      onExtendSelectionDown,
-      onExtendSelectionUp,
-      onMoveRowDown,
-      onMoveRowUp,
-      onNavigateDown,
-      onNavigateUp,
-      onStructuralKey,
-    ]
-  );
+  const handleKeyDown = useInlineCustomBlockKeys({
+    onEnter,
+    onExtendSelectionDown,
+    onExtendSelectionUp,
+    onMoveRowDown,
+    onMoveRowUp,
+    onNavigateDown,
+    onNavigateUp,
+    onStructuralKey,
+  });
 
   return (
     <button

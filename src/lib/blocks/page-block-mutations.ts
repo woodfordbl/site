@@ -1,9 +1,9 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import {
   buildBlockTree,
   findRowById,
   flattenRows,
-} from "@/db/queries/merge-blocks.ts";
+} from "@/lib/blocks/block-tree.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import { getBlockParentId } from "@/lib/schemas/block.ts";
@@ -208,10 +208,18 @@ export function moveBlockByRowId(
     return blocks;
   }
 
-  const movedBlock = withPlacementParent(row.effectiveBlock, placement);
-  const withoutMoved = deleteBlockByRowId(blocks, rows, rowId);
+  const descendantIds = collectDescendantIds(blocks, row.effectiveBlock.id);
+  const subtreeBlocks = blocks.filter((block) => descendantIds.has(block.id));
+  const withoutMoved = blocks.filter((block) => !descendantIds.has(block.id));
+  const movedRoot = withPlacementParent(row.effectiveBlock, placement);
+  const movedSubtree = subtreeBlocks.map((block) =>
+    block.id === row.effectiveBlock.id ? movedRoot : block
+  );
   const nextRows = buildBlockTree(withoutMoved);
-  return insertBlockAtPlacement(withoutMoved, nextRows, placement, movedBlock);
+  const insertAt = resolveInsertFlatIndex(withoutMoved, nextRows, placement);
+  const next = [...withoutMoved];
+  next.splice(insertAt, 0, ...movedSubtree);
+  return next;
 }
 
 export function blocksFromRows(rows: CanvasRow[]): Block[] {

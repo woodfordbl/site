@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
+import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import {
@@ -22,6 +23,7 @@ interface PageTitleSeed {
 }
 
 interface PageTitleEditorProps {
+  icon?: string;
   pageHasLocalDraft: boolean;
   pageId: string;
   seed?: PageTitleSeed;
@@ -35,6 +37,7 @@ interface PageTitleEditorViewProps extends PageTitleEditorProps {
 }
 
 function PageTitleEditorView({
+  icon: defaultIcon,
   pageId,
   seed,
   title: defaultTitle,
@@ -44,6 +47,7 @@ function PageTitleEditorView({
 }: PageTitleEditorViewProps) {
   const persistedTitle = localPage?.title ?? defaultTitle;
   const persistedSlug = localPage?.slug ?? defaultSlug;
+  const persistedIcon = localPage?.icon ?? defaultIcon;
 
   const [title, setTitle] = useState(persistedTitle);
   const [prevPersistedTitle, setPrevPersistedTitle] = useState(persistedTitle);
@@ -69,14 +73,14 @@ function PageTitleEditorView({
         return;
       }
 
-      const { slug } = persistPageMetadata({
+      persistPageMetadata({
         pageId,
+        slug: previousSlugRef.current,
         previousSlug: previousSlugRef.current,
         title: nextTitle,
         seed: localPage ? undefined : seed,
         pages,
       });
-      previousSlugRef.current = slug;
     },
     [localPage, pageId, pages, seed]
   );
@@ -84,18 +88,19 @@ function PageTitleEditorView({
   const handleBlur = useCallback(() => {
     isEditingRef.current = false;
 
-    if (title.trim() !== "") {
-      return;
-    }
+    const resolvedTitle = title.trim() === "" ? DEFAULT_PAGE_TITLE : title;
 
-    setTitle(DEFAULT_PAGE_TITLE);
+    if (title.trim() === "") {
+      setTitle(DEFAULT_PAGE_TITLE);
+    }
 
     const { slug } = persistPageMetadata({
       pageId,
       previousSlug: previousSlugRef.current,
-      title: DEFAULT_PAGE_TITLE,
+      title: resolvedTitle,
       seed: localPage ? undefined : seed,
       pages,
+      syncUrl: true,
     });
     previousSlugRef.current = slug;
   }, [localPage, pageId, pages, seed, title]);
@@ -105,19 +110,30 @@ function PageTitleEditorView({
   }, []);
 
   return (
-    <EditableSurface
-      ariaLabel="Page title"
-      className={cn(
-        "h-auto",
-        headingSurfaceClassName,
-        headingTypographyClassNames[1]
-      )}
-      onChange={handleChange}
-      onTextBlur={handleBlur}
-      onTextFocus={handleFocus}
-      placeholder={DEFAULT_PAGE_TITLE}
-      value={title}
-    />
+    <div className="flex flex-row items-end">
+      <PageIconPicker
+        icon={persistedIcon}
+        pageId={pageId}
+        pages={pages}
+        previousSlug={previousSlugRef.current}
+        seed={localPage ? undefined : seed}
+        title={title.trim() === "" ? DEFAULT_PAGE_TITLE : title}
+      />
+      <EditableSurface
+        ariaLabel="Page title"
+        className={cn(
+          "w-full min-w-0",
+          "h-auto",
+          headingSurfaceClassName,
+          headingTypographyClassNames[1]
+        )}
+        onChange={handleChange}
+        onTextBlur={handleBlur}
+        onTextFocus={handleFocus}
+        placeholder={DEFAULT_PAGE_TITLE}
+        value={title}
+      />
+    </div>
   );
 }
 
@@ -133,10 +149,8 @@ export function PageTitleEditor(props: PageTitleEditorProps) {
   const { pages } = usePageListItems();
 
   if (!isClient) {
-    if (props.pageHasLocalDraft) {
-      return null;
-    }
-
+    // Render the server-known title even for dirty pages; the local title
+    // swaps in after hydration without collapsing the layout.
     return (
       <PageTitleEditorView
         {...props}

@@ -65,9 +65,17 @@ function globPatternToRegExp(globPattern) {
   return new RegExp(`^${re}$`);
 }
 
-function pathMatchesGlob(relativePath, globPattern) {
+/**
+ * @param {string} relativePath
+ * @param {string} globPattern
+ */
+export function relativePathMatchesGlob(relativePath, globPattern) {
   const normalized = normalize(relativePath).replaceAll("\\", "/");
   return globPatternToRegExp(globPattern).test(normalized);
+}
+
+function pathMatchesGlob(relativePath, globPattern) {
+  return relativePathMatchesGlob(relativePath, globPattern);
 }
 
 /**
@@ -76,6 +84,14 @@ function pathMatchesGlob(relativePath, globPattern) {
  */
 export function getDocsForPath(root, relativePath) {
   const manifest = loadManifest(root);
+  return getDocsForPathFromManifest(manifest, relativePath);
+}
+
+/**
+ * @param {ReturnType<typeof loadManifest>} manifest
+ * @param {string} relativePath
+ */
+export function getDocsForPathFromManifest(manifest, relativePath) {
   const docs = new Set();
   for (const entry of manifest.mappings) {
     for (const glob of entry.globs) {
@@ -87,6 +103,23 @@ export function getDocsForPath(root, relativePath) {
     }
   }
   return [...docs].sort();
+}
+
+/**
+ * Manifest rows whose globs match at least one modified path.
+ *
+ * @param {ReturnType<typeof loadManifest>} manifest
+ * @param {string[]} relativePaths
+ */
+export function filterManifestEntriesByPaths(manifest, relativePaths) {
+  const normalized = relativePaths.map((path) =>
+    normalize(path).replaceAll("\\", "/")
+  );
+  return manifest.mappings.filter((entry) =>
+    normalized.some((path) =>
+      entry.globs.some((glob) => pathMatchesGlob(path, glob))
+    )
+  );
 }
 
 /**

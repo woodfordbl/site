@@ -24,6 +24,8 @@ import {
 const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
 const seededPageIds = new Set<string>();
 
+/** Lazy-seed payload when the first local write targets a shipped page. */
+/** Lazy-seed payload for first local write on a shipped page (blocks + baseline hash). */
 export interface PageMetadataSeed {
   blocks: Block[];
   serverBaselineHash: string;
@@ -54,10 +56,17 @@ function cascadeDescendantSlugs(
   }
 }
 
+/**
+ * Persists title, slug, and optional icon to `localPagesCollection` (lazy-seeds when needed).
+ * Cascades descendant slug prefixes; `syncPageUrl` uses `{ userPage: true }` when `routeBy === "id"`.
+ * @see docs/architecture/pages.md#title-editing
+ */
 export function persistPageMetadata(options: {
   pageId: string;
+  icon?: string;
   previousSlug?: string;
   slug?: string;
+  syncUrl?: boolean;
   title: string;
   seed?: PageMetadataSeed;
   pages?: PageSummary[];
@@ -81,6 +90,9 @@ export function persistPageMetadata(options: {
     localPagesCollection.update(options.pageId, (draft) => {
       draft.slug = slug;
       draft.title = title;
+      if (options.icon !== undefined) {
+        draft.icon = options.icon;
+      }
       draft.updatedAt = now;
     });
     markPageDirty(options.pageId);
@@ -89,6 +101,7 @@ export function persistPageMetadata(options: {
       id: options.pageId,
       slug,
       title,
+      icon: options.icon ?? existingPage?.icon,
       parentId: existingPage?.parentId ?? null,
       serverBaselineHash: options.seed.serverBaselineHash,
       createdAt: now,
@@ -111,8 +124,8 @@ export function persistPageMetadata(options: {
       pages
     );
 
-    if (existingPage?.routeBy !== "id") {
-      syncPageUrl(slug);
+    if (options.syncUrl && existingPage) {
+      syncPageUrl(slug, { userPage: existingPage.routeBy === "id" });
     }
   }
 

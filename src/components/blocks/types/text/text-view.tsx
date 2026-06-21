@@ -4,9 +4,9 @@ import { cn } from "@/lib/utils.ts";
 
 type TextViewProps = BlockViewProps<"text">;
 
-export function TextView({ props, className }: TextViewProps) {
+export function TextView({ props }: TextViewProps) {
   return (
-    <p className={cn("text-pretty", bodyTextClassName, className)}>
+    <p className={cn("text-pretty", bodyTextClassName)}>
       {props.text || "\u00A0"}
     </p>
   );

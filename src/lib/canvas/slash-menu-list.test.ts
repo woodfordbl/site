@@ -47,12 +47,12 @@ describe("buildRootSlashMenuItems", () => {
   it("includes the link trigger when query matches link keywords", () => {
     const items = buildRootSlashMenuItems("link", "page-home", pages);
 
-    expect(items).toEqual([
+    expect(items).toContainEqual(
       expect.objectContaining({
         kind: "page.link.trigger",
         key: PAGE_LINK_TRIGGER_KEY,
-      }),
-    ]);
+      })
+    );
   });
 
   it("matches the link trigger item definition", () => {

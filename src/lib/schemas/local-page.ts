@@ -4,7 +4,10 @@ export const localPageSchema = z.object({
   id: z.string(),
   slug: z.string(),
   title: z.string(),
+  icon: z.string().optional(),
   parentId: z.string().nullable(),
+  /** Sidebar sibling order within the same parentId scope. */
+  sidebarOrder: z.number().optional(),
   /** Flat block ids in document order for this page's shard. */
   blockOrder: z.array(z.string()).optional(),
   serverBaselineHash: z.string().nullable(),

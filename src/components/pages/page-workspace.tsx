@@ -1,20 +1,27 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
-import { NewPageButton } from "@/components/pages/new-page-button.tsx";
-import { PageList } from "@/components/pages/page-list.tsx";
+import { PageHeader } from "@/components/pages/page-header.tsx";
+import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
+import {
+  PageSidebarChromeProvider,
+  usePageSidebarChrome,
+} from "@/components/pages/page-sidebar-chrome.tsx";
+import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
+import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
-import { useSyncPageUrlFromLocalMetadata } from "@/hooks/use-sync-page-url-from-local-metadata.ts";
+import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
+import { rememberSlugPageResolution } from "@/lib/pages/remember-slug-page-resolution.ts";
 import {
   isLocallyDeletedPage,
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
-import { Route as RootRoute } from "@/routes/__root.tsx";
 
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
@@ -37,6 +44,7 @@ function toServerPageSource(
     id: page.id,
     slug: page.slug,
     title: page.title,
+    icon: page.icon,
     parentId: page.parentId ?? null,
     blocks,
   };
@@ -44,10 +52,29 @@ function toServerPageSource(
 
 export function PageWorkspace(props: PageWorkspaceProps) {
   const { page, pageHasLocalDraft } = props;
-  const { hasAnyLocalDrafts } = RootRoute.useRouteContext();
   const navigate = useNavigate();
+  const activePageRef = useActivePageRef();
   const localPage = useLocalPageById(page.id);
-  useSyncPageUrlFromLocalMetadata(page.id);
+  const [footerHost, setFooterHost] = useState<HTMLDivElement | null>(null);
+  useSyncPageUrl(page.id);
+
+  const serverPage = props.kind === "server" ? props.page : null;
+  const titleSeed = useMemo(
+    () =>
+      serverPage
+        ? {
+            blocks: serverPage.blocks,
+            serverBaselineHash: hashPageBlocks(serverPage.blocks),
+          }
+        : undefined,
+    [serverPage]
+  );
+
+  useEffect(() => {
+    if (activePageRef.slug) {
+      rememberSlugPageResolution(activePageRef.slug, page.id);
+    }
+  }, [activePageRef.slug, page.id]);
 
   useEffect(() => {
     if (
@@ -63,34 +90,71 @@ export function PageWorkspace(props: PageWorkspaceProps) {
     return null;
   }
 
-  const serverPage = props.kind === "server" ? props.page : null;
-  const titleSeed = serverPage
-    ? {
-        blocks: serverPage.blocks,
-        serverBaselineHash: hashPageBlocks(serverPage.blocks),
-      }
-    : undefined;
   const initialBlocks = serverPage?.blocks ?? [];
 
   return (
-    <div className="flex gap-12">
-      <aside className="hidden w-48 shrink-0 lg:block">
-        <PageList hasAnyLocalDrafts={hasAnyLocalDrafts} />
-        <NewPageButton />
-      </aside>
-      <div className="min-w-0 flex-1">
-        <PageTitleEditor
-          pageHasLocalDraft={pageHasLocalDraft}
-          pageId={page.id}
-          seed={titleSeed}
-          slug={page.slug}
-          title={page.title}
-        />
-        <PageCanvas
-          pageHasLocalDraft={pageHasLocalDraft}
-          serverPage={toServerPageSource(page, initialBlocks)}
-        />
+    <PageSidebarChromeProvider sidebar={<PageSidebar />}>
+      <PageWorkspaceBody
+        footerHost={footerHost}
+        initialBlocks={initialBlocks}
+        page={page}
+        pageHasLocalDraft={pageHasLocalDraft}
+        setFooterHost={setFooterHost}
+        titleSeed={titleSeed}
+      />
+    </PageSidebarChromeProvider>
+  );
+}
+
+function PageWorkspaceBody({
+  footerHost,
+  initialBlocks,
+  page,
+  pageHasLocalDraft,
+  setFooterHost,
+  titleSeed,
+}: {
+  footerHost: HTMLDivElement | null;
+  initialBlocks: Page["blocks"];
+  page: Page | LocalPage;
+  pageHasLocalDraft: boolean;
+  setFooterHost: (node: HTMLDivElement | null) => void;
+  titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
+}) {
+  const isMobile = useIsMobile();
+  const { isCollapsed } = usePageSidebarChrome();
+  const showSidebarRail = !(isMobile || isCollapsed);
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background md:rounded-xl"
+        data-page-main-panel=""
+      >
+        {showSidebarRail ? <PageSidebarRail /> : null}
+        <PageHeader pageId={page.id} titleSeed={titleSeed} />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <PageCanvas
+            footerHost={footerHost}
+            pageHasLocalDraft={pageHasLocalDraft}
+            serverPage={toServerPageSource(page, initialBlocks)}
+            titleSlot={
+              <PageTitleEditor
+                icon={page.icon}
+                pageHasLocalDraft={pageHasLocalDraft}
+                pageId={page.id}
+                seed={titleSeed}
+                slug={page.slug}
+                title={page.title}
+              />
+            }
+          />
+        </div>
       </div>
+      <div
+        className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 md:px-0"
+        ref={setFooterHost}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { isContainerBlockType } from "@/lib/canvas/block-spec.types.ts";
+import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 
 /** Depth-first flatten of canvas rows (container shells and children). */
 export function flattenCanvasRows(rows: CanvasRow[]): CanvasRow[] {

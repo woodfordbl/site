@@ -1,7 +1,8 @@
+import type { ContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
-import type { ContainerBlockType } from "@/lib/canvas/block-spec.types.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
+/** Discriminated union of canvas structural commands. @see docs/reference/canvas-commands.md */
 export type CanvasCommand =
   | { type: "row.update"; rowId: string; block: Block }
   | {
@@ -18,7 +19,6 @@ export type CanvasCommand =
       targetRowId: string;
       blocks: Block[];
       edge?: "before" | "after";
-      structured?: boolean;
     }
   | { type: "row.split"; rowId: string; start: number; end: number }
   | {
@@ -27,6 +27,7 @@ export type CanvasCommand =
       targetRowId: string;
       edge: "before" | "after";
     }
+  | { type: "row.moveToPosition"; rowId: string; position: RowPlacement }
   | {
       type: "row.convert";
       rowId: string;
@@ -36,6 +37,7 @@ export type CanvasCommand =
         indent?: number;
         headingLevel?: 1 | 2 | 3 | 4;
         pageId?: string;
+        pageLinkVariant?: "linked" | "child";
       };
     }
   | { type: "indent.adjust"; rowId: string; delta: -1 | 1 }
@@ -51,12 +53,56 @@ export type CanvasCommand =
     }
   | { type: "container.unwrap"; containerRowId: string }
   | {
+      type: "columns.create";
+      rowId: string;
+      count: 2 | 3 | 4;
+      text?: string;
+    }
+  | { type: "columns.addColumn"; columnsRowId: string }
+  | { type: "columns.removeColumn"; columnRowId: string }
+  | {
+      type: "table.create";
+      rowId: string;
+      columns?: number;
+      rows?: number;
+      hasHeaderRow?: boolean;
+      text?: string;
+    }
+  | { type: "table.addRow"; tableRowId: string; edge?: "before" | "after" }
+  | {
+      type: "table.addColumn";
+      tableId: string;
+      columnIndex: number;
+      edge: "before" | "after";
+    }
+  | { type: "table.removeRow"; tableRowId: string }
+  | { type: "table.removeColumn"; tableId: string; columnIndex: number }
+  | { type: "table.duplicateColumn"; tableId: string; columnIndex: number }
+  | {
+      type: "table.reorderColumn";
+      tableId: string;
+      fromIndex: number;
+      toIndex: number;
+    }
+  | { type: "table.toggleHeaderRow"; tableId: string; enabled: boolean }
+  | {
+      type: "table.updateColumnWidths";
+      tableId: string;
+      columnWidths: number[];
+    }
+  | {
+      type: "table.focusCell";
+      cellRowId: string;
+      direction: "next" | "previous" | "down" | "up";
+    }
+  | {
       type: "slash.convert";
       rowId: string;
       to: BlockType;
       text?: string;
       headingLevel?: 1 | 2 | 3 | 4;
       pageId?: string;
+      pageLinkVariant?: "linked" | "child";
     }
   | {
       type: "focus.set";
@@ -64,14 +110,12 @@ export type CanvasCommand =
       placement?: "start" | "end";
       offset?: number;
     }
-  | { type: "focus.clear" }
   | { type: "row.focusAdjacent"; rowId: string; direction: "up" | "down" }
   | { type: "row.moveAdjacent"; rowId: string; direction: "up" | "down" }
   | { type: "page.revertToServer" }
-  | { type: "page.acknowledgeServerBaseline" }
-  | { type: "author.saveToSource"; pageId: string }
-  | { type: "author.loadFromDisk"; pageId: string };
+  | { type: "page.acknowledgeServerBaseline" };
 
+/** Page tree and metadata commands (sidebar, title editor). @see docs/reference/page-commands.md */
 export type PageCommand =
   | {
       type: "page.create";
@@ -89,7 +133,29 @@ export type PageCommand =
       slug?: string;
       previousSlug?: string;
     }
-  | { type: "page.delete"; pageId: string };
+  | { type: "page.delete"; pageId: string }
+  | {
+      type: "page.reposition";
+      pageId: string;
+      parentId: string | null;
+      insertBeforePageId?: string | null;
+      appendPageLinkOnParent?: boolean;
+      seed?: {
+        blocks: Block[];
+        serverBaselineHash: string;
+      };
+      parentSeed?: {
+        blocks: Block[];
+        serverBaselineHash: string;
+      };
+      seedsByPageId?: Record<
+        string,
+        {
+          blocks: Block[];
+          serverBaselineHash: string;
+        }
+      >;
+    };
 
 export function assertNever(value: never): never {
   throw new Error(`Unexpected value: ${JSON.stringify(value)}`);

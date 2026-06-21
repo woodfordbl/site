@@ -28,8 +28,25 @@ export function toBlock(localBlock: LocalBlock): z.infer<typeof blockSchema> {
   return block;
 }
 
+/**
+ * Same LocalBlock object → same Block object, so live-query emissions keep
+ * block identity for unchanged rows (feeds row-level structural sharing).
+ */
+const blockConversionCache = new WeakMap<
+  LocalBlock,
+  z.infer<typeof blockSchema>
+>();
+
 export function blocksFromLocalBlocks(
   localBlocks: LocalBlock[]
 ): z.infer<typeof blockSchema>[] {
-  return localBlocks.map(toBlock);
+  return localBlocks.map((localBlock) => {
+    const cached = blockConversionCache.get(localBlock);
+    if (cached) {
+      return cached;
+    }
+    const block = toBlock(localBlock);
+    blockConversionCache.set(localBlock, block);
+    return block;
+  });
 }

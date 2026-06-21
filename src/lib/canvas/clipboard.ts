@@ -1,7 +1,4 @@
-import {
-  createEmptyBlock,
-  getTextFromBlock,
-} from "@/lib/blocks/create-block.ts";
+import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 export interface CanvasClipboardPayload {
@@ -12,20 +9,20 @@ function createId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * Clone blocks for paste with fresh ids. `parentId` references within the
+ * cloned set are remapped to the new ids so container subtrees stay intact;
+ * references to blocks outside the set are dropped so those blocks become
+ * subtree roots at the paste destination.
+ */
 export function cloneBlocksForPaste(blocks: Block[]): Block[] {
-  return blocks.map((block) => cloneBlockWithNewIds(block));
-}
+  const idMap = new Map(blocks.map((block) => [block.id, createId()]));
 
-function cloneBlockWithNewIds(block: Block): Block {
-  const next = createEmptyBlock(block.type);
-  const cloned: Block = {
-    ...next,
-    id: createId(),
-    indent: block.indent,
-    parentId: block.parentId ?? null,
-    props: structuredClone(block.props),
-  } as Block;
-  return cloned;
+  return blocks.map((block) => ({
+    ...structuredClone(block),
+    id: idMap.get(block.id) ?? createId(),
+    parentId: block.parentId ? (idMap.get(block.parentId) ?? null) : null,
+  }));
 }
 
 export function blocksToPlainText(blocks: Block[]): string {

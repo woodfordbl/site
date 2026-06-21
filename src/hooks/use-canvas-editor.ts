@@ -1,17 +1,16 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { findRowById } from "@/db/queries/merge-blocks.ts";
 import {
   type ServerPageSource,
   usePageCanvas,
 } from "@/db/queries/use-page-canvas.ts";
 import { useCanvasRowActions } from "@/hooks/use-canvas-row-actions.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import { applyCanvasEffects } from "@/lib/canvas/apply-effects.ts";
 import { tryApplyCanvasFocus } from "@/lib/canvas/apply-pending-focus.ts";
 import {
   type BlockSelectionState,
-  blocksFromSelectedRows,
   emptyBlockSelection,
   expandListContainerSelection,
   getActiveCanvasRowId,
@@ -19,59 +18,50 @@ import {
   rowIdsInDocumentOrder,
   selectAllRows,
   selectionEdgeRowId,
+  subtreeBlocksFromSelectedRows,
   toggleBlockSelection,
 } from "@/lib/canvas/block-selection.ts";
-import { isContainerBlockType } from "@/lib/canvas/block-spec.types.ts";
-import {
-  handleCanvasKeyboardShortcut,
-  handleCanvasPasteEvent,
-} from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
+import { handleCanvasPasteEvent } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import {
   blocksToPlainText,
   type CanvasClipboardPayload,
-  cloneBlocksForPaste,
   payloadFromBlocks,
 } from "@/lib/canvas/clipboard.ts";
-import { cloneRowSubtreeBlocks } from "@/lib/canvas/clone-row-subtree.ts";
 import type { CanvasCommand } from "@/lib/canvas/commands.ts";
 import type { FocusState } from "@/lib/canvas/effects.ts";
-import { findFocusableAdjacentRowId } from "@/lib/canvas/focusable-rows.ts";
+import {
+  findFocusableAdjacentRow,
+  findFocusableAdjacentRowId,
+  flattenCanvasRows,
+} from "@/lib/canvas/focusable-rows.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
-import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
-export function useCanvasEditor(
-  serverPage: ServerPageSource,
-  options?: {
-    onSaveAuthor?: (
-      blocks: Block[],
-      title: string,
-      slug: string
-    ) => Promise<void>;
-  }
-) {
+/**
+ * Canvas editing state + identity-stable actions. Every action reads volatile
+ * state (rows, selection, focus, clipboard) through refs so its identity never
+ * changes — the actions context built from these never invalidates consumers.
+ */
+export function useCanvasEditor(serverPage: ServerPageSource) {
   const [focus, setFocus] = useState<FocusState>(null);
-  const canvas = usePageCanvas(serverPage, {
-    focusedBlockId: focus?.rowId ?? null,
-  });
+  const canvas = usePageCanvas(serverPage);
   const [selection, setSelection] =
     useState<BlockSelectionState>(emptyBlockSelection);
-  const [draggingRowId, setDraggingRowIdState] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [clipboard, setClipboard] = useState<CanvasClipboardPayload | null>(
     null
   );
   const pasteInFlightRef = useRef(false);
-  const setDraggingRowId = useCallback((rowId: string | null) => {
-    setDraggingRowIdState(rowId);
-    if (!rowId) {
-      setDropTarget(null);
-    }
-  }, []);
 
-  const clearDropTarget = useCallback(() => {
-    setDropTarget(null);
-  }, []);
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
+  const clipboardRef = useRef(clipboard);
+  clipboardRef.current = clipboard;
+
+  const getRows = useCallback(() => canvasRef.current.rows, []);
 
   const clearSelection = useCallback(() => {
     setSelection(emptyBlockSelection);
@@ -111,146 +101,165 @@ export function useCanvasEditor(
 
   const toggleRowSelection = useCallback(
     (rowId: string, modifiers?: { metaKey?: boolean; shiftKey?: boolean }) => {
+      const focusRowId = focusRef.current?.rowId ?? getActiveCanvasRowId();
+
       if (modifiers?.shiftKey) {
-        const focusRowId = focus?.rowId ?? getActiveCanvasRowId();
         const active = document.activeElement;
         if (active instanceof HTMLElement) {
           active.blur();
         }
         clearFocus();
-
-        setSelection((current) =>
-          toggleBlockSelection(
-            canvas.rows,
-            current,
-            rowId,
-            modifiers,
-            focusRowId
-          )
-        );
-        return;
       }
 
-      const focusRowId = focus?.rowId ?? getActiveCanvasRowId();
       setSelection((current) =>
-        toggleBlockSelection(canvas.rows, current, rowId, modifiers, focusRowId)
+        toggleBlockSelection(getRows(), current, rowId, modifiers, focusRowId)
       );
     },
-    [canvas.rows, clearFocus, focus?.rowId]
+    [clearFocus, getRows]
   );
 
   const selectAll = useCallback(() => {
-    setSelection(selectAllRows(canvas.rows));
-  }, [canvas.rows]);
+    setSelection(selectAllRows(getRows()));
+  }, [getRows]);
 
   const selectRow = useCallback(
     (rowId: string) => {
       setSelection({
         anchorRowId: rowId,
-        selectedRowIds: expandListContainerSelection(canvas.rows, rowId),
+        selectedRowIds: expandListContainerSelection(getRows(), rowId),
       });
     },
-    [canvas.rows]
+    [getRows]
   );
+
+  const applyCommandEffects = useCallback((command: CanvasCommand) => {
+    const current = canvasRef.current;
+    const result = canvasReducer({ rows: current.getPlacementRows() }, command);
+
+    applyCanvasEffects(
+      result.effects,
+      {
+        saveRow: current.saveRowById,
+        savePageBlocks: current.persistPageBlocks,
+        insertRow: (position: RowPlacement, block: Block) =>
+          current.insertRowAtPosition(position, block),
+        deleteRow: current.deleteRowById,
+        moveRow: current.moveRowById,
+        revertToServer: current.revertToServer,
+        acknowledgeServerBaseline: current.acknowledgeServerBaseline,
+      },
+      current.rows,
+      setFocus
+    );
+  }, []);
 
   const dispatch = useCallback(
     (command: CanvasCommand) => {
-      canvas.runBlockTransaction(() => {
-        const result = canvasReducer(
-          {
-            rows: canvas.getPlacementRows(),
-            serverBlocks: canvas.serverBlocks,
-          },
-          command
-        );
-
-        applyCanvasEffects(
-          result.effects,
-          {
-            saveRow: canvas.saveRowById,
-            insertRow: (position: RowPlacement, block: Block) =>
-              canvas.insertRowAtPosition(position, block),
-            deleteRow: canvas.deleteRowById,
-            moveRow: canvas.moveRowById,
-            revertToServer: canvas.revertToServer,
-            acknowledgeServerBaseline: canvas.acknowledgeServerBaseline,
-            saveAuthorPage: async (_authorPageId, blocks, title, slug) => {
-              await options?.onSaveAuthor?.(blocks, title, slug);
-            },
-          },
-          canvas.rows,
-          setFocus
-        );
+      canvasRef.current.runBlockTransaction(() => {
+        applyCommandEffects(command);
       });
     },
-    [canvas, options]
+    [applyCommandEffects]
+  );
+
+  const dispatchCommands = useCallback(
+    (commands: CanvasCommand[]) => {
+      if (commands.length === 0) {
+        return;
+      }
+
+      canvasRef.current.runBlockTransaction(() => {
+        for (const command of commands) {
+          applyCommandEffects(command);
+        }
+      });
+    },
+    [applyCommandEffects]
+  );
+
+  const getPlacementRows = useCallback(
+    () => canvasRef.current.getPlacementRows(),
+    []
   );
 
   const rowActions = useCanvasRowActions({
-    getPlacementRows: canvas.getPlacementRows,
+    getPlacementRows,
     dispatch,
   });
 
-  const copySelection = useCallback(async () => {
-    const selectedRows = blocksFromSelectedRows(
-      canvas.rows,
-      selection.selectedRowIds
-    );
-    if (selectedRows.length === 0) {
+  const copyBlocksToClipboard = useCallback(async (blocks: Block[]) => {
+    if (blocks.length === 0) {
       return;
     }
 
-    const blocks = selectedRows.map((row) => row.effectiveBlock);
-    const payload = payloadFromBlocks(blocks);
-    setClipboard(payload);
+    setClipboard(payloadFromBlocks(blocks));
 
     try {
       await navigator.clipboard.writeText(blocksToPlainText(blocks));
     } catch {
       // Local clipboard state is enough for paste within the canvas.
     }
-  }, [canvas.rows, selection.selectedRowIds]);
+  }, []);
+
+  const copySelection = useCallback(async () => {
+    await copyBlocksToClipboard(
+      subtreeBlocksFromSelectedRows(
+        getRows(),
+        selectionRef.current.selectedRowIds
+      )
+    );
+  }, [copyBlocksToClipboard, getRows]);
+
+  const copyRow = useCallback(
+    async (rowId: string) => {
+      const row = findRowById(getRows(), rowId);
+      if (!row) {
+        return;
+      }
+
+      await copyBlocksToClipboard(
+        flattenRows([row]).map((flatRow) => flatRow.effectiveBlock)
+      );
+    },
+    [copyBlocksToClipboard, getRows]
+  );
 
   const deleteSelection = useCallback(() => {
-    if (selection.selectedRowIds.length === 0) {
+    const selectedRowIds = selectionRef.current.selectedRowIds;
+    if (selectedRowIds.length === 0) {
       return;
     }
 
-    dispatch({
-      type: "selection.delete",
-      rowIds: selection.selectedRowIds,
-    });
+    dispatch({ type: "selection.delete", rowIds: selectedRowIds });
     clearSelection();
-  }, [clearSelection, dispatch, selection.selectedRowIds]);
+  }, [clearSelection, dispatch]);
 
   const moveSelectedRowAdjacent = useCallback(
     (direction: "up" | "down") => {
+      const current = selectionRef.current;
       const rowId =
-        selection.anchorRowId ??
-        rowIdsInDocumentOrder(canvas.rows, selection.selectedRowIds).at(-1);
+        current.anchorRowId ??
+        rowIdsInDocumentOrder(getRows(), current.selectedRowIds).at(-1);
       if (!rowId) {
         return;
       }
       dispatch({ type: "row.moveAdjacent", rowId, direction });
     },
-    [canvas.rows, dispatch, selection.anchorRowId, selection.selectedRowIds]
+    [dispatch, getRows]
   );
 
   const extendSelectionAdjacent = useCallback(
     (direction: "up" | "down") => {
+      const rows = getRows();
       const rowId = selectionEdgeRowId(
-        canvas.rows,
-        selection.selectedRowIds,
+        rows,
+        selectionRef.current.selectedRowIds,
         direction
       );
       if (!rowId) {
         return;
       }
-      const adjacentRowId = findFocusableAdjacentRowId(
-        canvas.rows,
-        rowId,
-        direction
-      );
+      const adjacentRowId = findFocusableAdjacentRowId(rows, rowId, direction);
       if (!adjacentRowId) {
         return;
       }
@@ -261,147 +270,84 @@ export function useCanvasEditor(
       clearFocus();
       toggleRowSelection(adjacentRowId, { shiftKey: true });
     },
-    [canvas.rows, clearFocus, selection.selectedRowIds, toggleRowSelection]
-  );
-
-  const copyRow = useCallback(
-    async (rowId: string) => {
-      const row = findRowById(canvas.rows, rowId);
-      if (!row) {
-        return;
-      }
-
-      const blocks = [row.effectiveBlock];
-      const payload = payloadFromBlocks(blocks);
-      setClipboard(payload);
-
-      try {
-        await navigator.clipboard.writeText(blocksToPlainText(blocks));
-      } catch {
-        // Local clipboard state is enough for paste within the canvas.
-      }
-    },
-    [canvas.rows]
+    [clearFocus, getRows, toggleRowSelection]
   );
 
   const deleteRow = useCallback(
     (rowId: string) => {
-      dispatch({ type: "row.delete", rowId });
+      const flat = flattenCanvasRows(getRows());
+      const index = flat.findIndex((row) => row.rowId === rowId);
+      const previous =
+        index > 0 ? findFocusableAdjacentRow(flat, index, "up") : null;
+      const commands: CanvasCommand[] = [{ type: "row.delete", rowId }];
+      if (previous) {
+        commands.push({
+          type: "focus.set",
+          rowId: previous.rowId,
+          placement: "end",
+        });
+      }
+      dispatchCommands(commands);
       clearSelection();
     },
-    [clearSelection, dispatch]
+    [clearSelection, dispatchCommands, getRows]
   );
 
   const duplicateRow = useCallback(
     (rowId: string) => {
-      const row = findRowById(canvas.rows, rowId);
+      const row = findRowById(getRows(), rowId);
       if (!row) {
         return;
       }
 
-      if (isContainerBlockType(row.effectiveBlock.type)) {
-        dispatch({
-          type: "rows.paste",
-          targetRowId: rowId,
-          blocks: cloneRowSubtreeBlocks(row),
-          structured: true,
-        });
-        return;
-      }
-
-      rowActions.pasteAfter(rowId, cloneBlocksForPaste([row.effectiveBlock]));
+      dispatch({
+        type: "rows.paste",
+        targetRowId: rowId,
+        blocks: flattenRows([row]).map((flatRow) => flatRow.effectiveBlock),
+      });
     },
-    [canvas.rows, dispatch, rowActions]
+    [dispatch, getRows]
   );
 
   const pasteClipboard = useCallback(() => {
-    if (!clipboard?.blocks.length || pasteInFlightRef.current) {
+    const payload = clipboardRef.current;
+    if (!payload?.blocks.length || pasteInFlightRef.current) {
       return;
     }
 
     pasteInFlightRef.current = true;
 
+    const rows = getRows();
     const targetRowId =
-      rowIdsInDocumentOrder(canvas.rows, selection.selectedRowIds).at(-1) ??
-      focus?.rowId ??
-      canvas.rows.at(-1)?.rowId;
+      rowIdsInDocumentOrder(rows, selectionRef.current.selectedRowIds).at(-1) ??
+      focusRef.current?.rowId ??
+      rows.at(-1)?.rowId;
 
     if (!targetRowId) {
       pasteInFlightRef.current = false;
       return;
     }
 
-    rowActions.pasteAfter(targetRowId, clipboard.blocks);
+    rowActions.pasteAfter(targetRowId, payload.blocks);
     clearSelection();
 
     queueMicrotask(() => {
       pasteInFlightRef.current = false;
     });
-  }, [
-    canvas.rows,
-    clearSelection,
-    clipboard,
-    focus?.rowId,
-    rowActions,
-    selection.selectedRowIds,
-  ]);
-
-  const handleCanvasKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      handleCanvasKeyboardShortcut(event, {
-        clipboard,
-        copySelection,
-        deleteSelection,
-        extendSelectionDown: () => extendSelectionAdjacent("down"),
-        extendSelectionUp: () => extendSelectionAdjacent("up"),
-        moveRowDown: () => moveSelectedRowAdjacent("down"),
-        moveRowUp: () => moveSelectedRowAdjacent("up"),
-        pasteClipboard,
-        selectAll,
-        selectedCount: selection.selectedRowIds.length,
-      });
-    },
-    [
-      clipboard,
-      copySelection,
-      deleteSelection,
-      extendSelectionAdjacent,
-      moveSelectedRowAdjacent,
-      pasteClipboard,
-      selectAll,
-      selection.selectedRowIds.length,
-    ]
-  );
+  }, [clearSelection, getRows, rowActions]);
 
   const handleCanvasPaste = useCallback(
     (event: ClipboardEvent) => {
       handleCanvasPasteEvent(event, {
-        clipboard,
+        clipboard: clipboardRef.current,
         copySelection,
         deleteSelection,
         pasteClipboard,
         selectAll,
-        selectedCount: selection.selectedRowIds.length,
+        selectedCount: selectionRef.current.selectedRowIds.length,
       });
     },
-    [
-      clipboard,
-      copySelection,
-      deleteSelection,
-      pasteClipboard,
-      selectAll,
-      selection.selectedRowIds.length,
-    ]
-  );
-
-  const dispatchForRow = useCallback(
-    (
-      rowId: string,
-      command: Omit<CanvasCommand, "rowId"> & { rowId?: string }
-    ) => {
-      dispatch({ ...command, rowId } as CanvasCommand);
-    },
-    [dispatch]
+    [copySelection, deleteSelection, pasteClipboard, selectAll]
   );
 
   const isRowSelected = useCallback(
@@ -409,11 +355,25 @@ export function useCanvasEditor(
     [canvas.rows, selection]
   );
 
+  const saveRow = useCallback((row: CanvasRow, block: Block) => {
+    canvasRef.current.saveRow(row, block);
+  }, []);
+
+  const insertRow = useCallback(
+    (
+      placement: RowPlacement,
+      type?: Parameters<typeof canvas.insertRow>[1],
+      insertOptions?: Parameters<typeof canvas.insertRow>[2]
+    ) => canvasRef.current.insertRow(placement, type, insertOptions),
+    []
+  );
+
   return useMemo(
     () => ({
       rows: canvas.rows as CanvasRow[],
+      getRows,
       dispatch,
-      dispatchForRow,
+      dispatchCommands,
       ...rowActions,
       focus,
       clearFocus,
@@ -431,25 +391,25 @@ export function useCanvasEditor(
       duplicateRow,
       pasteClipboard,
       clipboard,
-      handleCanvasKeyDown,
       handleCanvasPaste,
       moveSelectedRowAdjacent,
       extendSelectionAdjacent,
-      draggingRowId,
-      setDraggingRowId,
-      dropTarget,
-      setDropTarget,
-      clearDropTarget,
-      saveRow: canvas.saveRow,
-      insertRow: canvas.insertRow,
+      saveRow,
+      insertRow,
       hasLocalChanges: canvas.hasLocalChanges,
       isStale: canvas.isStale,
       resetToServer: canvas.resetToServer,
     }),
     [
-      canvas,
+      canvas.rows,
+      saveRow,
+      insertRow,
+      canvas.hasLocalChanges,
+      canvas.isStale,
+      canvas.resetToServer,
+      getRows,
       dispatch,
-      dispatchForRow,
+      dispatchCommands,
       rowActions,
       focus,
       clearFocus,
@@ -466,14 +426,9 @@ export function useCanvasEditor(
       duplicateRow,
       pasteClipboard,
       clipboard,
-      handleCanvasKeyDown,
       handleCanvasPaste,
       moveSelectedRowAdjacent,
       extendSelectionAdjacent,
-      draggingRowId,
-      setDraggingRowId,
-      dropTarget,
-      clearDropTarget,
     ]
   );
 }

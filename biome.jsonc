@@ -37,7 +37,7 @@
       }
     },
     {
-      "includes": ["src/routes/$.tsx", "src/routes/p.$pageId.tsx"],
+      "includes": ["src/routes/$.tsx", "src/routes/p.$.tsx"],
       "linter": {
         "rules": {
           "style": {

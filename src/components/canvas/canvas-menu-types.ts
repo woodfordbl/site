@@ -7,6 +7,12 @@ export type CanvasMenuPayload =
   | { kind: "block-actions"; rowId: string }
   | { kind: "slash"; rowId: string };
 
+export interface BlockViewOption {
+  checked: boolean;
+  id: string;
+  label: string;
+}
+
 export interface BlockActionsSession {
   canTurnInto: boolean;
   onConvert: (item: SlashMenuItem) => void;
@@ -16,12 +22,15 @@ export interface BlockActionsSession {
   rowId: string;
   triggerId: string;
   turnIntoValue?: string;
+  viewOptions?: {
+    items: BlockViewOption[];
+    label: string;
+  };
 }
 
 export interface SlashMenuSession {
   anchorElement: HTMLElement | null;
   confirmSelection: () => void;
-  convertRowId?: string;
   currentPageId: string;
   linkSubOpen: boolean;
   onClose: () => void;

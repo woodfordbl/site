@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBlockTree } from "@/db/queries/merge-blocks.ts";
+import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import { resolveStructuralAction } from "@/lib/canvas/resolve-structural-action.ts";
 import { buildStructuralContext } from "@/lib/canvas/structural-context.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -26,9 +26,19 @@ describe("resolveStructuralAction", () => {
     if (!ctx) {
       return;
     }
-    const commands = resolveStructuralAction(ctx);
-    expect(commands.some((c) => c.type === "row.delete")).toBe(true);
-    expect(commands.some((c) => c.type === "focus.set")).toBe(true);
+    const firstRow = rows[0];
+    expect(firstRow).toBeDefined();
+    if (!firstRow) {
+      return;
+    }
+    expect(resolveStructuralAction(ctx)).toEqual([
+      { type: "row.delete", rowId: emptyRow.rowId },
+      {
+        type: "focus.set",
+        rowId: firstRow.rowId,
+        placement: "end",
+      },
+    ]);
   });
 
   it("does not delete the sole empty top-level row", () => {

@@ -1,28 +1,39 @@
-import { useMemo } from "react";
-import type { CanvasEditorContextValue } from "@/components/canvas/canvas-editor-context.tsx";
-import { CanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
+import { type ReactNode, useMemo } from "react";
+
+import "@/components/blocks/register-containers.ts";
+import {
+  type CanvasEditorActions,
+  CanvasEditorContext,
+} from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
-import { buildBlockTree, type CanvasRow } from "@/db/queries/merge-blocks.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
+import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
-import { emptyBlockSelection } from "@/lib/canvas/block-selection.ts";
 
 interface PageCanvasServerProps {
   serverPage: ServerPageSource;
+  titleSlot?: ReactNode;
 }
 
 const noop = () => undefined;
-const noopAsync = async () => undefined;
+const noopAsync = () => Promise.resolve(undefined);
 
-function createNoopCanvasEditorContext(
+function createNoopCanvasEditorActions(
   rows: CanvasRow[],
   currentPageId: string
-): CanvasEditorContextValue {
+): CanvasEditorActions {
   return {
-    rows,
-    dispatch: noop,
+    clearFocus: noop,
+    clearSelection: noop,
+    copyRow: noopAsync,
+    copySelection: noopAsync,
     currentPageId,
-    focus: null,
+    deleteRow: noop,
+    deleteSelection: noop,
+    dispatch: noop,
+    dispatchCommands: noop,
+    duplicateRow: noop,
+    getRows: () => rows,
     insertAfter: noop,
     insertAtScopeStart: noop,
     insertBefore: noop,
@@ -30,51 +41,41 @@ function createNoopCanvasEditorContext(
     moveBefore: noop,
     pasteAfter: noop,
     pasteBefore: noop,
-    clearFocus: noop,
-    selection: emptyBlockSelection,
-    selectedRowIds: [],
-    toggleRowSelection: noop,
+    pasteClipboard: noop,
+    saveRow: noop,
     selectAll: noop,
     selectRow: noop,
-    clearSelection: noop,
-    isRowSelected: () => false,
-    copySelection: noopAsync,
-    copyRow: noopAsync,
-    deleteSelection: noop,
-    deleteRow: noop,
-    duplicateRow: noop,
-    pasteClipboard: noop,
-    clipboard: null,
-    draggingRowId: null,
-    setDraggingRowId: noop,
-    dropTarget: null,
-    setDropTarget: noop,
-    clearDropTarget: noop,
-    saveRow: noop,
+    toggleRowSelection: noop,
   };
 }
 
-export function PageCanvasServer({ serverPage }: PageCanvasServerProps) {
+export function PageCanvasServer({
+  serverPage,
+  titleSlot,
+}: PageCanvasServerProps) {
   const rows = useMemo(
     () => buildBlockTree(rewriteLegacyEditorBlockIds(serverPage.blocks)),
     [serverPage.blocks]
   );
-  const context = useMemo(
-    () => createNoopCanvasEditorContext(rows, serverPage.id),
+  const actions = useMemo(
+    () => createNoopCanvasEditorActions(rows, serverPage.id),
     [rows, serverPage.id]
   );
 
   return (
-    <CanvasEditorContext.Provider value={context}>
-      <div className="flex flex-col gap-px overflow-visible [&>.group/canvas-row:first-child_.group/block]:pt-0 [&>.group/canvas-row:first-child_.group/list]:pt-0">
-        {rows.map((row) => (
-          <CanvasRowView
-            key={row.rowId}
-            mode="view"
-            onFocusHandled={noop}
-            row={row}
-          />
-        ))}
+    <CanvasEditorContext.Provider value={actions}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
+          data-scroll-restoration-id="page-canvas-scroll"
+        >
+          {titleSlot}
+          <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+            {rows.map((row) => (
+              <CanvasRowView key={row.rowId} mode="view" row={row} />
+            ))}
+          </div>
+        </div>
       </div>
     </CanvasEditorContext.Provider>
   );

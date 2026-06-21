@@ -46,6 +46,18 @@ describe("buildChildSlug", () => {
 });
 
 describe("buildPageTree", () => {
+  it("sorts siblings by sidebarOrder before title", () => {
+    const pages = [
+      page("b", "/b", "Beta", null),
+      page("a", "/a", "Alpha", null),
+    ];
+    pages[0].sidebarOrder = 2000;
+    pages[1].sidebarOrder = 1000;
+
+    const tree = buildPageTree(pages);
+    expect(tree.map((row) => row.page.id)).toEqual(["a", "b"]);
+  });
+
   it("builds nested rows by parentId", () => {
     const pages = [
       page("work", "/work", "Work"),
@@ -137,6 +149,33 @@ describe("buildSlugFromTitle", () => {
         value.toLowerCase().replace(/\s+/g, "-")
       )
     ).toBe("/about-me");
+  });
+
+  it("suffixes duplicate segments when a shipped sibling exists", () => {
+    const pages = [
+      page("server-new-page", "/new-page", "New Page"),
+      page("user-a", "/draft", "Draft"),
+    ];
+
+    expect(
+      buildSlugFromTitle(pages[1], pages, "New Page", (value) =>
+        value.toLowerCase().replace(/\s+/g, "-")
+      )
+    ).toBe("/new-page-2");
+  });
+
+  it("suffixes when multiple siblings already use the base segment", () => {
+    const pages = [
+      page("server-new-page", "/new-page", "New Page"),
+      page("user-b", "/new-page-2", "New Page"),
+      page("user-a", "/draft", "Draft"),
+    ];
+
+    expect(
+      buildSlugFromTitle(pages[2], pages, "New Page", (value) =>
+        value.toLowerCase().replace(/\s+/g, "-")
+      )
+    ).toBe("/new-page-3");
   });
 });
 

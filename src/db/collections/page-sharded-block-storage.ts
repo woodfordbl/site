@@ -1,6 +1,8 @@
 import { getBrowserStorage } from "@/db/collections/browser-storage.ts";
+import { localBlockSchema } from "@/lib/schemas/local-block.ts";
 
 export const BLOCK_SHARD_PREFIX = "site-local-blocks:";
+export const BLOCK_QUARANTINE_KEY = "site-local-blocks-quarantine";
 
 interface StoredItem<T> {
   data: T;
@@ -54,6 +56,55 @@ function writeShard<T>(
   storage.setItem(shardKey(pageId), JSON.stringify(shard));
 }
 
+/**
+ * Blocks that fail the current schema are dropped at read time and would be
+ * destroyed by the next shard overwrite. Before a shard write discards them,
+ * copy those raw items to a quarantine key so a schema fix can recover them.
+ * Deliberate deletes are unaffected: deleted blocks parsed fine, so a missing
+ * id that still parses is a real delete and is not quarantined.
+ */
+function quarantineUnparseableDroppedItems(
+  storage: Storage,
+  existing: ShardMap<unknown> | null,
+  incoming: ShardMap<unknown>
+): void {
+  if (!existing) {
+    return;
+  }
+
+  const dropped: ShardMap<unknown> = {};
+  for (const [blockId, stored] of Object.entries(existing)) {
+    if (blockId in incoming) {
+      continue;
+    }
+    if (localBlockSchema.safeParse(stored.data).success) {
+      continue;
+    }
+    dropped[blockId] = stored;
+  }
+
+  if (Object.keys(dropped).length === 0) {
+    return;
+  }
+
+  try {
+    const raw = storage.getItem(BLOCK_QUARANTINE_KEY);
+    const current = raw ? (JSON.parse(raw) as ShardMap<unknown>) : {};
+    storage.setItem(
+      BLOCK_QUARANTINE_KEY,
+      JSON.stringify({ ...current, ...dropped })
+    );
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[blocks] quarantined ${Object.keys(dropped).length} block(s) that no longer parse`,
+        Object.keys(dropped)
+      );
+    }
+  } catch {
+    // Quarantine is best-effort; never block the primary write.
+  }
+}
+
 function groupByPageId<T extends { pageId: string }>(
   collectionMap: ShardMap<T>
 ): Map<string, ShardMap<T>> {
@@ -69,11 +120,13 @@ function groupByPageId<T extends { pageId: string }>(
   return grouped;
 }
 
-const lastShardSnapshot = new Map<string, string>();
-
 export function createPageShardedBlockStorage(
   storage: Storage = getBrowserStorage()
 ): Storage {
+  const lastShardSnapshot = new Map<string, string>();
+  /** Block ids this tab last wrote per shard — lets content-only writes skip the quarantine re-read. */
+  const lastShardIds = new Map<string, Set<string>>();
+
   return {
     get length() {
       return storage.length;
@@ -131,8 +184,21 @@ export function createPageShardedBlockStorage(
           continue;
         }
 
+        const incomingIds = new Set(Object.keys(shard));
+        const previousIds = lastShardIds.get(pageId);
+        const mayHaveDroppedIds =
+          !previousIds ||
+          [...previousIds].some((blockId) => !incomingIds.has(blockId));
+        if (mayHaveDroppedIds) {
+          quarantineUnparseableDroppedItems(
+            storage,
+            readShard(storage, pageId),
+            shard
+          );
+        }
         writeShard(storage, pageId, shard);
         lastShardSnapshot.set(pageId, serialized);
+        lastShardIds.set(pageId, incomingIds);
       }
 
       const nextPageIds = new Set(grouped.keys());
@@ -141,8 +207,14 @@ export function createPageShardedBlockStorage(
           continue;
         }
 
+        quarantineUnparseableDroppedItems(
+          storage,
+          readShard(storage, pageId),
+          {}
+        );
         storage.removeItem(shardKey(pageId));
         lastShardSnapshot.delete(pageId);
+        lastShardIds.delete(pageId);
       }
     },
   };

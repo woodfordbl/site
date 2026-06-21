@@ -1,25 +1,66 @@
+import { useRouteContext } from "@tanstack/react-router";
 import {
+  cloneElement,
+  isValidElement,
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
+import {
+  DndSurface,
+  type DndSurfaceConfig,
+} from "@/components/dnd/dnd-surface.tsx";
+import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
+import { useDropZone } from "@/components/dnd/use-dnd.ts";
+import {
+  PageListDragPreview,
+  type PageListDragPreviewState,
+} from "@/components/pages/page-list-drag-preview.tsx";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.tsx";
+import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
+import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import {
   useMergedPageListItems,
   usePageListItems,
 } from "@/hooks/use-page-list.ts";
+import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { loadPage } from "@/lib/content/load-page.ts";
+import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import {
   buildPageTree,
   getAncestorPageIds,
   type PageRow,
 } from "@/lib/pages/build-page-tree.ts";
+import { flattenVisiblePageRows } from "@/lib/pages/flatten-visible-page-rows.ts";
+import { mergePageList } from "@/lib/pages/merge-page-list.ts";
+import {
+  readPageListExpandedIdsFromDocument,
+  writePageListExpandedIdsToDocument,
+} from "@/lib/pages/page-list-expanded-cookie.ts";
+import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
+import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
+import { planPageReposition } from "@/lib/pages/reposition-page.ts";
+import {
+  dropTargetToRepositionCommand,
+  PAGE_LIST_ROW_ATTRIBUTE,
+  type PageListDropTarget,
+  resolvePageListDropTargetFromPointer,
+} from "@/lib/pages/resolve-page-list-drop-target.ts";
+import { cn } from "@/lib/utils.ts";
 
+import { NewPageButton } from "./new-page-button.tsx";
 import { PageListItem, PageListItemStatic } from "./page-list-item.tsx";
+
+/** HTML5 drag channel for sidebar page rows. */
+const pageDragChannel = createDragChannel("application/x-page-id");
 
 function findPageById(
   pages: PageSummary[],
@@ -28,16 +69,24 @@ function findPageById(
   return pages.find((page) => page.id === pageId);
 }
 
+function hasLocalPageDocument(pageId: string): boolean {
+  return localPagesCollection.toArray.some(
+    (localPage) => localPage.id === pageId && localPage.deletedAt == null
+  );
+}
+
 function PageListTree({
   tree,
   pages,
   expandedIds,
+  navRef,
   onToggleExpand,
   renderItem,
 }: {
   tree: PageRow[];
   pages: PageSummary[];
   expandedIds: Set<string>;
+  navRef?: React.RefObject<HTMLElement | null>;
   onToggleExpand: (pageId: string) => void;
   renderItem: (props: {
     depth: number;
@@ -47,53 +96,102 @@ function PageListTree({
     row: PageRow;
   }) => ReactNode;
 }) {
+  const { getDropZoneProps } = useDropZone();
+
   return (
-    <nav aria-label="Pages" className="space-y-1">
-      <ul className="space-y-1">
-        {tree.map((row) => (
-          <li key={row.page.id}>
-            {renderItem({
-              depth: 0,
-              expandedIds,
-              onToggleExpand,
-              pages,
-              row,
-            })}
-          </li>
-        ))}
-      </ul>
+    <nav
+      aria-label="Pages"
+      className="space-y-1"
+      ref={navRef}
+      {...getDropZoneProps()}
+    >
+      <SidebarMenu className="gap-y-px">
+        {tree.map((row) => {
+          const node = renderItem({
+            depth: 0,
+            expandedIds,
+            onToggleExpand,
+            pages,
+            row,
+          });
+          return isValidElement(node)
+            ? cloneElement(node, { key: row.page.id })
+            : node;
+        })}
+        <NewPageButton />
+      </SidebarMenu>
     </nav>
   );
 }
 
-function PageListLive() {
-  const { pages } = useMergedPageListItems();
+function PageListContent({
+  initialExpandedIds,
+  interactive,
+  pages,
+}: {
+  /** SSR-known expand state (from the cookie) so the static shell matches the hydrated tree. */
+  initialExpandedIds?: readonly string[];
+  interactive: boolean;
+  pages: PageSummary[];
+}) {
   const activePage = useActivePageRef();
+  const dispatch = usePageDispatch(pages);
   const tree = useMemo(() => buildPageTree(pages), [pages]);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
+    interactive
+      ? readPageListExpandedIdsFromDocument()
+      : new Set(initialExpandedIds)
+  );
+  const [previewMeta, setPreviewMeta] = useState<Omit<
+    PageListDragPreviewState,
+    "clientX" | "clientY"
+  > | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
+  const requiredAncestorIds = useMemo(() => {
     const currentPage = activePage.pageId
       ? findPageById(pages, activePage.pageId)
       : undefined;
 
     if (!currentPage) {
-      return;
+      return new Set<string>();
     }
 
-    const ancestors = getAncestorPageIds(currentPage.id, pages);
-    if (ancestors.length === 0) {
-      return;
-    }
-
-    setExpandedIds((previous) => {
-      const next = new Set(previous);
-      for (const pageId of ancestors) {
-        next.add(pageId);
-      }
-      return next;
-    });
+    return new Set(getAncestorPageIds(currentPage.id, pages));
   }, [activePage.pageId, pages]);
+
+  const effectiveExpandedIds = useMemo(() => {
+    const merged = new Set(expandedIds);
+    for (const pageId of requiredAncestorIds) {
+      merged.add(pageId);
+    }
+    return merged;
+  }, [expandedIds, requiredAncestorIds]);
+
+  const visibleRows = useMemo(
+    () => flattenVisiblePageRows(tree, effectiveExpandedIds),
+    [effectiveExpandedIds, tree]
+  );
+
+  useEffect(() => {
+    if (!interactive) {
+      return;
+    }
+
+    setExpandedIds(readPageListExpandedIdsFromDocument());
+  }, [interactive]);
+
+  useEffect(() => {
+    if (!interactive) {
+      return;
+    }
+
+    const knownPageIds = new Set(pages.map((page) => page.id));
+    const persisted = new Set(
+      [...expandedIds].filter((pageId) => knownPageIds.has(pageId))
+    );
+    writePageListExpandedIdsToDocument(persisted);
+  }, [expandedIds, interactive, pages]);
 
   const handleToggleExpand = useCallback((pageId: string) => {
     setExpandedIds((previous) => {
@@ -107,68 +205,230 @@ function PageListLive() {
     });
   }, []);
 
-  if (tree.length === 0) {
-    return <p className="text-muted-foreground text-sm">No pages yet.</p>;
-  }
+  const ensurePageSeed = useCallback(
+    async (pageId: string): Promise<PageMetadataSeed | undefined> => {
+      if (hasLocalPageDocument(pageId)) {
+        return;
+      }
 
-  return (
-    <PageListTree
-      expandedIds={expandedIds}
-      onToggleExpand={handleToggleExpand}
-      pages={pages}
-      renderItem={({ depth, expandedIds, onToggleExpand, pages, row }) => (
-        <PageListItem
-          depth={depth}
-          expandedIds={expandedIds}
-          onToggleExpand={onToggleExpand}
-          pages={pages}
-          row={row}
-        />
-      )}
-      tree={tree}
-    />
+      const page = findPageById(pages, pageId);
+      if (!page) {
+        return;
+      }
+
+      const loaded = await loadPage({ data: { slug: page.slug } });
+      return {
+        blocks: loaded.blocks,
+        serverBaselineHash: hashPageBlocks(loaded.blocks),
+      };
+    },
+    [pages]
   );
-}
 
-function PageListView({
-  pages,
-}: {
-  pages: ReturnType<typeof usePageListItems>["pages"];
-}) {
-  const tree = useMemo(() => buildPageTree(pages), [pages]);
+  const repositionFromDropTarget = useCallback(
+    (sourceId: string, target: PageListDropTarget) => {
+      const command = dropTargetToRepositionCommand(target, sourceId, pages);
 
-  if (tree.length === 0) {
-    return <p className="text-muted-foreground text-sm">No pages yet.</p>;
-  }
+      let previewPlan: ReturnType<typeof planPageReposition>;
+      try {
+        previewPlan = planPageReposition({
+          appendPageLinkOnParent: command.appendPageLinkOnParent,
+          insertBeforePageId: command.insertBeforePageId,
+          pageId: command.pageId,
+          parentId: command.parentId,
+          pages,
+        });
+      } catch {
+        return;
+      }
 
-  return (
-    <PageListTree
-      expandedIds={new Set()}
-      onToggleExpand={() => undefined}
-      pages={pages}
-      renderItem={({ depth, row }) => (
-        <PageListItemStatic depth={depth} row={row} />
-      )}
-      tree={tree}
-    />
+      const scopePageIdsToSeed = previewPlan.scopeSidebarOrderUpdates
+        .map((update) => update.pageId)
+        .filter((id) => !hasLocalPageDocument(id));
+
+      Promise.all([
+        ...scopePageIdsToSeed.map((id) => ensurePageSeed(id)),
+        command.parentId && command.appendPageLinkOnParent
+          ? ensurePageSeed(command.parentId)
+          : Promise.resolve(undefined),
+      ])
+        .then((results) => {
+          const scopeSeedResults = results.slice(0, scopePageIdsToSeed.length);
+          const parentSeed = results.at(-1);
+          const seedsByPageId: Record<string, PageMetadataSeed> = {};
+
+          for (let index = 0; index < scopePageIdsToSeed.length; index += 1) {
+            const scopePageId = scopePageIdsToSeed[index];
+            const scopeSeed = scopeSeedResults[index];
+            if (scopePageId && scopeSeed) {
+              seedsByPageId[scopePageId] = scopeSeed;
+            }
+          }
+
+          dispatch({
+            type: "page.reposition",
+            pageId: command.pageId,
+            parentId: command.parentId,
+            insertBeforePageId: command.insertBeforePageId,
+            appendPageLinkOnParent: command.appendPageLinkOnParent,
+            seed: seedsByPageId[command.pageId],
+            seedsByPageId,
+            parentSeed:
+              parentSeed && command.parentId && command.appendPageLinkOnParent
+                ? parentSeed
+                : undefined,
+          });
+        })
+        .catch(() => undefined);
+    },
+    [dispatch, ensurePageSeed, pages]
   );
-}
 
-export function PageList({
-  hasAnyLocalDrafts = false,
-}: {
-  hasAnyLocalDrafts?: boolean;
-}) {
-  const isClient = useIsClient();
-  const { pages } = usePageListItems();
-
-  if (!isClient) {
-    if (hasAnyLocalDrafts) {
+  const dndConfig = useMemo<DndSurfaceConfig<PageListDropTarget> | null>(() => {
+    if (!interactive) {
       return null;
     }
 
-    return <PageListView pages={pages} />;
+    return {
+      channel: pageDragChannel,
+      dragImage: { kind: "overlay" },
+      rowAttribute: PAGE_LIST_ROW_ATTRIBUTE,
+      resolveDropTarget: ({ sourceId, pointer, rects }) =>
+        resolvePageListDropTargetFromPointer({
+          clientX: pointer.x,
+          clientY: pointer.y,
+          draggingPageId: sourceId,
+          navRect: navRef.current?.getBoundingClientRect() ?? null,
+          pages,
+          rowRects: rects,
+          visibleRows,
+        }),
+      onDrop: ({ sourceId, target }) =>
+        repositionFromDropTarget(sourceId, target),
+      onDragStart: ({ sourceId, pointer }) => {
+        const page = findPageById(pages, sourceId);
+        const rowEl = document.querySelector(
+          `[${PAGE_LIST_ROW_ATTRIBUTE}="${sourceId}"]`
+        );
+        const rowRect =
+          rowEl instanceof HTMLElement ? rowEl.getBoundingClientRect() : null;
+        const depth =
+          visibleRows.find((visibleRow) => visibleRow.pageId === sourceId)
+            ?.depth ?? 0;
+
+        setPreviewMeta({
+          depth,
+          icon: page?.icon,
+          offsetX: rowRect ? pointer.x - rowRect.left : 0,
+          offsetY: rowRect ? pointer.y - rowRect.top : 0,
+          pageId: sourceId,
+          title: page?.title ?? "Page",
+          width: rowRect?.width ?? 200,
+        });
+      },
+      onDragEnd: () => setPreviewMeta(null),
+    };
+  }, [interactive, pages, repositionFromDropTarget, visibleRows]);
+
+  if (tree.length === 0) {
+    return (
+      <nav aria-label="Pages" className="space-y-1">
+        <SidebarMenu className="gap-y-px">
+          <SidebarMenuItem>
+            <div
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-md p-2 text-muted-foreground text-sm",
+                pageListRowPaddingLeft(0)
+              )}
+            >
+              <span aria-hidden className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">
+                No pages yet.
+              </span>
+            </div>
+          </SidebarMenuItem>
+          <NewPageButton />
+        </SidebarMenu>
+      </nav>
+    );
   }
 
-  return <PageListLive />;
+  const listTree = (
+    <PageListTree
+      expandedIds={effectiveExpandedIds}
+      navRef={interactive ? navRef : undefined}
+      onToggleExpand={interactive ? handleToggleExpand : () => undefined}
+      pages={pages}
+      renderItem={({
+        depth,
+        expandedIds: ids,
+        onToggleExpand,
+        pages: p,
+        row,
+      }) =>
+        interactive ? (
+          <PageListItem
+            depth={depth}
+            expandedIds={ids}
+            onToggleExpand={onToggleExpand}
+            pages={p}
+            row={row}
+          />
+        ) : (
+          <PageListItemStatic depth={depth} row={row} />
+        )
+      }
+      tree={tree}
+    />
+  );
+
+  if (!(interactive && dndConfig)) {
+    return listTree;
+  }
+
+  return (
+    <DndSurface config={dndConfig}>
+      <DragOverlay>
+        {({ pointer }) =>
+          previewMeta ? (
+            <PageListDragPreview
+              preview={{
+                ...previewMeta,
+                clientX: pointer.x,
+                clientY: pointer.y,
+              }}
+            />
+          ) : null
+        }
+      </DragOverlay>
+      {listTree}
+    </DndSurface>
+  );
+}
+
+export function PageList() {
+  const isClient = useIsClient();
+  const { localPagePreview, sidebarPrefs } = useRouteContext({
+    from: "__root__",
+  });
+  const { pages: serverPages } = usePageListItems();
+  const { pages: mergedPages } = useMergedPageListItems();
+  const [isHydrated, setIsHydrated] = useState(false);
+  const staticPages = useMemo(
+    () => mergePageList(serverPages, localPagePreview),
+    [localPagePreview, serverPages]
+  );
+  const showStaticShell = !(isClient && isHydrated);
+
+  useLayoutEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  return (
+    <PageListContent
+      initialExpandedIds={sidebarPrefs.expandedPageIds}
+      interactive={isClient && isHydrated}
+      pages={showStaticShell ? staticPages : mergedPages}
+    />
+  );
 }

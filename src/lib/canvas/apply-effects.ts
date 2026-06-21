@@ -1,4 +1,4 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { assertNever } from "@/lib/canvas/commands.ts";
 import type {
   CanvasEffect,
@@ -43,23 +43,30 @@ export function applyCanvasEffects(
         });
         break;
       }
+      case "columns.apply": {
+        api.savePageBlocks(effect.blocks);
+        pendingFocus.push({
+          rowId: effect.focusRowId,
+          placement: "start",
+          offset: 0,
+        });
+        break;
+      }
+      case "table.apply": {
+        api.savePageBlocks(effect.blocks);
+        pendingFocus.push({
+          rowId: effect.focusRowId,
+          placement: "start",
+          offset: 0,
+        });
+        break;
+      }
       case "page.revertToServer": {
         api.revertToServer();
         break;
       }
       case "page.acknowledgeServerBaseline": {
         api.acknowledgeServerBaseline();
-        break;
-      }
-      case "author.save": {
-        api
-          .saveAuthorPage(
-            effect.pageId,
-            effect.blocks,
-            effect.title,
-            effect.slug
-          )
-          .catch(() => undefined);
         break;
       }
       default: {

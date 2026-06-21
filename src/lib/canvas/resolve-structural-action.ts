@@ -5,7 +5,7 @@ import type { StructuralContext } from "@/lib/canvas/structural-context.ts";
 import { previousRowAcceptsEmptyMerge } from "@/lib/canvas/structural-context.ts";
 
 function resolvePageLinkDelete(ctx: StructuralContext): CanvasCommand[] {
-  const focusTarget = ctx.previousCanvasRow ?? ctx.nextSibling;
+  const focusTarget = ctx.previousFocusableCanvasRow ?? ctx.nextSibling;
 
   return [
     { type: "row.delete", rowId: ctx.rowId },
@@ -14,7 +14,7 @@ function resolvePageLinkDelete(ctx: StructuralContext): CanvasCommand[] {
           {
             type: "focus.set" as const,
             rowId: focusTarget.rowId,
-            placement: (ctx.previousCanvasRow ? "end" : "start") as
+            placement: (ctx.previousFocusableCanvasRow ? "end" : "start") as
               | "start"
               | "end",
           },
@@ -34,11 +34,11 @@ function resolveEmptyTopLevelDelete(ctx: StructuralContext): CanvasCommand[] {
 
   return [
     { type: "row.delete", rowId: ctx.rowId },
-    ...(ctx.previousCanvasRow
+    ...(ctx.previousFocusableCanvasRow
       ? [
           {
             type: "focus.set" as const,
-            rowId: ctx.previousCanvasRow.rowId,
+            rowId: ctx.previousFocusableCanvasRow.rowId,
             placement: "end" as const,
           },
         ]
@@ -64,6 +64,18 @@ function resolveEmptyBlockActions(ctx: StructuralContext): CanvasCommand[] {
 
   if (shouldLiftEmptyContainerChildOnDelete(ctx.parentRow)) {
     return [{ type: "block.liftAsText", rowId: ctx.rowId }];
+  }
+
+  if (
+    ctx.parentRow?.effectiveBlock.type === "column" &&
+    ctx.parentRow.children.length === 1
+  ) {
+    return [
+      {
+        type: "columns.removeColumn",
+        columnRowId: ctx.parentRow.rowId,
+      },
+    ];
   }
 
   if (ctx.parentRow && ctx.parentRow.children.length === 1) {

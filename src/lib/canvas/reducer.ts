@@ -1,10 +1,11 @@
-import type { CanvasRow } from "@/db/queries/merge-blocks.ts";
-import { findRowContext } from "@/db/queries/merge-blocks.ts";
+import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import {
   clampBlockIndent,
   getBlockIndent,
   withBlockIndent,
 } from "@/lib/blocks/block-indent.ts";
+import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
 import {
   buildContainerChildBlock,
   buildWrappedContainerBlock,
@@ -13,14 +14,19 @@ import {
   getTextFromBlock,
   withBlockText,
 } from "@/lib/blocks/create-block.ts";
+import { coerceContainerChildBlock } from "@/lib/blocks/normalize-block.ts";
+import { blocksFromRows } from "@/lib/blocks/page-block-mutations.ts";
 import {
-  chainPlacementPlans,
   placementAfterRow,
   resolveRowMovePlan,
   resolveRowPlacementPlan,
   resolveScopeStartPlacement,
 } from "@/lib/blocks/row-placement.ts";
-import { acceptsEmptyMergeFromAfter } from "@/lib/canvas/block-container-config.ts";
+import {
+  acceptsEmptyMergeFromAfter,
+  isAllowedChild,
+  isContainerType,
+} from "@/lib/canvas/block-container-config.ts";
 import {
   canSplitBlock,
   conversionStaysInContainer,
@@ -32,8 +38,12 @@ import {
   expandRowIdsForDelete,
   rowIdsInReverseDocumentOrder,
 } from "@/lib/canvas/block-selection.ts";
-import { isContainerBlockType } from "@/lib/canvas/block-spec.types.ts";
 import { cloneBlocksForPaste } from "@/lib/canvas/clipboard.ts";
+import {
+  buildBlocksForColumnsCreate,
+  planColumnsAddColumn,
+  planColumnsRemoveColumn,
+} from "@/lib/canvas/columns-layout.ts";
 import { assertNever, type CanvasCommand } from "@/lib/canvas/commands.ts";
 import { planLiftContainerChildConversion } from "@/lib/canvas/container-child-conversion.ts";
 import type { CanvasEffect } from "@/lib/canvas/effects.ts";
@@ -41,7 +51,19 @@ import {
   findFocusableAdjacentRow,
   flattenCanvasRows,
 } from "@/lib/canvas/focusable-rows.ts";
-import type { Block } from "@/lib/schemas/block.ts";
+import {
+  buildBlocksForTableCreate,
+  planTableAddColumn,
+  planTableAddRow,
+  planTableDuplicateColumn,
+  planTableFocusAdjacentCell,
+  planTableRemoveColumn,
+  planTableRemoveRow,
+  planTableReorderColumn,
+  planTableToggleHeaderRow,
+  planTableUpdateColumnWidths,
+} from "@/lib/canvas/table-layout.ts";
+import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 /**
  * Canvas command reducer: maps {@link CanvasCommand} to {@link CanvasEffect}[] without React or I/O.
@@ -51,7 +73,6 @@ import type { Block } from "@/lib/schemas/block.ts";
 
 export interface CanvasReducerState {
   rows: CanvasRow[];
-  serverBlocks: Block[];
 }
 
 export interface ReducerResult {
@@ -59,6 +80,36 @@ export interface ReducerResult {
   state: CanvasReducerState;
 }
 
+/** Coerce a pasted subtree root to a type the destination scope accepts. */
+function coercePastedRootBlock(
+  block: Block,
+  destinationType: BlockType | null
+): Block {
+  if (destinationType && isContainerType(destinationType)) {
+    return isAllowedChild(destinationType, block.type)
+      ? block
+      : coerceContainerChildBlock(block, destinationType);
+  }
+
+  // Container-child-only types cannot stand alone at the top level.
+  if (block.type === "checklistItem" || block.type === "column") {
+    return {
+      id: block.id,
+      type: "text",
+      parentId: block.parentId ?? null,
+      indent: block.indent,
+      props: { text: getTextFromBlock(block) },
+    };
+  }
+
+  return block;
+}
+
+/**
+ * Plan inserts for pasted blocks (already cloned with remapped ids), keeping
+ * container subtrees intact. Blocks whose parent is outside the pasted set are
+ * roots placed sequentially at the target; descendants keep their parents.
+ */
 function structuredPasteEffects(
   rows: CanvasRow[],
   targetRowId: string,
@@ -69,39 +120,46 @@ function structuredPasteEffects(
     return [];
   }
 
-  const idSet = new Set(blocks.map((block) => block.id));
-  const root =
-    blocks.find((block) => !(block.parentId && idSet.has(block.parentId))) ??
-    blocks[0];
-  if (!root) {
-    return [];
-  }
-
   const rootPlan = resolveRowPlacementPlan(rows, targetRowId, edge);
   if (!rootPlan) {
     return [];
   }
 
-  const effects: CanvasEffect[] = [
-    {
-      type: "insert",
-      position: rootPlan,
-      block: root,
-      focus: false,
-    },
-  ];
+  const destinationParentId = rootPlan.parentId;
+  const destinationType = destinationParentId
+    ? (findRowById(rows, destinationParentId)?.effectiveBlock.type ?? null)
+    : null;
 
+  const idSet = new Set(blocks.map((block) => block.id));
+  const effects: CanvasEffect[] = [];
   const lastInsertedByParent = new Map<string, string>();
+  let lastRootId: string | null = null;
+
   for (const block of blocks) {
-    if (block.id === root.id) {
+    const isRoot = !(block.parentId && idSet.has(block.parentId));
+
+    if (isRoot) {
+      const placed = coercePastedRootBlock(
+        { ...block, parentId: destinationParentId },
+        destinationType
+      );
+      effects.push({
+        type: "insert",
+        position: lastRootId
+          ? {
+              parentId: destinationParentId,
+              anchorRowId: lastRootId,
+              edge: "after",
+            }
+          : rootPlan,
+        block: placed,
+        focus: false,
+      });
+      lastRootId = placed.id;
       continue;
     }
 
-    const parentId = block.parentId;
-    if (!parentId) {
-      continue;
-    }
-
+    const parentId = block.parentId as string;
     const previousSibling = lastInsertedByParent.get(parentId);
     effects.push({
       type: "insert",
@@ -173,34 +231,15 @@ export function canvasReducer(
     }
 
     case "rows.paste": {
-      if (command.structured && command.blocks.length > 0) {
-        return {
-          state,
-          effects: structuredPasteEffects(
-            state.rows,
-            command.targetRowId,
-            command.blocks,
-            command.edge ?? "after"
-          ),
-        };
-      }
-
-      const clonedBlocks = cloneBlocksForPaste(command.blocks);
-      const inserts = chainPlacementPlans(
-        state.rows,
-        command.targetRowId,
-        clonedBlocks,
-        command.edge ?? "after"
-      );
-      for (const [index, insert] of inserts.entries()) {
-        effects.push({
-          type: "insert",
-          position: insert.position,
-          block: insert.block,
-          focus: index === inserts.length - 1,
-        });
-      }
-      return { state, effects };
+      return {
+        state,
+        effects: structuredPasteEffects(
+          state.rows,
+          command.targetRowId,
+          cloneBlocksForPaste(command.blocks),
+          command.edge ?? "after"
+        ),
+      };
     }
 
     case "row.split": {
@@ -242,18 +281,13 @@ export function canvasReducer(
           return { state, effects };
         }
 
-        const insertType = text.length === 0 ? "text" : block.type;
+        const insertType =
+          block.type === "heading" || text.length === 0 ? "text" : block.type;
         const childType = resolveContainerChildInsertType(
           containerParent,
           insertType
         );
-        let insertedBlock = createEmptyBlock(childType);
-        if (childType === "heading" && block.type === "heading") {
-          insertedBlock = {
-            ...insertedBlock,
-            props: { ...insertedBlock.props, level: block.props.level },
-          } as Block;
-        }
+        const insertedBlock = createEmptyBlock(childType);
         insertedBlock.indent = indent;
         if (parentId) {
           insertedBlock.parentId = parentId;
@@ -336,6 +370,16 @@ export function canvasReducer(
       return { state, effects };
     }
 
+    case "row.moveToPosition": {
+      effects.push({
+        type: "move",
+        rowId: command.rowId,
+        position: command.position,
+      });
+      effects.push({ type: "focus", rowId: command.rowId, placement: "start" });
+      return { state, effects };
+    }
+
     case "row.convert": {
       const ctx = findRowContext(state.rows, command.rowId);
       if (!ctx) {
@@ -360,6 +404,7 @@ export function canvasReducer(
           indent: command.options?.indent,
           headingLevel: command.options?.headingLevel,
           pageId: command.options?.pageId,
+          pageLinkVariant: command.options?.pageLinkVariant,
         });
         effects.push({
           type: "persist",
@@ -379,6 +424,7 @@ export function canvasReducer(
         indent: command.options?.indent,
         headingLevel: command.options?.headingLevel,
         pageId: command.options?.pageId,
+        pageLinkVariant: command.options?.pageLinkVariant,
       });
       converted.parentId = containerParent?.effectiveBlock.parentId ?? null;
 
@@ -565,6 +611,163 @@ export function canvasReducer(
       return { state, effects };
     }
 
+    case "columns.create": {
+      const flatBlocks = blocksFromRows(state.rows);
+      const { blocks, focusRowId } = buildBlocksForColumnsCreate(
+        flatBlocks,
+        state.rows,
+        command.rowId,
+        command.count,
+        command.text
+      );
+      if (!focusRowId) {
+        return { state, effects };
+      }
+
+      effects.push({
+        type: "columns.apply",
+        blocks,
+        focusRowId,
+      });
+      return { state, effects };
+    }
+
+    case "columns.addColumn": {
+      return {
+        state,
+        effects: planColumnsAddColumn(state.rows, command.columnsRowId),
+      };
+    }
+
+    case "columns.removeColumn": {
+      return {
+        state,
+        effects: planColumnsRemoveColumn(state.rows, command.columnRowId),
+      };
+    }
+
+    case "table.create": {
+      const flatBlocks = blocksFromRows(state.rows);
+      const { blocks, focusRowId } = buildBlocksForTableCreate(
+        flatBlocks,
+        state.rows,
+        command.rowId,
+        {
+          columns: command.columns,
+          rows: command.rows,
+          hasHeaderRow: command.hasHeaderRow,
+          seedText: command.text,
+        }
+      );
+      if (!focusRowId) {
+        return { state, effects };
+      }
+
+      effects.push({
+        type: "table.apply",
+        blocks,
+        focusRowId,
+      });
+      return { state, effects };
+    }
+
+    case "table.addRow": {
+      return {
+        state,
+        effects: planTableAddRow(
+          state.rows,
+          command.tableRowId,
+          command.edge ?? "after"
+        ),
+      };
+    }
+
+    case "table.addColumn": {
+      return {
+        state,
+        effects: planTableAddColumn(
+          state.rows,
+          command.tableId,
+          command.columnIndex,
+          command.edge
+        ),
+      };
+    }
+
+    case "table.removeRow": {
+      return {
+        state,
+        effects: planTableRemoveRow(state.rows, command.tableRowId),
+      };
+    }
+
+    case "table.removeColumn": {
+      return {
+        state,
+        effects: planTableRemoveColumn(
+          state.rows,
+          command.tableId,
+          command.columnIndex
+        ),
+      };
+    }
+
+    case "table.duplicateColumn": {
+      return {
+        state,
+        effects: planTableDuplicateColumn(
+          state.rows,
+          command.tableId,
+          command.columnIndex
+        ),
+      };
+    }
+
+    case "table.reorderColumn": {
+      return {
+        state,
+        effects: planTableReorderColumn(
+          state.rows,
+          command.tableId,
+          command.fromIndex,
+          command.toIndex
+        ),
+      };
+    }
+
+    case "table.toggleHeaderRow": {
+      return {
+        state,
+        effects: planTableToggleHeaderRow(
+          state.rows,
+          command.tableId,
+          command.enabled
+        ),
+      };
+    }
+
+    case "table.updateColumnWidths": {
+      return {
+        state,
+        effects: planTableUpdateColumnWidths(
+          state.rows,
+          command.tableId,
+          command.columnWidths
+        ),
+      };
+    }
+
+    case "table.focusCell": {
+      return {
+        state,
+        effects: planTableFocusAdjacentCell(
+          state.rows,
+          command.cellRowId,
+          command.direction
+        ),
+      };
+    }
+
     case "container.wrap": {
       const ctx = findRowContext(state.rows, command.rowId);
       if (!ctx) {
@@ -658,6 +861,25 @@ export function canvasReducer(
     }
 
     case "slash.convert": {
+      if (command.to === "columns") {
+        return canvasReducer(state, {
+          type: "columns.create",
+          rowId: command.rowId,
+          count: 2,
+          text: command.text,
+        });
+      }
+
+      if (command.to === "table") {
+        return canvasReducer(state, {
+          type: "table.create",
+          rowId: command.rowId,
+          columns: 3,
+          rows: 3,
+          text: command.text,
+        });
+      }
+
       return canvasReducer(state, {
         type: "row.convert",
         rowId: command.rowId,
@@ -666,6 +888,7 @@ export function canvasReducer(
           text: command.text,
           headingLevel: command.headingLevel,
           pageId: command.pageId,
+          pageLinkVariant: command.pageLinkVariant,
         },
       });
     }
@@ -677,10 +900,6 @@ export function canvasReducer(
         placement: command.placement,
         offset: command.offset,
       });
-      return { state, effects };
-    }
-
-    case "focus.clear": {
       return { state, effects };
     }
 
@@ -728,10 +947,6 @@ export function canvasReducer(
       effects.push({ type: "page.acknowledgeServerBaseline" });
       return { state, effects };
     }
-
-    case "author.saveToSource":
-    case "author.loadFromDisk":
-      return { state, effects };
 
     default:
       return assertNever(command);

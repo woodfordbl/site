@@ -21,7 +21,7 @@ const shippedPages: PageSummary[] = [
 ];
 
 describe("pageReducer page.create", () => {
-  it("navigates by pageId and allocates metadata slug among user siblings", () => {
+  it("navigates by slug and dedupes against shipped siblings", () => {
     const { effects } = pageReducer(
       { type: "page.create", title: "New Page", pageId: "user-new" },
       shippedPages
@@ -30,10 +30,14 @@ describe("pageReducer page.create", () => {
     const persist = effects.find((effect) => effect.type === "page.persist");
     expect(persist?.type).toBe("page.persist");
     if (persist?.type === "page.persist") {
-      expect(persist.slug).toBe("/new-page");
+      expect(persist.slug).toBe("/new-page-2");
     }
 
     const navigate = effects.find((effect) => effect.type === "navigate");
-    expect(navigate).toEqual({ type: "navigate", pageId: "user-new" });
+    expect(navigate).toEqual({
+      type: "navigate",
+      slug: "/new-page-2",
+      userPage: true,
+    });
   });
 });

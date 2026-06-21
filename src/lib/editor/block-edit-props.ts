@@ -5,7 +5,6 @@ export interface BlockEditKeyboardProps {
   autoFocus?: boolean;
   autoFocusOffset?: number;
   autoFocusPlacement?: "start" | "end";
-  fieldRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
   indent?: number;
   onAutoFocusHandled?: () => void;
   onEnter?: (selection: FieldSelection) => void;

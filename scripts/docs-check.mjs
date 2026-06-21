@@ -1,5 +1,10 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import {
+  formatScopeSummary,
+  parseModifiedFilesArgv,
+  resolveCheckScope,
+} from "./docs-check-scope.mjs";
 import { latestCodeMtime, loadManifest } from "./docs-manifest-lookup.mjs";
 import { collectBrokenDocReferences } from "./docs-ref-check.mjs";
 
@@ -26,8 +31,17 @@ function collectStaleDocs(entry) {
 }
 
 function main() {
-  const stale = manifest.mappings.flatMap(collectStaleDocs);
-  const brokenRefs = collectBrokenDocReferences(root);
+  const modifiedPaths = parseModifiedFilesArgv(process.argv.slice(2));
+  const scope = resolveCheckScope(root, modifiedPaths);
+  const entries =
+    scope.mode === "full" ? manifest.mappings : (scope.entries ?? []);
+  const stale = entries.flatMap(collectStaleDocs);
+  let brokenRefs = [];
+  if (scope.mode === "full") {
+    brokenRefs = collectBrokenDocReferences(root);
+  } else if (scope.docFiles?.length) {
+    brokenRefs = collectBrokenDocReferences(root, { docFiles: scope.docFiles });
+  }
   let failed = false;
 
   if (stale.length > 0) {
@@ -52,7 +66,7 @@ function main() {
     process.exit(1);
   }
 
-  console.log("docs:check OK");
+  console.log(`docs:check OK${formatScopeSummary(scope)}`);
   process.exit(0);
 }
 

@@ -32,10 +32,10 @@ const pages: PageSummary[] = [
 ];
 
 describe("resolvePageNavTarget", () => {
-  it("routes user-created pages by id", () => {
+  it("routes user-created pages under /p/", () => {
     expect(resolvePageNavTarget("user-notes", pages)).toEqual({
-      to: "/p/$pageId",
-      params: { pageId: "user-notes" },
+      to: "/p/$",
+      params: { _splat: "notes" },
     });
   });
 
@@ -50,10 +50,10 @@ describe("resolvePageNavTarget", () => {
     expect(resolvePageNavTarget("home", pages)).toEqual({ to: "/" });
   });
 
-  it("routes nested user child under a server parent by id", () => {
+  it("routes nested user child under /p/", () => {
     expect(resolvePageNavTarget("nested-user-child", pages)).toEqual({
-      to: "/p/$pageId",
-      params: { pageId: "nested-user-child" },
+      to: "/p/$",
+      params: { _splat: "previous-work/my-notes" },
     });
   });
 });

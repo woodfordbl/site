@@ -6,7 +6,13 @@ import type { LocalPage } from "@/lib/schemas/local-page.ts";
 
 const serverPages: PageSummary[] = [
   { id: "home", slug: "/", title: "Home", parentId: null },
-  { id: "about", slug: "/about", title: "About", parentId: null },
+  {
+    id: "about",
+    slug: "/about",
+    title: "About",
+    parentId: null,
+    icon: "tabler:IconBook",
+  },
 ];
 
 function localPage(
@@ -16,6 +22,7 @@ function localPage(
     id: overrides.id,
     slug: overrides.slug ?? "/about",
     title: overrides.title ?? "About",
+    icon: overrides.icon,
     parentId: overrides.parentId ?? null,
     serverBaselineHash: overrides.serverBaselineHash ?? "hash",
     deletedAt: overrides.deletedAt,
@@ -58,5 +65,32 @@ describe("mergePageList", () => {
     ]);
     expect(merged.find((page) => page.id === "notes")?.routeBy).toBe("id");
     expect(merged.find((page) => page.id === "about")?.routeBy).toBe("slug");
+  });
+
+  it("keeps server icon when local doc has no icon override", () => {
+    const merged = mergePageList(serverPages, [
+      localPage({
+        id: "about",
+        title: "About (edited)",
+        slug: "/about-edited",
+      }),
+    ]);
+
+    expect(merged.find((page) => page.id === "about")?.icon).toBe(
+      "tabler:IconBook"
+    );
+  });
+
+  it("prefers local icon over server icon", () => {
+    const merged = mergePageList(serverPages, [
+      localPage({
+        id: "about",
+        icon: "🚀",
+        title: "About",
+        slug: "/about",
+      }),
+    ]);
+
+    expect(merged.find((page) => page.id === "about")?.icon).toBe("🚀");
   });
 });

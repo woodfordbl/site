@@ -4,11 +4,18 @@ import {
   calloutPropsSchema,
   checklistItemPropsSchema,
   checklistPropsSchema,
+  columnPropsSchema,
+  columnsPropsSchema,
   dividerPropsSchema,
+  embedPropsSchema,
   headingPropsSchema,
   listPropsSchema,
+  mediaPropsSchema,
   pageLinkPropsSchema,
   quotePropsSchema,
+  tableCellPropsSchema,
+  tablePropsSchema,
+  tableRowPropsSchema,
   textPropsSchema,
 } from "./block-props.ts";
 
@@ -22,6 +29,13 @@ export const blockTypeSchema = z.enum([
   "checklistItem",
   "pageLink",
   "divider",
+  "columns",
+  "column",
+  "media",
+  "embed",
+  "table",
+  "tableRow",
+  "tableCell",
 ]);
 
 export type BlockType = z.infer<typeof blockTypeSchema>;
@@ -70,6 +84,34 @@ export const blockSchema = z.discriminatedUnion("type", [
     type: z.literal("divider"),
     props: dividerPropsSchema,
   }),
+  blockBaseSchema.extend({
+    type: z.literal("columns"),
+    props: columnsPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("column"),
+    props: columnPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("media"),
+    props: mediaPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("embed"),
+    props: embedPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("table"),
+    props: tablePropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("tableRow"),
+    props: tableRowPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("tableCell"),
+    props: tableCellPropsSchema,
+  }),
 ]);
 
 export type Block = z.infer<typeof blockSchema>;
@@ -96,10 +138,4 @@ export type Placement = z.infer<typeof placementSchema>;
 
 export function getBlockParentId(block: Block): string | null {
   return block.parentId ?? null;
-}
-
-export function isContainerBlock(
-  block: Block
-): block is Extract<Block, { type: "list" | "checklist" }> {
-  return block.type === "list" || block.type === "checklist";
 }

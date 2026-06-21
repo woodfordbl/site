@@ -8,6 +8,7 @@ export const pageSchema = z.object({
   title: z.string(),
   icon: z.string().optional(),
   parentId: z.string().nullable(),
+  sidebarOrder: z.number().optional(),
   blocks: z.array(blockSchema),
 });
 

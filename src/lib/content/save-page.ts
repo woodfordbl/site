@@ -13,7 +13,7 @@ function assertAuthorSaveAllowed() {
 }
 
 export const savePage = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => pageSchema.parse(data))
+  .validator((data: unknown) => pageSchema.parse(data))
   .handler(async ({ data }) => {
     assertAuthorSaveAllowed();
     const relativePath = slugToRelativePath(data.slug);

@@ -25,3 +25,11 @@ After spike, **custom `EditableSurface` + command bus** wins because:
 ## Hard no
 
 - `@blocknote/xl-*` packages
+
+## Outcome
+
+Track A scaled past the original scope without revisiting B/C:
+
+- 13 block types in [`src/lib/schemas/block.ts`](../../src/lib/schemas/block.ts) (vs the 4–5 scoped above)
+- Drag-drop reorder shipped as a custom HTML5 toolkit ([`src/lib/dnd/`](../../src/lib/dnd/) + [`src/components/dnd/`](../../src/components/dnd/)) — see [drag-and-drop](./drag-and-drop.md) — no PM adapter needed
+- The registry + command-bus architecture held unchanged

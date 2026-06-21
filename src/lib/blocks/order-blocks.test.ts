@@ -1,47 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveDocumentOrderIds } from "@/lib/blocks/order-blocks.ts";
+import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
+import { orderBlocksByIds } from "@/lib/blocks/order-blocks.ts";
+import type { Block } from "@/lib/schemas/block.ts";
 
-describe("resolveDocumentOrderIds", () => {
-  it("keeps a pending local order ahead of a stale persisted order", () => {
-    expect(
-      resolveDocumentOrderIds({
-        pendingOrder: ["a", "b", "new"],
-        persistedOrder: ["a", "b"],
-        storageOrder: ["a", "b", "new"],
-        workingOrder: ["a", "b", "new"],
-      })
-    ).toEqual(["a", "b", "new"]);
+function textBlock(id: string): Block {
+  return { ...createEmptyBlock("text"), id };
+}
+
+describe("orderBlocksByIds", () => {
+  it("returns blocks unchanged when no order is provided", () => {
+    const blocks = [textBlock("a"), textBlock("b")];
+    expect(orderBlocksByIds(blocks, null)).toBe(blocks);
+    expect(orderBlocksByIds(blocks, [])).toBe(blocks);
   });
 
-  it("keeps a pending local reorder ahead of complete persisted order", () => {
-    expect(
-      resolveDocumentOrderIds({
-        pendingOrder: ["b", "a"],
-        persistedOrder: ["a", "b"],
-        storageOrder: ["a", "b"],
-        workingOrder: ["b", "a"],
-      })
-    ).toEqual(["b", "a"]);
+  it("orders blocks by the given id order", () => {
+    const blocks = [textBlock("a"), textBlock("b"), textBlock("c")];
+    const ordered = orderBlocksByIds(blocks, ["c", "a", "b"]);
+    expect(ordered.map((block) => block.id)).toEqual(["c", "a", "b"]);
   });
 
-  it("uses a complete persisted order when no local order is pending", () => {
-    expect(
-      resolveDocumentOrderIds({
-        persistedOrder: ["c", "a", "b"],
-        storageOrder: ["a", "b", "c"],
-        workingOrder: ["a", "b", "c"],
-      })
-    ).toEqual(["c", "a", "b"]);
+  it("appends blocks missing from the order after ordered ids", () => {
+    const blocks = [textBlock("a"), textBlock("new"), textBlock("b")];
+    const ordered = orderBlocksByIds(blocks, ["b", "a"]);
+    expect(ordered.map((block) => block.id)).toEqual(["b", "a", "new"]);
   });
 
-  it("preserves working order while persisted order is incomplete", () => {
-    expect(
-      resolveDocumentOrderIds({
-        persistedOrder: ["a", "b"],
-        storageOrder: ["a", "b", "c"],
-        workingOrder: ["a", "c", "b"],
-      })
-    ).toEqual(["a", "c", "b"]);
+  it("skips order ids with no matching block", () => {
+    const blocks = [textBlock("a")];
+    const ordered = orderBlocksByIds(blocks, ["ghost", "a"]);
+    expect(ordered.map((block) => block.id)).toEqual(["a"]);
   });
 });

@@ -20,4 +20,10 @@ describe("syncPageUrl", () => {
 
     expect(window.location.pathname).toBe("/about-me");
   });
+
+  it("maps user page slugs to /p paths", () => {
+    syncPageUrl("/new-page-2", { userPage: true });
+
+    expect(window.location.pathname).toBe("/p/new-page-2");
+  });
 });

@@ -1,17 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useLocalPages } from "@/hooks/use-local-pages.ts";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
-import {
-  findLegacyUserSlugRedirect,
-  planUserPageSlugMigrations,
-} from "@/lib/pages/migrate-user-page-routes.ts";
-import { pageNavTargetById } from "@/lib/pages/slugify.ts";
+import { planUserPageSlugMigrations } from "@/lib/pages/migrate-user-page-routes.ts";
 
-const MIGRATION_FLAG_KEY = "site-user-page-routes-v1";
+const MIGRATION_FLAG_KEY = "site-user-page-slugs-v1";
 
 function snapshotAfterMigrations(
   serverPages: { id: string }[],
@@ -31,8 +26,8 @@ function snapshotAfterMigrations(
   return `${serverPages.map((page) => page.id).join(",")}:${localPart}`;
 }
 
+/** One-time boot: repair user metadata slugs that shadow shipped paths or duplicate another user slug. */
 export function useMigrateUserPageRoutes(): void {
-  const navigate = useNavigate();
   const { data: serverPages = [], isSuccess } = useQuery(pageListQueryOptions);
   const localPages = useLocalPages();
   const migratedSnapshotRef = useRef<string | null>(
@@ -65,14 +60,6 @@ export function useMigrateUserPageRoutes(): void {
       });
     }
 
-    const legacyPageId = findLegacyUserSlugRedirect(
-      window.location.pathname,
-      localPages
-    );
-    if (legacyPageId) {
-      navigate({ ...pageNavTargetById(legacyPageId), replace: true });
-    }
-
     const nextSnapshot = snapshotAfterMigrations(
       serverPages,
       localPages,
@@ -80,5 +67,5 @@ export function useMigrateUserPageRoutes(): void {
     );
     migratedSnapshotRef.current = nextSnapshot;
     localStorage.setItem(MIGRATION_FLAG_KEY, nextSnapshot);
-  }, [isSuccess, localPages, navigate, serverPages]);
+  }, [isSuccess, localPages, serverPages]);
 }

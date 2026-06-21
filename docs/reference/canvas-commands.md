@@ -1,19 +1,19 @@
 # Canvas commands
 
-Block UI dispatches these via `useBlockFieldActions` / `BlockRenderer` (canvas context) or slash menu. The slash menu root list is built by [`buildRootSlashMenuItems`](../../src/lib/canvas/slash-menu-list.ts) and rendered as plain command rows in a field-anchored Popover (editor-driven selection at root; inline search panel for page link targets). Escape or outside dismiss suppresses reopen until the leading `/` is removed from the block text. Persisted block rows update `localBlocksCollection` immediately on content edits; structural commands batch-replace the page's blocks and `localPagesCollection.blockOrder` in one transaction via `replacePageBlocks`. Block types register in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts); container policy in [`src/lib/canvas/block-container-config.ts`](../../src/lib/canvas/block-container-config.ts).
+Block UI dispatches these via `useBlockFieldActions` / `BlockRenderer` (canvas context) or slash menu. The slash menu root list is built by [`buildRootSlashMenuItems`](../../src/lib/canvas/slash-menu-list.ts) and rendered as plain command rows in a field-anchored Popover (editor-driven selection at root; inline search panel for page link targets). Escape or outside dismiss suppresses reopen until the leading `/` is removed from the block text. Persisted block rows update `localBlocksCollection` immediately on content edits; structural commands run inside one block transaction per dispatch — incremental inserts/deletes/order patches committed by `commitPageBlockTransaction` (the hot path, driven from [`use-page-canvas.ts`](../../src/db/queries/use-page-canvas.ts)), with `applyPageBlockDiff` for bulk edits — keeping `localPagesCollection.blockOrder` in sync. Block types register in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts); container policy in [`src/lib/canvas/block-container-config.ts`](../../src/lib/canvas/block-container-config.ts).
 
 ## Row lifecycle
 
 | Command | Trigger |
 |---------|---------|
-| `row.update` | Field onChange |
+| `row.update` | Field onChange; embed **Change view** toggles (`showTitle` / `showUrl`) |
 | `row.insert` | Gutter + — position `{ parentId, anchorRowId, edge }` or `{ parentId, atScopeStart }` |
 | `row.split` | Enter in text block at caret (text after caret → new block of same type); at end of row → empty `text` block after; at caret 0 on non-empty top-level row → empty row before (same type), focus stays on original row; on empty top-level row → empty `text` row after; **list child at caret 0** lifts out as top-level `text` (empty or not; splits list when needed) |
 | `row.delete` | Structural resolver; gutter menu **Delete** |
-| `row.convert` | Slash selection; gutter menu **Turn into**. Container children stay inside only when container policy allows the target; list items stay in the list only for `text → text`; other targets lift the item out and split the list when needed. |
+| `row.convert` | Slash selection; gutter menu **Turn into**. Container children stay inside only when container policy allows the target; list items stay in the list only for `text → text`; other targets lift the item out and split the list when needed. `pageLink` conversions pass `options.pageId` and optional `options.pageLinkVariant` (`linked` \| `child`). |
 | `row.move` | Drag block to new position (grab handle), or Option+↑/↓ on a focused row (`row.moveAdjacent`). `PageCanvasEditor` resolves drag targets from pointer Y via `resolveDropTargetFromPointer`; off-page pointer snaps to first/last top-level row. |
 | `selection.delete` | Delete selected blocks (Delete / Backspace) |
-| `rows.paste` | Paste copied blocks after selection or focus; gutter menu **Duplicate** |
+| `rows.paste` | Paste copied blocks after selection or focus; gutter menu **Duplicate**. Always clones with fresh ids — `cloneBlocksForPaste` ([`clipboard.ts`](../../src/lib/canvas/clipboard.ts)) remaps `parentId` within the pasted set so container subtrees stay intact; subtree roots are coerced to types the destination accepts (`coercePastedRootBlock` in [`reducer.ts`](../../src/lib/canvas/reducer.ts)) |
 
 ## Row actions hook
 
@@ -26,9 +26,9 @@ Gutter, drag-drop, and paste use `useCanvasRowActions` (via canvas editor contex
 | `moveAfter` / `moveBefore` | `row.move` |
 | `pasteAfter` / `pasteBefore` | `rows.paste` |
 
-Placement math lives in `src/lib/blocks/row-placement.ts`. Drag target resolution lives in `src/lib/canvas/resolve-drop-target.ts` (`normalizeDropTarget`, `resolveDropTargetFromPointer`, `collectCanvasRowRects`).
+Placement math lives in `src/lib/blocks/row-placement.ts`. Drag target resolution lives in `src/lib/canvas/resolve-drop-target.ts` and `src/lib/canvas/drop-target.ts` (`normalizeDropTarget`, `resolveDropTargetFromPointer`, `collectCanvasRowRects`).
 
-Structural row commands must persist the full next document order, not only the changed block row. `replacePageBlocks` accepts both page metadata and block row mutations so `blockOrder` stays in sync with the local block shard.
+Structural row commands must persist the full next document order, not only the changed block row. The block transaction patches `blockOrder` alongside the block row mutations (`patchBlockOrder` / `commitPageBlockTransaction` in [`block-collection-ops.ts`](../../src/db/queries/block-collection-ops.ts)) so order stays in sync with the local block shard.
 
 ## Structural
 
@@ -40,6 +40,19 @@ Structural row commands must persist the full next document order, not only the 
 | `block.liftAsText` | Exit container child as text block (indent preserved; sole child deletes the container; empty list first item with no previous sibling) |
 | `container.wrap` | Wrap row in list (`variant`: `bullet` or `ordered`) or checklist using `buildWrappedContainerBlock` / `buildContainerChildBlock`. Container children lift out first, then wrap at that canvas position (no nested containers). |
 | `container.unwrap` | Collapse empty container (empty list first or sole item uses `block.liftAsText`; empty list item with previous sibling uses `row.delete`) |
+| `columns.create` | Replace the active row with a `columns` shell and `count` (2–4) `column` children, each seeded with one `text` row (first column keeps slash text). Planner: [`planColumnsCreate`](../../src/lib/canvas/columns-layout.ts). |
+| `columns.addColumn` | Append a `column` + empty `text` (max 4); equalize `column.props.width`. |
+| `columns.removeColumn` | Delete a column subtree; when fewer than 2 columns remain, [`planColumnsUnwrap`](../../src/lib/canvas/columns-layout.ts) hoists content to the canvas parent. |
+| `table.create` | Replace the active row with a `table` shell, `rows` × `columns` grid of `tableRow` / `tableCell`, optional `hasHeaderRow`, seed first cell from slash text. Planner: [`planTableCreate`](../../src/lib/canvas/table-layout.ts). |
+| `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count (`edge`: `before` \| `after`). |
+| `table.addColumn` | Insert empty `tableCell` at index in every row; extend `table.props.columnWidths`. |
+| `table.removeRow` | Delete row when `> MIN_TABLE_ROWS`; removing header row clears `hasHeaderRow`. |
+| `table.removeColumn` | Delete index-th cell in all rows; splice `columnWidths` (min 2 columns). |
+| `table.reorderColumn` | Batch `move` each row's cell + reorder `columnWidths` (`tableId`, `fromIndex`, `toIndex`). |
+| `table.toggleHeaderRow` | `persist` `hasHeaderRow` on the table block. |
+| `table.updateColumnWidths` | Commit column resize (`columnWidths[]`). |
+| `table.focusCell` | Tab/Enter grid navigation (`direction`: `next` \| `previous` \| `down`). |
+| `row.moveToPosition` | Move a row to an explicit `RowPlacement` (used for empty-column drops with `atScopeStart`). |
 
 ## Page stale (seeded server pages)
 
@@ -53,7 +66,6 @@ Structural row commands must persist the full next document order, not only the 
 | Command | Meaning |
 |---------|---------|
 | `focus.set` | Focus row (`placement`: `start`/`end`, or explicit `offset` character index) |
-| `focus.clear` | Clear focus request |
 | `row.focusAdjacent` | Up/down navigation at caret boundary (skips container shells; [`focusable-rows.ts`](../../src/lib/canvas/focusable-rows.ts)) |
 | `row.moveAdjacent` | Option+↑/↓ — reducer finds adjacent focusable row, then dispatches `row.move` before/after it |
 
@@ -68,25 +80,26 @@ Press and release the grab handle (without dragging) highlights the row and open
 | Menu item | Dispatches / hook |
 |-----------|-------------------|
 | Turn into | `slash.convert` or `container.wrap` (inline-text blocks only) |
-| Duplicate | `rows.paste` via `duplicateRow` (clones row or list subtree) |
+| Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids) |
 | Delete | `row.delete` |
 
-Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item.
+Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item. Both capture full subtrees — `subtreeBlocksFromSelectedRows` ([`block-selection.ts`](../../src/lib/canvas/block-selection.ts)) for selections, `flattenRows` for a single row.
 
-Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Subtree clone for duplicate: `src/lib/canvas/clone-row-subtree.ts`.
+Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Paste cloning: `cloneBlocksForPaste` in `src/lib/canvas/clipboard.ts`.
 
 ## Slash
 
 | Command | Meaning |
 |---------|---------|
-| `slash.convert` | Convert block type (Heading 1–4, Text, Bullet list, Numbered list, Checklist, Quote, Page link, Divider). Container children lift out unless the container allows the target. Heading selections pass `headingLevel` (1–4). List selections use `container.wrap` with `listVariant`. Checklist selections use `container.wrap` with `containerType: checklist`. Page link selections pass `pageId`. |
+| `slash.convert` | Convert block type (Heading 1–4, Text, Bullet list, Numbered list, Checklist, Quote, Page link, Media, Embed, Divider). Container children lift out unless the container allows the target. Heading selections pass `headingLevel` (1–4). List selections use `container.wrap` with `listVariant`. Checklist selections use `container.wrap` with `containerType: checklist`. Page link selections pass `pageId` and optional `pageLinkVariant`: `linked` (**Link To Page**) or `child` (**New Page**). |
 
 ## Author (dev only)
 
-| Command / UI | Meaning |
+No author commands exist on `CanvasCommand`; the dev-only footer calls helpers directly:
+
+| UI | Meaning |
 |---------|---------|
-| `author.saveToSource` / `author.loadFromDisk` | No-ops in `canvasReducer` (reserved) |
-| Footer **Save to source** | Calls `savePage` + `exportPageDocument` directly from `PageCanvasFooter` (dev only) |
+| Footer **Save to source** | Calls `preparePageDocumentForAuthorSave` (exports IndexedDB media to `public/media/` when needed), `saveMediaAssets`, then `savePage` + `exportPageDocument` from `PageCanvasFooter` (dev only); exports optional page `icon` when set |
 | Footer **Reset** | Discards local page document via `resetToServer` |
 
 Author save exports `parentId` with the page document so nested JSON paths round-trip correctly. Normal blank rows are exported like any other user row.
@@ -97,4 +110,22 @@ Author save exports `parentId` with the page document so nested JSON paths round
 
 ## Page commands
 
-Page lifecycle (`page.create`, `page.update`, `page.delete`) lives in [`page-commands.md`](./page-commands.md). `page.create` navigates to `/p/{pageId}`; slash **New Page** passes `navigate: false`. `page.create` accepts optional `initialBlocks` to seed a new user page (sidebar **Duplicate page** uses `clonePageBlocks` before create).
+Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** in [`commands.ts`](../../src/lib/canvas/commands.ts), [`effects.ts`](../../src/lib/canvas/effects.ts), and [`usePageDispatch`](../../src/hooks/use-page-dispatch.ts) — not `canvasReducer`. Full reference: [`page-commands.md`](./page-commands.md).
+
+| Command | Role |
+|---------|------|
+| `page.create` | New user page; `page.persist` (purges same-scope slug tombstones, then insert) + `navigate` (`userPage: true` → `/p/$` for allocated slug) unless `navigate: false` (slash **New Page**, sidebar duplicate with `initialBlocks`); `/p/$` load uses [`resolveActiveUserPageBySlug`](../../src/lib/pages/resolve-user-page-by-slug.ts) |
+| `page.update` | Title/slug/icon metadata via `page.persist` (no `navigate` effect; active-tab URL sync on blur via `syncUrl` in [`persistPageMetadata`](../../src/lib/pages/persist-page-metadata.ts), `userPage` when `routeBy === "id"`) |
+| `page.delete` | Hard delete user pages or local tombstone for shipped pages |
+| `page.reposition` | Sidebar DnD: `parentId`, `sidebarOrder`, metadata `slug` (+ descendant cascade via [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts)); optional `appendPageLinkOnParent` on nest drops; optional `seed` / `parentSeed` before first local write; invalid plan → no effects |
+
+| Effect | Applied by `usePageDispatch` |
+|--------|------------------------------|
+| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` or via `persistPageReposition` (`userPage` when `routeBy === "id"`) |
+| `page.delete` | `deleteLocalPage` (user hard delete or shipped tombstone) |
+| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts) |
+| `navigate` | `{ slug, userPage? }` → router [`pageNavTargetForUserPage`](../../src/lib/pages/slugify.ts) or [`pageNavTarget`](../../src/lib/pages/slugify.ts) (`replace: true`); `mode: "history"` → [`syncPageUrl`](../../src/lib/pages/sync-url.ts) with the same `userPage` flag |
+
+Boot routing ([`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts)) and passive-tab slug sync ([`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts)) are not `PageEffect` entries — see [pages — Route migration](../architecture/pages.md#route-migration).
+
+Canvas-only page helpers (`page.revertToServer`, `page.acknowledgeServerBaseline`) stay on **`CanvasEffect`** / **`CanvasCommand`**, not `PageEffect`. Do not confuse canvas block `row.move` with `page.reposition`. Both surfaces use the [drag-and-drop toolkit](../architecture/drag-and-drop.md): sidebar whole-row drag with [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) and MIME `application/x-page-id`; canvas grip drag with MIME `application/x-canvas-row-id` and [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts). Page routing and boot migration: [pages](../architecture/pages.md).

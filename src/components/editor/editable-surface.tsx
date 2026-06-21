@@ -1,14 +1,12 @@
 import {
   type KeyboardEvent,
-  type Ref,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
-import { resolveFieldCommand } from "@/lib/canvas/keymaps/index.ts";
 import { matchMarkdownShortcut } from "@/lib/canvas/markdown-shortcuts.ts";
 import {
   type FieldSelection,
@@ -21,12 +19,13 @@ import {
   handleBlockIndentKeyDown,
   handleBlockModifierArrowKeyDown,
   handleSlashMenuKeyDown,
+  resolveStructuralDeleteKey,
 } from "@/lib/editor/field-keydown.ts";
 import { cn } from "@/lib/utils.ts";
 
 /** Canvas editor fields: no chrome, no focus ring. Textareas grow via field-sizing-content. */
 export const editorFieldClassName =
-  "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 shadow-none outline-none placeholder:text-muted-foreground focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
+  "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 text-foreground shadow-none outline-none placeholder:text-muted-foreground/50 focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
 
 export const editorTextareaClassName =
   "field-sizing-content resize-none overflow-hidden";
@@ -37,8 +36,6 @@ interface EditableSurfaceProps {
   autoFocusOffset?: number;
   autoFocusPlacement?: "start" | "end";
   className?: string;
-  /** Active input/textarea — used to anchor the slash menu without stealing focus. */
-  fieldRef?: Ref<HTMLInputElement | HTMLTextAreaElement | null>;
   indent?: number;
   multiline?: boolean;
   onAutoFocusHandled?: () => void;
@@ -71,11 +68,10 @@ interface EditableSurfaceProps {
   onTextFocus?: () => void;
   placeholder?: string;
   /** When to show placeholder on empty fields. Headings use `when-empty`. */
-  placeholderVisibility?: "when-focused" | "when-unfocused" | "when-empty";
+  placeholderVisibility?: "when-focused" | "when-empty";
   slashCaret?: FieldSelection;
   slashMenuOpen?: boolean;
   slashPhase?: "root" | "link";
-  textareaRef?: Ref<HTMLTextAreaElement | null>;
   value: string;
 }
 
@@ -112,8 +108,6 @@ export function EditableSurface({
   slashMenuOpen = false,
   slashPhase = "root",
   slashCaret,
-  textareaRef: externalTextareaRef,
-  fieldRef: externalFieldRef,
   onTextFocus,
   onTextBlur,
 }: EditableSurfaceProps) {
@@ -131,51 +125,31 @@ export function EditableSurface({
         inputRef.current = null;
         textareaRef.current = null;
       }
-
-      if (
-        typeof externalTextareaRef === "function" &&
-        node instanceof HTMLTextAreaElement
-      ) {
-        externalTextareaRef(node);
-      } else if (
-        externalTextareaRef &&
-        typeof externalTextareaRef !== "function" &&
-        node instanceof HTMLTextAreaElement
-      ) {
-        externalTextareaRef.current = node;
-      }
-      if (typeof externalFieldRef === "function") {
-        externalFieldRef(node);
-      } else if (externalFieldRef) {
-        externalFieldRef.current = node;
-      }
     },
-    [externalFieldRef, externalTextareaRef]
+    []
   );
 
-  useEffect(() => {
-    if (!autoFocus) {
+  const applyAutoFocus = useCallback(() => {
+    const field = multiline ? textareaRef.current : inputRef.current;
+    if (!field) {
       return;
     }
-    const field = multiline ? textareaRef.current : inputRef.current;
-    if (field) {
-      if (autoFocusOffset === undefined) {
-        focusFieldAtPlacement(field, autoFocusPlacement);
-      } else {
-        focusFieldAtSelection(field, {
-          start: autoFocusOffset,
-          end: autoFocusOffset,
-        });
-      }
+
+    if (autoFocusOffset === undefined) {
+      focusFieldAtPlacement(field, autoFocusPlacement);
+    } else {
+      focusFieldAtSelection(field, {
+        start: autoFocusOffset,
+        end: autoFocusOffset,
+      });
     }
-    onAutoFocusHandled?.();
-  }, [
-    autoFocus,
-    autoFocusOffset,
-    autoFocusPlacement,
-    multiline,
-    onAutoFocusHandled,
-  ]);
+  }, [autoFocusOffset, autoFocusPlacement, multiline]);
+
+  useAutoFocus({
+    enabled: autoFocus,
+    onFocus: applyAutoFocus,
+    onHandled: onAutoFocusHandled,
+  });
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -266,13 +240,7 @@ export function EditableSurface({
         (event.key === "Backspace" || event.key === "Delete") &&
         onStructuralKey
       ) {
-        const keyResult = resolveFieldCommand(event, {
-          caretAtStart:
-            event.currentTarget.selectionStart === 0 &&
-            event.currentTarget.selectionEnd === 0,
-          isEmpty: value.length === 0,
-          valueLength: value.length,
-        });
+        const keyResult = resolveStructuralDeleteKey(event, value.length === 0);
         if (keyResult.handled) {
           const handled = onStructuralKey(
             keyResult.caretAtStart,
@@ -355,9 +323,7 @@ export function EditableSurface({
   }, [multiline, slashCaret, slashMenuOpen]);
 
   const showPlaceholder =
-    value.length === 0 &&
-    (placeholderVisibility === "when-empty" ||
-      (placeholderVisibility === "when-focused" ? isFocused : !isFocused));
+    value.length === 0 && (placeholderVisibility === "when-empty" || isFocused);
   const fieldClassName = cn(editorFieldClassName, "relative z-10", className);
 
   if (multiline) {

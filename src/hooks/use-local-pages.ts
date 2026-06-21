@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
+import { useIsClient } from "@/hooks/use-is-client.ts";
 import { type LocalPage, localPageSchema } from "@/lib/schemas/local-page.ts";
 
 const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
@@ -49,12 +50,50 @@ function useLocalPagesSnapshot(): LocalPage[] {
 }
 
 export function useLocalPages(): LocalPage[] {
+  const isClient = useIsClient();
   const bootstrapPages = useMemo(() => readBootstrapLocalPages(), []);
   const collectionPages = useLocalPagesSnapshot();
-  const isReady =
-    typeof window !== "undefined" && localPagesCollection.isReady();
+  const isReady = isClient && localPagesCollection.isReady();
 
-  return isReady ? collectionPages : bootstrapPages;
+  if (!isClient) {
+    return SERVER_LOCAL_PAGES;
+  }
+
+  if (!isReady) {
+    return bootstrapPages;
+  }
+
+  if (collectionPages.length > 0) {
+    return collectionPages;
+  }
+
+  // Empty collection is ambiguous: Vite HMR can reload the module with an
+  // empty snapshot before sync repopulates, but deleting the last local page
+  // also empties it. localStorage disambiguates — real deletions persist
+  // there, so an empty store means genuinely no local pages.
+  return readBootstrapLocalPages().length > 0
+    ? bootstrapPages
+    : SERVER_LOCAL_PAGES;
+}
+
+/** True while local page rows may still be repopulating after collection init/HMR. */
+export function useLocalPagesSettling(): boolean {
+  const isClient = useIsClient();
+  const bootstrapPages = useMemo(() => readBootstrapLocalPages(), []);
+  const collectionPages = useLocalPagesSnapshot();
+  const isReady = isClient && localPagesCollection.isReady();
+
+  if (!(isClient && isReady)) {
+    return true;
+  }
+
+  if (collectionPages.length > 0 || bootstrapPages.length === 0) {
+    return false;
+  }
+
+  // See useLocalPages: re-read storage so deleting the last local page does
+  // not read as "settling" forever.
+  return readBootstrapLocalPages().length > 0;
 }
 
 export function useLocalPageById(pageId: string): LocalPage | null {
