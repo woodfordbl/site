@@ -48,7 +48,7 @@ flowchart TD
 
 | Hook | Use |
 |------|-----|
-| `useDragSource({ id, holdMs?, onClickWithoutDrag? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab |
+| `useDragSource({ id, holdMs?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
 | `useDropZone()` | Spread `getDropZoneProps()` on the container (`nav`, canvas wrapper) |
 | `useDropTarget(selector)` | `useSyncExternalStore` slice of `dropTarget` — only rows whose selector result changes re-render |
 | `useDragState(selector)` | Same for `draggingId` / `pointer` (e.g. disable inputs while dragging) |
@@ -57,13 +57,17 @@ flowchart TD
 
 [`drag-overlay.tsx`](../../src/components/dnd/drag-overlay.tsx) portals a follow-pointer preview when `dragImage.kind === "overlay"`. The sidebar uses it with [`PageListDragPreview`](../../src/components/pages/page-list-drag-preview.tsx), which positions via `transform: translate3d(...)` so pointer-follow stays compositor-only (no layout/paint per move).
 
+### Nested surfaces — `CanvasRowDndBridge`
+
+[`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) wraps the canvas in an outer [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (canvas row channel) and a [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) that re-exposes that context to descendants. Nested table column [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) instances shadow the nearest `DndContext`; table row structure handles set `useCanvasRowSurface: true` on `useDragSource` so row drags still write `application/x-canvas-row-id` and commit through the canvas resolver.
+
 ## Surface wiring
 
 | Surface | Provider | Row attribute | MIME type | Drag image | Drop zone | Domain resolver |
 |---------|----------|---------------|-----------|------------|-----------|-----------------|
 | Sidebar | [`PageListLive`](../../src/components/pages/page-list.tsx) | `data-page-list-row-id` | `application/x-page-id` | [`setEmptyDragImage`](../../src/lib/dnd/drag-image.ts) (body-attached) + [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) / [`PageListDragPreview`](../../src/components/pages/page-list-drag-preview.tsx) | `<nav>` via `useDropZone` | [`resolvePageListDropTargetFromPointer`](../../src/lib/pages/resolve-page-list-drop-target.ts) |
 | Canvas | [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) | `data-canvas-row-id` | `application/x-canvas-row-id` | `native-clone` of `[data-canvas-row-content]` | `CanvasDropZone` div | [`resolveDropTargetFromPointer`](../../src/lib/canvas/resolve-drop-target.ts) |
-| Table layout | [`TableView`](../../src/components/blocks/types/table/table-view.tsx) (`TableColumnDnD` nested) | `data-table-row-id` (rows) / `data-table-column-drag-id` (columns) | row: `application/x-canvas-row-id`; column: `application/x-table-column-index` | row: native clone; column: overlay | `[data-table-layout]` | [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) (rows); inline column resolver in `table-view.tsx` |
+| Table layout | [`TableView`](../../src/components/blocks/types/table/table-view.tsx) (`TableColumnDnD` nested; row handles via `CanvasRowDndBridge`) | `data-table-row-id` (rows) / `data-table-column-drag-id` (columns) | row: `application/x-canvas-row-id` (`useCanvasRowSurface`); column: `application/x-table-column-index` | row: native clone; column: overlay | `[data-table-layout]` (column zone inside `TableColumnDnD`) | [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) (rows); `resolveTableColumnDropTarget` in `table-view.tsx` (columns) |
 
 Drop indicators:
 
@@ -74,12 +78,12 @@ Drop indicators:
 
 When the pointer is inside `[data-table-layout]`, [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) runs before the generic canvas pass:
 
-- **Row mode** — vertical midpoint bands on `[data-table-row-id]` rects among `tableRow` siblings → standard `row.move`. The header row is skipped when `table.props.hasHeaderRow` (grip hidden on that row).
-- **Column mode** — nested `DndSurface` on the table header with MIME `application/x-table-column-index`; horizontal bands on `[data-table-column-drag-id]` header cells → `table.reorderColumn`. Implemented in [`table-view.tsx`](../../src/components/blocks/types/table/table-view.tsx) (not the top-level canvas resolver).
+- **Row mode** — [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) spreads `useDragSource({ useCanvasRowSurface: true })` so drags use the bridged canvas row surface. Vertical midpoint bands on `[data-table-row-id]` rects among `tableRow` siblings → standard `row.move`. The header row is skipped when `table.props.hasHeaderRow`.
+- **Column mode** — nested `TableColumnDnD` / `DndSurface` with MIME `application/x-table-column-index`; horizontal midpoint bands on `[data-table-column-drag-id]` header cells (or first body row when no header) → `table.reorderColumn`. Implemented in [`table-view.tsx`](../../src/components/blocks/types/table/table-view.tsx) (not the top-level canvas resolver).
 
-Full grid model and keyboard map: [table-blocks](./table-blocks.md).
+Full grid model, structure handles, and keyboard map: [table-blocks](./table-blocks.md).
 
-Grip source: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) calls `useDragSource` on the grab button (no separate `row-drag` / `drag-ghost` modules).
+Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
 
 ## Performance
 

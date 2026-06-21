@@ -60,9 +60,9 @@
     "lint": "ultracite check",
     "format": "ultracite fix",
     "typecheck": "node scripts/sync-tabler-icons-public.mjs && tsc --noEmit",
-    "check": "ultracite check",
+    "check": "node scripts/sync-tabler-icons-public.mjs && ultracite check",
     "fix": "ultracite fix",
-    "docs:check": "node scripts/docs-check.mjs",
+    "docs:check": "node scripts/sync-tabler-icons-public.mjs && node scripts/docs-check.mjs",
     "docs:sync-brief": "node scripts/docs-sync-brief.mjs",
     "sync": "node scripts/sync-emojibase-public.mjs && node scripts/sync-tabler-icons-public.mjs"
   },

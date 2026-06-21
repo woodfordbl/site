@@ -44,10 +44,11 @@ Structural row commands must persist the full next document order, not only the 
 | `columns.addColumn` | Append a `column` + empty `text` (max 4); equalize `column.props.width`. |
 | `columns.removeColumn` | Delete a column subtree; when fewer than 2 columns remain, [`planColumnsUnwrap`](../../src/lib/canvas/columns-layout.ts) hoists content to the canvas parent. |
 | `table.create` | Replace the active row with a `table` shell, `rows` × `columns` grid of `tableRow` / `tableCell`, optional `hasHeaderRow`, seed first cell from slash text. Planner: [`planTableCreate`](../../src/lib/canvas/table-layout.ts). |
-| `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count (`edge`: `before` \| `after`). |
-| `table.addColumn` | Insert empty `tableCell` at index in every row; extend `table.props.columnWidths`. |
+| `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count; anchor `tableRowId` + optional `edge` (`before` \| `after`). Structure-handle menu and hover add-row control. |
+| `table.addColumn` | Insert empty `tableCell` at `columnIndex` + `edge` in every row; extend `table.props.columnWidths`. |
 | `table.removeRow` | Delete row when `> MIN_TABLE_ROWS`; removing header row clears `hasHeaderRow`. |
 | `table.removeColumn` | Delete index-th cell in all rows; splice `columnWidths` (min 2 columns). |
+| `table.duplicateColumn` | Clone cell text in every row; insert duplicate column after `columnIndex`. Planner: [`planTableDuplicateColumn`](../../src/lib/canvas/table-layout.ts). |
 | `table.reorderColumn` | Batch `move` each row's cell + reorder `columnWidths` (`tableId`, `fromIndex`, `toIndex`). |
 | `table.toggleHeaderRow` | `persist` `hasHeaderRow` on the table block. |
 | `table.updateColumnWidths` | Commit column resize (`columnWidths[]`). |
@@ -82,6 +83,15 @@ Press and release the grab handle (without dragging) highlights the row and open
 | Turn into | `slash.convert` or `container.wrap` (inline-text blocks only) |
 | Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids) |
 | Delete | `row.delete` |
+
+**Table structure-handle menus** (row/column handles in [`TableView`](../../src/components/blocks/types/table/table-view.tsx)) dispatch table-scoped commands directly — not the gutter block menu:
+
+| Menu item | Dispatches |
+|-----------|------------|
+| Insert above / below (row) or left / right (column) | `table.addRow` / `table.addColumn` with `edge` |
+| Duplicate | `rows.paste` via `duplicateRow` (row) or `table.duplicateColumn` (column) |
+| Clear contents | `row.update` (empty cell text in scope) |
+| Delete | `table.removeRow` / `table.removeColumn` |
 
 Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item. Both capture full subtrees — `subtreeBlocksFromSelectedRows` ([`block-selection.ts`](../../src/lib/canvas/block-selection.ts)) for selections, `flattenRows` for a single row.
 
