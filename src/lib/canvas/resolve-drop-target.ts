@@ -1,6 +1,9 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
-import { normalizeDropTarget } from "@/lib/canvas/drop-target.ts";
+import {
+  type DropTarget,
+  normalizeDropTarget,
+} from "@/lib/canvas/drop-target.ts";
 import { resolveTableLayoutDrop } from "@/lib/canvas/resolve-table-drop-target.ts";
 import { collectRects } from "@/lib/dnd/rects.ts";
 

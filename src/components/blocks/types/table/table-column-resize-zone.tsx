@@ -63,14 +63,17 @@ export function TableColumnResizeOverlay({
       className="pointer-events-none absolute inset-0 z-20"
       data-table-column-resize-overlay
     >
-      {Array.from({ length: columnCount - 1 }, (_, columnIndex) => (
-        <TableColumnResizeZone
-          columnIndex={columnIndex}
-          key={columnIndex}
-          leftPx={tableColumnBoundaryLeftPx(columnWidths, columnIndex)}
-          onResizeStart={onResizeStart}
-        />
-      ))}
+      {Array.from({ length: columnCount - 1 }, (_, columnIndex) => {
+        const leftPx = tableColumnBoundaryLeftPx(columnWidths, columnIndex);
+        return (
+          <TableColumnResizeZone
+            columnIndex={columnIndex}
+            key={`boundary-${leftPx}`}
+            leftPx={leftPx}
+            onResizeStart={onResizeStart}
+          />
+        );
+      })}
     </div>
   );
 }

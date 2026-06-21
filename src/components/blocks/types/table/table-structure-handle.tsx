@@ -1,28 +1,14 @@
-import {
-  IconArrowLeft,
-  IconArrowRight,
-  IconCircleX,
-  IconCopy,
-  IconGripHorizontal,
-  IconGripVertical,
-  IconTrash,
-} from "@tabler/icons-react";
+import { IconGripHorizontal, IconGripVertical } from "@tabler/icons-react";
 import { useId, useMemo, useState } from "react";
-
-import {
-  useCanvasEditorContext,
-  useCanvasEditorState,
-} from "@/components/canvas/canvas-editor-context.tsx";
+import { TableStructureHandleMenu } from "@/components/blocks/types/table/table-structure-handle-menu.tsx";
+import { useCanvasEditorState } from "@/components/canvas/canvas-editor-context.tsx";
 import { useDragSource } from "@/components/dnd/use-dnd.ts";
 import {
   createDropdownMenuHandle,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import { Kbd } from "@/components/ui/kbd.tsx";
-import { findRowById } from "@/lib/blocks/block-tree.ts";
 import { cn } from "@/lib/utils.ts";
 
 type TableStructureHandleAxis = "column" | "row";
@@ -51,7 +37,6 @@ export function TableStructureHandle({
   const triggerId = useId();
   const menuHandle = useMemo(() => createDropdownMenuHandle(), []);
   const [menuOpen, setMenuOpen] = useState(false);
-  const { dispatch, duplicateRow } = useCanvasEditorContext();
   const { rows } = useCanvasEditorState();
 
   const { getSourceProps, showGrabbing } = useDragSource({
@@ -78,56 +63,6 @@ export function TableStructureHandle({
 
   const GripIcon = axis === "row" ? IconGripVertical : IconGripHorizontal;
   const isAccentState = menuOpen || showGrabbing;
-  const closeMenu = () => {
-    setMenuOpen(false);
-  };
-
-  const clearRowContents = () => {
-    if (!tableRowId) {
-      return;
-    }
-    const row = findRowById(rows, tableRowId);
-    if (!row) {
-      return;
-    }
-    for (const cell of row.children) {
-      const block = cell.effectiveBlock;
-      if (block.type !== "tableCell" || block.props.text.length === 0) {
-        continue;
-      }
-      dispatch({
-        type: "row.update",
-        rowId: cell.rowId,
-        block: { ...block, props: { text: "" } },
-      });
-    }
-  };
-
-  const clearColumnContents = () => {
-    if (columnIndex === undefined) {
-      return;
-    }
-    const tableRow = findRowById(rows, tableId);
-    if (!tableRow) {
-      return;
-    }
-    for (const row of tableRow.children) {
-      const cell = row.children[columnIndex];
-      const block = cell?.effectiveBlock;
-      if (
-        !cell ||
-        block?.type !== "tableCell" ||
-        block.props.text.length === 0
-      ) {
-        continue;
-      }
-      dispatch({
-        type: "row.update",
-        rowId: cell.rowId,
-        block: { ...block, props: { text: "" } },
-      });
-    }
-  };
 
   return (
     <DropdownMenu
@@ -215,134 +150,16 @@ export function TableStructureHandle({
         side={axis === "row" ? "right" : "bottom"}
         sideOffset={6}
       >
-        {axis === "row" && tableRowId ? (
-          <>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({
-                  type: "table.addRow",
-                  tableRowId,
-                  edge: "before",
-                });
-                closeMenu();
-              }}
-            >
-              <IconArrowLeft />
-              Insert above
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({
-                  type: "table.addRow",
-                  tableRowId,
-                  edge: "after",
-                });
-                closeMenu();
-              }}
-            >
-              <IconArrowRight />
-              Insert below
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                duplicateRow(tableRowId);
-                closeMenu();
-              }}
-            >
-              <IconCopy />
-              Duplicate
-              <Kbd className="ml-auto">⌘D</Kbd>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                clearRowContents();
-                closeMenu();
-              }}
-            >
-              <IconCircleX />
-              Clear contents
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({ type: "table.removeRow", tableRowId });
-                closeMenu();
-              }}
-              variant="destructive"
-            >
-              <IconTrash />
-              Delete
-            </DropdownMenuItem>
-          </>
-        ) : null}
-        {axis === "column" && columnIndex !== undefined ? (
-          <>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({
-                  type: "table.addColumn",
-                  tableId,
-                  columnIndex,
-                  edge: "before",
-                });
-                closeMenu();
-              }}
-            >
-              <IconArrowLeft />
-              Insert left
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({
-                  type: "table.addColumn",
-                  tableId,
-                  columnIndex,
-                  edge: "after",
-                });
-                closeMenu();
-              }}
-            >
-              <IconArrowRight />
-              Insert right
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({
-                  type: "table.duplicateColumn",
-                  tableId,
-                  columnIndex,
-                });
-                closeMenu();
-              }}
-            >
-              <IconCopy />
-              Duplicate
-              <Kbd className="ml-auto">⌘D</Kbd>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                clearColumnContents();
-                closeMenu();
-              }}
-            >
-              <IconCircleX />
-              Clear contents
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                dispatch({
-                  type: "table.removeColumn",
-                  tableId,
-                  columnIndex,
-                });
-                closeMenu();
-              }}
-              variant="destructive"
-            >
-              <IconTrash />
-              Delete
-            </DropdownMenuItem>
-          </>
-        ) : null}
+        <TableStructureHandleMenu
+          axis={axis}
+          columnIndex={columnIndex}
+          onClose={() => {
+            setMenuOpen(false);
+          }}
+          rows={rows}
+          tableId={tableId}
+          tableRowId={tableRowId}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -63,15 +63,16 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
   const isDivider = block.type === "divider";
   const showGutter = mode === "edit";
   const isContainerChild = Boolean(block.parentId);
-  const contentSpacingClassName =
-    showGutter && !isContainerChild
-      ? block.type === "divider"
+  let contentSpacingClassName: string | undefined;
+  if (showGutter && !isContainerChild) {
+    contentSpacingClassName =
+      block.type === "divider"
         ? "min-h-10 items-center"
         : getBlockShellSpacingClass(
             block.type,
             block.type === "heading" ? block.props.level : undefined
-          )
-      : undefined;
+          );
+  }
 
   return (
     <CanvasRowShell

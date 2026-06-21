@@ -57,6 +57,17 @@
       }
     },
     {
+      "includes": ["scripts/measure-gutter-alignment.mjs"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredDependencies": "off",
+            "noUnresolvedImports": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["scripts/docs-*.mjs"],
       "linter": {
         "rules": {
