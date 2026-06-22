@@ -29,6 +29,7 @@ One metadata record per `page.id` in `localPagesCollection`:
 - `sidebarOrder` — optional numeric sibling order within the same `parentId` scope for the sidebar tree (sparse steps like block ordering; title tiebreaker when unset)
 - `blockOrder` — flat block ids in document order (updated on structural edits)
 - `serverBaselineHash` — `hashPageBlocks(server.blocks)` at seed time; `null` for user-created pages
+- `serverMetadataBaseline` — hash of shipped title/slug/icon/parent/sidebarOrder at lazy-seed; used with block hash for stale detection
 - `deletedAt` — when set, the page is hidden locally (shipped JSON unchanged)
 - `createdAt` — ISO timestamp set once at insert (lazy-seed uses first local edit time; never updated)
 - `updatedAt`
@@ -78,7 +79,7 @@ Implementation: `src/lib/local-draft/dirty-pages-cookie.ts`.
 UI-hint cookies share read/write helpers in [`document-cookie.ts`](../../src/lib/cookies/document-cookie.ts). Writes are size-budget-guarded (~3800-byte encoded-value budget — browsers silently drop `document.cookie` writes over ~4 KB, which would freeze a stale value forever); `writeDocumentCookie` returns a boolean so callers can degrade instead.
 
 - `site-local-dirty` — dirty page ids (above).
-- `site-page-list-local` — minimal local-page sidebar mirror for SSR first paint ([`page-list-local-preview-cookie.ts`](../../src/lib/pages/page-list-local-preview-cookie.ts), written by [`SyncPageListLocalPreviewEffect`](../../src/components/pages/sync-page-list-local-preview-effect.tsx)). When over budget, `writePageListLocalPreviewToDocument` sorts entries user-pages-first (they affect routing; shipped overlays are cosmetic title/icon) and truncates until the write fits — SSR paints a best-known subset and the client reconciles after hydration.
+- `site-page-list-local` — dirty overlays + user-created pages only ([`page-list-local-preview-cookie.ts`](../../src/lib/pages/page-list-local-preview-cookie.ts)); written synchronously on metadata persist/delete and by [`SyncPageListLocalPreviewEffect`](../../src/components/pages/sync-page-list-local-preview-effect.tsx). User pages first when over budget. **Loading priority:** no cookie → server only; cookie present → `mergePageList(server, cookie)` for SSR/hydration until `localPagesCollection` is ready, then live localStorage via [`mergeLocalPageSources`](../../src/lib/pages/merge-local-page-sources.ts).
 - `site-page-list-expanded` — sidebar chevron state. Read during SSR as `PageSidebarPrefs.expandedPageIds` ([`read-page-sidebar-prefs.server.ts`](../../src/lib/pages/read-page-sidebar-prefs.server.ts) / [`load-page-sidebar-prefs.ts`](../../src/lib/pages/load-page-sidebar-prefs.ts)) so the static sidebar shell renders the expanded tree plus active-page ancestors (`PageListContent` `initialExpandedIds` in [`page-list.tsx`](../../src/components/pages/page-list.tsx)) — no collapse-then-expand flash.
 
 ## Writes
@@ -105,12 +106,31 @@ The canvas follows an editor-state ordering model: UI commands resolve a placeme
 
 Guard this behavior with `src/db/queries/block-collection-ops.test.ts`; it verifies that structural replacement accepts both page and block collection mutations and writes the expected `blockOrder`. Container-child lift/remove (for example empty list or checklist item → text) uses the same structural replacement path.
 
+## Hybrid server + local merge
+
+**Sidebar union rule:** `visiblePages = serverCatalog ∪ userPages − tombstones`. Pristine shipped pages (no local row) always read the latest bundled JSON. Lazy-seeded overlays (`serverBaselineHash` set) and user pages (`serverBaselineHash: null`) stay local-first until reset.
+
+[`resolvePageCatalog`](../../src/lib/pages/resolve-page-state.ts) (`resolvePageState`, `PageOrigin`) is the shared resolver: `server`, `server-overridden`, `user`, `tombstoned`, `orphaned`. [`useMergedPageListItems`](../../src/hooks/use-page-list.ts) builds the sidebar from it via [`mergePageList`](../../src/lib/pages/merge-page-list.ts).
+
+**Deploy freshness:** [`getPagesCatalogRevision`](../../src/lib/content/page-store.server.ts) hashes shipped ids/slugs/titles. The root loader exposes `pagesCatalogRevision`; [`SyncPagesCatalogRevisionEffect`](../../src/components/pages/sync-pages-catalog-revision-effect.tsx) invalidates the React Query page list when the revision changes (new shipped pages appear without wiping local overlays).
+
+**Reset:**
+
+| Action | Command / helper | Effect |
+|--------|------------------|--------|
+| Reset one shipped page | `page.resetToRemote` / [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) | Deletes local metadata + block shard; restores shipped baseline on next read |
+| Reset everything | `page.resetAllToRemote` / [`resetAllToRemote`](../../src/lib/pages/reset-all-to-remote.ts) | Clears all local pages, block shards, hint cookies; navigates home |
+| Stale after deploy | Footer **Use site version** | Full reset (metadata + blocks) via `revertToServer` → `resetPageToRemote` |
+| Keep local despite stale | Footer **Keep my edits** | Updates `serverBaselineHash` and `serverMetadataBaseline` only |
+
+Orphan overlays (local row for a removed shipped id) are detected by [`findOrphanLocalPages`](../../src/lib/pages/resolve-page-state.ts); [`OrphanLocalPagesEffect`](../../src/components/pages/orphan-local-pages-effect.tsx) prompts to discard.
+
 ## Server baseline hash
 
-When a seeded local page exists and `hashPageBlocks(server.blocks) !== serverBaselineHash`, the page is stale.
+When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale.
 
-- **Revert to latest** → replace local blocks with server JSON, refresh hash
-- **Keep my version** → update `serverBaselineHash` only
+- **Use site version** → full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) (metadata + blocks)
+- **Keep my edits** → update both baseline hashes only
 
 ## Author dev mode
 

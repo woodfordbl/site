@@ -2,6 +2,7 @@ import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
 import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import {
   buildSlugFromTitle,
@@ -9,6 +10,7 @@ import {
   replacePageSlugPrefix,
 } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import {
   normalizePageSlug,
   pageSlugsEqual,
@@ -97,6 +99,16 @@ export function persistPageMetadata(options: {
     });
     markPageDirty(options.pageId);
   } else if (options.seed) {
+    const serverMetadataBaseline = existingPage
+      ? hashPageMetadata({
+          icon: existingPage.icon,
+          parentId: existingPage.parentId,
+          sidebarOrder: existingPage.sidebarOrder,
+          slug: existingPage.slug,
+          title: existingPage.title,
+        })
+      : undefined;
+
     localPagesCollection.insert({
       id: options.pageId,
       slug,
@@ -104,6 +116,7 @@ export function persistPageMetadata(options: {
       icon: options.icon ?? existingPage?.icon,
       parentId: existingPage?.parentId ?? null,
       serverBaselineHash: options.seed.serverBaselineHash,
+      serverMetadataBaseline,
       createdAt: now,
       updatedAt: now,
     });
@@ -127,6 +140,10 @@ export function persistPageMetadata(options: {
     if (options.syncUrl && existingPage) {
       syncPageUrl(slug, { userPage: existingPage.routeBy === "id" });
     }
+  }
+
+  if (hasLocalPageDocument(options.pageId) || options.seed) {
+    syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
   }
 
   return { slug };

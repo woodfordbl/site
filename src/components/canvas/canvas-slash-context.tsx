@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type { SlashMenuItem } from "@/components/blocks/registry.ts";
+import { useBlockActionsMenu } from "@/components/canvas/block-actions-menu.tsx";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import {
   canvasSlashTriggerId,
@@ -68,6 +69,7 @@ export function CanvasSlashProvider({
 }) {
   const { currentPageId, dispatch, getRows } = useCanvasEditorContext();
   const dispatchPage = usePageDispatch(pages);
+  const { closeBlockActionsMenu } = useBlockActionsMenu();
   const {
     open: menuOpen,
     payload,
@@ -373,9 +375,16 @@ export function CanvasSlashProvider({
         return;
       }
 
+      closeBlockActionsMenu();
       openSlashMenu(session);
     },
-    [handleSlash, openSlashMenu, setSlashSession, slashMenuOpen]
+    [
+      closeBlockActionsMenu,
+      handleSlash,
+      openSlashMenu,
+      setSlashSession,
+      slashMenuOpen,
+    ]
   );
 
   const actions = useMemo<CanvasSlashActions>(

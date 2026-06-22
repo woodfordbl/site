@@ -17,7 +17,7 @@ import {
 } from "@/components/dnd/dnd-surface.tsx";
 import { usePointerClickVsDrag } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { prepareDataTransferForMove } from "@/lib/dnd/drag-channel.ts";
-import type { DragState } from "@/lib/dnd/drag-store.ts";
+import type { DragState, DragStore } from "@/lib/dnd/drag-store.ts";
 
 const IDLE_STATE: DragState<unknown> = {
   draggingId: null,
@@ -69,6 +69,50 @@ export function useDropTarget<TDropTarget, S>(
   select: (target: TDropTarget | null) => S
 ): S {
   return useDragState((state) =>
+    select((state.dropTarget as TDropTarget | null) ?? null)
+  );
+}
+
+function useSurfaceDragState<S>(
+  store: DragStore<unknown> | null | undefined,
+  selector: (state: DragState<unknown>) => S
+): S {
+  const lastRef = useRef<{ snapshot: DragState<unknown>; value: S } | null>(
+    null
+  );
+
+  const getSelection = useCallback(() => {
+    const snapshot = store ? store.getSnapshot() : IDLE_STATE;
+    const last = lastRef.current;
+    if (last && last.snapshot === snapshot) {
+      return last.value;
+    }
+    const value = selector(snapshot);
+    if (last && Object.is(last.value, value)) {
+      lastRef.current = { snapshot, value: last.value };
+      return last.value;
+    }
+    lastRef.current = { snapshot, value };
+    return value;
+  }, [store, selector]);
+
+  const subscribe = useCallback(
+    (listener: () => void) => store?.subscribe(listener) ?? (() => undefined),
+    [store]
+  );
+
+  return useSyncExternalStore(subscribe, getSelection, getSelection);
+}
+
+/**
+ * Subscribes to the bridged canvas row drag store when nested inside another
+ * surface (e.g. table column DnD). Use for table row drop indicators.
+ */
+export function useCanvasRowDropTarget<TDropTarget, S>(
+  select: (target: TDropTarget | null) => S
+): S {
+  const ctx = useCanvasRowDndContext();
+  return useSurfaceDragState(ctx?.store, (state) =>
     select((state.dropTarget as TDropTarget | null) ?? null)
   );
 }

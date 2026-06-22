@@ -44,13 +44,15 @@ Structural row commands must persist the full next document order, not only the 
 | `columns.addColumn` | Append a `column` + empty `text` (max 4); equalize `column.props.width`. |
 | `columns.removeColumn` | Delete a column subtree; when fewer than 2 columns remain, [`planColumnsUnwrap`](../../src/lib/canvas/columns-layout.ts) hoists content to the canvas parent. |
 | `table.create` | Replace the active row with a `table` shell, `rows` × `columns` grid of `tableRow` / `tableCell`, optional `hasHeaderRow`, seed first cell from slash text. Planner: [`planTableCreate`](../../src/lib/canvas/table-layout.ts). |
-| `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count; anchor `tableRowId` + optional `edge` (`before` \| `after`). Structure-handle menu and hover add-row control. |
-| `table.addColumn` | Insert empty `tableCell` at `columnIndex` + `edge` in every row; extend `table.props.columnWidths`. |
+| `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count; anchor `tableRowId` + optional `edge` (`before` \| `after`). Optional `focus` (default `true`); trailing plus scrub passes `focus: false` on intermediate adds. Structure-handle menu, hover add-row control, and trailing plus scrub. |
+| `table.addColumn` | Insert empty `tableCell` at `columnIndex` + `edge` in every row; extend `table.props.columnWidths`. Optional `focus` (default `true`); trailing plus scrub passes `focus: false` on intermediate adds. |
 | `table.removeRow` | Delete row when `> MIN_TABLE_ROWS`; removing header row clears `hasHeaderRow`. |
 | `table.removeColumn` | Delete index-th cell in all rows; splice `columnWidths` (min 2 columns). |
 | `table.duplicateColumn` | Clone cell text in every row; insert duplicate column after `columnIndex`. Planner: [`planTableDuplicateColumn`](../../src/lib/canvas/table-layout.ts). |
 | `table.reorderColumn` | Batch `move` each row's cell + reorder `columnWidths` (`tableId`, `fromIndex`, `toIndex`). |
 | `table.toggleHeaderRow` | `persist` `hasHeaderRow` on the table block. |
+| `table.toggleHeaderColumn` | `persist` `hasHeaderColumn` on the table block. |
+| `table.fitToWidth` | Proportionally scale `columnWidths` to `targetWidthPx` (block menu measures scroll viewport). |
 | `table.updateColumnWidths` | Commit column resize (`columnWidths[]`). |
 | `table.focusCell` | Tab/Enter grid navigation (`direction`: `next` \| `previous` \| `down`). |
 | `row.moveToPosition` | Move a row to an explicit `RowPlacement` (used for empty-column drops with `atScopeStart`). |
@@ -76,7 +78,7 @@ Focus effects are applied in `useCanvasEditor` via `tryApplyCanvasFocus` ([`appl
 
 ## Gutter block menu
 
-Press and release the grab handle (without dragging) highlights the row and opens the block-actions dropdown. Shift+click on the grab or row content extends a range from the selection anchor or the row with the active caret (via `getActiveCanvasRowId`); it blurs the field and does not open the menu. Cmd/Ctrl+click on the grab toggles selection (unchanged). Click-hold drag reorders with no highlight or menu. The menu dismisses immediately on outside pointer down or focus loss (no close animation). Menu actions use existing commands:
+Press and release the grab handle (without dragging) highlights the row and opens the per-gutter block-actions dropdown ([`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Shift+click on the grab or row content extends a range from the selection anchor or the row with the active caret (via `getActiveCanvasRowId`); it blurs the field and does not open the menu. Cmd/Ctrl+click on the grab toggles selection (unchanged). Click-hold drag reorders with no highlight or menu. Base UI dismisses the menu on outside interaction (no close animation). Menu actions use existing commands:
 
 | Menu item | Dispatches / hook |
 |-----------|-------------------|
@@ -84,7 +86,7 @@ Press and release the grab handle (without dragging) highlights the row and open
 | Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids) |
 | Delete | `row.delete` |
 
-**Table structure-handle menus** (row/column handles in [`TableView`](../../src/components/blocks/types/table/table-view.tsx)) dispatch table-scoped commands directly — not the gutter block menu:
+Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canvas/block-actions-menu.tsx) (`openRowId`). Keyboard delete with a menu open closes it first via `useCloseBlockActionsMenuBeforeAction` before dispatching `row.delete` / `selection.delete`. (row/column handles in [`TableView`](../../src/components/blocks/types/table/table-view.tsx)) dispatch table-scoped commands directly — not the gutter block menu:
 
 | Menu item | Dispatches |
 |-----------|------------|

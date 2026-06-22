@@ -15,6 +15,7 @@ import { sweepOrphanAssets } from "@/db/assets/asset-gc.ts";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { deleteAllBlocksForPage } from "@/db/queries/block-collection-ops.ts";
+import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { exportPageDocument } from "@/lib/content/page-export.ts";
 import { preparePageDocumentForAuthorSave } from "@/lib/content/prepare-page-document-for-author-save.ts";
@@ -36,6 +37,32 @@ interface PageCanvasFooterProps {
   rows: CanvasRow[];
 }
 
+type FooterConfirmAction = "reset" | "revert" | "resetAll";
+
+const CONFIRM_DIALOG_COPY: Record<
+  FooterConfirmAction,
+  { title: string; description: string; confirmLabel: string }
+> = {
+  resetAll: {
+    title: "Reset all local changes?",
+    description:
+      "All local edits and custom pages will be removed. Shipped site pages will be restored. This cannot be undone.",
+    confirmLabel: "Reset all",
+  },
+  revert: {
+    title: "Use the site version?",
+    description:
+      "This page was updated on the site since you edited it. Switching to the site version restores the shipped title, icon, and content. This cannot be undone.",
+    confirmLabel: "Use site version",
+  },
+  reset: {
+    title: "Reset to site version?",
+    description:
+      "Your local edits on this page will be removed and the shipped site version restored. This cannot be undone.",
+    confirmLabel: "Reset page",
+  },
+};
+
 export function PageCanvasFooter({
   hasLocalChanges,
   isStale,
@@ -49,11 +76,11 @@ export function PageCanvasFooter({
   pageTitle,
   rows,
 }: PageCanvasFooterProps) {
-  const [confirmAction, setConfirmAction] = useState<"reset" | "revert" | null>(
-    null
-  );
+  const [confirmAction, setConfirmAction] =
+    useState<FooterConfirmAction | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const isDev = import.meta.env.DEV;
+  const dispatch = usePageDispatch();
   const { data: localPages = [] } = useLiveQuery(
     (query) =>
       query
@@ -104,6 +131,8 @@ export function PageCanvasFooter({
       onReset();
     } else if (confirmAction === "revert") {
       onRevertToServer();
+    } else if (confirmAction === "resetAll") {
+      dispatch({ type: "page.resetAllToRemote" });
     }
     setConfirmAction(null);
   };
@@ -132,14 +161,24 @@ export function PageCanvasFooter({
         </Button>
       ) : null}
       {hasLocalChanges ? (
-        <Button
-          onClick={() => setConfirmAction("reset")}
-          size="xs"
-          type="button"
-          variant="outline"
-        >
-          Reset
-        </Button>
+        <>
+          <Button
+            onClick={() => setConfirmAction("reset")}
+            size="xs"
+            type="button"
+            variant="outline"
+          >
+            Reset page
+          </Button>
+          <Button
+            onClick={() => setConfirmAction("resetAll")}
+            size="xs"
+            type="button"
+            variant="outline"
+          >
+            Reset all
+          </Button>
+        </>
       ) : null}
       <Dialog
         onOpenChange={(open) => {
@@ -152,14 +191,12 @@ export function PageCanvasFooter({
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
-              {confirmAction === "revert"
-                ? "Use the site version?"
-                : "Reset to published version?"}
+              {confirmAction ? CONFIRM_DIALOG_COPY[confirmAction].title : ""}
             </DialogTitle>
             <DialogDescription>
-              {confirmAction === "revert"
-                ? "This page was updated on the site since you edited it. Switching to the site version removes your local edits. This cannot be undone."
-                : "Your local edits on this page will be removed. This cannot be undone."}
+              {confirmAction
+                ? CONFIRM_DIALOG_COPY[confirmAction].description
+                : ""}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -171,7 +208,9 @@ export function PageCanvasFooter({
               Cancel
             </Button>
             <Button onClick={handleConfirm} type="button" variant="destructive">
-              {confirmAction === "revert" ? "Use site version" : "Reset page"}
+              {confirmAction
+                ? CONFIRM_DIALOG_COPY[confirmAction].confirmLabel
+                : ""}
             </Button>
           </DialogFooter>
         </DialogContent>

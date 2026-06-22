@@ -44,13 +44,54 @@ function isRowDescendantOf(
 
 function collectTableRowRects(layout: Element): Map<string, DOMRect> {
   const rects = new Map<string, DOMRect>();
+  const table = layout.querySelector("table");
+  const tableRect =
+    table instanceof HTMLElement ? table.getBoundingClientRect() : null;
+
   for (const element of layout.querySelectorAll(`[${TABLE_ROW_ATTRIBUTE}]`)) {
     const rowId = element.getAttribute(TABLE_ROW_ATTRIBUTE);
-    if (rowId) {
-      rects.set(rowId, element.getBoundingClientRect());
+    if (!rowId) {
+      continue;
     }
+
+    const rowRect = element.getBoundingClientRect();
+    if (tableRect) {
+      rects.set(
+        rowId,
+        toTableRowDropRect({
+          left: tableRect.left,
+          right: tableRect.right,
+          top: rowRect.top,
+          bottom: rowRect.bottom,
+        })
+      );
+      continue;
+    }
+
+    rects.set(rowId, rowRect);
   }
   return rects;
+}
+
+function toTableRowDropRect(bounds: {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+}): DOMRect {
+  const width = bounds.right - bounds.left;
+  const height = bounds.bottom - bounds.top;
+  return {
+    top: bounds.top,
+    left: bounds.left,
+    bottom: bounds.bottom,
+    right: bounds.right,
+    width,
+    height,
+    x: bounds.left,
+    y: bounds.top,
+    toJSON: () => ({}),
+  } as DOMRect;
 }
 
 function resolveTableRowDropTarget(

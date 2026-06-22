@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 
-import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { resolveActiveLocalPageBySlug } from "@/lib/pages/resolve-active-local-page-by-slug.ts";
 import { resolveActiveUserPageBySlug } from "@/lib/pages/resolve-user-page-by-slug.ts";
 import { normalizePageSlug } from "@/lib/pages/slugify.ts";
@@ -28,17 +27,8 @@ export function useResolvedUserPageById(
       return null;
     }
 
-    const pages = readPagesForSlugLookup(localPages);
-    return pages.find((page) => page.id === pageId) ?? null;
+    return localPages.find((page) => page.id === pageId) ?? null;
   }, [localPages, pageId]);
-}
-
-function readPagesForSlugLookup(syncedPages: LocalPage[]): LocalPage[] {
-  if (typeof window !== "undefined" && localPagesCollection.isReady()) {
-    return localPagesCollection.toArray;
-  }
-
-  return syncedPages;
 }
 
 /**
@@ -50,10 +40,10 @@ export function useResolvedUserPage(slug: string): LocalPage | null {
   const normalized = normalizePageSlug(slug);
   const localPages = useLocalPages();
 
-  return useMemo(() => {
-    const pages = readPagesForSlugLookup(localPages);
-    return resolveActiveUserPageBySlug(pages, normalized);
-  }, [localPages, normalized]);
+  return useMemo(
+    () => resolveActiveUserPageBySlug(localPages, normalized),
+    [localPages, normalized]
+  );
 }
 
 /**
@@ -64,10 +54,10 @@ export function useResolvedLocalPageBySlug(slug: string): LocalPage | null {
   const normalized = normalizePageSlug(slug);
   const localPages = useLocalPages();
 
-  return useMemo(() => {
-    const pages = readPagesForSlugLookup(localPages);
-    return resolveActiveLocalPageBySlug(pages, normalized);
-  }, [localPages, normalized]);
+  return useMemo(
+    () => resolveActiveLocalPageBySlug(localPages, normalized),
+    [localPages, normalized]
+  );
 }
 
 /** User-created pages (`serverBaselineHash: null`) from the local collection. */

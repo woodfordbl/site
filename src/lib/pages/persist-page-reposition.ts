@@ -1,6 +1,7 @@
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
@@ -54,6 +55,15 @@ function applyScopeOrderUpdate(
     sidebarOrder: update.sidebarOrder,
     icon: summary?.icon,
     serverBaselineHash: pageSeed.serverBaselineHash,
+    serverMetadataBaseline: summary
+      ? hashPageMetadata({
+          icon: summary.icon,
+          parentId: summary.parentId,
+          sidebarOrder: summary.sidebarOrder,
+          slug: summary.slug,
+          title: summary.title,
+        })
+      : undefined,
     createdAt: now,
     updatedAt: now,
   });

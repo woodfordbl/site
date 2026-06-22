@@ -54,6 +54,8 @@ export type PageEffect =
       initialBlocks?: Block[];
     }
   | { type: "page.delete"; pageId: string }
+  | { type: "page.resetToRemote"; pageId: string }
+  | { type: "page.resetAllToRemote" }
   | {
       type: "page.reposition";
       plan: PageRepositionPlan;

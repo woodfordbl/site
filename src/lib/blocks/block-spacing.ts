@@ -15,7 +15,7 @@ const canvasGutterFirstLinePaddingClassNames = {
 /** Shared body copy typography for text-like blocks (one line height by default). */
 export const bodyTextTypographyClassName = "text-lg leading-relaxed";
 
-export const bodyTextClassName = `${bodyTextTypographyClassName} text-muted-foreground`;
+export const bodyTextClassName = `${bodyTextTypographyClassName} text-foreground`;
 
 const headingTopSpacingClassNames: Record<HeadingProps["level"], string> = {
   1: "pt-4",

@@ -1,7 +1,18 @@
-import { type ComponentProps, useCallback, useMemo, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 
 import { TableCellEdit } from "@/components/blocks/types/table/table-cell-edit.tsx";
 import { TableCellView } from "@/components/blocks/types/table/table-cell-view.tsx";
+import {
+  measureTableColumnDragPreview,
+  TableColumnDragPreview,
+  type TableColumnDragPreviewState,
+} from "@/components/blocks/types/table/table-column-drag-preview.tsx";
 import { TableColumnHandle } from "@/components/blocks/types/table/table-column-handle.tsx";
 import { TableColumnResizeOverlay } from "@/components/blocks/types/table/table-column-resize-zone.tsx";
 import {
@@ -9,6 +20,7 @@ import {
   TableAddRowButton,
 } from "@/components/blocks/types/table/table-controls.tsx";
 import { TableRowHandle } from "@/components/blocks/types/table/table-row-handle.tsx";
+import { TableStructureDropIndicators } from "@/components/blocks/types/table/table-structure-drop-indicators.tsx";
 import {
   getTableCellStructureSelectionClassName,
   getTableColumnHandleRevealClasses,
@@ -19,11 +31,13 @@ import {
   useCanvasEditorContext,
   useCanvasFocus,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { RowGutter } from "@/components/canvas/row-gutter.tsx";
 import {
   DndSurface,
   type DndSurfaceConfig,
 } from "@/components/dnd/dnd-surface.tsx";
-import { useDropTarget, useDropZone } from "@/components/dnd/use-dnd.ts";
+import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
+import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area.tsx";
 import {
   TableBody,
@@ -32,11 +46,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
+import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { BlockContainerProps } from "@/lib/canvas/block-spec.types.ts";
+import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import {
   deriveTableGrid,
   tableColumnWidthsTotalPx,
 } from "@/lib/canvas/table-layout.ts";
+import { collectTableColumnDropRects } from "@/lib/dnd/collect-table-column-rects.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -44,12 +61,6 @@ const TABLE_COLUMN_ATTRIBUTE = "data-table-column-drag-id";
 const tableColumnChannel = createDragChannel(
   "application/x-table-column-index"
 );
-
-interface TableColumnDropTarget {
-  columnIndex: number;
-  edge: "before" | "after";
-  tableId: string;
-}
 
 function parseColumnDragId(sourceId: string): {
   columnIndex: number;
@@ -65,6 +76,49 @@ function parseColumnDragId(sourceId: string): {
     return null;
   }
   return { tableId, columnIndex };
+}
+
+interface TableColumnDropTarget {
+  columnIndex: number;
+  edge: "before" | "after";
+  tableId: string;
+}
+
+/** Matches {@link CANVAS_GUTTER_REVEAL_DELAY_MS} in canvas-row-shell. */
+const TABLE_GUTTER_REVEAL_DELAY_MS = 300;
+const TABLE_HEADER_CELL_CLASSNAME =
+  "relative border border-border bg-muted/40 font-medium";
+
+function TableBlockGutter({
+  revealed,
+  row,
+}: {
+  revealed: boolean;
+  row: BlockContainerProps["row"];
+}) {
+  const { insertAfter, insertAtScopeStart, insertBefore } =
+    useCanvasEditorContext();
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-auto w-12 shrink-0 pt-3 [&_.canvas-block-gutter]:opacity-0",
+        revealed && "[&_.canvas-block-gutter]:opacity-100"
+      )}
+      data-table-block-gutter
+    >
+      <RowGutter
+        onInsert={(edge) => {
+          handleContainerGutterInsert(row, edge, {
+            insertAfter,
+            insertAtScopeStart,
+            insertBefore,
+          });
+        }}
+        row={row}
+      />
+    </div>
+  );
 }
 
 function resolveTableColumnDropTarget(args: {
@@ -114,38 +168,21 @@ function rectContains(
   );
 }
 
-function TableColumnDropIndicator({
-  columnIndex,
-  tableId,
-}: {
-  columnIndex: number;
-  tableId: string;
-}) {
-  const indicator = useDropTarget((target: TableColumnDropTarget | null) => {
-    if (!target || target.tableId !== tableId) {
-      return null;
-    }
-    if (target.edge === "before" && target.columnIndex === columnIndex) {
-      return "before";
-    }
-    if (target.edge === "after" && target.columnIndex === columnIndex) {
-      return "after";
-    }
-    return null;
-  });
-
-  if (!indicator) {
-    return null;
-  }
+function TableColumnDropZone({ children }: { children: ReactNode }) {
+  const { getDropZoneProps } = useDropZone();
+  const isDragging = useDragState((state) => state.draggingId != null);
 
   return (
     <div
-      aria-hidden
       className={cn(
-        "pointer-events-none absolute top-0 bottom-0 z-20 w-0.5 bg-selection",
-        indicator === "before" ? "left-0" : "right-0"
+        "relative w-full min-w-0 overflow-visible",
+        isDragging &&
+          "cursor-grabbing [&_input]:pointer-events-none [&_textarea]:pointer-events-none"
       )}
-    />
+      {...getDropZoneProps()}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -155,12 +192,16 @@ function TableColumnDnD({
   ...props
 }: ComponentProps<"div">) {
   const { dispatch } = useCanvasEditorContext();
-  const { getDropZoneProps } = useDropZone();
+  const [previewMeta, setPreviewMeta] = useState<Omit<
+    TableColumnDragPreviewState,
+    "clientX" | "clientY"
+  > | null>(null);
 
   const config = useMemo<DndSurfaceConfig<TableColumnDropTarget>>(
     () => ({
       channel: tableColumnChannel,
       rowAttribute: TABLE_COLUMN_ATTRIBUTE,
+      collectDropRects: collectTableColumnDropRects,
       resolveDropTarget: ({ sourceId, pointer, rects }) =>
         resolveTableColumnDropTarget({ sourceId, pointer, rects }),
       onDrop: ({ sourceId, target }) => {
@@ -183,13 +224,32 @@ function TableColumnDnD({
         });
       },
       dragImage: { kind: "overlay" },
+      onDragStart: ({ sourceId, pointer }) => {
+        setPreviewMeta(measureTableColumnDragPreview(sourceId, pointer));
+      },
+      onDragEnd: () => {
+        setPreviewMeta(null);
+      },
     }),
     [dispatch]
   );
 
   return (
     <DndSurface config={config}>
-      <div {...getDropZoneProps()} className={className} {...props}>
+      <DragOverlay>
+        {({ pointer }) =>
+          previewMeta ? (
+            <TableColumnDragPreview
+              preview={{
+                ...previewMeta,
+                clientX: pointer.x,
+                clientY: pointer.y,
+              }}
+            />
+          ) : null
+        }
+      </DragOverlay>
+      <div className={className} {...props}>
         {children}
       </div>
     </DndSurface>
@@ -235,6 +295,48 @@ export function TableView({ row, mode }: BlockContainerProps) {
     },
     [grid]
   );
+  const handleColumnStructureMenuOpenChange = useCallback(
+    (columnIndex: number, open: boolean) => {
+      if (open) {
+        selectTableColumn(columnIndex);
+        return;
+      }
+      clearStructureSelection();
+    },
+    [clearStructureSelection, selectTableColumn]
+  );
+  const handleRowStructureMenuOpenChange = useCallback(
+    (tableRowId: string, open: boolean) => {
+      if (open) {
+        selectTableRow(tableRowId);
+        return;
+      }
+      clearStructureSelection();
+    },
+    [clearStructureSelection, selectTableRow]
+  );
+
+  const tableRowIds = useMemo(
+    () => new Set(grid?.rows.map((tableRow) => tableRow.rowId) ?? []),
+    [grid?.rows]
+  );
+  const gutterOpenTimeout = useTimeout();
+  const [gutterRevealed, setGutterRevealed] = useState(false);
+
+  const handleTablePointerEnter = () => {
+    if (mode !== "edit") {
+      return;
+    }
+    gutterOpenTimeout.clear();
+    gutterOpenTimeout.start(TABLE_GUTTER_REVEAL_DELAY_MS, () => {
+      setGutterRevealed(true);
+    });
+  };
+
+  const handleTablePointerLeave = () => {
+    gutterOpenTimeout.clear();
+    setGutterRevealed(false);
+  };
 
   const tableBlock = row.effectiveBlock;
   if (!grid || tableBlock.type !== "table") {
@@ -269,219 +371,258 @@ export function TableView({ row, mode }: BlockContainerProps) {
   return (
     <TableColumnDnD
       className={cn(
-        "group/table-layout -mr-12 w-[calc(100%+3rem)] min-w-0 overflow-visible",
+        "group/table-layout min-w-0 overflow-visible",
+        mode === "edit"
+          ? "-mx-12 w-[calc(100%+6rem)]"
+          : "-mr-12 w-[calc(100%+3rem)]",
         columnHandleRevealClasses
       )}
       data-table-id={grid.tableId}
       data-table-layout
+      onPointerEnter={handleTablePointerEnter}
+      onPointerLeave={handleTablePointerLeave}
     >
-      <div className="relative w-full min-w-0 overflow-visible">
+      <TableColumnDropZone>
         <ScrollArea className="w-full min-w-0 [&_[data-orientation=vertical]]:hidden">
-          <div className="flex w-max min-w-full flex-col gap-0.5 pl-12">
-            <div className="-ml-12 flex w-max flex-col gap-0.5">
-              <div className="relative pt-3 pr-3 pl-3">
-                <div className="relative isolate">
-                  <table
-                    className={cn(
-                      "relative z-0 table-fixed caption-bottom border-collapse text-sm",
-                      "[&_tr]:border-0",
-                      "[&_td]:overflow-visible [&_td]:border [&_td]:border-border",
-                      "[&_th]:overflow-visible [&_th]:border [&_th]:border-border"
-                    )}
-                    data-slot="table"
-                    style={{ width: tableWidthPx }}
-                  >
-                    <colgroup>
-                      {grid.rows[0]?.cells.map((cell, index) => (
-                        <col
-                          key={cell.cellId}
-                          style={{ width: `${widths[index] ?? 0}px` }}
-                        />
-                      ))}
-                    </colgroup>
-                    {grid.hasHeaderRow && grid.rows[0] ? (
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          {grid.rows[0].cells.map((cell, columnIndex) => {
-                            const headerRowId = grid.rows[0].rowId;
-                            const selectionClassName = cellSelectionClassName(
-                              0,
-                              columnIndex,
-                              headerRowId
-                            );
+          <div
+            className={cn(
+              "flex w-max min-w-full flex-col gap-0.5",
+              mode === "edit" ? "px-12" : "pl-12"
+            )}
+          >
+            <div
+              className={cn(
+                "flex w-max",
+                mode === "edit"
+                  ? "-mx-12 items-start gap-0"
+                  : "-ml-12 flex-col gap-0.5"
+              )}
+            >
+              {mode === "edit" ? (
+                <TableBlockGutter revealed={gutterRevealed} row={row} />
+              ) : null}
+              <div className="flex w-max flex-col gap-0.5">
+                <div className="relative pt-3 pr-8 pl-3">
+                  <div className="relative isolate">
+                    <table
+                      className={cn(
+                        "relative z-0 table-fixed caption-bottom border-collapse text-sm",
+                        "[&_tr]:border-0",
+                        "[&_td]:overflow-visible",
+                        "[&_th]:overflow-visible"
+                      )}
+                      data-slot="table"
+                      style={{ width: tableWidthPx }}
+                    >
+                      <colgroup>
+                        {grid.rows[0]?.cells.map((cell, index) => (
+                          <col
+                            key={cell.cellId}
+                            style={{ width: `${widths[index] ?? 0}px` }}
+                          />
+                        ))}
+                      </colgroup>
+                      {grid.hasHeaderRow && grid.rows[0] ? (
+                        <TableHeader>
+                          <TableRow className="hover:!bg-transparent">
+                            {grid.rows[0].cells.map((cell, columnIndex) => {
+                              const headerRowId = grid.rows[0].rowId;
+                              const selectionClassName = cellSelectionClassName(
+                                0,
+                                columnIndex,
+                                headerRowId
+                              );
+
+                              return (
+                                <TableHead
+                                  className={cn(
+                                    TABLE_HEADER_CELL_CLASSNAME,
+                                    selectionClassName,
+                                    selectionClassName && "z-[1]"
+                                  )}
+                                  data-table-column-drag-id={`${grid.tableId}:${columnIndex}`}
+                                  data-table-column-index={columnIndex}
+                                  data-table-last-column={
+                                    columnIndex === grid.columnCount - 1
+                                      ? ""
+                                      : undefined
+                                  }
+                                  key={cell.cellId}
+                                >
+                                  {mode === "edit" ? (
+                                    <TableColumnHandle
+                                      columnIndex={columnIndex}
+                                      onStructureMenuOpenChange={(open) => {
+                                        handleColumnStructureMenuOpenChange(
+                                          columnIndex,
+                                          open
+                                        );
+                                      }}
+                                      tableId={grid.tableId}
+                                    />
+                                  ) : null}
+                                  {mode === "edit" ? (
+                                    <TableCellEditor
+                                      cellRow={findCellRow(row, cell.cellId)}
+                                      clearFocus={clearFocus}
+                                      focus={focus}
+                                    />
+                                  ) : (
+                                    <TableCellView
+                                      props={{ text: cell.text }}
+                                    />
+                                  )}
+                                </TableHead>
+                              );
+                            })}
+                          </TableRow>
+                        </TableHeader>
+                      ) : null}
+                      <TableBody>
+                        {grid.rows
+                          .slice(grid.hasHeaderRow ? 1 : 0)
+                          .map((tableRow, bodyRowIndex) => {
+                            const isLastRow = tableRow.rowId === lastRowId;
+                            const isColumnHandleRow =
+                              !grid.hasHeaderRow && bodyRowIndex === 0;
+                            const rowIndex =
+                              bodyRowIndex + (grid.hasHeaderRow ? 1 : 0);
 
                             return (
-                              <TableHead
-                                className={cn(
-                                  "relative bg-muted/40 font-medium",
-                                  selectionClassName,
-                                  selectionClassName && "z-[1]"
-                                )}
-                                data-table-column-drag-id={`${grid.tableId}:${columnIndex}`}
-                                data-table-column-index={columnIndex}
-                                data-table-last-column={
-                                  columnIndex === grid.columnCount - 1
-                                    ? ""
-                                    : undefined
-                                }
-                                key={cell.cellId}
+                              <TableRow
+                                className="group/table-row hover:!bg-transparent"
+                                data-canvas-row-id={tableRow.rowId}
+                                data-table-last-row={isLastRow ? "" : undefined}
+                                data-table-row-id={tableRow.rowId}
+                                key={tableRow.rowId}
                               >
-                                <TableColumnDropIndicator
-                                  columnIndex={columnIndex}
-                                  tableId={grid.tableId}
-                                />
-                                {mode === "edit" ? (
-                                  <TableColumnHandle
-                                    columnIndex={columnIndex}
-                                    onStructureSelect={() => {
-                                      selectTableColumn(columnIndex);
-                                    }}
-                                    tableId={grid.tableId}
-                                  />
-                                ) : null}
-                                {mode === "edit" ? (
-                                  <TableCellEditor
-                                    cellRow={findCellRow(row, cell.cellId)}
-                                    clearFocus={clearFocus}
-                                    clearStructureSelection={
-                                      clearStructureSelection
-                                    }
-                                    focus={focus}
-                                  />
-                                ) : (
-                                  <TableCellView props={{ text: cell.text }} />
-                                )}
-                              </TableHead>
-                            );
-                          })}
-                        </TableRow>
-                      </TableHeader>
-                    ) : null}
-                    <TableBody>
-                      {grid.rows
-                        .slice(grid.hasHeaderRow ? 1 : 0)
-                        .map((tableRow, bodyRowIndex) => {
-                          const isLastRow = tableRow.rowId === lastRowId;
-                          const isColumnHandleRow =
-                            !grid.hasHeaderRow && bodyRowIndex === 0;
-                          const rowIndex =
-                            bodyRowIndex + (grid.hasHeaderRow ? 1 : 0);
+                                {tableRow.cells.map((cell, columnIndex) => {
+                                  const selectionClassName =
+                                    cellSelectionClassName(
+                                      rowIndex,
+                                      columnIndex,
+                                      tableRow.rowId
+                                    );
+                                  const isHeaderColumnCell =
+                                    grid.hasHeaderColumn && columnIndex === 0;
 
-                          return (
-                            <TableRow
-                              className="group/table-row hover:bg-muted/20"
-                              data-canvas-row-id={tableRow.rowId}
-                              data-table-last-row={isLastRow ? "" : undefined}
-                              data-table-row-id={tableRow.rowId}
-                              key={tableRow.rowId}
-                            >
-                              {tableRow.cells.map((cell, columnIndex) => {
-                                const selectionClassName =
-                                  cellSelectionClassName(
-                                    rowIndex,
-                                    columnIndex,
-                                    tableRow.rowId
-                                  );
-
-                                return (
-                                  <TableCell
-                                    className={cn(
-                                      "relative align-top",
-                                      selectionClassName,
-                                      selectionClassName && "z-[1]"
-                                    )}
-                                    data-table-column-drag-id={
-                                      isColumnHandleRow
-                                        ? `${grid.tableId}:${columnIndex}`
-                                        : undefined
-                                    }
-                                    data-table-column-index={columnIndex}
-                                    data-table-last-column={
-                                      columnIndex === grid.columnCount - 1
-                                        ? ""
-                                        : undefined
-                                    }
-                                    key={cell.cellId}
-                                  >
-                                    {mode === "edit" && columnIndex === 0 ? (
-                                      <TableRowHandle
-                                        onStructureSelect={() => {
-                                          selectTableRow(tableRow.rowId);
-                                        }}
-                                        rowId={tableRow.rowId}
-                                        tableId={grid.tableId}
-                                      />
-                                    ) : null}
-                                    {mode === "edit" && isColumnHandleRow ? (
-                                      <>
-                                        <TableColumnDropIndicator
-                                          columnIndex={columnIndex}
+                                  return (
+                                    <TableCell
+                                      className={cn(
+                                        "relative border border-border align-top",
+                                        isHeaderColumnCell &&
+                                          TABLE_HEADER_CELL_CLASSNAME,
+                                        selectionClassName,
+                                        selectionClassName && "z-[1]"
+                                      )}
+                                      data-table-column-drag-id={
+                                        isColumnHandleRow
+                                          ? `${grid.tableId}:${columnIndex}`
+                                          : undefined
+                                      }
+                                      data-table-column-index={columnIndex}
+                                      data-table-last-column={
+                                        columnIndex === grid.columnCount - 1
+                                          ? ""
+                                          : undefined
+                                      }
+                                      key={cell.cellId}
+                                    >
+                                      {mode === "edit" && columnIndex === 0 ? (
+                                        <TableRowHandle
+                                          onStructureMenuOpenChange={(open) => {
+                                            handleRowStructureMenuOpenChange(
+                                              tableRow.rowId,
+                                              open
+                                            );
+                                          }}
+                                          rowId={tableRow.rowId}
                                           tableId={grid.tableId}
                                         />
+                                      ) : null}
+                                      {mode === "edit" && isColumnHandleRow ? (
                                         <TableColumnHandle
                                           columnIndex={columnIndex}
-                                          onStructureSelect={() => {
-                                            selectTableColumn(columnIndex);
+                                          onStructureMenuOpenChange={(open) => {
+                                            handleColumnStructureMenuOpenChange(
+                                              columnIndex,
+                                              open
+                                            );
                                           }}
                                           tableId={grid.tableId}
                                         />
-                                      </>
-                                    ) : null}
-                                    {mode === "edit" ? (
-                                      <TableCellEditor
-                                        cellRow={findCellRow(row, cell.cellId)}
-                                        clearFocus={clearFocus}
-                                        clearStructureSelection={
-                                          clearStructureSelection
-                                        }
-                                        focus={focus}
-                                      />
-                                    ) : (
-                                      <TableCellView
-                                        props={{ text: cell.text }}
-                                      />
-                                    )}
-                                  </TableCell>
-                                );
-                              })}
-                            </TableRow>
-                          );
-                        })}
-                    </TableBody>
-                  </table>
+                                      ) : null}
+                                      {mode === "edit" ? (
+                                        <TableCellEditor
+                                          cellRow={findCellRow(
+                                            row,
+                                            cell.cellId
+                                          )}
+                                          clearFocus={clearFocus}
+                                          focus={focus}
+                                        />
+                                      ) : (
+                                        <TableCellView
+                                          props={{ text: cell.text }}
+                                        />
+                                      )}
+                                    </TableCell>
+                                  );
+                                })}
+                              </TableRow>
+                            );
+                          })}
+                      </TableBody>
+                    </table>
+                    {mode === "edit" ? (
+                      <TableStructureDropIndicators
+                        columnWidths={widths}
+                        tableId={grid.tableId}
+                        tableRowIds={tableRowIds}
+                        tableWidthPx={tableWidthPx}
+                      />
+                    ) : null}
+                    {mode === "edit" ? (
+                      <TableColumnResizeOverlay
+                        columnCount={grid.columnCount}
+                        columnWidths={widths}
+                        onResizeStart={startResize}
+                      />
+                    ) : null}
+                  </div>
                   {mode === "edit" ? (
-                    <TableColumnResizeOverlay
-                      columnCount={grid.columnCount}
-                      columnWidths={widths}
-                      onResizeStart={startResize}
-                    />
+                    <div
+                      className="pointer-events-none absolute top-3 right-0 bottom-0 z-20 flex w-5"
+                      data-table-add-column-host
+                    >
+                      <TableAddColumnButton
+                        className="pointer-events-auto h-full"
+                        columnCount={grid.columnCount}
+                        tableId={grid.tableId}
+                      />
+                    </div>
                   ) : null}
                 </div>
                 {mode === "edit" ? (
                   <div
-                    className="pointer-events-none absolute top-3 right-0 bottom-0 z-20 flex w-5"
-                    data-table-add-column-host
+                    className="group/add-row-host pr-3 pl-3"
+                    data-table-add-row-host
                   >
-                    <TableAddColumnButton
-                      className="pointer-events-auto h-full"
-                      columnCount={grid.columnCount}
-                      tableId={grid.tableId}
-                    />
+                    <div style={{ width: tableWidthPx }}>
+                      <TableAddRowButton
+                        lastRowId={lastRowId}
+                        rowCount={rowCount}
+                        tableId={grid.tableId}
+                      />
+                    </div>
                   </div>
                 ) : null}
               </div>
-              {mode === "edit" ? (
-                <div className="pr-3 pl-3">
-                  <div style={{ width: tableWidthPx }}>
-                    <TableAddRowButton lastRowId={lastRowId} />
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
           {mode === "edit" ? <ScrollBar orientation="horizontal" /> : null}
         </ScrollArea>
-      </div>
+      </TableColumnDropZone>
     </TableColumnDnD>
   );
 }
@@ -503,12 +644,10 @@ function findCellRow(
 function TableCellEditor({
   cellRow,
   clearFocus,
-  clearStructureSelection,
   focus,
 }: {
   cellRow: BlockContainerProps["row"] | undefined;
   clearFocus: () => void;
-  clearStructureSelection: () => void;
   focus: ReturnType<typeof useCanvasFocus>;
 }) {
   const { dispatch } = useCanvasEditorContext();
@@ -526,7 +665,6 @@ function TableCellEditor({
       autoFocusOffset={isFocusTarget ? focus?.offset : undefined}
       autoFocusPlacement={isFocusTarget ? focus?.placement : undefined}
       onAutoFocusHandled={clearFocus}
-      onCellFocus={clearStructureSelection}
       onChange={(nextProps) => {
         dispatch({
           type: "row.update",

@@ -3,29 +3,9 @@ import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
 
-export type CanvasMenuPayload =
-  | { kind: "block-actions"; rowId: string }
-  | { kind: "slash"; rowId: string };
-
-export interface BlockViewOption {
-  checked: boolean;
-  id: string;
-  label: string;
-}
-
-export interface BlockActionsSession {
-  canTurnInto: boolean;
-  onConvert: (item: SlashMenuItem) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  onMenuOpen?: () => void;
+export interface CanvasMenuPayload {
+  kind: "slash";
   rowId: string;
-  triggerId: string;
-  turnIntoValue?: string;
-  viewOptions?: {
-    items: BlockViewOption[];
-    label: string;
-  };
 }
 
 export interface SlashMenuSession {

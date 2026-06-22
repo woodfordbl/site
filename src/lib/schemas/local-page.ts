@@ -11,6 +11,8 @@ export const localPageSchema = z.object({
   /** Flat block ids in document order for this page's shard. */
   blockOrder: z.array(z.string()).optional(),
   serverBaselineHash: z.string().nullable(),
+  /** Hash of shipped title/slug/icon/parent/sidebarOrder at lazy-seed time. */
+  serverMetadataBaseline: z.string().optional(),
   /** When set, the page is hidden locally (server JSON is unchanged). */
   deletedAt: z.string().optional(),
   createdAt: z.string(),

@@ -28,9 +28,12 @@ import {
   LOCAL_DELETE_BASELINE_HASH,
   resolvePageDeleteTargets,
 } from "@/lib/pages/page-delete.ts";
+import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import { persistPageReposition } from "@/lib/pages/persist-page-reposition.ts";
 import { planPageReposition } from "@/lib/pages/reposition-page.ts";
+import { resetAllToRemote } from "@/lib/pages/reset-all-to-remote.ts";
+import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
 import { purgeSlugTombstonesForUserPageCreate } from "@/lib/pages/resolve-user-page-by-slug.ts";
 import {
   normalizePageSlug,
@@ -56,6 +59,7 @@ function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
 
   if (isHardDeleteLocalPage(localPage)) {
     localPagesCollection.delete(pageId);
+    syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
     return;
   }
 
@@ -64,6 +68,7 @@ function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
       draft.deletedAt = now;
       draft.updatedAt = now;
     });
+    syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
     return;
   }
 
@@ -82,6 +87,8 @@ function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
     createdAt: now,
     updatedAt: now,
   });
+
+  syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
 }
 
 function resolveCreatePage(
@@ -178,6 +185,14 @@ export function pageReducer(
           (pageId) => ({ type: "page.delete", pageId }) satisfies PageEffect
         ),
       };
+    }
+    case "page.resetToRemote": {
+      return {
+        effects: [{ type: "page.resetToRemote", pageId: command.pageId }],
+      };
+    }
+    case "page.resetAllToRemote": {
+      return { effects: [{ type: "page.resetAllToRemote" }] };
     }
     case "page.reposition": {
       try {
@@ -345,6 +360,16 @@ export function usePageDispatch(pages: PageSummary[] = []) {
             break;
           case "page.delete":
             deleteLocalPage(effect.pageId, dispatchPages);
+            break;
+          case "page.resetToRemote":
+            resetPageToRemote(effect.pageId);
+            break;
+          case "page.resetAllToRemote":
+            resetAllToRemote()
+              .then(() => {
+                navigate({ replace: true, to: "/" });
+              })
+              .catch(() => undefined);
             break;
           case "page.reposition":
             applyPageRepositionEffect(effect, dispatchPages, now);

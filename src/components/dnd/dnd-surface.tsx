@@ -22,6 +22,8 @@ export type DragImageStrategy =
 
 export interface DndSurfaceConfig<TDropTarget> {
   channel: DragChannel;
+  /** Optional drop-geometry snapshot; defaults to {@link collectRects} on `rowAttribute`. */
+  collectDropRects?: () => Map<string, DOMRect>;
   dragImage?: DragImageStrategy;
   onDragEnd?: () => void;
   onDragStart?: (args: { sourceId: string; pointer: DragPointer }) => void;
@@ -30,12 +32,14 @@ export interface DndSurfaceConfig<TDropTarget> {
     target: TDropTarget;
     pointer: DragPointer;
   }) => void;
+  /** Chooses drag image per source; falls back to `dragImage` when omitted or undefined. */
+  resolveDragImage?: (sourceId: string) => DragImageStrategy | undefined;
   resolveDropTarget: (args: {
     sourceId: string;
     pointer: DragPointer;
     rects: Map<string, DOMRect>;
   }) => TDropTarget | null;
-  /** Attribute used to snapshot row rects at drag start (e.g. `data-canvas-row-id`). */
+  /** Attribute used to snapshot row rects at drag start when `collectDropRects` is omitted. */
   rowAttribute: string;
 }
 
@@ -97,7 +101,9 @@ export function DndSurface<TDropTarget>({
 
   const value = useMemo<DndContextValue<TDropTarget>>(() => {
     const refreshRects = () => {
-      rectsRef.current = collectRects(configRef.current.rowAttribute);
+      rectsRef.current =
+        configRef.current.collectDropRects?.() ??
+        collectRects(configRef.current.rowAttribute);
     };
 
     // Scroll/resize fire per frame during drag-scroll; re-measuring every row
@@ -166,7 +172,10 @@ export function DndSurface<TDropTarget>({
         if (event.dataTransfer) {
           configRef.current.channel.write(event.dataTransfer, sourceId);
         }
-        applyDragImage(configRef.current.dragImage, sourceId, event);
+        const dragImage =
+          configRef.current.resolveDragImage?.(sourceId) ??
+          configRef.current.dragImage;
+        applyDragImage(dragImage, sourceId, event);
         store.startDrag(sourceId, pointer);
         configRef.current.onDragStart?.({ sourceId, pointer });
 
@@ -176,6 +185,7 @@ export function DndSurface<TDropTarget>({
             x: nativeEvent.clientX,
             y: nativeEvent.clientY,
           };
+          pendingResolveRef.current = true;
           schedule();
         };
         document.addEventListener("dragover", trackPointer);

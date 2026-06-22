@@ -68,12 +68,18 @@ export type CanvasCommand =
       hasHeaderRow?: boolean;
       text?: string;
     }
-  | { type: "table.addRow"; tableRowId: string; edge?: "before" | "after" }
+  | {
+      type: "table.addRow";
+      tableRowId: string;
+      edge?: "before" | "after";
+      focus?: boolean;
+    }
   | {
       type: "table.addColumn";
       tableId: string;
       columnIndex: number;
       edge: "before" | "after";
+      focus?: boolean;
     }
   | { type: "table.removeRow"; tableRowId: string }
   | { type: "table.removeColumn"; tableId: string; columnIndex: number }
@@ -85,6 +91,8 @@ export type CanvasCommand =
       toIndex: number;
     }
   | { type: "table.toggleHeaderRow"; tableId: string; enabled: boolean }
+  | { type: "table.toggleHeaderColumn"; tableId: string; enabled: boolean }
+  | { type: "table.fitToWidth"; tableId: string; targetWidthPx: number }
   | {
       type: "table.updateColumnWidths";
       tableId: string;
@@ -134,6 +142,8 @@ export type PageCommand =
       previousSlug?: string;
     }
   | { type: "page.delete"; pageId: string }
+  | { type: "page.resetToRemote"; pageId: string }
+  | { type: "page.resetAllToRemote" }
   | {
       type: "page.reposition";
       pageId: string;

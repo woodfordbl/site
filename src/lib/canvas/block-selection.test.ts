@@ -5,6 +5,7 @@ import {
   emptyBlockSelection,
   expandListContainerSelection,
   expandRowIdsForDelete,
+  rangeRowIdsBetween,
   selectionIncludesAllListChildren,
   toggleBlockSelection,
 } from "@/lib/canvas/block-selection.ts";
@@ -80,6 +81,40 @@ describe("block selection", () => {
 
     expect(selected.anchorRowId).toBe(first);
     expect(selected.selectedRowIds).toHaveLength(3);
+  });
+
+  it("shift+click range stays within the same column", () => {
+    const rows = buildBlockTree([
+      { id: "cols", type: "columns", props: {} },
+      { id: "col1", type: "column", parentId: "cols", props: { width: 1 } },
+      { id: "col2", type: "column", parentId: "cols", props: { width: 1 } },
+      { id: "a1", type: "text", parentId: "col1", props: { text: "A1" } },
+      { id: "a2", type: "text", parentId: "col1", props: { text: "A2" } },
+      { id: "b1", type: "text", parentId: "col2", props: { text: "B1" } },
+    ]);
+
+    expect(rangeRowIdsBetween(rows, "a2", "a1")).toEqual(["a1", "a2"]);
+    expect(rangeRowIdsBetween(rows, "a2", "b1")).toEqual(["a2", "col2", "b1"]);
+  });
+
+  it("shift+click in a column selects only sibling blocks", () => {
+    const rows = buildBlockTree([
+      { id: "cols", type: "columns", props: {} },
+      { id: "col1", type: "column", parentId: "cols", props: { width: 1 } },
+      { id: "col2", type: "column", parentId: "cols", props: { width: 1 } },
+      { id: "a1", type: "text", parentId: "col1", props: { text: "A1" } },
+      { id: "a2", type: "text", parentId: "col1", props: { text: "A2" } },
+      { id: "b1", type: "text", parentId: "col2", props: { text: "B1" } },
+    ]);
+
+    const selected = toggleBlockSelection(
+      rows,
+      { selectedRowIds: ["a2"], anchorRowId: "a2" },
+      "a1",
+      { shiftKey: true }
+    );
+
+    expect(selected.selectedRowIds).toEqual(["a1", "a2"]);
   });
 
   it("shift+click with no anchor or focus selects only the clicked row", () => {

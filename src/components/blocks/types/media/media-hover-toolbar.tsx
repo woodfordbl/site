@@ -4,7 +4,7 @@ import {
   IconDownload,
   IconLink,
 } from "@tabler/icons-react";
-import { type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button.tsx";
 import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import {
@@ -25,6 +25,7 @@ interface MediaHoverToolbarProps {
   className?: string;
   displayUrl: string;
   onView: () => void;
+  positionStyle?: CSSProperties;
   props: MediaProps;
 }
 
@@ -52,7 +53,7 @@ function ToolbarButton({
             }}
             size="icon-xs"
             type="button"
-            variant="ghost"
+            variant="overlayItem"
           >
             {children}
           </Button>
@@ -67,6 +68,7 @@ export function MediaHoverToolbar({
   className,
   displayUrl,
   onView,
+  positionStyle,
   props,
 }: MediaHoverToolbarProps) {
   const [isActive, setIsActive] = useState(false);
@@ -76,7 +78,8 @@ export function MediaHoverToolbar({
       <ButtonGroup
         aria-label="Media actions"
         className={cn(
-          "absolute top-2 right-2 z-20 opacity-0 transition-opacity duration-150 ease-[var(--ease-out-strong)]",
+          "absolute z-20 opacity-0 transition-opacity duration-150 ease-[var(--ease-out-strong)]",
+          !positionStyle && "top-2 right-2",
           "group-focus-within/media:opacity-100 group-hover/media:opacity-100",
           isActive && "opacity-100",
           className
@@ -92,6 +95,7 @@ export function MediaHoverToolbar({
         onPointerDown={(event) => {
           event.stopPropagation();
         }}
+        style={positionStyle}
         variant="overlay"
       >
         <ToolbarButton label="View" onClick={onView}>

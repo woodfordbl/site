@@ -5,6 +5,7 @@ import {
   IconDotsVertical,
   IconPencil,
   IconPhoto,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import type { RefObject } from "react";
@@ -19,21 +20,25 @@ import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 
 interface PageListRowDropdownProps {
   canDelete: boolean;
+  canResetToRemote: boolean;
   menuActionRef: RefObject<HTMLButtonElement | null>;
   onChangeIcon: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onRename: () => void;
+  onResetToRemote: () => void;
   title: string;
 }
 
 export function PageListRowDropdown({
   canDelete,
+  canResetToRemote,
   menuActionRef,
   onChangeIcon,
   onDelete,
   onDuplicate,
   onRename,
+  onResetToRemote,
   title,
 }: PageListRowDropdownProps) {
   return (
@@ -80,6 +85,12 @@ export function PageListRowDropdown({
           <IconCopy />
           Duplicate page
         </DropdownMenuItem>
+        {canResetToRemote ? (
+          <DropdownMenuItem onClick={onResetToRemote}>
+            <IconRefresh />
+            Reset to site version
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem
           disabled={!canDelete}
           onClick={onDelete}

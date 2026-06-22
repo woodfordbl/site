@@ -1,7 +1,16 @@
-import { type ReactNode, useCallback, useMemo } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import "@/components/blocks/register-containers.ts";
+import {
+  measureTableRowDragPreview,
+  TableRowDragPreview,
+  type TableRowDragPreviewState,
+} from "@/components/blocks/types/table/table-row-drag-preview.tsx";
+import {
+  BlockActionsMenuProvider,
+  useCloseBlockActionsMenuBeforeAction,
+} from "@/components/canvas/block-actions-menu.tsx";
 import {
   type CanvasEditorActions,
   CanvasEditorContext,
@@ -9,10 +18,7 @@ import {
   CanvasFocusContext,
   CanvasSelectionContext,
 } from "@/components/canvas/canvas-editor-context.tsx";
-import {
-  CanvasMenuProvider,
-  useCloseBlockActionsMenuBeforeAction,
-} from "@/components/canvas/canvas-menu-context.tsx";
+import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx";
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
@@ -22,6 +28,7 @@ import {
   DndSurface,
   type DndSurfaceConfig,
 } from "@/components/dnd/dnd-surface.tsx";
+import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
 import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
@@ -33,17 +40,27 @@ import {
   type DropTarget,
   resolveDropTargetFromPointer,
 } from "@/lib/canvas/resolve-drop-target.ts";
+import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
   footerHost?: HTMLElement | null;
+  pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }
 
 /** HTML5 drag channel for canvas rows. */
 const canvasRowChannel = createDragChannel("application/x-canvas-row-id");
+
+function isTableRowDragSource(sourceId: string): boolean {
+  return (
+    document.querySelector(
+      `[data-table-row-id="${CSS.escape(sourceId)}"]`
+    ) instanceof HTMLElement
+  );
+}
 
 type CanvasEditorState = ReturnType<typeof useCanvasEditor>;
 
@@ -113,6 +130,11 @@ function PageCanvasEditorBody({
     },
   });
 
+  const [tableRowPreviewMeta, setTableRowPreviewMeta] = useState<Omit<
+    TableRowDragPreviewState,
+    "clientX" | "clientY"
+  > | null>(null);
+
   const dndConfig = useMemo<DndSurfaceConfig<DropTarget>>(
     () => ({
       channel: canvasRowChannel,
@@ -139,14 +161,23 @@ function PageCanvasEditorBody({
         }
         editor.clearSelection();
       },
-      dragImage: {
-        kind: "native-clone",
-        getNode: (rowId) => {
-          const node = document.querySelector(
-            `[${CANVAS_ROW_ATTRIBUTE}="${rowId}"] [data-canvas-row-content]`
-          );
-          return node instanceof HTMLElement ? node : null;
-        },
+      resolveDragImage: (sourceId) => {
+        if (isTableRowDragSource(sourceId)) {
+          return { kind: "overlay" };
+        }
+        return {
+          kind: "native-clone",
+          getNode: resolveCanvasRowDragPreviewNode,
+        };
+      },
+      onDragStart: ({ sourceId, pointer }) => {
+        if (!isTableRowDragSource(sourceId)) {
+          return;
+        }
+        setTableRowPreviewMeta(measureTableRowDragPreview(sourceId, pointer));
+      },
+      onDragEnd: () => {
+        setTableRowPreviewMeta(null);
       },
     }),
     [
@@ -250,6 +281,19 @@ function PageCanvasEditorBody({
           <CanvasEditorStateContext.Provider value={stateValue}>
             <CanvasSlashProvider pages={pages}>
               <DndSurface config={dndConfig}>
+                <DragOverlay>
+                  {({ pointer }) =>
+                    tableRowPreviewMeta ? (
+                      <TableRowDragPreview
+                        preview={{
+                          ...tableRowPreviewMeta,
+                          clientX: pointer.x,
+                          clientY: pointer.y,
+                        }}
+                      />
+                    ) : null
+                  }
+                </DragOverlay>
                 <CanvasRowDndBridge>
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
@@ -290,7 +334,7 @@ function CanvasDropZone({ children }: { children: ReactNode }) {
     <div
       className={cn(
         isDragging &&
-          "[&_input]:pointer-events-none [&_textarea]:pointer-events-none"
+          "cursor-grabbing [&_input]:pointer-events-none [&_textarea]:pointer-events-none"
       )}
       {...getDropZoneProps()}
     >
@@ -301,19 +345,22 @@ function CanvasDropZone({ children }: { children: ReactNode }) {
 
 export function PageCanvasEditor({
   footerHost,
+  pageHasLocalDraft,
   serverPage,
   titleSlot,
 }: PageCanvasEditorProps) {
-  const editor = useCanvasEditor(serverPage);
+  const editor = useCanvasEditor(serverPage, pageHasLocalDraft);
 
   return (
     <CanvasMenuProvider>
-      <PageCanvasEditorBody
-        editor={editor}
-        footerHost={footerHost}
-        serverPage={serverPage}
-        titleSlot={titleSlot}
-      />
+      <BlockActionsMenuProvider>
+        <PageCanvasEditorBody
+          editor={editor}
+          footerHost={footerHost}
+          serverPage={serverPage}
+          titleSlot={titleSlot}
+        />
+      </BlockActionsMenuProvider>
     </CanvasMenuProvider>
   );
 }
