@@ -1,5 +1,10 @@
 import type { Page } from "@/lib/schemas/page.ts";
 
+type PagesCatalogRevisionInput = Pick<
+  Page,
+  "id" | "parentId" | "slug" | "title"
+>;
+
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -22,7 +27,9 @@ function hashString(input: string): string {
 }
 
 /** Revision token for the shipped page catalog; changes when ids or slugs change. */
-export function computePagesCatalogRevision(pages: Page[]): string {
+export function computePagesCatalogRevision(
+  pages: PagesCatalogRevisionInput[]
+): string {
   const payload = pages
     .map((page) => ({
       id: page.id,
