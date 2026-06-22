@@ -320,6 +320,23 @@ export function TableView({ row, mode }: BlockContainerProps) {
     () => new Set(grid?.rows.map((tableRow) => tableRow.rowId) ?? []),
     [grid?.rows]
   );
+  const gutterOpenTimeout = useTimeout();
+  const [gutterRevealed, setGutterRevealed] = useState(false);
+
+  const handleTablePointerEnter = () => {
+    if (mode !== "edit") {
+      return;
+    }
+    gutterOpenTimeout.clear();
+    gutterOpenTimeout.start(TABLE_GUTTER_REVEAL_DELAY_MS, () => {
+      setGutterRevealed(true);
+    });
+  };
+
+  const handleTablePointerLeave = () => {
+    gutterOpenTimeout.clear();
+    setGutterRevealed(false);
+  };
 
   const tableBlock = row.effectiveBlock;
   if (!grid || tableBlock.type !== "table") {
@@ -350,23 +367,6 @@ export function TableView({ row, mode }: BlockContainerProps) {
   const columnHandleRevealClasses = getTableColumnHandleRevealClasses(
     grid.columnCount
   );
-  const gutterOpenTimeout = useTimeout();
-  const [gutterRevealed, setGutterRevealed] = useState(false);
-
-  const handleTablePointerEnter = () => {
-    if (mode !== "edit") {
-      return;
-    }
-    gutterOpenTimeout.clear();
-    gutterOpenTimeout.start(TABLE_GUTTER_REVEAL_DELAY_MS, () => {
-      setGutterRevealed(true);
-    });
-  };
-
-  const handleTablePointerLeave = () => {
-    gutterOpenTimeout.clear();
-    setGutterRevealed(false);
-  };
 
   return (
     <TableColumnDnD

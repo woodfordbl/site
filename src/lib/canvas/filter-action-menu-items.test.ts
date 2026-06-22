@@ -5,15 +5,24 @@ import {
   matchesActionMenuQuery,
 } from "@/lib/canvas/filter-action-menu-items.ts";
 
+function noopSelect(): void {
+  // Test fixture only — filter tests do not invoke handlers.
+}
+
 describe("filterActionMenuItems", () => {
   const items = [
     {
       id: "duplicate",
       label: "Duplicate",
       keywords: ["copy"],
-      onSelect: () => {},
+      onSelect: noopSelect,
     },
-    { id: "delete", label: "Delete", keywords: ["remove"], onSelect: () => {} },
+    {
+      id: "delete",
+      label: "Delete",
+      keywords: ["remove"],
+      onSelect: noopSelect,
+    },
   ];
 
   it("returns all items for an empty query", () => {

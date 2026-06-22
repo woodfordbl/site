@@ -106,7 +106,7 @@ export function TableColumnDragPreview({
               "flex min-h-0 items-start border-border border-b px-2 py-1.5 last:border-b-0",
               preview.cellIsHeader[index] && "bg-muted/40 font-medium"
             )}
-            key={`${label}-${index}`}
+            key={`${label}-${preview.cellHeights[index]}`}
             style={{ height: preview.cellHeights[index] }}
           >
             <span className="min-w-0 truncate">{label || "\u00a0"}</span>

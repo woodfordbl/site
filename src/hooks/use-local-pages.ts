@@ -76,12 +76,12 @@ export function useLocalPages(): LocalPage[] {
     return bootstrapPages;
   }
 
-  const livePages =
-    collectionPages.length > 0
-      ? collectionPages
-      : readBootstrapLocalPages().length > 0
-        ? bootstrapPages
-        : SERVER_LOCAL_PAGES;
+  let livePages = SERVER_LOCAL_PAGES;
+  if (collectionPages.length > 0) {
+    livePages = collectionPages;
+  } else if (readBootstrapLocalPages().length > 0) {
+    livePages = bootstrapPages;
+  }
 
   return mergeLocalPageSources(previewPages, bootstrapPages, livePages);
 }

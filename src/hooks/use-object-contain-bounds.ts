@@ -40,6 +40,8 @@ export function useObjectContainBounds(
     setBounds((current) => (boundsAreEqual(current, next) ? current : next));
   }, [element, naturalSize]);
 
+  // layoutDependency is an intentional sync remeasure trigger from resize width.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: external layout signal
   useLayoutEffect(() => {
     measure();
   }, [layoutDependency, measure]);

@@ -46,6 +46,76 @@ function getTableGridFromRows(rows: CanvasRow[], tableId: string) {
   return deriveTableGrid(tableRow);
 }
 
+type TableCountDispatch = ReturnType<typeof useCanvasEditorContext>["dispatch"];
+
+function addOneTableCountUnit(
+  axis: TableCountScrubAxis,
+  dispatch: TableCountDispatch,
+  getRows: () => CanvasRow[],
+  tableId: string
+): boolean {
+  const grid = getTableGridFromRows(getRows(), tableId);
+  if (!grid) {
+    return false;
+  }
+
+  if (axis === "row") {
+    const lastRowId = grid.rows.at(-1)?.rowId;
+    if (!lastRowId) {
+      return false;
+    }
+
+    dispatch({
+      type: "table.addRow",
+      tableRowId: lastRowId,
+      edge: "after",
+      focus: false,
+    });
+    return true;
+  }
+
+  dispatch({
+    type: "table.addColumn",
+    tableId,
+    columnIndex: grid.columnCount - 1,
+    edge: "after",
+    focus: false,
+  });
+  return true;
+}
+
+function removeOneTableCountUnit(
+  axis: TableCountScrubAxis,
+  dispatch: TableCountDispatch,
+  getRows: () => CanvasRow[],
+  tableId: string
+): boolean {
+  const grid = getTableGridFromRows(getRows(), tableId);
+  if (!grid) {
+    return false;
+  }
+
+  if (axis === "row") {
+    const lastRowId = grid.rows.at(-1)?.rowId;
+    if (!lastRowId) {
+      return false;
+    }
+
+    dispatch({
+      type: "table.removeRow",
+      tableRowId: lastRowId,
+    });
+    return true;
+  }
+
+  dispatch({
+    type: "table.removeColumn",
+    tableId,
+    columnIndex: grid.columnCount - 1,
+  });
+  return true;
+}
+
 /**
  * Pointer scrub on table trailing plus controls: click adds one row/column;
  * drag adjusts trailing count incrementally with live dispatch.
@@ -92,64 +162,18 @@ export function useTableCountScrub({
       let currentCount = getCurrentCount();
 
       while (currentCount < targetCount) {
-        const grid = getTableGridFromRows(getRows(), tableId);
-        if (!grid) {
+        if (!addOneTableCountUnit(axis, dispatch, getRows, tableId)) {
           return;
         }
-
-        if (axis === "row") {
-          const lastRowId = grid.rows.at(-1)?.rowId;
-          if (!lastRowId) {
-            return;
-          }
-
-          dispatch({
-            type: "table.addRow",
-            tableRowId: lastRowId,
-            edge: "after",
-            focus: false,
-          });
-          netAddedRef.current += 1;
-        } else {
-          dispatch({
-            type: "table.addColumn",
-            tableId,
-            columnIndex: grid.columnCount - 1,
-            edge: "after",
-            focus: false,
-          });
-          netAddedRef.current += 1;
-        }
-
+        netAddedRef.current += 1;
         currentCount = getCurrentCount();
       }
 
       while (currentCount > targetCount) {
-        const grid = getTableGridFromRows(getRows(), tableId);
-        if (!grid) {
+        if (!removeOneTableCountUnit(axis, dispatch, getRows, tableId)) {
           return;
         }
-
-        if (axis === "row") {
-          const lastRowId = grid.rows.at(-1)?.rowId;
-          if (!lastRowId) {
-            return;
-          }
-
-          dispatch({
-            type: "table.removeRow",
-            tableRowId: lastRowId,
-          });
-          netAddedRef.current -= 1;
-        } else {
-          dispatch({
-            type: "table.removeColumn",
-            tableId,
-            columnIndex: grid.columnCount - 1,
-          });
-          netAddedRef.current -= 1;
-        }
-
+        netAddedRef.current -= 1;
         currentCount = getCurrentCount();
       }
     },

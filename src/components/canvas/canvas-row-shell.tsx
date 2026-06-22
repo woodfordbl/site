@@ -144,6 +144,26 @@ export function CanvasRowShell({
   const showBefore = dropEdge === "before";
   const showAfter = dropEdge === "after";
 
+  let gutterHost: React.ReactNode = null;
+  if (gutter) {
+    gutterHost = (
+      <div
+        className="pointer-events-none -ml-12 w-12 shrink-0 [&_.canvas-block-gutter]:opacity-0"
+        data-canvas-row-gutter-host
+      >
+        <div className="pointer-events-auto h-fit">{gutter}</div>
+      </div>
+    );
+  } else if (reserveGutterSpace) {
+    gutterHost = (
+      <div
+        aria-hidden
+        className="-ml-12 w-12 shrink-0"
+        data-canvas-row-gutter-host
+      />
+    );
+  }
+
   return (
     <div
       className={cn("relative overflow-visible", className)}
@@ -172,20 +192,7 @@ export function CanvasRowShell({
         onPointerOver={handleRowLayoutPointerOver}
         ref={rowLayoutRef}
       >
-        {gutter ? (
-          <div
-            className="pointer-events-none -ml-12 w-12 shrink-0 [&_.canvas-block-gutter]:opacity-0"
-            data-canvas-row-gutter-host
-          >
-            <div className="pointer-events-auto h-fit">{gutter}</div>
-          </div>
-        ) : reserveGutterSpace ? (
-          <div
-            aria-hidden
-            className="-ml-12 w-12 shrink-0"
-            data-canvas-row-gutter-host
-          />
-        ) : null}
+        {gutterHost}
         <div
           className={cn(
             "min-h-0 min-w-0 flex-1 rounded-lg transition-colors",

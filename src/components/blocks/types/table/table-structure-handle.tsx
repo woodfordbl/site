@@ -13,6 +13,59 @@ import { cn } from "@/lib/utils.ts";
 
 type TableStructureHandleAxis = "column" | "row";
 
+interface TableStructureGripVisualsProps {
+  axis: TableStructureHandleAxis;
+  GripIcon: typeof IconGripHorizontal;
+  gripPadding: string;
+  isAccentState: boolean;
+}
+
+function TableStructureGripVisuals({
+  axis,
+  gripPadding,
+  isAccentState,
+  GripIcon,
+}: TableStructureGripVisualsProps) {
+  return (
+    <>
+      <span
+        aria-hidden
+        className={cn(
+          "absolute shrink-0 rounded-full transition-colors duration-0",
+          axis === "row" ? "h-5 w-0.5" : "h-0.5 w-5",
+          isAccentState ? "bg-primary" : "bg-border",
+          isAccentState && "opacity-0"
+        )}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          "relative z-10 shrink-0 rounded-full bg-muted-foreground transition-opacity duration-0",
+          axis === "row" ? "mx-px h-4 w-0.5" : "mx-px h-0.5 w-5",
+          "group-hover/handle:opacity-0 group-focus-visible/handle:opacity-0",
+          isAccentState && "opacity-0"
+        )}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          "absolute z-10 flex items-center justify-center rounded-sm border border-border bg-background transition-[opacity,border-color,color] duration-0",
+          gripPadding,
+          "opacity-0",
+          !isAccentState &&
+            "group-hover/handle:text-muted-foreground group-hover/handle:opacity-100",
+          !isAccentState &&
+            "group-focus-visible/handle:text-muted-foreground group-focus-visible/handle:opacity-100",
+          isAccentState &&
+            "border-primary bg-primary text-primary-foreground opacity-100"
+        )}
+      >
+        <GripIcon className="size-3 shrink-0" />
+      </span>
+    </>
+  );
+}
+
 interface TableStructureHandleProps {
   axis: TableStructureHandleAxis;
   columnIndex?: number;
@@ -117,40 +170,12 @@ export function TableStructureHandle({
               ref={triggerRef}
               type="button"
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute shrink-0 rounded-full transition-colors duration-0",
-                  axis === "row" ? "h-5 w-0.5" : "h-0.5 w-5",
-                  isAccentState ? "bg-primary" : "bg-border",
-                  isAccentState && "opacity-0"
-                )}
+              <TableStructureGripVisuals
+                axis={axis}
+                GripIcon={GripIcon}
+                gripPadding={gripPadding}
+                isAccentState={isAccentState}
               />
-              <span
-                aria-hidden
-                className={cn(
-                  "relative z-10 shrink-0 rounded-full bg-muted-foreground transition-opacity duration-0",
-                  axis === "row" ? "mx-px h-4 w-0.5" : "mx-px h-0.5 w-5",
-                  "group-hover/handle:opacity-0 group-focus-visible/handle:opacity-0",
-                  isAccentState && "opacity-0"
-                )}
-              />
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute z-10 flex items-center justify-center rounded-sm border border-border bg-background transition-[opacity,border-color,color] duration-0",
-                  gripPadding,
-                  "opacity-0",
-                  !isAccentState &&
-                    "group-hover/handle:text-muted-foreground group-hover/handle:opacity-100",
-                  !isAccentState &&
-                    "group-focus-visible/handle:text-muted-foreground group-focus-visible/handle:opacity-100",
-                  isAccentState &&
-                    "border-primary bg-primary text-primary-foreground opacity-100"
-                )}
-              >
-                <GripIcon className="size-3 shrink-0" />
-              </span>
             </button>
           }
         />

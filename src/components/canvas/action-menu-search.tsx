@@ -53,12 +53,7 @@ export function ActionMenuSearch({
   query,
 }: ActionMenuSearchProps) {
   return (
-    <div
-      className="px-1 pb-1"
-      onKeyDown={(event) => {
-        event.stopPropagation();
-      }}
-    >
+    <div className="px-1 pb-1">
       <InputGroup className="h-8">
         <InputGroupAddon align="inline-start">
           <InputGroupText>
@@ -70,6 +65,9 @@ export function ActionMenuSearch({
           autoComplete="off"
           onChange={(event) => {
             onQueryChange(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
           }}
           placeholder="Search actions…"
           ref={inputRef}

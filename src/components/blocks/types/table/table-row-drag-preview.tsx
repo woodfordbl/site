@@ -101,7 +101,7 @@ export function TableRowDragPreview({
               "flex min-h-0 min-w-0 items-start border-border border-r px-2 py-1.5 last:border-r-0",
               preview.cellIsHeader[index] && "bg-muted/40 font-medium"
             )}
-            key={`${label}-${index}`}
+            key={`${label}-${preview.cellWidths[index]}`}
             style={{ width: preview.cellWidths[index] }}
           >
             <span className="min-w-0 truncate">{label || "\u00a0"}</span>
