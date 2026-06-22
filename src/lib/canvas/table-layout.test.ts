@@ -15,6 +15,7 @@ import {
   buildBlocksForTableCreate,
   buildTableBlock,
   computeTableColumnResizeWidths,
+  computeTableFitToWidthColumnWidths,
   planTableCreate,
   planTableFocusAdjacentCell,
   planTableRemoveColumn,
@@ -121,6 +122,14 @@ describe("computeTableColumnResizeWidths — only resized column changes", () =>
     });
     expect(next[0]).toBe(120);
     expect(next[1]).toBe(120);
+  });
+});
+
+describe("computeTableFitToWidthColumnWidths", () => {
+  it("scales columns proportionally to the target width", () => {
+    const next = computeTableFitToWidthColumnWidths([120, 240, 120], 480);
+    expect(next.reduce((sum, width) => sum + width, 0)).toBe(480);
+    expect(next[1]).toBeGreaterThan(next[0] ?? 0);
   });
 });
 

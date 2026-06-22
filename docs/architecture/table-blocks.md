@@ -6,13 +6,13 @@ Notion-style editable grids: a **table** container holds **tableRow** rows, each
 
 | Block | Kind | Props | Children |
 |-------|------|-------|----------|
-| `table` | container | `hasHeaderRow: boolean`, `columnWidths: number[]` (pixel widths, default 120px) | `tableRow` only |
+| `table` | container | `hasHeaderRow: boolean`, `hasHeaderColumn: boolean`, `columnWidths: number[]` (pixel widths, default 120px) | `tableRow` only |
 | `tableRow` | container | `{}` | `tableCell` only (sibling order = column index) |
 | `tableCell` | leaf | `{ text: string }` | none |
 
 Defaults on slash create: **3×3**, `hasHeaderRow: true`, equal pixel `columnWidths` (`DEFAULT_TABLE_COLUMN_WIDTH` = 120px per column). Legacy stored ratios ≤10 migrate to px at render. Limits: `MIN_TABLE_COLUMNS = 2`, `MIN_TABLE_ROWS = 1`, `MAX_TABLE_COLUMNS = 10`.
 
-Tables work at canvas root and inside **column** containers (`allowedChildTypes: *`). The wrapper uses `w-full min-w-0` with horizontal scroll when column widths exceed the parent. On overflow, the layout bleeds `-mr-12 w-[calc(100%+3rem)]` into the canvas right padding; scroll content pairs `pl-12` / `-ml-12` so max scroll aligns the table’s trailing edge with the normal content boundary.
+Tables work at canvas root and inside **column** containers (`allowedChildTypes: *`). The wrapper uses `w-full min-w-0` with horizontal scroll when column widths exceed the parent. On overflow, the edit layout bleeds `-mx-12 w-[calc(100%+6rem)]` into both canvas horizontal paddings; scroll content pairs `px-12` / `-mx-12` so max scroll aligns the table’s leading and trailing edges with the panel padding (and the block gutter scrolls with the table).
 
 ## Worked example (test fixture)
 
@@ -40,7 +40,7 @@ Planners live in [`table-layout.ts`](../../src/lib/canvas/table-layout.ts); `der
 
 ## Rendering
 
-[`TableView`](../../src/components/blocks/types/table/table-view.tsx) renders the full grid — cells do **not** go through [`BlockTreeNode`](../../src/components/canvas/block-tree-node.tsx) (no gutters inside the grid). The outer table block keeps the normal canvas gutter for Turn into / Delete / Duplicate.
+[`TableView`](../../src/components/blocks/types/table/table-view.tsx) renders the full grid — cells do **not** go through [`BlockTreeNode`](../../src/components/canvas/block-tree-node.tsx) (no gutters inside the grid). The outer table block keeps the normal canvas gutter for Turn into / Delete / Duplicate in edit mode; that gutter lives inside the table’s horizontal scroll area (with a reserved gutter column on the row shell so content alignment matches other blocks).
 
 Layout markers:
 
@@ -63,13 +63,13 @@ Row and column chrome share [`TableStructureHandle`](../../src/components/blocks
 
 **Click** (press and release without drag) selects the row or column and opens [`TableStructureHandleMenu`](../../src/components/blocks/types/table/table-structure-handle-menu.tsx) (insert, duplicate, clear contents, delete). **Drag** reorders: rows use the canvas row channel (`useCanvasRowSurface` + [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx)); columns use the nested table column surface. Header row has no row handle when `hasHeaderRow`.
 
-**Structure selection:** click sets local `TableStructureSelection` state; affected cells get accent perimeter borders (`border-*-accent` via [`getTableCellStructureSelectionClassName`](../../src/components/blocks/types/table/table-structure-selection.ts)). Selection clears when a cell receives text focus (`onCellFocus`).
+**Structure selection:** click opens the structure menu and sets local `TableStructureSelection` state; affected cells get a 2px primary outer perimeter (`border-*-2 border-*-primary` via [`getTableCellStructureSelectionClassName`](../../src/components/blocks/types/table/table-structure-selection.ts)). Selection clears when the menu closes (Escape, outside click, menu action, or drag). The structure menu uses the grab trigger with `align="start"` (`side="bottom"` for columns, `side="right"` for rows).
 
 Header row: first `tableRow` uses muted `TableHead` styling; column handles and a full-height [`TableColumnResizeOverlay`](../../src/components/blocks/types/table/table-column-resize-zone.tsx) appear in edit mode.
 
 Column widths: `<colgroup>` pixel widths from `columnWidths` (legacy ratio values ≤10 migrate to px at render); live preview during resize via [`use-table-column-resize.ts`](../../src/components/blocks/types/table/use-table-column-resize.ts) — only the dragged column changes width. Resize hover uses `bg-sidebar-border` (same as sidebar rail).
 
-Horizontal scroll: Base UI [`ScrollArea`](../../src/components/ui/scroll-area.tsx) with a horizontal scrollbar (auto-hide at rest via global CSS). No edge fade on tables. The wrapper bleeds `-mr-12 w-[calc(100%+3rem)]` into canvas right padding; scroll content uses matching `pl-12` / `-ml-12` so the table stays left-aligned at rest but can scroll until its trailing edge meets the normal content boundary (not the bled panel edge). The table wrapper uses `pt-3 pl-3 pr-3` so structure-handle pills and the add-column gutter sit inside scroll content (not clipped by the viewport). Scroll content width is the table (+ horizontal inset + add-row strip below); [`TableAddColumnButton`](../../src/components/blocks/types/table/table-controls.tsx) is absolutely positioned in the trailing `pr-3` gutter beside the last column. Add row/column: hover `TableAddRowButton` / `TableAddColumnButton` and block menu actions on the selected table block.
+Horizontal scroll: Base UI [`ScrollArea`](../../src/components/ui/scroll-area.tsx) with a horizontal scrollbar (auto-hide at rest via global CSS). No edge fade on tables. In edit mode the wrapper bleeds `-mx-12 w-[calc(100%+6rem)]` into both canvas horizontal paddings; scroll content uses matching `px-12` / `-mx-12` so the table stays left-aligned at rest but can scroll until its leading edge (row handles, block gutter) and trailing edge meet the panel padding. The block gutter (`RowGutter`) is the first column inside scroll content and scrolls horizontally with the table. View mode keeps the prior right-only bleed (`-mr-12`, `pl-12` / `-ml-12`). The table wrapper uses `pt-3 pl-3 pr-8` so structure-handle pills and the add-column gutter sit inside scroll content (not clipped by the viewport). Scroll content width is the gutter (edit) + table (+ horizontal inset + add-row strip below); [`TableAddColumnButton`](../../src/components/blocks/types/table/table-controls.tsx) is absolutely positioned in the trailing `pr-8` gutter beside the last column. Add row/column: hover `TableAddRowButton` / `TableAddColumnButton` and block menu actions on the selected table block.
 
 ## Cell keyboard
 
@@ -99,6 +99,8 @@ Table-scoped commands use **`tableId`** for batch column ops (`reorderColumn`, `
 | `table.removeColumn` | Blocked at `MIN_TABLE_COLUMNS` |
 | `table.reorderColumn` | Batch `move` per row + splice `columnWidths` |
 | `table.toggleHeaderRow` | `persist` table props only |
+| `table.toggleHeaderColumn` | `persist` table props only |
+| `table.fitToWidth` | Proportionally scale `columnWidths` to a target viewport width |
 | `table.updateColumnWidths` | Commit resize |
 | `table.focusCell` | Tab/Enter grid navigation |
 
@@ -110,8 +112,8 @@ Slash menu: **Table** via `table.create` (default 3×3 grid). Registry: [`regist
 
 Two scopes inside `[data-table-layout]`:
 
-1. **Row reorder** — canvas row channel (`application/x-canvas-row-id`) on [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) via `useCanvasRowSurface` (preserved through nested column DnD by [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) on [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)). Resolver: [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) (vertical midpoint bands on `[data-table-row-id]`). Header row (`r1` when `hasHeaderRow`) is not draggable.
-2. **Column reorder** — nested [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (`TableColumnDnD`) with `application/x-table-column-index`; horizontal midpoint bands on `[data-table-column-drag-id]` header cells → `table.reorderColumn`. Drop indicators use `bg-selection` vertical lines between columns.
+1. **Row reorder** — canvas row channel (`application/x-canvas-row-id`) on [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) via `useCanvasRowSurface` (preserved through nested column DnD by [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) on [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)). Resolver: [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) (vertical midpoint bands on full-width `[data-table-row-id]` rects pinned to the `<table>` left/right). Header row (`r1` when `hasHeaderRow`) is not draggable. Drag previews ([`TableRowDragPreview`](../../src/components/blocks/types/table/table-row-drag-preview.tsx)) show the primary-bordered row plus the left grip handle; the source handle hides while dragging.
+2. **Column reorder** — nested [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (`TableColumnDnD`) with `application/x-table-column-index`; horizontal midpoint bands on full-height column strips from [`collectTableColumnDropRects`](../../src/lib/dnd/collect-table-column-rects.ts) (merges every `[data-table-column-index]` cell in the column, pinned to the `<table>` top/bottom) → `table.reorderColumn`. [`TableStructureDropIndicators`](../../src/components/blocks/types/table/table-structure-drop-indicators.tsx) renders one full-height vertical or full-width horizontal `bg-primary` line at the active boundary. Drag previews ([`TableColumnDragPreview`](../../src/components/blocks/types/table/table-column-drag-preview.tsx)) show the primary-bordered column plus the top grip handle; the source handle hides while dragging.
 
 [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) calls the table row resolver before columns/canvas fallback when the pointer is inside a table layout. Column drops resolve inside `TableColumnDnD`, not the top-level canvas resolver.
 

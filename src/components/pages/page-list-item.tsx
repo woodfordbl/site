@@ -3,6 +3,7 @@ import {
   IconCopy,
   IconPencil,
   IconPhoto,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -60,6 +61,7 @@ import {
 } from "@/lib/pages/resolve-page-nav-target.ts";
 import type { PageNavTarget } from "@/lib/pages/slugify.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import { isLocallyDeletedPage } from "@/lib/schemas/local-page.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageListItemProps {
@@ -96,13 +98,13 @@ function PageListRowDropIndicators({
       {dropIndicator === "before" ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 -translate-y-1/2 rounded-full bg-(--selection)"
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 -translate-y-1/2 rounded-full bg-accent"
         />
       ) : null}
       {dropIndicator === "after" ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1 translate-y-1/2 rounded-full bg-(--selection)"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1 translate-y-1/2 rounded-full bg-accent"
         />
       ) : null}
     </>
@@ -112,6 +114,7 @@ function PageListRowDropIndicators({
 interface PageListRowLinkProps {
   active: boolean;
   canDelete: boolean;
+  canResetToRemote: boolean;
   depth: number;
   dropIndicator: "before" | "after" | null;
   expandedIds: Set<string>;
@@ -125,6 +128,7 @@ interface PageListRowLinkProps {
   onDelete: () => void;
   onDuplicate: () => void;
   onRename: () => void;
+  onResetToRemote: () => void;
   onToggleExpand: (pageId: string) => void;
   pageId: string;
   pages: PageSummary[];
@@ -135,6 +139,7 @@ interface PageListRowLinkProps {
 function PageListRowLink({
   active,
   canDelete,
+  canResetToRemote,
   depth,
   dropIndicator,
   expandedIds,
@@ -148,6 +153,7 @@ function PageListRowLink({
   onDelete,
   onDuplicate,
   onRename,
+  onResetToRemote,
   onToggleExpand,
   pageId,
   pages,
@@ -169,7 +175,7 @@ function PageListRowLink({
 
   const menuButtonClassName = cn(
     pageListRowPaddingLeft(depth),
-    isNestTarget && "bg-(--selection)",
+    isNestTarget && "bg-accent",
     isDragging &&
       "text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
   );
@@ -255,11 +261,13 @@ function PageListRowLink({
       {isDragging ? null : (
         <PageListRowDropdown
           canDelete={canDelete}
+          canResetToRemote={canResetToRemote}
           menuActionRef={menuActionRef}
           onChangeIcon={onChangeIcon}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
           onRename={onRename}
+          onResetToRemote={onResetToRemote}
           title={title}
         />
       )}
@@ -437,6 +445,10 @@ export function PageListItem({
   }
 
   const canDeleteRow = canDeletePage(page.id, pages);
+  const canResetToRemote =
+    localPage != null &&
+    localPage.serverBaselineHash != null &&
+    !isLocallyDeletedPage(localPage);
   const navTarget = resolvePageNavTarget(page.id, pages);
   const active = isActivePage(page.id, page.slug, activePage);
 
@@ -501,6 +513,10 @@ export function PageListItem({
     },
     [ensureSeed, localPage, page.id, pages]
   );
+
+  const handleResetToRemote = useCallback(() => {
+    dispatch({ type: "page.resetToRemote", pageId: page.id });
+  }, [dispatch, page.id]);
 
   const handleDuplicate = useCallback(() => {
     resolveSourceBlocks(page, localBlocks)
@@ -619,6 +635,7 @@ export function PageListItem({
     <PageListRowLink
       active={active}
       canDelete={canDeleteRow}
+      canResetToRemote={canResetToRemote}
       depth={depth}
       dropIndicator={dropIndicator}
       expandedIds={expandedIds}
@@ -632,6 +649,7 @@ export function PageListItem({
       onDelete={() => setDeleteOpen(true)}
       onDuplicate={handleDuplicate}
       onRename={startRenaming}
+      onResetToRemote={handleResetToRemote}
       onToggleExpand={onToggleExpand}
       pageId={page.id}
       pages={pages}
@@ -660,6 +678,12 @@ export function PageListItem({
           <IconPhoto />
           Change icon
         </ContextMenuItem>
+        {canResetToRemote ? (
+          <ContextMenuItem onClick={handleResetToRemote}>
+            <IconRefresh />
+            Reset to site version
+          </ContextMenuItem>
+        ) : null}
         <ContextMenuItem
           disabled={!canDeleteRow}
           onClick={() => setDeleteOpen(true)}

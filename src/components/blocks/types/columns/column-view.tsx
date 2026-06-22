@@ -27,7 +27,7 @@ export function ColumnView({ columnRow, mode }: ColumnViewProps) {
       {showScopeStart ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 bg-selection"
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 bg-primary"
         />
       ) : null}
       {columnRow.children.map((child) => (

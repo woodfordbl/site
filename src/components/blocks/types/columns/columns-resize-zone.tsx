@@ -33,7 +33,7 @@ export function ColumnResizeZone({
           "hover:[&_span]:opacity-100 hover:[&_span]:delay-300",
           "focus-visible:[&_span]:opacity-100 focus-visible:[&_span]:delay-300",
           "active:[&_span]:opacity-100",
-          "hover:[&_span]:bg-selection"
+          "hover:[&_span]:bg-accent"
         )}
         lineClassName="h-full opacity-0 transition-opacity delay-0 duration-150 ease-in-out"
         onResizeStart={(event) => {

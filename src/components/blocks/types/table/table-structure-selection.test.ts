@@ -11,6 +11,15 @@ describe("getTableColumnHandleRevealClasses", () => {
       '[&:has([data-table-column-index="0"]:hover)_[data-table-column-handle="0"]]:opacity-100 [&:has([data-table-column-index="1"]:hover)_[data-table-column-handle="1"]]:opacity-100'
     );
   });
+
+  it("includes reveal rules for every column up to the table width", () => {
+    expect(getTableColumnHandleRevealClasses(5)).toContain(
+      '[&:has([data-table-column-index="4"]:hover)_[data-table-column-handle="4"]]:opacity-100'
+    );
+    expect(getTableColumnHandleRevealClasses(5)).not.toContain(
+      '[&:has([data-table-column-index="5"]:hover)_[data-table-column-handle="5"]]:opacity-100'
+    );
+  });
 });
 
 describe("getTableCellStructureSelectionClassName", () => {
@@ -43,9 +52,15 @@ describe("getTableCellStructureSelectionClassName", () => {
       rowIndex: 0,
     });
 
-    expect(corner).toBe("border-t-accent border-b-accent border-l-accent");
-    expect(middle).toBe("border-t-accent border-b-accent");
-    expect(trailing).toBe("border-t-accent border-b-accent border-r-accent");
+    expect(corner).toBe(
+      "border-t-2 border-t-primary border-b-2 border-b-primary border-l-2 border-l-primary"
+    );
+    expect(middle).toBe(
+      "border-t-2 border-t-primary border-b-2 border-b-primary"
+    );
+    expect(trailing).toBe(
+      "border-t-2 border-t-primary border-b-2 border-b-primary border-r-2 border-r-primary"
+    );
   });
 
   it("draws a perimeter on the selected column", () => {
@@ -63,6 +78,8 @@ describe("getTableCellStructureSelectionClassName", () => {
       tableRowId: "row-2",
     });
 
-    expect(style).toBe("border-l-accent border-r-accent border-b-accent");
+    expect(style).toBe(
+      "border-l-2 border-l-primary border-r-2 border-r-primary border-b-2 border-b-primary"
+    );
   });
 });

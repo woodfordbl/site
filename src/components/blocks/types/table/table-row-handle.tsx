@@ -1,14 +1,14 @@
 import { TableStructureHandle } from "@/components/blocks/types/table/table-structure-handle.tsx";
 
 interface TableRowHandleProps {
-  onStructureSelect: () => void;
+  onStructureMenuOpenChange: (open: boolean) => void;
   rowId: string;
   tableId: string;
 }
 
 /** Left-edge handle on a body row — click opens row menu, drag reorders via canvas row DnD. */
 export function TableRowHandle({
-  onStructureSelect,
+  onStructureMenuOpenChange,
   rowId,
   tableId,
 }: TableRowHandleProps) {
@@ -16,7 +16,7 @@ export function TableRowHandle({
     <TableStructureHandle
       axis="row"
       dragId={rowId}
-      onStructureSelect={onStructureSelect}
+      onStructureMenuOpenChange={onStructureMenuOpenChange}
       revealGroupClassName="group-hover/table-row:opacity-100"
       tableId={tableId}
       tableRowId={rowId}

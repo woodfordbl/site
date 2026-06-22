@@ -7,7 +7,7 @@
 - **Checklist** blocks are containers only (empty props)
 - **Columns** blocks are containers only (empty props); children are **column** blocks only
 - **Column** blocks are generic-scope containers (`allowedChildTypes: *`); children are normal canvas rows (text, heading, nested list, etc.)
-- **Table** blocks are containers (`hasHeaderRow`, `columnWidths[]`); children are **tableRow** only
+- **Table** blocks are containers (`hasHeaderRow`, `columnWidths[]`); children are **tableRow** only. Trailing row/column count can be adjusted via plus-control pointer scrub — [table-blocks](./table-blocks.md#trailing-plus-controls).
 - **Table row** blocks are containers (empty props); children are **tableCell** only (sibling order = column index)
 - **Table cell** blocks are leaves with `props.text` (plain text only in v1)
 - List items are normal **text** blocks with `parentId = list.id`

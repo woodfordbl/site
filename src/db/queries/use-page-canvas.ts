@@ -5,7 +5,6 @@ import {
   applyPageBlockDiff,
   beginPageBlockTransaction,
   commitPageBlockTransaction,
-  deleteAllBlocksForPage,
   deletePageBlocksInTx,
   insertPageBlockAt,
   type PageBlockTransaction,
@@ -26,7 +25,8 @@ import { normalizeEditablePageBlocks } from "@/lib/blocks/ensure-minimum-blocks.
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import { CanvasPageSession } from "@/lib/canvas/page-session.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
-import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
+import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 export interface ServerPageSource {
@@ -50,11 +50,15 @@ function existingBlockIds(blocks: Array<{ id: string }>): Set<string> {
   return new Set(blocks.map((block) => block.id));
 }
 
-export function usePageCanvas(serverPage: ServerPageSource) {
+export function usePageCanvas(
+  serverPage: ServerPageSource,
+  pageHasLocalDraft = false
+) {
   const { id: pageId } = serverPage;
 
   const {
     blocks: collectionBlocks,
+    bootstrapBlocks,
     existingLocalBlocks,
     hasSeededBlocks,
     isReady,
@@ -65,12 +69,34 @@ export function usePageCanvas(serverPage: ServerPageSource) {
     () => hashPageBlocks(serverPage.blocks),
     [serverPage.blocks]
   );
-  const isStale =
+  const serverMetadataBaseline = useMemo(
+    () =>
+      hashPageMetadata({
+        icon: serverPage.icon,
+        parentId: serverPage.parentId,
+        slug: serverPage.slug,
+        title: serverPage.title,
+      }),
+    [serverPage.icon, serverPage.parentId, serverPage.slug, serverPage.title]
+  );
+  const blocksStale =
     localPage?.serverBaselineHash != null &&
     localPage.serverBaselineHash !== serverBaselineHash;
+  const metadataStale =
+    localPage?.serverMetadataBaseline != null &&
+    localPage.serverMetadataBaseline !== serverMetadataBaseline;
+  const isStale = blocksStale || metadataStale;
 
+  const hasLocalBlockSource =
+    hasSeededBlocks ||
+    localPage != null ||
+    pageHasLocalDraft ||
+    bootstrapBlocks.length > 0;
   const sourceBlocks =
-    hasSeededBlocks || localPage != null ? collectionBlocks : serverPage.blocks;
+    hasLocalBlockSource &&
+    (collectionBlocks.length > 0 || bootstrapBlocks.length > 0)
+      ? collectionBlocks
+      : serverPage.blocks;
 
   const generatedBlankBlockRef = useRef<{
     block: Extract<Block, { type: "text" }>;
@@ -185,9 +211,11 @@ export function usePageCanvas(serverPage: ServerPageSource) {
         id: pageId,
         slug: serverPage.slug,
         title: serverPage.title,
+        icon: serverPage.icon,
         parentId: serverPage.parentId,
         blockOrder,
         serverBaselineHash,
+        serverMetadataBaseline,
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -196,6 +224,8 @@ export function usePageCanvas(serverPage: ServerPageSource) {
       localPage,
       pageId,
       serverBaselineHash,
+      serverMetadataBaseline,
+      serverPage.icon,
       serverPage.parentId,
       serverPage.slug,
       serverPage.title,
@@ -491,33 +521,18 @@ export function usePageCanvas(serverPage: ServerPageSource) {
   );
 
   const getPlacementRows = useCallback(() => {
-    if (inBlockTransactionRef.current && sessionRef.current) {
+    // Prefer the live session tree so structural reads stay correct between
+    // back-to-back dispatches (React `rows` can lag until the collection syncs).
+    if (sessionRef.current) {
       return sessionRef.current.getRows();
     }
     return rows;
   }, [rows]);
 
   const revertToServer = useCallback(() => {
-    const now = new Date().toISOString();
-    const blocks = serverPage.blocks;
-
-    if (localPage) {
-      localPagesCollection.update(pageId, (draft) => {
-        draft.serverBaselineHash = serverBaselineHash;
-        draft.updatedAt = now;
-      });
-    }
-
-    deleteAllBlocksForPage(existingLocalBlocks);
-    seedPageBlocks(pageId, blocks);
-    sessionRef.current = CanvasPageSession.hydrate(blocks);
-  }, [
-    existingLocalBlocks,
-    localPage,
-    pageId,
-    serverBaselineHash,
-    serverPage.blocks,
-  ]);
+    resetPageToRemote(pageId);
+    sessionRef.current = CanvasPageSession.hydrate(serverPage.blocks);
+  }, [pageId, serverPage.blocks]);
 
   const acknowledgeServerBaseline = useCallback(() => {
     if (!localPage) {
@@ -526,19 +541,15 @@ export function usePageCanvas(serverPage: ServerPageSource) {
 
     localPagesCollection.update(pageId, (draft) => {
       draft.serverBaselineHash = serverBaselineHash;
+      draft.serverMetadataBaseline = serverMetadataBaseline;
       draft.updatedAt = new Date().toISOString();
     });
-  }, [localPage, pageId, serverBaselineHash]);
+  }, [localPage, pageId, serverBaselineHash, serverMetadataBaseline]);
 
   const resetToServer = useCallback(() => {
-    if (localPage) {
-      localPagesCollection.delete(pageId);
-    }
-
-    deleteAllBlocksForPage(existingLocalBlocks);
-    markPageClean(pageId);
+    resetPageToRemote(pageId);
     sessionRef.current = CanvasPageSession.hydrate(serverPage.blocks);
-  }, [existingLocalBlocks, localPage, pageId, serverPage.blocks]);
+  }, [pageId, serverPage.blocks]);
 
   const hasLocalChanges = localPage != null || hasSeededBlocks;
 

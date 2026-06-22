@@ -7,6 +7,7 @@ import { lazy } from "react";
 
 import { AppProviders } from "@/db/provider.tsx";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
+import { getPagesCatalogRevision } from "@/lib/content/page-store.server.ts";
 import { getSidebarTablerGlyphs } from "@/lib/pages/get-sidebar-tabler-glyphs.ts";
 import { loadPageListLocalPreview } from "@/lib/pages/load-page-list-local-preview.ts";
 import { loadPageSidebarPrefs } from "@/lib/pages/load-page-sidebar-prefs.ts";
@@ -43,7 +44,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       data: tablerIconNamesFromPages(mergedPages),
     });
 
-    return { sidebarTablerGlyphs };
+    return {
+      pagesCatalogRevision: getPagesCatalogRevision(),
+      serverPages: pages,
+      sidebarTablerGlyphs,
+    };
   },
   head: () => ({
     meta: [

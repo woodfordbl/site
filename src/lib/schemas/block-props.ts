@@ -64,9 +64,10 @@ export const mediaPropsSchema = z.object({
 
 export const DEFAULT_TABLE_COLUMN_WIDTH = 120;
 
-/** `table` block props: header row flag and column widths in pixels. */
+/** `table` block props: header row/column flags and column widths in pixels. */
 export const tablePropsSchema = z.object({
   hasHeaderRow: z.boolean().default(true),
+  hasHeaderColumn: z.boolean().default(false),
   columnWidths: z
     .array(z.number().positive())
     .default([

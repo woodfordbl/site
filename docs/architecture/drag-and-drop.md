@@ -67,12 +67,12 @@ flowchart TD
 |---------|----------|---------------|-----------|------------|-----------|-----------------|
 | Sidebar | [`PageListLive`](../../src/components/pages/page-list.tsx) | `data-page-list-row-id` | `application/x-page-id` | [`setEmptyDragImage`](../../src/lib/dnd/drag-image.ts) (body-attached) + [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) / [`PageListDragPreview`](../../src/components/pages/page-list-drag-preview.tsx) | `<nav>` via `useDropZone` | [`resolvePageListDropTargetFromPointer`](../../src/lib/pages/resolve-page-list-drop-target.ts) |
 | Canvas | [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) | `data-canvas-row-id` | `application/x-canvas-row-id` | `native-clone` of `[data-canvas-row-content]` | `CanvasDropZone` div | [`resolveDropTargetFromPointer`](../../src/lib/canvas/resolve-drop-target.ts) |
-| Table layout | [`TableView`](../../src/components/blocks/types/table/table-view.tsx) (`TableColumnDnD` nested; row handles via `CanvasRowDndBridge`) | `data-table-row-id` (rows) / `data-table-column-drag-id` (columns) | row: `application/x-canvas-row-id` (`useCanvasRowSurface`); column: `application/x-table-column-index` | row: native clone; column: overlay | `[data-table-layout]` (column zone inside `TableColumnDnD`) | [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) (rows); `resolveTableColumnDropTarget` in `table-view.tsx` (columns) |
+| Table layout | [`TableView`](../../src/components/blocks/types/table/table-view.tsx) (`TableColumnDnD` nested; row handles via `CanvasRowDndBridge`) | `data-table-row-id` (rows) / `data-table-column-drag-id` (columns) | row: `application/x-canvas-row-id` (`useCanvasRowSurface`); column: `application/x-table-column-index` | row: [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) / [`TableRowDragPreview`](../../src/components/blocks/types/table/table-row-drag-preview.tsx) on [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx); column: [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) / [`TableColumnDragPreview`](../../src/components/blocks/types/table/table-column-drag-preview.tsx) | `[data-table-layout]` (column zone inside `TableColumnDnD`) | [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) (rows); `resolveTableColumnDropTarget` in `table-view.tsx` (columns) |
 
 Drop indicators:
 
 - Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight.
-- Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` for `--selection` insertion lines (table column drops use vertical lines between header cells).
+- Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-primary` horizontal/vertical lines).
 
 ### Table layout
 
@@ -83,7 +83,7 @@ When the pointer is inside `[data-table-layout]`, [`resolveTableLayoutDrop`](../
 
 Full grid model, structure handles, and keyboard map: [table-blocks](./table-blocks.md).
 
-Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
+Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows — same grab button composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) for click-to-open and `useDragSource` for click-hold reorder) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
 
 ## Performance
 

@@ -1,3 +1,4 @@
+import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
 import { type Page, pageSchema } from "@/lib/schemas/page.ts";
 
 /**
@@ -40,4 +41,9 @@ export function getShippedPageByRelativePath(
   relativePath: string
 ): Page | undefined {
   return getPagesByRelativePath().get(relativePath);
+}
+
+/** Revision token for the shipped catalog; exposed to the client for deploy freshness. */
+export function getPagesCatalogRevision(): string {
+  return computePagesCatalogRevision(getShippedPages());
 }

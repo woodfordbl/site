@@ -1,12 +1,16 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { writePageListLocalPreviewFromPages } from "@/lib/pages/page-list-local-preview-cookie.ts";
 
 /** Mirrors user page sidebar metadata into a cookie so SSR can render the page list. */
 export function SyncPageListLocalPreviewEffect() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const sync = () => {
+      if (!localPagesCollection.isReady()) {
+        return;
+      }
+
       writePageListLocalPreviewFromPages(localPagesCollection.toArray);
     };
 

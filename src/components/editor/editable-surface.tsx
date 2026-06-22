@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils.ts";
 
 /** Canvas editor fields: no chrome, no focus ring. Textareas grow via field-sizing-content. */
 export const editorFieldClassName =
-  "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 text-foreground shadow-none outline-none placeholder:text-muted-foreground/50 focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
+  "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
 
 export const editorTextareaClassName =
   "field-sizing-content resize-none overflow-hidden";

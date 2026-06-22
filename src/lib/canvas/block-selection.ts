@@ -1,5 +1,9 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
-import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
+import {
+  findRowById,
+  findRowContext,
+  flattenRows,
+} from "@/lib/blocks/block-tree.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 export interface BlockSelectionState {
@@ -61,11 +65,64 @@ export function selectionEdgeRowId(
   return direction === "up" ? ordered[0] : (ordered.at(-1) ?? null);
 }
 
+function rangeRowIdsBetweenSiblings(
+  siblings: readonly CanvasRow[],
+  anchorRowId: string,
+  targetRowId: string
+): string[] | null {
+  const ordered = siblings.map((row) => row.rowId);
+  const anchorIndex = ordered.indexOf(anchorRowId);
+  const targetIndex = ordered.indexOf(targetRowId);
+  if (anchorIndex === -1 || targetIndex === -1) {
+    return null;
+  }
+
+  const start = Math.min(anchorIndex, targetIndex);
+  const end = Math.max(anchorIndex, targetIndex);
+  return ordered.slice(start, end + 1);
+}
+
+/** Shift-range stays within a column when both rows share the same column parent. */
+function rangeRowIdsBetweenInColumn(
+  rows: CanvasRow[],
+  anchorRowId: string,
+  targetRowId: string
+): string[] | null {
+  const anchorContext = findRowContext(rows, anchorRowId);
+  const targetContext = findRowContext(rows, targetRowId);
+  if (!(anchorContext && targetContext)) {
+    return null;
+  }
+
+  const columnParent = anchorContext.parent;
+  if (
+    columnParent?.effectiveBlock.type !== "column" ||
+    targetContext.parent?.rowId !== columnParent.rowId
+  ) {
+    return null;
+  }
+
+  return rangeRowIdsBetweenSiblings(
+    anchorContext.siblings,
+    anchorRowId,
+    targetRowId
+  );
+}
+
 export function rangeRowIdsBetween(
   rows: CanvasRow[],
   anchorRowId: string,
   targetRowId: string
 ): string[] {
+  const columnRange = rangeRowIdsBetweenInColumn(
+    rows,
+    anchorRowId,
+    targetRowId
+  );
+  if (columnRange) {
+    return columnRange;
+  }
+
   const ordered = flattenRows(rows).map((row) => row.rowId);
   const anchorIndex = ordered.indexOf(anchorRowId);
   const targetIndex = ordered.indexOf(targetRowId);

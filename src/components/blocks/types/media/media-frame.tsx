@@ -6,7 +6,10 @@ import { MediaVideoPlayer } from "@/components/blocks/types/media/media-video-pl
 import { useMediaResize } from "@/components/blocks/types/media/use-media-resize.ts";
 import { ResizeHandle } from "@/components/ui/resize-handle.tsx";
 import { useObjectContainBounds } from "@/hooks/use-object-contain-bounds.ts";
-import { mediaResizeHandlePosition } from "@/lib/dom/media-resize-handle-position.ts";
+import {
+  mediaHoverToolbarPosition,
+  mediaResizeHandlePosition,
+} from "@/lib/dom/media-resize-handle-position.ts";
 import type { NaturalMediaSize } from "@/lib/dom/object-contain-bounds.ts";
 import type { MediaProps } from "@/lib/schemas/block-props.ts";
 import { cn } from "@/lib/utils.ts";
@@ -41,13 +44,17 @@ export function MediaFrame({
   >(null);
   const [naturalSize, setNaturalSize] = useState<NaturalMediaSize | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const contentBounds = useObjectContainBounds(mediaElement, naturalSize);
   const { displayWidthPercent, isResizable, isResizing, startResize } =
     useMediaResize({
       frameRef,
       onWidthChange,
       widthPercent: props.widthPercent,
     });
+  const contentBounds = useObjectContainBounds(
+    mediaElement,
+    naturalSize,
+    displayWidthPercent
+  );
 
   const handleNaturalSize = (size: NaturalMediaSize) => {
     if (size.width > 0 && size.height > 0) {
@@ -123,13 +130,18 @@ export function MediaFrame({
               />
             </>
           ) : null}
-        </div>
 
-        <MediaHoverToolbar
-          displayUrl={displayUrl}
-          onView={() => setLightboxOpen(true)}
-          props={props}
-        />
+          <MediaHoverToolbar
+            displayUrl={displayUrl}
+            onView={() => setLightboxOpen(true)}
+            positionStyle={
+              contentBounds
+                ? mediaHoverToolbarPosition(contentBounds)
+                : undefined
+            }
+            props={props}
+          />
+        </div>
       </div>
 
       <MediaLightbox

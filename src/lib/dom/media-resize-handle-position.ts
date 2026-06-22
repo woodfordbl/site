@@ -18,3 +18,16 @@ export function mediaResizeHandlePosition(
     transform: "translate(-50%, -50%)",
   };
 }
+
+/** Top-right overlay actions, inset to match {@link mediaResizeHandlePosition}. */
+export function mediaHoverToolbarPosition(bounds: ObjectContainContentBounds): {
+  left: number;
+  top: number;
+  transform: string;
+} {
+  return {
+    top: bounds.top + MEDIA_RESIZE_HANDLE_INSET_PX,
+    left: bounds.left + bounds.width - MEDIA_RESIZE_HANDLE_INSET_PX,
+    transform: "translateX(-100%)",
+  };
+}

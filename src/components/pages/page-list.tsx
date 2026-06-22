@@ -26,10 +26,7 @@ import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
-import {
-  useMergedPageListItems,
-  usePageListItems,
-} from "@/hooks/use-page-list.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { loadPage } from "@/lib/content/load-page.ts";
@@ -40,7 +37,6 @@ import {
   type PageRow,
 } from "@/lib/pages/build-page-tree.ts";
 import { flattenVisiblePageRows } from "@/lib/pages/flatten-visible-page-rows.ts";
-import { mergePageList } from "@/lib/pages/merge-page-list.ts";
 import {
   readPageListExpandedIdsFromDocument,
   writePageListExpandedIdsToDocument,
@@ -408,17 +404,11 @@ function PageListContent({
 
 export function PageList() {
   const isClient = useIsClient();
-  const { localPagePreview, sidebarPrefs } = useRouteContext({
+  const { sidebarPrefs } = useRouteContext({
     from: "__root__",
   });
-  const { pages: serverPages } = usePageListItems();
-  const { pages: mergedPages } = useMergedPageListItems();
+  const { pages } = useMergedPageListItems();
   const [isHydrated, setIsHydrated] = useState(false);
-  const staticPages = useMemo(
-    () => mergePageList(serverPages, localPagePreview),
-    [localPagePreview, serverPages]
-  );
-  const showStaticShell = !(isClient && isHydrated);
 
   useLayoutEffect(() => {
     setIsHydrated(true);
@@ -428,7 +418,7 @@ export function PageList() {
     <PageListContent
       initialExpandedIds={sidebarPrefs.expandedPageIds}
       interactive={isClient && isHydrated}
-      pages={showStaticShell ? staticPages : mergedPages}
+      pages={pages}
     />
   );
 }

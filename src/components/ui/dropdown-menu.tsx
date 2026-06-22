@@ -3,6 +3,7 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import type * as React from "react";
+import { Switch } from "@/components/ui/switch.tsx";
 import { cn } from "@/lib/utils.ts";
 
 type DropdownMenuHandle<Payload = unknown> = ReturnType<
@@ -178,6 +179,43 @@ function DropdownMenuSubContent({
   );
 }
 
+function DropdownMenuSwitchItem({
+  checked,
+  children,
+  className,
+  disabled,
+  onCheckedChange,
+  ...props
+}: Omit<MenuPrimitive.Item.Props, "children"> & {
+  checked: boolean;
+  children: React.ReactNode;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <MenuPrimitive.Item
+      className={cn(
+        "group/dropdown-menu-item relative flex cursor-default select-none items-center justify-between gap-3 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent not-data-[variant=destructive]:focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-highlighted:bg-accent data-inset:pl-7 data-highlighted:text-accent-foreground data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        className
+      )}
+      closeOnClick={false}
+      data-slot="dropdown-menu-switch-item"
+      disabled={disabled}
+      {...props}
+    >
+      <span className="flex min-w-0 items-center gap-1.5">{children}</span>
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+        size="sm"
+      />
+    </MenuPrimitive.Item>
+  );
+}
+
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -297,5 +335,6 @@ export {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
+  DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 };

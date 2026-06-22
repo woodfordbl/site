@@ -1,9 +1,9 @@
 import { BlockGutter } from "@/components/canvas/block-gutter.tsx";
+import type { BlockViewOption } from "@/components/canvas/block-gutter-menu.tsx";
 import {
   useCanvasEditorContext,
   useCanvasSelection,
 } from "@/components/canvas/canvas-editor-context.tsx";
-import type { BlockActionsSession } from "@/components/canvas/canvas-menu-types.ts";
 import { getCanvasGutterAlignClassName } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
@@ -30,7 +30,7 @@ function turnIntoValueFromBlock(block: Block): string | undefined {
 
 function buildEmbedViewOptions(
   row: CanvasRow
-): BlockActionsSession["viewOptions"] | undefined {
+): { items: BlockViewOption[]; label: string } | undefined {
   const block = row.effectiveBlock;
   if (block.type !== "embed" || block.props.url.trim().length === 0) {
     return;

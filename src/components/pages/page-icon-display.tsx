@@ -2,7 +2,6 @@
 
 import { useLoaderData } from "@tanstack/react-router";
 import { TablerGlyph } from "@/components/pages/tabler-glyph.tsx";
-import { useIsClient } from "@/hooks/use-is-client.ts";
 import { DEFAULT_PAGE_ICON, decodePageIcon } from "@/lib/pages/page-icon.ts";
 import {
   type TablerIconGlyph,
@@ -25,9 +24,8 @@ function TablerPageIcon({
   name: string;
   preloadedGlyph?: TablerIconGlyph;
 }) {
-  const isClient = useIsClient();
   const catalogGlyph = useTablerIconGlyph(name);
-  const resolved = preloadedGlyph ?? (isClient ? catalogGlyph : undefined);
+  const resolved = preloadedGlyph ?? catalogGlyph;
 
   if (!resolved) {
     return <DEFAULT_PAGE_ICON aria-hidden className={className} />;

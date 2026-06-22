@@ -2,16 +2,13 @@ import { useCallback, useRef, useState } from "react";
 
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
-import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
-import {
-  useMergedPageListItems,
-  usePageListItems,
-} from "@/hooks/use-page-list.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
+import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -33,7 +30,7 @@ interface PageTitleEditorProps {
 
 interface PageTitleEditorViewProps extends PageTitleEditorProps {
   localPage: ReturnType<typeof useLocalPageById>;
-  pages: ReturnType<typeof usePageListItems>["pages"];
+  pages: PageSummary[];
 }
 
 function PageTitleEditorView({
@@ -145,21 +142,5 @@ function PageTitleEditorLive(props: PageTitleEditorProps) {
 }
 
 export function PageTitleEditor(props: PageTitleEditorProps) {
-  const isClient = useIsClient();
-  const { pages } = usePageListItems();
-
-  if (!isClient) {
-    // Render the server-known title even for dirty pages; the local title
-    // swaps in after hydration without collapsing the layout.
-    return (
-      <PageTitleEditorView
-        {...props}
-        key={props.pageId}
-        localPage={null}
-        pages={pages}
-      />
-    );
-  }
-
   return <PageTitleEditorLive key={props.pageId} {...props} />;
 }

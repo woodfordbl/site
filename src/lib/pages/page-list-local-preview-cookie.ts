@@ -2,8 +2,12 @@ import {
   readDocumentCookie,
   writeDocumentCookie,
 } from "@/lib/cookies/document-cookie.ts";
+import { readDirtyPageIdsFromDocument } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
-import { isLocallyDeletedPage } from "@/lib/schemas/local-page.ts";
+import {
+  isLocallyDeletedPage,
+  isUserCreatedPage,
+} from "@/lib/schemas/local-page.ts";
 
 /** Cookie mirror of local page sidebar metadata for SSR first paint (`site-page-list-local`). */
 export const PAGE_LIST_LOCAL_PREVIEW_COOKIE_NAME = "site-page-list-local";
@@ -33,12 +37,15 @@ export function toLocalPagePreviewEntry(
   };
 }
 
-/** Includes shipped-page overlays (custom icons/titles) and user-created pages. */
+/** Dirty overlays and user-created pages only — keeps the SSR cookie under budget. */
 export function localPagePreviewEntriesFromPages(
   pages: LocalPage[]
 ): LocalPagePreviewEntry[] {
+  const dirtyPageIds = readDirtyPageIdsFromDocument();
+
   return pages
     .filter((page) => !isLocallyDeletedPage(page))
+    .filter((page) => isUserCreatedPage(page) || dirtyPageIds.has(page.id))
     .map(toLocalPagePreviewEntry);
 }
 
@@ -147,6 +154,17 @@ export function writePageListLocalPreviewToDocument(
 
 export function writePageListLocalPreviewFromPages(pages: LocalPage[]): void {
   writePageListLocalPreviewToDocument(localPagePreviewEntriesFromPages(pages));
+}
+
+/** Mirrors the live collection into the SSR preview cookie (client-only). */
+export function syncPageListLocalPreviewFromCollection(
+  pages: LocalPage[]
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  writePageListLocalPreviewFromPages(pages);
 }
 
 /** Converts preview entries into `LocalPage` stubs for `mergePageList`. */

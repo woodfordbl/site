@@ -35,11 +35,12 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
 
   if (isContainerSpec(spec)) {
     const Container = resolveContainerComponent(spec);
+    const isTable = row.effectiveBlock.type === "table";
 
     return (
       <CanvasRowShell
         gutter={
-          mode === "edit" ? (
+          mode === "edit" && !isTable ? (
             <RowGutter
               onInsert={(edge) => {
                 handleContainerGutterInsert(row, edge, {
@@ -52,6 +53,7 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
             />
           ) : null
         }
+        reserveGutterSpace={mode === "edit" && isTable}
         row={row}
       >
         <Container mode={mode} row={row} />

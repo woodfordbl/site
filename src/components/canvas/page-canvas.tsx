@@ -16,22 +16,20 @@ interface PageCanvasProps {
 
 export function PageCanvas({
   footerHost,
-  pageHasLocalDraft: _pageHasLocalDraft,
+  pageHasLocalDraft,
   serverPage,
   titleSlot,
 }: PageCanvasProps) {
   const isClient = useIsClient();
 
   if (!isClient) {
-    // Dirty pages render the server baseline too: the local draft swaps in
-    // after hydration, keeping the layout stable instead of flashing a blank
-    // content area (and crawlers always see real content).
     return <PageCanvasServer serverPage={serverPage} titleSlot={titleSlot} />;
   }
 
   return (
     <PageCanvasEditor
       footerHost={footerHost}
+      pageHasLocalDraft={pageHasLocalDraft}
       serverPage={serverPage}
       titleSlot={titleSlot}
     />

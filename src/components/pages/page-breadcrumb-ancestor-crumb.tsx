@@ -1,12 +1,9 @@
 "use client";
 
 import { Link } from "@tanstack/react-router";
-import {
-  PAGE_BREADCRUMB_CHILDREN_LIMIT,
-  PAGE_BREADCRUMB_CRUMB_CLASS,
-} from "@/components/pages/page-breadcrumb-shared.ts";
+import { PAGE_BREADCRUMB_CHILDREN_LIMIT } from "@/components/pages/page-breadcrumb-shared.ts";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
-import { iconSlotClassName } from "@/components/ui/button.tsx";
+import { buttonVariants, iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +24,6 @@ import {
 } from "@/lib/pages/breadcrumb-scope.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { resolvePageNavTarget } from "@/lib/pages/resolve-page-nav-target.ts";
-import { cn } from "@/lib/utils.ts";
 
 interface PageBreadcrumbAncestorCrumbProps {
   activePageId: string;
@@ -168,7 +164,7 @@ export function PageBreadcrumbAncestorCrumb({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
-        className={cn(PAGE_BREADCRUMB_CRUMB_CLASS, "outline-hidden")}
+        className={buttonVariants({ variant: "ghost" })}
         closeDelay={300}
         delay={300}
         nativeButton={false}

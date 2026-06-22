@@ -28,6 +28,7 @@ export const DEFAULT_TABLE_ROWS = 3;
 export interface TableGrid {
   columnCount: number;
   columnWidths: number[];
+  hasHeaderColumn: boolean;
   hasHeaderRow: boolean;
   rows: Array<{
     rowId: string;
@@ -63,6 +64,7 @@ export function deriveTableGrid(tableRow: CanvasRow): TableGrid | null {
   return {
     tableId: tableRow.rowId,
     hasHeaderRow: tableBlock.props.hasHeaderRow,
+    hasHeaderColumn: tableBlock.props.hasHeaderColumn,
     columnWidths: resolveTableColumnWidthsPx(tableBlock.props.columnWidths),
     columnCount,
     rows,
@@ -105,6 +107,7 @@ export function buildTableBlock(
     indent: number;
     parentId: string | null;
     columnCount: number;
+    hasHeaderColumn?: boolean;
     hasHeaderRow?: boolean;
   }
 ): Extract<Block, { type: "table" }> {
@@ -116,6 +119,7 @@ export function buildTableBlock(
     parentId: options.parentId,
     props: {
       hasHeaderRow: options.hasHeaderRow ?? true,
+      hasHeaderColumn: options.hasHeaderColumn ?? false,
       columnWidths: buildEqualTableColumnWidths(options.columnCount),
     },
   };
@@ -198,6 +202,54 @@ function getTableColumnCount(tableRow: CanvasRow): number {
       : MIN_TABLE_COLUMNS;
   const rowCounts = tableRow.children.map((row) => row.children.length);
   return Math.max(widths, ...rowCounts, MIN_TABLE_COLUMNS);
+}
+
+/** Scale column widths proportionally so their sum matches `targetWidthPx`. */
+export function computeTableFitToWidthColumnWidths(
+  columnWidths: number[],
+  targetWidthPx: number
+): number[] {
+  const resolved = resolveTableColumnWidthsPx(columnWidths);
+  const count = resolved.length;
+  if (count === 0 || targetWidthPx <= 0) {
+    return resolved;
+  }
+
+  const minTotal = MIN_TABLE_COLUMN_WIDTH_PX * count;
+  if (targetWidthPx <= minTotal) {
+    return buildEqualTableColumnWidths(count);
+  }
+
+  const total = resolved.reduce((sum, width) => sum + width, 0);
+  if (total <= 0) {
+    const equal = Math.floor(targetWidthPx / count);
+    const remainder = targetWidthPx - equal * count;
+    return resolved.map((_, index) =>
+      Math.max(
+        MIN_TABLE_COLUMN_WIDTH_PX,
+        equal + (index === count - 1 ? remainder : 0)
+      )
+    );
+  }
+
+  const scale = targetWidthPx / total;
+  const scaled = resolved.map((width) =>
+    Math.max(MIN_TABLE_COLUMN_WIDTH_PX, Math.round(width * scale))
+  );
+
+  let drift = targetWidthPx - scaled.reduce((sum, width) => sum + width, 0);
+  for (let index = scaled.length - 1; drift !== 0 && index >= 0; index -= 1) {
+    const current = scaled[index] ?? MIN_TABLE_COLUMN_WIDTH_PX;
+    const adjustment = drift > 0 ? 1 : -1;
+    const next = current + adjustment;
+    if (next < MIN_TABLE_COLUMN_WIDTH_PX) {
+      continue;
+    }
+    scaled[index] = next;
+    drift -= adjustment;
+  }
+
+  return scaled;
 }
 
 /** Resize one column by pointer delta; other columns keep their pixel width. */
@@ -321,10 +373,37 @@ export function buildBlocksForTableCreate(
   return { blocks: workingBlocks, focusRowId };
 }
 
+/** Map pointer delta to whole scrub steps; half a step counts (Notion-style). */
+export function computeTableScrubDelta(
+  deltaPx: number,
+  stepPx: number
+): number {
+  if (stepPx <= 0) {
+    return 0;
+  }
+
+  const halfStep = stepPx / 2;
+  const steps =
+    deltaPx >= 0
+      ? Math.floor((deltaPx + halfStep) / stepPx)
+      : Math.ceil((deltaPx - halfStep) / stepPx);
+
+  return steps === 0 ? 0 : steps;
+}
+
+export function clampTableRowCount(count: number): number {
+  return Math.max(MIN_TABLE_ROWS, count);
+}
+
+export function clampTableColumnCount(count: number): number {
+  return Math.min(MAX_TABLE_COLUMNS, Math.max(MIN_TABLE_COLUMNS, count));
+}
+
 export function planTableAddRow(
   rows: CanvasRow[],
   anchorRowId: string,
-  edge: "before" | "after" = "after"
+  edge: "before" | "after" = "after",
+  options: { focus?: boolean } = {}
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, anchorRowId);
   if (!ctx || ctx.row.effectiveBlock.type !== "tableRow") {
@@ -336,6 +415,7 @@ export function planTableAddRow(
     return [];
   }
 
+  const shouldFocus = options.focus ?? true;
   const columnCount = getTableColumnCount(tableCtx.tableRow);
   const rowBlock = buildTableRowBlock(tableCtx.tableRow.rowId);
   const effects: CanvasEffect[] = [
@@ -367,7 +447,7 @@ export function planTableAddRow(
       type: "insert",
       position: cellPlacement,
       block: cellBlock,
-      focus: colIndex === 0,
+      focus: shouldFocus && colIndex === 0,
     });
     lastCellId = cellBlock.id;
     if (colIndex === 0) {
@@ -375,7 +455,7 @@ export function planTableAddRow(
     }
   }
 
-  if (firstCellId) {
+  if (firstCellId && shouldFocus) {
     effects.push({
       type: "focus",
       rowId: firstCellId,
@@ -390,13 +470,15 @@ export function planTableAddColumn(
   rows: CanvasRow[],
   tableId: string,
   columnIndex: number,
-  edge: "before" | "after"
+  edge: "before" | "after",
+  options: { focus?: boolean } = {}
 ): CanvasEffect[] {
   const tableCtx = findTableContext(rows, tableId);
   if (!tableCtx) {
     return [];
   }
 
+  const shouldFocus = options.focus ?? true;
   const { tableRow, tableBlock } = tableCtx;
   const currentCount = getTableColumnCount(tableRow);
   if (currentCount >= MAX_TABLE_COLUMNS) {
@@ -433,7 +515,7 @@ export function planTableAddColumn(
     },
   });
 
-  if (focusCellId) {
+  if (focusCellId && shouldFocus) {
     effects.push({
       type: "focus",
       rowId: focusCellId,
@@ -718,6 +800,52 @@ export function planTableToggleHeaderRow(
       },
     },
   ];
+}
+
+export function planTableToggleHeaderColumn(
+  rows: CanvasRow[],
+  tableId: string,
+  enabled: boolean
+): CanvasEffect[] {
+  const tableRow = findRowById(rows, tableId);
+  if (!tableRow || tableRow.effectiveBlock.type !== "table") {
+    return [];
+  }
+
+  const block = tableRow.effectiveBlock;
+  if (block.props.hasHeaderColumn === enabled) {
+    return [];
+  }
+
+  return [
+    {
+      type: "persist",
+      rowId: tableId,
+      block: {
+        ...block,
+        props: { ...block.props, hasHeaderColumn: enabled },
+      },
+    },
+  ];
+}
+
+export function planTableFitToWidth(
+  rows: CanvasRow[],
+  tableId: string,
+  targetWidthPx: number
+): CanvasEffect[] {
+  const tableRow = findRowById(rows, tableId);
+  if (!tableRow || tableRow.effectiveBlock.type !== "table") {
+    return [];
+  }
+
+  const block = tableRow.effectiveBlock;
+  const columnWidths = computeTableFitToWidthColumnWidths(
+    block.props.columnWidths,
+    targetWidthPx
+  );
+
+  return planTableUpdateColumnWidths(rows, tableId, columnWidths);
 }
 
 export function planTableUpdateColumnWidths(

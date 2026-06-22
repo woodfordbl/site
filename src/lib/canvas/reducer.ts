@@ -56,10 +56,12 @@ import {
   planTableAddColumn,
   planTableAddRow,
   planTableDuplicateColumn,
+  planTableFitToWidth,
   planTableFocusAdjacentCell,
   planTableRemoveColumn,
   planTableRemoveRow,
   planTableReorderColumn,
+  planTableToggleHeaderColumn,
   planTableToggleHeaderRow,
   planTableUpdateColumnWidths,
 } from "@/lib/canvas/table-layout.ts";
@@ -677,7 +679,8 @@ export function canvasReducer(
         effects: planTableAddRow(
           state.rows,
           command.tableRowId,
-          command.edge ?? "after"
+          command.edge ?? "after",
+          { focus: command.focus }
         ),
       };
     }
@@ -689,7 +692,8 @@ export function canvasReducer(
           state.rows,
           command.tableId,
           command.columnIndex,
-          command.edge
+          command.edge,
+          { focus: command.focus }
         ),
       };
     }
@@ -742,6 +746,28 @@ export function canvasReducer(
           state.rows,
           command.tableId,
           command.enabled
+        ),
+      };
+    }
+
+    case "table.toggleHeaderColumn": {
+      return {
+        state,
+        effects: planTableToggleHeaderColumn(
+          state.rows,
+          command.tableId,
+          command.enabled
+        ),
+      };
+    }
+
+    case "table.fitToWidth": {
+      return {
+        state,
+        effects: planTableFitToWidth(
+          state.rows,
+          command.tableId,
+          command.targetWidthPx
         ),
       };
     }

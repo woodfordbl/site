@@ -123,6 +123,7 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
   table: {
     defaultProps: () => ({
       hasHeaderRow: true,
+      hasHeaderColumn: false,
       columnWidths: [1, 1, 1],
     }),
     isEmpty: () => true,

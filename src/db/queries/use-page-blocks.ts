@@ -62,15 +62,18 @@ export function usePageBlocks(pageId: string): UsePageBlocksResult {
 
   const localPage = useMemo(() => {
     if (localPageReady) {
-      return livePages[0] ?? null;
+      return livePages[0] ?? bootstrapPage;
     }
     return bootstrapPage;
   }, [bootstrapPage, livePages, localPageReady]);
 
-  const existingLocalBlocks = useMemo(
-    (): LocalBlock[] => (localBlocksReady ? liveLocalBlocks : bootstrapBlocks),
-    [bootstrapBlocks, liveLocalBlocks, localBlocksReady]
-  );
+  const existingLocalBlocks = useMemo((): LocalBlock[] => {
+    if (!localBlocksReady) {
+      return bootstrapBlocks;
+    }
+
+    return liveLocalBlocks.length > 0 ? liveLocalBlocks : bootstrapBlocks;
+  }, [bootstrapBlocks, liveLocalBlocks, localBlocksReady]);
 
   const blocks = useMemo(() => {
     const raw = blocksFromLocalBlocks(existingLocalBlocks);

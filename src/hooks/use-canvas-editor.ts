@@ -42,9 +42,12 @@ import type { Block } from "@/lib/schemas/block.ts";
  * state (rows, selection, focus, clipboard) through refs so its identity never
  * changes — the actions context built from these never invalidates consumers.
  */
-export function useCanvasEditor(serverPage: ServerPageSource) {
+export function useCanvasEditor(
+  serverPage: ServerPageSource,
+  pageHasLocalDraft = false
+) {
   const [focus, setFocus] = useState<FocusState>(null);
-  const canvas = usePageCanvas(serverPage);
+  const canvas = usePageCanvas(serverPage, pageHasLocalDraft);
   const [selection, setSelection] =
     useState<BlockSelectionState>(emptyBlockSelection);
   const [clipboard, setClipboard] = useState<CanvasClipboardPayload | null>(
@@ -61,7 +64,7 @@ export function useCanvasEditor(serverPage: ServerPageSource) {
   const clipboardRef = useRef(clipboard);
   clipboardRef.current = clipboard;
 
-  const getRows = useCallback(() => canvasRef.current.rows, []);
+  const getRows = useCallback(() => canvasRef.current.getPlacementRows(), []);
 
   const clearSelection = useCallback(() => {
     setSelection(emptyBlockSelection);

@@ -61,7 +61,7 @@ export function useMediaResize({
         }
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = null;
-          frameEl.style.width = `${pendingPercentRef.current}%`;
+          setLiveWidthPercent(pendingPercentRef.current);
         });
       };
 
@@ -83,7 +83,6 @@ export function useMediaResize({
           startWidthPercent,
         });
 
-        frameEl.style.width = "";
         document.body.style.removeProperty("user-select");
         document.body.style.removeProperty("cursor");
         setIsResizing(false);
