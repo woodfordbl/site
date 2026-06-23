@@ -68,12 +68,7 @@ export function useLocalPages(): LocalPage[] {
   }
 
   if (!isReady) {
-    // Match SSR first paint: cookie preview when the user has local edits.
-    if (previewPages.length > 0) {
-      return previewPages;
-    }
-
-    return bootstrapPages;
+    return mergeLocalPageSources(previewPages, bootstrapPages);
   }
 
   let livePages = SERVER_LOCAL_PAGES;
@@ -103,7 +98,8 @@ export function useLocalPagesSettling(): boolean {
   }
 
   if (!isReady) {
-    if (previewPages.length > 0) {
+    const merged = mergeLocalPageSources(previewPages, bootstrapPages);
+    if (merged.length > 0) {
       return false;
     }
 

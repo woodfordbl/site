@@ -14,6 +14,8 @@ export const PAGE_LIST_LOCAL_PREVIEW_COOKIE_NAME = "site-page-list-local";
 
 /** Minimal local page fields needed to render the sidebar tree on SSR. */
 export interface LocalPagePreviewEntry {
+  /** When set, the shipped page is hidden locally (see {@link mergePageList}). */
+  deletedAt?: string;
   icon?: string;
   id: string;
   parentId: string | null;
@@ -34,18 +36,23 @@ export function toLocalPagePreviewEntry(
     parentId: page.parentId,
     serverBaselineHash: page.serverBaselineHash,
     sidebarOrder: page.sidebarOrder,
+    deletedAt: page.deletedAt,
   };
 }
 
-/** Dirty overlays and user-created pages only — keeps the SSR cookie under budget. */
+/** Dirty overlays, user-created pages, and delete tombstones for SSR sidebar merge. */
 export function localPagePreviewEntriesFromPages(
   pages: LocalPage[]
 ): LocalPagePreviewEntry[] {
   const dirtyPageIds = readDirtyPageIdsFromDocument();
 
   return pages
-    .filter((page) => !isLocallyDeletedPage(page))
-    .filter((page) => isUserCreatedPage(page) || dirtyPageIds.has(page.id))
+    .filter(
+      (page) =>
+        isLocallyDeletedPage(page) ||
+        isUserCreatedPage(page) ||
+        dirtyPageIds.has(page.id)
+    )
     .map(toLocalPagePreviewEntry);
 }
 
@@ -91,6 +98,8 @@ export function parsePageListLocalPreviewCookie(
             typeof entry.sidebarOrder === "number"
               ? entry.sidebarOrder
               : undefined,
+          deletedAt:
+            typeof entry.deletedAt === "string" ? entry.deletedAt : undefined,
         } satisfies LocalPagePreviewEntry,
       ];
     });
@@ -115,19 +124,29 @@ export function readPageListLocalPreviewFromDocument(): LocalPagePreviewEntry[] 
   );
 }
 
+function previewEntryPriority(entry: LocalPagePreviewEntry): number {
+  if (entry.deletedAt != null) {
+    return 0;
+  }
+
+  if (entry.serverBaselineHash === null) {
+    return 1;
+  }
+
+  return 2;
+}
+
 /**
- * User-created pages first (they affect routing on first paint), shipped-page
- * overlays after (cosmetic title/icon) — so over-budget truncation drops the
- * least important entries.
+ * Delete tombstones first (sidebar visibility), user pages next (routing),
+ * shipped-page overlays last (cosmetic title/icon) — over-budget truncation
+ * drops the least important entries.
  */
 function entriesByPreviewPriority(
   entries: LocalPagePreviewEntry[]
 ): LocalPagePreviewEntry[] {
-  return [...entries].sort((left, right) => {
-    const leftUser = left.serverBaselineHash === null ? 0 : 1;
-    const rightUser = right.serverBaselineHash === null ? 0 : 1;
-    return leftUser - rightUser;
-  });
+  return [...entries].sort(
+    (left, right) => previewEntryPriority(left) - previewEntryPriority(right)
+  );
 }
 
 /**
@@ -181,6 +200,7 @@ export function localPagesFromPreviewEntries(
     parentId: entry.parentId,
     sidebarOrder: entry.sidebarOrder,
     serverBaselineHash: entry.serverBaselineHash,
+    deletedAt: entry.deletedAt,
     createdAt: timestamp,
     updatedAt: timestamp,
   }));
