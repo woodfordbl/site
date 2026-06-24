@@ -108,14 +108,16 @@ function PageTitleEditorView({
 
   return (
     <div className="flex flex-row items-end">
-      <PageIconPicker
-        icon={persistedIcon}
-        pageId={pageId}
-        pages={pages}
-        previousSlug={previousSlugRef.current}
-        seed={localPage ? undefined : seed}
-        title={title.trim() === "" ? DEFAULT_PAGE_TITLE : title}
-      />
+      <div className="w-9 shrink-0">
+        <PageIconPicker
+          icon={persistedIcon}
+          pageId={pageId}
+          pages={pages}
+          previousSlug={previousSlugRef.current}
+          seed={localPage ? undefined : seed}
+          title={title.trim() === "" ? DEFAULT_PAGE_TITLE : title}
+        />
+      </div>
       <EditableSurface
         ariaLabel="Page title"
         className={cn(
