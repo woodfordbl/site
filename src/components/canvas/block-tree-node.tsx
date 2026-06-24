@@ -18,6 +18,9 @@ import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
 
+/** Matches page title `PageIconPicker` trigger (`size-9` / 36px). */
+const topLevelPageTitleAlignClassName = "pl-9";
+
 interface BlockTreeNodeProps {
   mode: BlockMode;
   /** Container type when this row renders inside a container scope (column children). */
@@ -36,9 +39,14 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
   if (isContainerSpec(spec)) {
     const Container = resolveContainerComponent(spec);
     const isTable = row.effectiveBlock.type === "table";
+    const isTopLevel = !row.effectiveBlock.parentId;
+    const alignWithPageTitle = isTopLevel && !isTable;
 
     return (
       <CanvasRowShell
+        contentClassName={
+          alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
+        }
         gutter={
           mode === "edit" && !isTable ? (
             <RowGutter
@@ -65,6 +73,7 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
   const isDivider = block.type === "divider";
   const showGutter = mode === "edit";
   const isContainerChild = Boolean(block.parentId);
+  const alignWithPageTitle = !isContainerChild;
   let contentSpacingClassName: string | undefined;
   if (showGutter && !isContainerChild) {
     contentSpacingClassName =
@@ -78,6 +87,9 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
 
   return (
     <CanvasRowShell
+      contentClassName={
+        alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
+      }
       contentSpacingClassName={contentSpacingClassName}
       gutter={showGutter ? <RowGutter row={row} /> : null}
       gutterAlignCenter={isDivider}
