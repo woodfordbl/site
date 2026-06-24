@@ -1,6 +1,5 @@
 import type { CSSProperties } from "react";
 
-import { REVEAL_DELAY_DELAYED_MS } from "@/components/ui/hover-reveal.ts";
 import { ResizeHandle } from "@/components/ui/resize-handle.tsx";
 import { cn } from "@/lib/utils.ts";
 
@@ -23,15 +22,14 @@ export function ColumnResizeZone({
   onResizeStart,
 }: ColumnResizeZoneProps) {
   return (
+    // --reveal-delay: deliberate wait before the divider fades in (see motion.md).
     <div
       className={cn(
         "pointer-events-none absolute top-0 bottom-0 left-6 z-10 hidden -translate-x-1/2 touch-none md:flex",
         className
       )}
       data-reveal-group=""
-      style={
-        { "--reveal-delay": `${REVEAL_DELAY_DELAYED_MS}ms` } as CSSProperties
-      }
+      style={{ "--reveal-delay": "300ms" } as CSSProperties}
     >
       <ResizeHandle
         ariaLabel="Resize columns"

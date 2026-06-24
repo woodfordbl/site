@@ -6,9 +6,9 @@ toolbar and resize handles, table structure handles, table add-row/column
 controls, and column-divider grips. Before this, each site re-implemented the
 same idea ~10 different ways (durations of 0/100/150ms, a 300ms delay, three
 easings, `@media (hover:hover)` gating and reduced-motion handling on only one
-site). The primitive lives in [`src/styles.css`](../../src/styles.css) under
-`@layer utilities`; the React helper is
-[`src/components/ui/hover-reveal.ts`](../../src/components/ui/hover-reveal.ts).
+site). The primitive is pure CSS — it lives entirely in
+[`src/styles.css`](../../src/styles.css) under `@layer utilities`; sites opt in
+with class names and a `data-reveal-group` attribute, no helper module.
 
 ## Classes
 
@@ -34,18 +34,21 @@ block. So a site can mix the shared base with its own trigger and force states.
 
 ## Timing — standard but overridable
 
-Duration and delay come from per-instance CSS custom properties, defaulting to the
-exported constants — tweak them per instance like a Base UI tooltip's delay:
+Duration and delay come from two CSS custom properties, with CSS fallbacks for the
+defaults — so the common case needs nothing:
 
-| Property | Default | Constant |
-| --- | --- | --- |
-| `--reveal-duration` | `150ms` | `REVEAL_DURATION_MS` |
-| `--reveal-delay` | `0ms` (reveal only) | `REVEAL_DELAY_MS` |
+| Property | Default |
+| --- | --- |
+| `--reveal-duration` | `150ms` |
+| `--reveal-delay` | `0ms` (reveal only) |
 
-`revealGroupProps({ duration?, delay? })` returns `data-reveal-group` plus a
-`style` setting those properties — spread it on the container (merge `style` if
-the element already has inline styles). For the default 150ms/0ms you can just add
-`data-reveal-group=""` and let the CSS fallbacks apply.
+For the default feel just add `data-reveal-group=""` and let the fallbacks apply.
+To tweak one instance — like a Base UI tooltip's delay — set the property inline
+on the element:
+
+```tsx
+style={{ "--reveal-duration": "0ms" } as CSSProperties}
+```
 
 The delay is applied on **reveal only** (it lives in the `:hover`/`:focus-within`
 rule), so controls always hide instantly.
@@ -53,8 +56,8 @@ rule), so controls always hide instantly.
 Overrides in use:
 
 - **Table structure handles** — instant: `style={{ "--reveal-duration": "0ms" }}`.
-- **Column dividers** — deliberate wait: `--reveal-delay: REVEAL_DELAY_DELAYED_MS`
-  (300ms) on the `data-reveal-group` wrapper.
+- **Column dividers** — deliberate wait: `style={{ "--reveal-delay": "300ms" }}` on
+  the `data-reveal-group` wrapper.
 
 ## Touch / no-hover
 
@@ -79,8 +82,8 @@ to a short `opacity 100ms ease`, matching `.overlay-popover-surface`.
 
 ## Adding a new reveal surface
 
-1. Put `data-reveal-group=""` on the hover/focus container (or spread
-   `revealGroupProps()` to override timing).
+1. Put `data-reveal-group=""` on the hover/focus container (add an inline
+   `--reveal-duration` / `--reveal-delay` style to override timing).
 2. Add `hover-reveal` to the control that should appear (or `swap-reveal` /
    `swap-conceal` for a two-element slot swap).
 3. Only reach for a site-specific trigger when the reveal condition isn't "hover

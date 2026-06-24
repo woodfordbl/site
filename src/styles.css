@@ -205,7 +205,7 @@
    * Trigger: a [data-reveal-group] ancestor (hover / focus-within), or a
    * site-specific group-hover utility (e.g. table add-row reveals on last-row
    * hover). Timing comes from per-instance --reveal-duration / --reveal-delay
-   * custom properties (see revealGroupProps in components/ui/hover-reveal.ts);
+   * custom properties (default 150ms / 0ms; see docs/architecture/motion.md);
    * the delay applies on reveal only, so controls hide instantly.
    *
    * Selectors stay at zero specificity (:where) and below any real utility, so a

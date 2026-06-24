@@ -204,7 +204,7 @@
       "docs": ["docs/architecture/author-dev-mode.md"]
     },
     {
-      "globs": ["src/components/ui/hover-reveal.ts", "src/styles.css"],
+      "globs": ["src/styles.css"],
       "docs": ["docs/architecture/motion.md"]
     }
   ]
