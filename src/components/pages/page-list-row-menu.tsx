@@ -61,7 +61,7 @@ export function PageListRowDropdown({
         render={
           <SidebarMenuAction
             aria-label={`Page actions for ${title}`}
-            className="transition-opacity duration-150 ease-[var(--ease-out-strong)] hover:bg-sidebar-accent-strong hover:text-sidebar-accent-foreground group-hover/page-row:opacity-100 group-focus-visible/page-row:opacity-100 aria-expanded:bg-sidebar-accent-strong aria-expanded:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0"
+            className="hover-reveal hover:bg-sidebar-accent-strong hover:text-sidebar-accent-foreground aria-expanded:bg-sidebar-accent-strong aria-expanded:text-sidebar-accent-foreground aria-expanded:opacity-100"
             render={<button ref={menuActionRef} type="button" />}
           >
             <IconDotsVertical />

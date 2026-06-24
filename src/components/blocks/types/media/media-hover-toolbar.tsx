@@ -78,9 +78,8 @@ export function MediaHoverToolbar({
       <ButtonGroup
         aria-label="Media actions"
         className={cn(
-          "absolute z-20 opacity-0 transition-opacity duration-150 ease-[var(--ease-out-strong)]",
+          "hover-reveal absolute z-20",
           !positionStyle && "top-2 right-2",
-          "group-focus-within/media:opacity-100 group-hover/media:opacity-100",
           isActive && "opacity-100",
           className
         )}

@@ -202,6 +202,10 @@
         "src/lib/content/save-page.ts"
       ],
       "docs": ["docs/architecture/author-dev-mode.md"]
+    },
+    {
+      "globs": ["src/components/ui/hover-reveal.ts", "src/styles.css"],
+      "docs": ["docs/architecture/motion.md"]
     }
   ]
 }

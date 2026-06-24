@@ -1,5 +1,12 @@
 import { IconGripHorizontal, IconGripVertical } from "@tabler/icons-react";
-import { useCallback, useId, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { TableStructureHandleMenu } from "@/components/blocks/types/table/table-structure-handle-menu.tsx";
 import { useCanvasEditorState } from "@/components/canvas/canvas-editor-context.tsx";
 import { useDragSource } from "@/components/dnd/use-dnd.ts";
@@ -155,8 +162,8 @@ export function TableStructureHandle({
               aria-label={axis === "row" ? "Row actions" : "Column actions"}
               className={cn(
                 "group/handle pointer-events-auto relative flex items-center justify-center",
-                "cursor-pointer transition-opacity duration-0 active:cursor-grabbing",
-                "opacity-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                "hover-reveal cursor-pointer active:cursor-grabbing",
+                "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 axis === "row" ? "h-5 w-3" : "h-3 w-5",
                 revealGroupClassName,
                 "hover:opacity-100 focus-visible:opacity-100",
@@ -168,6 +175,7 @@ export function TableStructureHandle({
               }
               data-table-structure-handle
               ref={triggerRef}
+              style={{ "--reveal-duration": "0ms" } as CSSProperties}
               type="button"
             >
               <TableStructureGripVisuals
