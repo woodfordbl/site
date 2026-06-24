@@ -56,7 +56,7 @@ Layout markers:
 
 ### Structure handles {#structure-handles}
 
-Row and column chrome share [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) via [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) (left edge, body rows) and [`TableColumnHandle`](../../src/components/blocks/types/table/table-column-handle.tsx) (top edge, header cells — or first body row when `hasHeaderRow` is false). Handles stay hidden at rest (`opacity-0`) and reveal on hover:
+Row and column chrome share [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) via [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) (left edge, body rows) and [`TableColumnHandle`](../../src/components/blocks/types/table/table-column-handle.tsx) (top edge, header cells — or first body row when `hasHeaderRow` is false). Handles stay hidden at rest via the shared `.hover-reveal` primitive ([motion.md](./motion.md), with `--reveal-duration: 0ms` so they snap) and reveal on hover through these site-specific triggers:
 
 - **Rows** — `group-hover/table-row:opacity-100` on the row handle (first column only).
 - **Columns** — wrapper `group/table-layout` gets per-column `:has([data-table-column-index="n"]:hover)` rules from [`getTableColumnHandleRevealClasses`](../../src/components/blocks/types/table/table-structure-selection.ts) so hovering any cell in a column shows that column’s top handle.

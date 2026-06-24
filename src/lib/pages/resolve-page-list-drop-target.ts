@@ -25,8 +25,12 @@ export type PageListDropTarget =
       anchorPageId: string;
     };
 
-/** Min px (capped by row height) for top/bottom insert bands on each row. */
-export const PAGE_LIST_SIBLING_EDGE_PX = 10;
+/**
+ * Min px (capped by row height) for top/bottom insert bands on each row.
+ * Kept small so the central "nest under this page" band stays comfortably
+ * hittable (the before/after edges and the between-rows gaps share this value).
+ */
+export const PAGE_LIST_SIBLING_EDGE_PX = 6;
 
 /** Attribute marking sidebar rows so the DnD surface can snapshot their rects. */
 export const PAGE_LIST_ROW_ATTRIBUTE = "data-page-list-row-id";

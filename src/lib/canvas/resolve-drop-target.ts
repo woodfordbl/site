@@ -334,6 +334,38 @@ function resolveVerticalRowDrop(
   return null;
 }
 
+/**
+ * Resolve a top-level insert position from a pointer Y — used when dropping an
+ * external item (a sidebar page) into the canvas. Top-level only, so the inserted
+ * row never lands inside a container (e.g. a text-only table cell). Returns the
+ * last row's `after` as a fallback so a drop always lands somewhere.
+ */
+export function resolveTopLevelInsertEdge(
+  rows: CanvasRow[],
+  clientY: number,
+  rowRects: Map<string, DOMRect>
+): { edge: "before" | "after"; rowId: string } | null {
+  const first = rows[0];
+  const last = rows.at(-1);
+  if (!(first && last)) {
+    return null;
+  }
+
+  const firstRect = rowRects.get(first.rowId);
+  if (firstRect && clientY < firstRect.top) {
+    return { rowId: first.rowId, edge: "before" };
+  }
+
+  for (const row of rows) {
+    const rect = rowRects.get(row.rowId);
+    if (rect && clientY >= rect.top && clientY <= rect.bottom) {
+      return { rowId: row.rowId, edge: resolveDropEdge(clientY, rect) };
+    }
+  }
+
+  return { rowId: last.rowId, edge: "after" };
+}
+
 export function resolveDropTargetFromPointer(
   rows: CanvasRow[],
   clientX: number,

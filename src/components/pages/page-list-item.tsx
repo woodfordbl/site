@@ -207,7 +207,7 @@ function PageListRowLink({
         <PageIconDisplay
           className={cn(
             showExpandChevron &&
-              "absolute inset-0 flex items-center justify-center transition-opacity duration-100 ease-out group-hover/page-row:pointer-events-none group-hover/page-row:opacity-0 group-focus-visible/page-row:pointer-events-none group-focus-visible/page-row:opacity-0"
+              "swap-conceal absolute inset-0 flex items-center justify-center group-hover/page-row:pointer-events-none group-focus-visible/page-row:pointer-events-none"
           )}
           icon={icon}
         />
@@ -215,7 +215,7 @@ function PageListRowLink({
           <CollapsibleTrigger
             aria-expanded={isExpanded}
             aria-label={isExpanded ? `Collapse ${title}` : `Expand ${title}`}
-            className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-sm text-sidebar-foreground opacity-0 outline-hidden ring-sidebar-ring transition-opacity duration-100 ease-out hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-hover/page-row:pointer-events-auto group-hover/page-row:opacity-100 group-focus-visible/page-row:pointer-events-auto group-focus-visible/page-row:opacity-100"
+            className="swap-reveal pointer-events-none absolute inset-0 flex items-center justify-center rounded-sm text-sidebar-foreground outline-hidden ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-hover/page-row:pointer-events-auto group-focus-visible/page-row:pointer-events-auto"
             onClick={(event) => {
               event.stopPropagation();
             }}
@@ -246,6 +246,7 @@ function PageListRowLink({
           "hover:[&_[data-page-list-row-content]]:bg-sidebar-accent hover:[&_[data-page-list-row-content]]:text-sidebar-accent-foreground has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:bg-sidebar-accent has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:text-sidebar-accent-foreground"
       )}
       data-page-list-row-id={pageId}
+      data-reveal-group=""
       {...getSourceProps()}
     >
       <PageListRowDropIndicators dropIndicator={dropIndicator} />

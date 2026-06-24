@@ -11,6 +11,9 @@ export type CanvasCommand =
       blockType?: BlockType;
       indent?: number;
       initialText?: string;
+      /** Target page id when `blockType` is `pageLink` (e.g. a sidebar page dropped into the canvas). */
+      pageId?: string;
+      pageLinkVariant?: "linked" | "child";
     }
   | { type: "row.delete"; rowId: string }
   | { type: "selection.delete"; rowIds: string[] }

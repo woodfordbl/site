@@ -116,6 +116,7 @@ export function BlockGutter({
               render={
                 <Button
                   aria-label="Insert block"
+                  data-gutter-insert
                   onClick={(event) => {
                     const edge =
                       event.altKey || event.getModifierState("Alt")

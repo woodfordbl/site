@@ -4,6 +4,7 @@ import { normalizeDropTarget } from "@/lib/canvas/drop-target.ts";
 import {
   resolveColumnContentDrop,
   resolveDropTargetFromPointer,
+  resolveTopLevelInsertEdge,
 } from "@/lib/canvas/resolve-drop-target.ts";
 
 function row(rowId: string, children: CanvasRow[] = []): CanvasRow {
@@ -43,6 +44,44 @@ function rect(top: number, height: number, left = 0, width = 100): DOMRect {
     toJSON: () => ({}),
   } as DOMRect;
 }
+
+describe("resolveTopLevelInsertEdge", () => {
+  const rows = [row("a"), row("b"), row("c")];
+  const rects = new Map<string, DOMRect>([
+    ["a", rect(100, 40)],
+    ["b", rect(140, 40)],
+    ["c", rect(180, 40)],
+  ]);
+
+  it("inserts before the first row above the list", () => {
+    expect(resolveTopLevelInsertEdge(rows, 80, rects)).toEqual({
+      rowId: "a",
+      edge: "before",
+    });
+  });
+
+  it("inserts after the last row below the list", () => {
+    expect(resolveTopLevelInsertEdge(rows, 400, rects)).toEqual({
+      rowId: "c",
+      edge: "after",
+    });
+  });
+
+  it("uses the hovered row's midpoint for before/after", () => {
+    expect(resolveTopLevelInsertEdge(rows, 145, rects)).toEqual({
+      rowId: "b",
+      edge: "before",
+    });
+    expect(resolveTopLevelInsertEdge(rows, 175, rects)).toEqual({
+      rowId: "b",
+      edge: "after",
+    });
+  });
+
+  it("returns null when there are no rows", () => {
+    expect(resolveTopLevelInsertEdge([], 100, rects)).toBeNull();
+  });
+});
 
 describe("normalizeDropTarget", () => {
   const rows = [row("a"), row("b"), row("c")];

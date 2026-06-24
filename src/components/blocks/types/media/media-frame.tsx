@@ -25,8 +25,7 @@ interface MediaFrameProps {
 const mediaElementClassName = "max-h-[480px] w-full rounded-md object-contain";
 
 const resizeHandleVisibilityClassName = cn(
-  "pointer-events-auto z-10 opacity-0 transition-opacity duration-150 ease-[var(--ease-out-strong)]",
-  "group-focus-within/media:opacity-100 group-hover/media:opacity-100",
+  "hover-reveal pointer-events-auto z-10",
   "active:opacity-100",
   "hover:[&_span]:border-foreground/25 hover:[&_span]:shadow-md"
 );
@@ -67,6 +66,7 @@ export function MediaFrame({
       <div
         className="group/media relative mx-auto touch-none"
         data-media-frame
+        data-reveal-group=""
         ref={frameRef}
         style={{ width: `${displayWidthPercent}%` }}
       >

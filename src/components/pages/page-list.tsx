@@ -37,6 +37,7 @@ import {
   type PageRow,
 } from "@/lib/pages/build-page-tree.ts";
 import { flattenVisiblePageRows } from "@/lib/pages/flatten-visible-page-rows.ts";
+import { PAGE_DRAG_MIME_TYPE } from "@/lib/pages/page-canvas-drop.ts";
 import {
   readPageListExpandedIdsFromDocument,
   writePageListExpandedIdsToDocument,
@@ -56,7 +57,7 @@ import { NewPageButton } from "./new-page-button.tsx";
 import { PageListItem, PageListItemStatic } from "./page-list-item.tsx";
 
 /** HTML5 drag channel for sidebar page rows. */
-const pageDragChannel = createDragChannel("application/x-page-id");
+const pageDragChannel = createDragChannel(PAGE_DRAG_MIME_TYPE);
 
 function findPageById(
   pages: PageSummary[],

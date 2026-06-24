@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import { ResizeHandle } from "@/components/ui/resize-handle.tsx";
 import { cn } from "@/lib/utils.ts";
 
@@ -20,22 +22,23 @@ export function ColumnResizeZone({
   onResizeStart,
 }: ColumnResizeZoneProps) {
   return (
+    // --reveal-delay: deliberate wait before the divider fades in (see motion.md).
     <div
       className={cn(
         "pointer-events-none absolute top-0 bottom-0 left-6 z-10 hidden -translate-x-1/2 touch-none md:flex",
         className
       )}
+      data-reveal-group=""
+      style={{ "--reveal-delay": "300ms" } as CSSProperties}
     >
       <ResizeHandle
         ariaLabel="Resize columns"
         className={cn(
           "pointer-events-auto h-full",
-          "hover:[&_span]:opacity-100 hover:[&_span]:delay-300",
-          "focus-visible:[&_span]:opacity-100 focus-visible:[&_span]:delay-300",
           "active:[&_span]:opacity-100",
           "hover:[&_span]:bg-accent"
         )}
-        lineClassName="h-full opacity-0 transition-opacity delay-0 duration-150 ease-in-out"
+        lineClassName="hover-reveal h-full"
         onResizeStart={(event) => {
           onResizeStart(leftColumnId, rightColumnId, event);
         }}

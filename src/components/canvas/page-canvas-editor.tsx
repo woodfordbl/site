@@ -33,15 +33,23 @@ import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
 import { useCanvasKeyboard } from "@/hooks/use-canvas-keyboard.ts";
+import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { handleCanvasKeyboardShortcut } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
+  collectCanvasRowRects,
   type DropTarget,
   resolveDropTargetFromPointer,
+  resolveTopLevelInsertEdge,
 } from "@/lib/canvas/resolve-drop-target.ts";
 import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
+import {
+  canDropPageIntoCanvas,
+  PAGE_DRAG_MIME_TYPE,
+} from "@/lib/pages/page-canvas-drop.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
@@ -77,6 +85,46 @@ function PageCanvasEditorBody({
 }) {
   const runAfterBlockActionsMenuClose = useCloseBlockActionsMenuBeforeAction();
   const { pages } = useMergedPageListItems();
+  const dispatchPage = usePageDispatch(pages);
+  const repositionPage = usePageReposition(pages, dispatchPage);
+  const currentPageId = serverPage.id;
+
+  // Dragging a sidebar page onto the canvas inserts a child pageLink at the drop
+  // position and re-nests the page under this one (cycle/depth guarded). The
+  // reposition uses appendPageLinkOnParent:false because we place the link
+  // ourselves. @see docs/architecture/pages.md
+  const handleDropPageIntoCanvas = useCallback(
+    (droppedPageId: string, clientY: number) => {
+      if (!canDropPageIntoCanvas({ currentPageId, droppedPageId, pages })) {
+        return;
+      }
+
+      const target = resolveTopLevelInsertEdge(
+        editor.getRows(),
+        clientY,
+        collectCanvasRowRects()
+      );
+      if (target) {
+        const insertOptions = {
+          blockType: "pageLink" as const,
+          pageId: droppedPageId,
+          pageLinkVariant: "child" as const,
+        };
+        if (target.edge === "before") {
+          editor.insertBefore(target.rowId, insertOptions);
+        } else {
+          editor.insertAfter(target.rowId, insertOptions);
+        }
+      }
+
+      repositionPage({
+        appendPageLinkOnParent: false,
+        pageId: droppedPageId,
+        parentId: currentPageId,
+      });
+    },
+    [currentPageId, editor, pages, repositionPage]
+  );
 
   const deleteSelection = useCallback(() => {
     runAfterBlockActionsMenuClose(editor.deleteSelection);
@@ -301,7 +349,7 @@ function PageCanvasEditorBody({
                       data-scroll-restoration-id="page-canvas-scroll"
                     >
                       {titleSlot}
-                      <CanvasDropZone>
+                      <CanvasDropZone onDropPage={handleDropPageIntoCanvas}>
                         <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
                           {editor.rows.map((row) => (
                             <CanvasRowView
@@ -326,17 +374,74 @@ function PageCanvasEditorBody({
   );
 }
 
-function CanvasDropZone({ children }: { children: ReactNode }) {
+function isPageDrag(event: React.DragEvent<HTMLDivElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes(PAGE_DRAG_MIME_TYPE);
+}
+
+function CanvasDropZone({
+  children,
+  onDropPage,
+}: {
+  children: ReactNode;
+  onDropPage: (pageId: string, clientY: number) => void;
+}) {
   const { getDropZoneProps } = useDropZone();
   const isDragging = useDragState((state) => state.draggingId != null);
+  const [pageDragOver, setPageDragOver] = useState(false);
+  const zone = getDropZoneProps();
+
+  // Compose the canvas-row drop zone with cross-surface sidebar page drops.
+  // Spread (not inline) so the a11y "no handlers on static element" rule — which
+  // the bare drop zone already opts out of via spreading — stays satisfied.
+  const dropZoneProps = {
+    onDragLeave: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!isPageDrag(event)) {
+        zone.onDragLeave(event);
+        return;
+      }
+      const next = event.relatedTarget;
+      if (next instanceof Node && event.currentTarget.contains(next)) {
+        return;
+      }
+      setPageDragOver(false);
+    },
+    onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!isPageDrag(event)) {
+        zone.onDragOver(event);
+        return;
+      }
+      // A sidebar page is being dragged in — accept it as a child-page drop.
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      if (!pageDragOver) {
+        setPageDragOver(true);
+      }
+    },
+    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!isPageDrag(event)) {
+        zone.onDrop(event);
+        return;
+      }
+      event.preventDefault();
+      setPageDragOver(false);
+      const pageId = event.dataTransfer.getData(PAGE_DRAG_MIME_TYPE);
+      if (pageId) {
+        onDropPage(pageId, event.clientY);
+      }
+    },
+  };
 
   return (
     <div
       className={cn(
+        // Fill the scroll area so the empty space below the last block is still a
+        // drop target (native dragover only fires over the drop-zone element).
+        "flex-1",
         isDragging &&
-          "cursor-grabbing [&_input]:pointer-events-none [&_textarea]:pointer-events-none"
+          "cursor-grabbing [&_input]:pointer-events-none [&_textarea]:pointer-events-none",
+        pageDragOver && "rounded-lg ring-2 ring-accent ring-inset"
       )}
-      {...getDropZoneProps()}
+      {...dropZoneProps}
     >
       {children}
     </div>

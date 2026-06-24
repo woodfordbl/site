@@ -192,6 +192,76 @@
       transform: none;
     }
   }
+
+  /*
+   * Hover-reveal / swap — standardized opacity affordance for secondary controls
+   * (row actions, media toolbar/handles, table handles, column dividers) and the
+   * page-row icon↔chevron swap. One primitive replaces ~10 hand-rolled variants.
+   *
+   * Classes:
+   *   .hover-reveal   — hidden at rest, fades in when revealed.
+   *   .swap-reveal / .swap-conceal — two elements crossfading in one slot.
+   *
+   * Trigger: a [data-reveal-group] ancestor (hover / focus-within), or a
+   * site-specific group-hover utility (e.g. table add-row reveals on last-row
+   * hover). Timing comes from per-instance --reveal-duration / --reveal-delay
+   * custom properties (default 150ms / 0ms; see docs/architecture/motion.md);
+   * the delay applies on reveal only, so controls hide instantly.
+   *
+   * Selectors stay at zero specificity (:where) and below any real utility, so a
+   * site's force-visible state (opacity-100 while active/open) or custom trigger
+   * always wins without !important; ordering inside this block resolves ties.
+   */
+  :where(.hover-reveal, .swap-reveal) {
+    opacity: 0;
+  }
+
+  :where(.swap-conceal) {
+    opacity: 1;
+  }
+
+  :where(.hover-reveal, .swap-reveal, .swap-conceal) {
+    transition: opacity var(--reveal-duration, 150ms) var(--ease-out-strong);
+  }
+
+  :where([data-reveal-group]:hover, [data-reveal-group]:focus-within)
+    :where(.hover-reveal, .swap-reveal) {
+    opacity: 1;
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  :where([data-reveal-group]:hover, [data-reveal-group]:focus-within)
+    :where(.swap-conceal) {
+    opacity: 0;
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  /* No-hover (touch) pointers: simple reveals stay reachable; swaps rest so the
+     two slot elements never both show. */
+  @media (hover: none) {
+    :where(.hover-reveal) {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.hover-reveal, .swap-reveal, .swap-conceal) {
+      transition: opacity 100ms ease;
+    }
+  }
+
+  /* Canvas block gutter on touch: keep the grip reachable (the JS pointer-hover
+     reveal never fires without hover) and drop the insert (+) button so only the
+     drag/menu grip shows. The grip already maps tap→menu, press-drag→move. */
+  @media (hover: none) {
+    .canvas-block-gutter {
+      opacity: 1 !important;
+    }
+
+    [data-gutter-insert] {
+      display: none !important;
+    }
+  }
 }
 
 @layer base {

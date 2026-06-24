@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 const addControlBaseClassName = cn(
-  "rounded-sm border-border text-muted-foreground opacity-0 transition-opacity",
+  "hover-reveal rounded-sm border-border text-muted-foreground",
   "hover:bg-muted/30 hover:text-foreground",
   "hover:opacity-100 focus-visible:opacity-100"
 );
