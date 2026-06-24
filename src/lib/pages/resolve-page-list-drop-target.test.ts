@@ -70,6 +70,20 @@ describe("resolvePageListDropTargetFromPointer", () => {
     ).toEqual({ kind: "nest", parentPageId: "work" });
   });
 
+  it("nests across a wide central band, not just dead-center", () => {
+    // 160 sits in the lower half of the Work row (140-168) but outside the
+    // narrow sibling edges/gaps, so it should nest rather than reorder.
+    expect(
+      resolvePageListDropTargetFromPointer({
+        clientY: 160,
+        draggingPageId: "notes",
+        pages,
+        rowRects,
+        visibleRows,
+      })
+    ).toEqual({ kind: "nest", parentPageId: "work" });
+  });
+
   it("inserts before when pointer is in the top band", () => {
     expect(
       resolvePageListDropTargetFromPointer({

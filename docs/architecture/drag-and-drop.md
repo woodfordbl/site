@@ -85,6 +85,11 @@ Full grid model, structure handles, and keyboard map: [table-blocks](./table-blo
 
 Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows — same grab button composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) for click-to-open and `useDragSource` for click-hold reorder) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
 
+## Drop bands & zones
+
+- **Sidebar** — each row splits into a small top/bottom **sibling** edge (`PAGE_LIST_SIBLING_EDGE_PX`) and a wide central **nest** band (`resolveBand` `middle` → nest). The edge is kept small (6px) so dropping onto a page's body reliably nests it rather than reordering; the between-row gaps reuse the same value for "insert between siblings".
+- **Canvas** — the [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) fills the scroll area (`flex-1`) so the empty space below the last block still receives native `dragover`/`drop`; a pointer past the last row resolves to `after` the last top-level row.
+
 ## Performance
 
 Previously, every row re-rendered on each `dragover` because `dropTarget` lived in React context or parent state. The external store plus `useDropTarget` / `useDragState` selectors compare the selected slice with `Object.is` and bail out when unchanged, so only rows affected by the current target (and the overlay) update per pointer move.

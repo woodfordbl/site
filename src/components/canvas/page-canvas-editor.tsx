@@ -333,6 +333,9 @@ function CanvasDropZone({ children }: { children: ReactNode }) {
   return (
     <div
       className={cn(
+        // Fill the scroll area so the empty space below the last block is still a
+        // drop target (native dragover only fires over the drop-zone element).
+        "flex-1",
         isDragging &&
           "cursor-grabbing [&_input]:pointer-events-none [&_textarea]:pointer-events-none"
       )}
