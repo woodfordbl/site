@@ -89,6 +89,7 @@ Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (can
 
 - **Sidebar** — each row splits into a small top/bottom **sibling** edge (`PAGE_LIST_SIBLING_EDGE_PX`) and a wide central **nest** band (`resolveBand` `middle` → nest). The edge is kept small (6px) so dropping onto a page's body reliably nests it rather than reordering; the between-row gaps reuse the same value for "insert between siblings".
 - **Canvas** — the [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) fills the scroll area (`flex-1`) so the empty space below the last block still receives native `dragover`/`drop`; a pointer past the last row resolves to `after` the last top-level row.
+- **Sidebar → canvas (cross-surface)** — the surfaces are MIME-isolated, but the canvas drop zone additionally sniffs the sidebar's `PAGE_DRAG_MIME_TYPE` (`application/x-page-id`) on `dragover`/`drop`. Dropping a sidebar page onto a canvas re-nests it under the open page and appends a child `pageLink` (reusing [`usePageReposition`](../../src/hooks/use-page-reposition.ts) with `appendPageLinkOnParent`), guarded by [`canDropPageIntoCanvas`](../../src/lib/pages/page-canvas-drop.ts) (self / cycle / depth via `assertCanReposition`).
 
 ## Performance
 
