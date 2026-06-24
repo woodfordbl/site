@@ -7,7 +7,7 @@ Block UI dispatches these via `useBlockFieldActions` / `BlockRenderer` (canvas c
 | Command | Trigger |
 |---------|---------|
 | `row.update` | Field onChange; embed **Change view** toggles (`showTitle` / `showUrl`) |
-| `row.insert` | Gutter + — position `{ parentId, anchorRowId, edge }` or `{ parentId, atScopeStart }` |
+| `row.insert` | Gutter + — position `{ parentId, anchorRowId, edge }` or `{ parentId, atScopeStart }`; optional `pageId` + `pageLinkVariant` build a `pageLink` (sidebar page dropped into the canvas) |
 | `row.split` | Enter in text block at caret (text after caret → new block of same type); at end of row → empty `text` block after; at caret 0 on non-empty top-level row → empty row before (same type), focus stays on original row; on empty top-level row → empty `text` row after; **list child at caret 0** lifts out as top-level `text` (empty or not; splits list when needed) |
 | `row.delete` | Structural resolver; gutter menu **Delete** |
 | `row.convert` | Slash selection; gutter menu **Turn into**. Container children stay inside only when container policy allows the target; list items stay in the list only for `text → text`; other targets lift the item out and split the list when needed. `pageLink` conversions pass `options.pageId` and optional `options.pageLinkVariant` (`linked` \| `child`). |

@@ -200,12 +200,21 @@ export function canvasReducer(
     }
 
     case "row.insert": {
-      let block = createEmptyBlock(command.blockType ?? "text");
-      if (command.indent !== undefined) {
-        block.indent = command.indent;
-      }
-      if (command.initialText) {
-        block = withBlockText(block, command.initialText);
+      let block: Block;
+      if (command.blockType === "pageLink" && command.pageId) {
+        block = convertBlockType(createEmptyBlock("text"), "pageLink", {
+          indent: command.indent,
+          pageId: command.pageId,
+          pageLinkVariant: command.pageLinkVariant,
+        });
+      } else {
+        block = createEmptyBlock(command.blockType ?? "text");
+        if (command.indent !== undefined) {
+          block.indent = command.indent;
+        }
+        if (command.initialText) {
+          block = withBlockText(block, command.initialText);
+        }
       }
       if (command.position.parentId) {
         block.parentId = command.position.parentId;

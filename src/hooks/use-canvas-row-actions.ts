@@ -12,6 +12,8 @@ export interface RowInsertOptions {
   blockType?: BlockType;
   indent?: number;
   initialText?: string;
+  pageId?: string;
+  pageLinkVariant?: "linked" | "child";
 }
 
 interface UseCanvasRowActionsOptions {
@@ -44,6 +46,8 @@ export function useCanvasRowActions({
         blockType: options?.blockType,
         indent: options?.indent,
         initialText: options?.initialText,
+        pageId: options?.pageId,
+        pageLinkVariant: options?.pageLinkVariant,
       });
     },
     [dispatch, getPlacementRows]

@@ -39,8 +39,10 @@ import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { handleCanvasKeyboardShortcut } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
+  collectCanvasRowRects,
   type DropTarget,
   resolveDropTargetFromPointer,
+  resolveTopLevelInsertEdge,
 } from "@/lib/canvas/resolve-drop-target.ts";
 import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
@@ -87,20 +89,41 @@ function PageCanvasEditorBody({
   const repositionPage = usePageReposition(pages, dispatchPage);
   const currentPageId = serverPage.id;
 
-  // Dragging a sidebar page onto the canvas re-nests it under this page and
-  // appends a child pageLink (cycle/depth guarded). @see docs/architecture/pages.md
+  // Dragging a sidebar page onto the canvas inserts a child pageLink at the drop
+  // position and re-nests the page under this one (cycle/depth guarded). The
+  // reposition uses appendPageLinkOnParent:false because we place the link
+  // ourselves. @see docs/architecture/pages.md
   const handleDropPageIntoCanvas = useCallback(
-    (droppedPageId: string) => {
+    (droppedPageId: string, clientY: number) => {
       if (!canDropPageIntoCanvas({ currentPageId, droppedPageId, pages })) {
         return;
       }
+
+      const target = resolveTopLevelInsertEdge(
+        editor.getRows(),
+        clientY,
+        collectCanvasRowRects()
+      );
+      if (target) {
+        const insertOptions = {
+          blockType: "pageLink" as const,
+          pageId: droppedPageId,
+          pageLinkVariant: "child" as const,
+        };
+        if (target.edge === "before") {
+          editor.insertBefore(target.rowId, insertOptions);
+        } else {
+          editor.insertAfter(target.rowId, insertOptions);
+        }
+      }
+
       repositionPage({
-        appendPageLinkOnParent: true,
+        appendPageLinkOnParent: false,
         pageId: droppedPageId,
         parentId: currentPageId,
       });
     },
-    [currentPageId, pages, repositionPage]
+    [currentPageId, editor, pages, repositionPage]
   );
 
   const deleteSelection = useCallback(() => {
@@ -360,7 +383,7 @@ function CanvasDropZone({
   onDropPage,
 }: {
   children: ReactNode;
-  onDropPage: (pageId: string) => void;
+  onDropPage: (pageId: string, clientY: number) => void;
 }) {
   const { getDropZoneProps } = useDropZone();
   const isDragging = useDragState((state) => state.draggingId != null);
@@ -403,7 +426,7 @@ function CanvasDropZone({
       setPageDragOver(false);
       const pageId = event.dataTransfer.getData(PAGE_DRAG_MIME_TYPE);
       if (pageId) {
-        onDropPage(pageId);
+        onDropPage(pageId, event.clientY);
       }
     },
   };
