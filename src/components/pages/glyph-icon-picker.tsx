@@ -6,7 +6,6 @@ import {
   type ComponentType,
   type RefObject,
   useCallback,
-  useEffect,
   useState,
 } from "react";
 
@@ -26,7 +25,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs.tsx";
 import {
-  prefetchPageIconCatalogs,
+  ensurePageIconPickerReady,
   preloadPageIconEmojiPanel,
   preloadPageIconIconPanel,
 } from "@/lib/pages/preload-page-icon-picker.ts";
@@ -96,6 +95,7 @@ function useGlyphIconPickerPanels() {
     useState<ComponentType<PageIconPickerIconPanelProps> | null>(null);
 
   const ensurePanels = useCallback(() => {
+    ensurePageIconPickerReady(queryClient);
     preloadPageIconEmojiPanel()
       .then((Panel) => setEmojiPanel(() => Panel))
       .catch(() => {
@@ -106,17 +106,7 @@ function useGlyphIconPickerPanels() {
       .catch(() => {
         /* prefetch is best-effort */
       });
-    prefetchPageIconCatalogs(queryClient);
   }, [queryClient]);
-
-  useEffect(() => {
-    const idleId = requestIdleCallback(() => {
-      ensurePanels();
-    });
-    return () => {
-      cancelIdleCallback(idleId);
-    };
-  }, [ensurePanels]);
 
   return { EmojiPanel, IconPanel, ensurePanels };
 }

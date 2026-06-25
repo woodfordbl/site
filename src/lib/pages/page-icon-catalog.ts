@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
+import { getSidebarTablerGlyphs } from "@/lib/pages/get-sidebar-tabler-glyphs.ts";
 import type {
   TablerIconCatalogItem,
   TablerIconNode,
@@ -24,8 +25,8 @@ async function fetchTablerIconCatalog(): Promise<TablerIconCatalog> {
 }
 
 /**
- * Shared query for the deferred Tabler catalog. Parsed once and cached forever; reused by the
- * icon picker panel and {@link useTablerIconGlyph} so the asset is fetched at most once.
+ * Shared query for the deferred Tabler catalog. Parsed once and cached forever; used by the
+ * icon picker panel only — passive display uses SSR glyphs or {@link tablerGlyphByNameQueryOptions}.
  */
 export const tablerIconCatalogQueryOptions = queryOptions({
   queryKey: ["page-icon", "tabler-catalog"],
@@ -44,18 +45,30 @@ export interface TablerIconGlyph {
   node: TablerIconNode;
 }
 
-/**
- * Reads a single icon's glyph from the cached catalog without triggering a fetch (`enabled: false`).
- * Returns `undefined` until the catalog is warmed, so {@link PageIconDisplay} can paint a fallback first.
- */
-export function useTablerIconGlyph(name: string): TablerIconGlyph | undefined {
-  const { data } = useQuery({
-    ...tablerIconCatalogQueryOptions,
-    enabled: false,
-    select: (catalog): TablerIconGlyph | undefined => {
-      const item = catalog.byName.get(name);
-      return item ? { node: item.node, filled: item.filled } : undefined;
+/** Fetches a single Tabler glyph by name via the server catalog (no full JSON download). */
+export function tablerGlyphByNameQueryOptions(name: string) {
+  return queryOptions({
+    queryKey: ["page-icon", "tabler-glyph", name] as const,
+    queryFn: async (): Promise<TablerIconGlyph | undefined> => {
+      const glyphs = await getSidebarTablerGlyphs({ data: [name] });
+      return glyphs[name];
     },
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+/**
+ * Resolves a Tabler glyph for passive display. Prefer `preloadedGlyph` from the root loader;
+ * otherwise fetches by name from the server catalog without loading the full picker asset.
+ */
+export function useTablerIconGlyph(
+  name: string,
+  enabled = true
+): TablerIconGlyph | undefined {
+  const { data } = useQuery({
+    ...tablerGlyphByNameQueryOptions(name),
+    enabled: enabled && name.length > 0,
   });
   return data;
 }

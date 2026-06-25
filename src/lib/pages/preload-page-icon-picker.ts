@@ -46,16 +46,22 @@ export function prefetchPageIconCatalogs(queryClient: QueryClient): void {
   });
 }
 
-/**
- * Idle warmup entry point: code-split panels + both catalog assets.
- * @see docs/architecture/pages.md#page-icons
- */
-export function warmPageIconPicker(queryClient: QueryClient): void {
+/** Idle global warmup: code-split panel chunks only (no JSON catalogs). */
+export function warmPageIconPickerChunks(): void {
   preloadPageIconEmojiPanel().catch(() => {
     /* best-effort */
   });
   preloadPageIconIconPanel().catch(() => {
     /* best-effort */
   });
+}
+
+/**
+ * Picker intent entry point: panel chunks + both catalog assets.
+ * Called on pointer enter and popover open — not on every route.
+ * @see docs/architecture/pages.md#page-icons
+ */
+export function ensurePageIconPickerReady(queryClient: QueryClient): void {
+  warmPageIconPickerChunks();
   prefetchPageIconCatalogs(queryClient);
 }

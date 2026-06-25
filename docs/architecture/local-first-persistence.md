@@ -144,18 +144,18 @@ In `import.meta.env.DEV`, author can save working copy directly to JSON — see 
 |--------|------|---------|
 | [`MigrateUserPageRoutesEffect`](../../src/components/pages/migrate-user-page-routes-effect.tsx) | First catalog snapshot | User page slug repair for shadowed/duplicate paths ([Migration](#migration)) |
 | [`SyncPageListLocalPreviewEffect`](../../src/components/pages/sync-page-list-local-preview-effect.tsx) | Mount + every `localPagesCollection` change | Mirrors local page sidebar metadata into the `site-page-list-local` cookie ([SSR hint cookies](#ssr-hint-cookies)) |
-| [`WarmPageIconPickerCacheEffect`](../../src/components/pages/warm-page-icon-picker-cache-effect.tsx) | `requestIdleCallback` on every route | Best-effort [`warmPageIconPicker`](../../src/lib/pages/preload-page-icon-picker.ts): code-split emoji + icon panel chunks and `prefetchPageIconCatalogs` (both catalog assets into the TanStack Query cache) |
+| [`WarmPageIconPickerCacheEffect`](../../src/components/pages/warm-page-icon-picker-cache-effect.tsx) | `scheduleIdleCallback` on every route | Best-effort [`warmPageIconPickerChunks`](../../src/lib/pages/preload-page-icon-picker.ts): code-split emoji + icon panel chunks only (catalog JSON loads on picker intent) |
 
 Importing `local-collections.ts` at the top of the provider also kicks off `startLocalCollectionsSync` (migrations, dirty-cookie reconcile, collection sync, idle orphan-asset sweep).
 
 ## Client-only icon/emoji assets (not in TanStack collections)
 
-Page icon catalogs are separate from page/block persistence. The warm effect and picker preload share [`preload-page-icon-picker.ts`](../../src/lib/pages/preload-page-icon-picker.ts): cached dynamic imports of [`PageIconPickerEmojiPanel`](../../src/components/pages/page-icon-picker-emoji-panel.tsx) and [`PageIconPickerIconPanel`](../../src/components/pages/page-icon-picker-icon-panel.tsx) plus `prefetchPageIconCatalogs`, which warms two self-hosted JSON assets into TanStack Query (`staleTime: Infinity`):
+Page icon catalogs are separate from page/block persistence. [`preload-page-icon-picker.ts`](../../src/lib/pages/preload-page-icon-picker.ts) owns cached dynamic imports of [`PageIconPickerEmojiPanel`](../../src/components/pages/page-icon-picker-emoji-panel.tsx) and [`PageIconPickerIconPanel`](../../src/components/pages/page-icon-picker-icon-panel.tsx). Global idle warm loads panel chunks only; `ensurePageIconPickerReady` (pointer enter / popover open) also runs `prefetchPageIconCatalogs`, warming two self-hosted JSON assets into TanStack Query (`staleTime: Infinity`):
 
 - Emoji — `/emojibase/en/data.json` from [`PAGE_ICON_EMOJIBASE_URL`](../../src/lib/pages/page-icon-emojibase.ts), copied at dev/build via `pnpm sync:emojibase` (`scripts/sync-emojibase-public.mjs`).
 - Tabler icons — `/tabler/icons.json`, generated at dev/build via `pnpm sync:icons` (`scripts/sync-tabler-icons-public.mjs`) from the installed `@tabler/icons-react` glyph data (all ~6,100 icons as `{ name, keywords, filled, node }`). The same script writes `src/generated/tabler-icons.json`, the bundled copy used for SSR glyph rendering ([`read-tabler-glyphs.server.ts`](../../src/lib/pages/read-tabler-glyphs.server.ts)) — the server never reads `public/` at runtime.
 
-Neither asset is stored in `site-local-pages` shards, and neither is statically imported on the page-render path, so they never land in the first-paint bundle. [`PageIconDisplay`](../../src/components/pages/page-icon-display.tsx) reads the Tabler catalog with `enabled: false` so a page with a `tabler:` icon paints the default glyph first and upgrades once the idle warm populates the cache. Picker layout and tab UX: [pages — Page icons](./pages.md#page-icons).
+Neither asset is stored in `site-local-pages` shards, and neither is statically imported on the page-render path, so they never land in the first-paint bundle. Passive Tabler display uses SSR glyphs plus optional by-name server fetches; the full JSON catalogs load only when the picker opens. Picker layout and tab UX: [pages — Page icons](./pages.md#page-icons).
 
 ## Migration
 

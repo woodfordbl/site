@@ -107,3 +107,7 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 - [Pages — Sidebar drag-and-drop](./pages.md#sidebar-drag-and-drop)
 - [Canvas commands](../reference/canvas-commands.md)
 - [Page commands — `page.reposition`](../reference/page-commands.md#page-reposition)
+
+## Scope
+
+This document covers the shared DnD toolkit only. Other modules under `src/components/pages/` (for example the icon picker) are documented in [pages](./pages.md) and do not use this DnD layer.
