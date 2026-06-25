@@ -55,7 +55,7 @@ interface CanvasRowShellProps {
   children: ReactNode;
   className?: string;
   contentClassName?: string;
-  /** Top-level block spacing applied to the content column when a gutter is shown. */
+  /** Top-level block spacing on the content column (and gutter wrapper) when a gutter is shown. */
   contentSpacingClassName?: string;
   gutter?: ReactNode;
   /** Vertically centers gutter controls with short, non-text rows (e.g. divider). */
@@ -151,7 +151,11 @@ export function CanvasRowShell({
         className="pointer-events-none -ml-12 w-12 shrink-0 [&_.canvas-block-gutter]:opacity-0"
         data-canvas-row-gutter-host
       >
-        <div className="pointer-events-auto h-fit">{gutter}</div>
+        <div
+          className={cn("pointer-events-auto h-fit", contentSpacingClassName)}
+        >
+          {gutter}
+        </div>
       </div>
     );
   } else if (reserveGutterSpace) {
@@ -180,7 +184,6 @@ export function CanvasRowShell({
         className={cn(
           "flex min-w-0",
           gutterAlignCenter ? "items-center" : "items-start",
-          contentSpacingClassName,
           gutter &&
             "[&:has([data-canvas-row-content]_[data-canvas-row-shell]:hover)>_[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-0!",
           gutter &&
@@ -196,7 +199,8 @@ export function CanvasRowShell({
         <div
           className={cn(
             "min-h-0 min-w-0 flex-1 rounded-lg transition-colors",
-            isSelected && "bg-accent",
+            contentSpacingClassName,
+            isSelected && "bg-selection",
             contentClassName
           )}
           data-canvas-row-content

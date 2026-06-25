@@ -141,7 +141,7 @@ export function PageSidebarHoverReveal({
       <div
         aria-hidden={!open}
         className={cn(
-          "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-sidebar text-sidebar-foreground shadow-lg",
+          "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg",
           "transition-[transform,opacity,visibility] will-change-transform motion-reduce:transition-opacity",
           open
             ? "pointer-events-auto opacity-100"

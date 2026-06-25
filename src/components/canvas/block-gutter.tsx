@@ -7,8 +7,7 @@ import {
   BlockActionsMenuTrigger,
   useBlockActionsMenu,
 } from "@/components/canvas/block-actions-menu.tsx";
-import type { BlockViewOption } from "@/components/canvas/block-gutter-menu.tsx";
-import { BlockGutterMenu } from "@/components/canvas/block-gutter-menu.tsx";
+import { BlockGutterMenu } from "@/components/canvas/block-gutter-menu/block-gutter-menu.tsx";
 import { useCanvasMenu } from "@/components/canvas/canvas-menu-context.tsx";
 import { useDragSource } from "@/components/dnd/use-dnd.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -32,7 +31,6 @@ const GUTTER_TOOLTIP_GROUP_TIMEOUT_MS = 800;
 
 interface BlockGutterProps {
   alignClassName?: string;
-  canTurnInto?: boolean;
   isSelected?: boolean;
   onConvert?: (item: SlashMenuItem) => void;
   onDelete?: () => void;
@@ -42,11 +40,6 @@ interface BlockGutterProps {
   onMenuOpen?: () => void;
   onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
   rowId: string;
-  turnIntoValue?: string;
-  viewOptions?: {
-    items: BlockViewOption[];
-    label: string;
-  };
 }
 
 export function BlockGutter({
@@ -60,9 +53,6 @@ export function BlockGutter({
   onDelete,
   onDragInteractionStart,
   isSelected = false,
-  canTurnInto = false,
-  turnIntoValue,
-  viewOptions,
 }: BlockGutterProps) {
   const { openRowId, setOpenRowId } = useBlockActionsMenu();
   const { closeMenu: closeSlashMenu } = useCanvasMenu();
@@ -228,13 +218,10 @@ export function BlockGutter({
 
         <BlockActionsMenuContent>
           <BlockGutterMenu
-            canTurnInto={canTurnInto}
             onConvert={onConvert}
             onDelete={onDelete}
             onDuplicate={onDuplicate}
             rowId={rowId}
-            turnIntoValue={turnIntoValue}
-            viewOptions={viewOptions}
           />
         </BlockActionsMenuContent>
       </BlockActionsMenu>

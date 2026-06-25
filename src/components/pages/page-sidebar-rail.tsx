@@ -141,7 +141,7 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
             <button
               aria-label="Resize or collapse sidebar"
               className={cn(
-                "absolute inset-inline-start-0 inset-y-0 z-30 hidden w-4 -translate-x-1/2 cursor-col-resize border-0 bg-transparent p-0 outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 hover:after:bg-sidebar-border focus-visible:outline-none focus-visible:ring-0 sm:flex",
+                "absolute inset-inline-start-0 inset-y-0 z-30 hidden w-4 -translate-x-1/2 cursor-col-resize border-0 bg-transparent p-0 outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 hover:after:bg-selection focus-visible:outline-none focus-visible:ring-0 sm:flex",
                 className
               )}
               data-page-sidebar-rail=""

@@ -75,7 +75,7 @@ export function PageLinkEdit({
 
   return (
     <Button
-      className="w-full justify-start px-1 font-normal text-base focus-visible:border-none focus-visible:ring-0"
+      className="w-full justify-start px-1 font-normal text-base text-foreground focus-visible:border-none focus-visible:ring-0"
       nativeButton={false}
       onKeyDown={handleKeyDown}
       render={

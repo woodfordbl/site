@@ -111,7 +111,7 @@ function DropdownMenuItem({
   return (
     <MenuPrimitive.Item
       className={cn(
-        "group/dropdown-menu-item relative flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent not-data-[variant=destructive]:focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-[variant=destructive]:data-highlighted:text-destructive data-disabled:pointer-events-none data-highlighted:bg-accent data-inset:pl-7 not-data-[variant=destructive]:data-highlighted:text-accent-foreground data-disabled:opacity-50 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:hover:text-destructive [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-[variant=destructive]:data-highlighted:[&_svg]:text-destructive data-[variant=destructive]:focus:[&_svg]:text-destructive data-[variant=destructive]:hover:[&_svg]:text-destructive",
+        "group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent not-data-[variant=destructive]:focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-[variant=destructive]:data-highlighted:text-destructive data-disabled:pointer-events-none data-highlighted:bg-accent data-inset:pl-7 not-data-[variant=destructive]:data-highlighted:text-accent-foreground data-disabled:opacity-50 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:hover:text-destructive [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-[variant=destructive]:data-highlighted:[&_svg]:text-destructive data-[variant=destructive]:focus:[&_svg]:text-destructive data-[variant=destructive]:hover:[&_svg]:text-destructive",
         className
       )}
       data-highlighted={highlighted ? "" : undefined}
@@ -140,7 +140,7 @@ function DropdownMenuSubTrigger({
   return (
     <MenuPrimitive.SubmenuTrigger
       className={cn(
-        "flex cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-highlighted:bg-accent data-open:bg-accent data-popup-open:bg-accent data-inset:pl-7 data-highlighted:text-accent-foreground data-open:text-accent-foreground data-popup-open:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "flex cursor-default select-none items-center gap-2 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-highlighted:bg-accent data-open:bg-accent data-popup-open:bg-accent data-inset:pl-7 data-highlighted:text-accent-foreground data-open:text-accent-foreground data-popup-open:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       data-highlighted={highlighted ? "" : undefined}
@@ -185,6 +185,7 @@ function DropdownMenuSwitchItem({
   className,
   disabled,
   onCheckedChange,
+  onClick,
   ...props
 }: Omit<MenuPrimitive.Item.Props, "children"> & {
   checked: boolean;
@@ -193,6 +194,7 @@ function DropdownMenuSwitchItem({
 }) {
   return (
     <MenuPrimitive.Item
+      aria-checked={checked}
       className={cn(
         "group/dropdown-menu-item relative flex cursor-default select-none items-center justify-between gap-3 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent not-data-[variant=destructive]:focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-highlighted:bg-accent data-inset:pl-7 data-highlighted:text-accent-foreground data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
@@ -200,17 +202,22 @@ function DropdownMenuSwitchItem({
       closeOnClick={false}
       data-slot="dropdown-menu-switch-item"
       disabled={disabled}
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented || disabled) {
+          return;
+        }
+        onCheckedChange(!checked);
+      }}
       {...props}
     >
-      <span className="flex min-w-0 items-center gap-1.5">{children}</span>
+      <span className="flex min-w-0 items-center gap-2">{children}</span>
       <Switch
         checked={checked}
+        className="pointer-events-none"
         disabled={disabled}
-        onCheckedChange={onCheckedChange}
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
         size="sm"
+        tabIndex={-1}
       />
     </MenuPrimitive.Item>
   );
@@ -229,7 +236,7 @@ function DropdownMenuCheckboxItem({
     <MenuPrimitive.CheckboxItem
       checked={checked}
       className={cn(
-        "relative flex cursor-default select-none items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-inset:pl-7 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "relative flex cursor-default select-none items-center gap-2 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-inset:pl-7 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       data-inset={inset}
@@ -269,7 +276,7 @@ function DropdownMenuRadioItem({
   return (
     <MenuPrimitive.RadioItem
       className={cn(
-        "relative flex cursor-default select-none items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-inset:pl-7 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "relative flex cursor-default select-none items-center gap-2 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-inset:pl-7 data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       data-inset={inset}

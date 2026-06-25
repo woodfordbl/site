@@ -35,10 +35,10 @@ export function ColumnResizeZone({
         ariaLabel="Resize columns"
         className={cn(
           "pointer-events-auto h-full",
-          "active:[&_span]:opacity-100",
-          "hover:[&_span]:bg-accent"
+          "focus-visible:[&_span]:opacity-100",
+          "active:[&_span]:opacity-100"
         )}
-        lineClassName="hover-reveal h-full"
+        lineClassName="hover-reveal h-full bg-selection"
         onResizeStart={(event) => {
           onResizeStart(leftColumnId, rightColumnId, event);
         }}

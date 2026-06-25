@@ -188,8 +188,12 @@ export function syncPageListLocalPreviewFromCollection(
 
 /** Converts preview entries into `LocalPage` stubs for `mergePageList`. */
 export function localPagesFromPreviewEntries(
-  entries: LocalPagePreviewEntry[]
+  entries: LocalPagePreviewEntry[] | undefined
 ): LocalPage[] {
+  if (!entries) {
+    return [];
+  }
+
   const timestamp = "1970-01-01T00:00:00.000Z";
 
   return entries.map((entry) => ({

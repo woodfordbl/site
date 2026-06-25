@@ -90,6 +90,10 @@ describe("parsePageListLocalPreviewCookie", () => {
 });
 
 describe("localPagesFromPreviewEntries", () => {
+  it("returns an empty list when entries are missing", () => {
+    expect(localPagesFromPreviewEntries(undefined)).toEqual([]);
+  });
+
   it("passes deletedAt into LocalPage stubs for mergePageList", () => {
     const merged = mergePageList(
       serverPages,
