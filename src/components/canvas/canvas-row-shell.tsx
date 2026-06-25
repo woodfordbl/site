@@ -148,7 +148,7 @@ export function CanvasRowShell({
   if (gutter) {
     gutterHost = (
       <div
-        className="pointer-events-none -ml-12 w-12 shrink-0 [&_.canvas-block-gutter]:opacity-0"
+        className="pointer-events-none -ml-8 w-8 shrink-0 md:-ml-12 md:w-12 [&_.canvas-block-gutter]:opacity-0"
         data-canvas-row-gutter-host
       >
         <div
@@ -162,7 +162,7 @@ export function CanvasRowShell({
     gutterHost = (
       <div
         aria-hidden
-        className="-ml-12 w-12 shrink-0"
+        className="-ml-8 w-8 shrink-0 md:-ml-12 md:w-12"
         data-canvas-row-gutter-host
       />
     );

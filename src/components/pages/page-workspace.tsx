@@ -125,6 +125,8 @@ function PageWorkspaceBody({
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isMobile || isCollapsed);
 
+  const header = <PageHeader pageId={page.id} titleSeed={titleSeed} />;
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <div
@@ -132,10 +134,17 @@ function PageWorkspaceBody({
         data-page-main-panel=""
       >
         {showSidebarRail ? <PageSidebarRail /> : null}
-        <PageHeader pageId={page.id} titleSeed={titleSeed} />
+        {/* Desktop: header is fixed above the scroll region. Mobile: it lives
+            inside the scroll region (as headerSlot) so it scrolls away. */}
+        {isMobile ? null : header}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <PageCanvas
             footerHost={footerHost}
+            headerSlot={
+              isMobile ? (
+                <div className="-mr-4 mb-4 -ml-8 md:hidden">{header}</div>
+              ) : null
+            }
             pageHasLocalDraft={pageHasLocalDraft}
             serverPage={toServerPageSource(page, initialBlocks)}
             titleSlot={

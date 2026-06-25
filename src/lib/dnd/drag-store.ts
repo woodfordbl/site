@@ -8,6 +8,8 @@ export interface DragState<TDropTarget> {
   draggingId: string | null;
   dropTarget: TDropTarget | null;
   pointer: DragPointer | null;
+  /** True when the drag is driven by pointer events (touch) rather than native HTML5 DnD. */
+  pointerDrag: boolean;
 }
 
 export interface DragStore<TDropTarget> {
@@ -15,7 +17,7 @@ export interface DragStore<TDropTarget> {
   getSnapshot(): DragState<TDropTarget>;
   setDropTarget(target: TDropTarget | null): void;
   setPointer(pointer: DragPointer): void;
-  startDrag(id: string, pointer: DragPointer): void;
+  startDrag(id: string, pointer: DragPointer, pointerDrag?: boolean): void;
   subscribe(listener: () => void): () => void;
 }
 
@@ -23,6 +25,7 @@ const IDLE_STATE: DragState<unknown> = {
   draggingId: null,
   pointer: null,
   dropTarget: null,
+  pointerDrag: false,
 };
 
 /**
@@ -53,8 +56,8 @@ export function createDragStore<TDropTarget>(): DragStore<TDropTarget> {
         listeners.delete(listener);
       };
     },
-    startDrag(id, pointer) {
-      set({ draggingId: id, pointer, dropTarget: null });
+    startDrag(id, pointer, pointerDrag = false) {
+      set({ draggingId: id, pointer, dropTarget: null, pointerDrag });
     },
     setPointer(pointer) {
       if (state.draggingId == null) {

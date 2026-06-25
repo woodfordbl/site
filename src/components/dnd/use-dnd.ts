@@ -15,6 +15,7 @@ import {
   DndContext,
   type DndContextValue,
 } from "@/components/dnd/dnd-surface.tsx";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer.ts";
 import { usePointerClickVsDrag } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { prepareDataTransferForMove } from "@/lib/dnd/drag-channel.ts";
 import type { DragState, DragStore } from "@/lib/dnd/drag-store.ts";
@@ -23,6 +24,7 @@ const IDLE_STATE: DragState<unknown> = {
   draggingId: null,
   pointer: null,
   dropTarget: null,
+  pointerDrag: false,
 };
 
 function useDndContext(): DndContextValue<unknown> | null {
@@ -128,7 +130,7 @@ interface UseDragSourceOptions {
 }
 
 interface SourceHandlers {
-  draggable: true;
+  draggable: boolean;
   onClick: (event: ReactMouseEvent<HTMLElement>) => void;
   onDragEnd: (event: ReactDragEvent<HTMLElement>) => void;
   onDragStart: (event: ReactDragEvent<HTMLElement>) => void;
@@ -143,6 +145,9 @@ interface SourceHandlers {
 type SourceOverrides = Partial<Omit<SourceHandlers, "draggable">>;
 
 const MOVE_THRESHOLD_PX = 2;
+
+/** Touch drags start past this travel so a tap-to-open still registers as a tap. */
+const TOUCH_DRAG_THRESHOLD_PX = 6;
 
 function compose<E>(
   ours: (event: E) => void,
@@ -177,11 +182,19 @@ export function useDragSource(options: UseDragSourceOptions): {
   const canvasRowCtx = useCanvasRowDndContext();
   const ctx = useCanvasRowSurface ? canvasRowCtx : nestedCtx;
   const isDragging = useDragState((state) => state.draggingId === id);
+  const coarse = useCoarsePointer();
 
   const [holdReady, setHoldReady] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
+  // Pointer (touch) drag bookkeeping — native HTML5 DnD never fires on touch.
+  const touchDragOriginRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const isTouchDraggingRef = useRef(false);
 
   const {
     handleClick,
@@ -202,11 +215,139 @@ export function useDragSource(options: UseDragSourceOptions): {
     setIsMoving(false);
   }, []);
 
+  // --- Touch (coarse pointer) drag path ---------------------------------------
+  // Native HTML5 DnD never fires on touch, so the grip is not `draggable` and
+  // the drag is driven entirely by pointer events against the store directly.
+  const touchPointerDown = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      if (event.button === 0) {
+        touchDragOriginRef.current = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+        };
+        isTouchDraggingRef.current = false;
+      }
+      handlePointerDown(event);
+    },
+    [handlePointerDown]
+  );
+
+  const touchPointerMove = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      const origin = touchDragOriginRef.current;
+      if (!origin || event.pointerId !== origin.pointerId) {
+        return;
+      }
+      if (isTouchDraggingRef.current) {
+        event.preventDefault();
+        ctx?.movePointer({ x: event.clientX, y: event.clientY });
+        return;
+      }
+      const movedX = event.clientX - origin.x;
+      const movedY = event.clientY - origin.y;
+      if (Math.hypot(movedX, movedY) < TOUCH_DRAG_THRESHOLD_PX) {
+        return;
+      }
+      isTouchDraggingRef.current = true;
+      try {
+        event.currentTarget.setPointerCapture(origin.pointerId);
+      } catch {
+        // Pointer may already be released (fast flick); drag still proceeds.
+      }
+      clickVsDragStart(event as unknown as ReactDragEvent<HTMLElement>);
+      setIsMoving(true);
+      ctx?.beginPointerDrag(id, { x: event.clientX, y: event.clientY });
+    },
+    [clickVsDragStart, ctx, id]
+  );
+
+  const touchPointerUp = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      const origin = touchDragOriginRef.current;
+      const wasDragging = isTouchDraggingRef.current;
+      if (origin && event.pointerId === origin.pointerId) {
+        try {
+          event.currentTarget.releasePointerCapture(origin.pointerId);
+        } catch {
+          // Capture may not be held; nothing to release.
+        }
+      }
+      touchDragOriginRef.current = null;
+      isTouchDraggingRef.current = false;
+      if (wasDragging) {
+        clickVsDragEnd();
+        setIsMoving(false);
+        ctx?.commitPointerDrop();
+      }
+      // A tap opens the menu via the trailing native `click` (handleClick), not
+      // here: opening on pointerup would let the menu trigger's own click toggle
+      // it straight back closed. A real drag captures the pointer, so no click
+      // fires and the menu stays closed.
+    },
+    [clickVsDragEnd, ctx]
+  );
+
+  const touchPointerCancel = useCallback(() => {
+    const wasDragging = isTouchDraggingRef.current;
+    touchDragOriginRef.current = null;
+    isTouchDraggingRef.current = false;
+    setIsMoving(false);
+    if (wasDragging) {
+      clickVsDragEnd();
+      ctx?.cancelDrag();
+    }
+  }, [clickVsDragEnd, ctx]);
+
+  // --- Native (fine pointer) drag path ----------------------------------------
+  const nativePointerDown = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      if (event.button === 0) {
+        resetHold();
+        pressOriginRef.current = { x: event.clientX, y: event.clientY };
+        if (holdMs != null) {
+          holdTimerRef.current = setTimeout(() => {
+            setHoldReady(true);
+          }, holdMs);
+        }
+      }
+      handlePointerDown(event);
+    },
+    [handlePointerDown, holdMs, resetHold]
+  );
+
+  const nativePointerMove = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      const origin = pressOriginRef.current;
+      if (!(holdReady && origin)) {
+        return;
+      }
+      const dx = event.clientX - origin.x;
+      const dy = event.clientY - origin.y;
+      if (Math.hypot(dx, dy) >= MOVE_THRESHOLD_PX) {
+        setIsMoving(true);
+      }
+    },
+    [holdReady]
+  );
+
+  const nativePointerUp = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      handlePointerUp(event);
+      if (event.button === 0) {
+        resetHold();
+      }
+    },
+    [handlePointerUp, resetHold]
+  );
+
   const getSourceProps = useCallback<
     (overrides?: SourceOverrides) => SourceHandlers
   >(
     (overrides = {}) => ({
-      draggable: true,
+      // On touch (coarse) pointers, native HTML5 DnD never starts, so the grip
+      // is not `draggable` and reorder is driven entirely by pointer events.
+      draggable: !coarse,
       onClick: compose(handleClick, overrides.onClick),
       onDragStartCapture: compose((event) => {
         const dataTransfer = event.dataTransfer;
@@ -229,48 +370,38 @@ export function useDragSource(options: UseDragSourceOptions): {
         resetHold();
         ctx?.cancelDrag();
       }, overrides.onDragEnd),
-      onPointerDown: compose((event) => {
-        if (event.button === 0) {
-          resetHold();
-          pressOriginRef.current = { x: event.clientX, y: event.clientY };
-          if (holdMs != null) {
-            holdTimerRef.current = setTimeout(() => {
-              setHoldReady(true);
-            }, holdMs);
-          }
-        }
-        handlePointerDown(event);
-      }, overrides.onPointerDown),
-      onPointerMove: compose((event) => {
-        const origin = pressOriginRef.current;
-        if (!(holdReady && origin)) {
-          return;
-        }
-        const dx = event.clientX - origin.x;
-        const dy = event.clientY - origin.y;
-        if (Math.hypot(dx, dy) >= MOVE_THRESHOLD_PX) {
-          setIsMoving(true);
-        }
-      }, overrides.onPointerMove),
-      onPointerUp: compose((event) => {
-        handlePointerUp(event);
-        if (event.button === 0) {
-          resetHold();
-        }
-      }, overrides.onPointerUp),
-      onPointerCancel: compose(resetHold, overrides.onPointerCancel),
+      onPointerDown: compose(
+        coarse ? touchPointerDown : nativePointerDown,
+        overrides.onPointerDown
+      ),
+      onPointerMove: compose(
+        coarse ? touchPointerMove : nativePointerMove,
+        overrides.onPointerMove
+      ),
+      onPointerUp: compose(
+        coarse ? touchPointerUp : nativePointerUp,
+        overrides.onPointerUp
+      ),
+      onPointerCancel: compose(
+        coarse ? touchPointerCancel : resetHold,
+        overrides.onPointerCancel
+      ),
     }),
     [
       clickVsDragEnd,
       clickVsDragStart,
+      coarse,
       ctx,
       handleClick,
-      handlePointerDown,
-      handlePointerUp,
-      holdMs,
-      holdReady,
       id,
+      nativePointerDown,
+      nativePointerMove,
+      nativePointerUp,
       resetHold,
+      touchPointerCancel,
+      touchPointerDown,
+      touchPointerMove,
+      touchPointerUp,
     ]
   );
 

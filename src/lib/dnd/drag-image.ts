@@ -27,6 +27,17 @@ export function setEmptyDragImage(event: DragEvent): void {
   });
 }
 
+/**
+ * Deep-clones `node` and copies live `[data-canvas-field]` input/textarea
+ * values (which `cloneNode`/`outerHTML` drop) so a rendered preview shows the
+ * dragged block's text rather than an empty box.
+ */
+export function cloneNodeWithFieldValues(node: HTMLElement): HTMLElement {
+  const clone = node.cloneNode(true) as HTMLElement;
+  syncFormValues(node, clone);
+  return clone;
+}
+
 function syncFormValues(source: Element, clone: Element): void {
   const sourceFields = source.querySelectorAll(CANVAS_FIELD_SELECTOR);
   const cloneFields = clone.querySelectorAll(CANVAS_FIELD_SELECTOR);
