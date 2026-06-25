@@ -1,29 +1,13 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect } from "react";
 
-import {
-  prefetchPageIconCatalogs,
-  warmPageIconPicker,
-} from "@/lib/pages/preload-page-icon-picker.ts";
+import { scheduleIdleCallback } from "@/lib/dom/schedule-idle-callback.ts";
+import { warmPageIconPickerChunks } from "@/lib/pages/preload-page-icon-picker.ts";
 
-/** Prefetch Tabler catalog before paint; idle-warm picker chunks after. */
+/** Idle-warm picker panel chunks once per session; catalogs load on picker intent only. */
 export function WarmPageIconPickerCacheEffect() {
-  const queryClient = useQueryClient();
-
-  useLayoutEffect(() => {
-    prefetchPageIconCatalogs(queryClient);
-  }, [queryClient]);
-
-  useEffect(() => {
-    const idleId = requestIdleCallback(() => {
-      warmPageIconPicker(queryClient);
-    });
-    return () => {
-      cancelIdleCallback(idleId);
-    };
-  }, [queryClient]);
+  useEffect(() => scheduleIdleCallback(() => warmPageIconPickerChunks()), []);
 
   return null;
 }

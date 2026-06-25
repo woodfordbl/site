@@ -12,7 +12,7 @@ import { getSidebarTablerGlyphs } from "@/lib/pages/get-sidebar-tabler-glyphs.ts
 import { loadPageListLocalPreview } from "@/lib/pages/load-page-list-local-preview.ts";
 import { loadPageSidebarPrefs } from "@/lib/pages/load-page-sidebar-prefs.ts";
 import { mergePageList } from "@/lib/pages/merge-page-list.ts";
-import { tablerIconNamesFromPages } from "@/lib/pages/tabler-icon-names-from-pages.ts";
+import { tablerIconNamesForSSR } from "@/lib/pages/tabler-icon-names-from-pages.ts";
 import type { RouterContext } from "@/router-context.ts";
 
 import appCss from "../styles.css?url";
@@ -41,7 +41,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       await context.queryClient.ensureQueryData(pageListQueryOptions);
     const mergedPages = mergePageList(pages, context.localPagePreview);
     const sidebarTablerGlyphs = await getSidebarTablerGlyphs({
-      data: tablerIconNamesFromPages(mergedPages),
+      data: tablerIconNamesForSSR(mergedPages),
     });
 
     return {

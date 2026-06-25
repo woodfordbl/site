@@ -14,7 +14,7 @@ export interface PageIconDisplayProps {
   icon?: string;
 }
 
-/** Resolves a stored Tabler name against the deferred catalog; paints the default icon until ready. */
+/** Resolves a stored Tabler name; paints the default icon until SSR or a by-name fetch is ready. */
 function TablerPageIcon({
   className,
   name,
@@ -24,8 +24,8 @@ function TablerPageIcon({
   name: string;
   preloadedGlyph?: TablerIconGlyph;
 }) {
-  const catalogGlyph = useTablerIconGlyph(name);
-  const resolved = preloadedGlyph ?? catalogGlyph;
+  const fetchedGlyph = useTablerIconGlyph(name, !preloadedGlyph);
+  const resolved = preloadedGlyph ?? fetchedGlyph;
 
   if (!resolved) {
     return <DEFAULT_PAGE_ICON aria-hidden className={className} />;

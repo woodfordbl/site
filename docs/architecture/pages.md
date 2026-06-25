@@ -66,7 +66,7 @@ User-created pages that would shadow a shipped slug at create/rename time receiv
 
 `useLocalPages` treats an empty collection snapshot as ambiguous: Vite HMR can reload the collection module empty before sync repopulates, but deleting the last local page also empties it. It re-reads `site-local-pages` from localStorage to disambiguate — real deletions persist there, so an empty store means genuinely no local pages (no ghost sidebar rows after deleting the last page).
 
-Shipped page content is **bundled at build time** via [`page-store.server.ts`](../../src/lib/content/page-store.server.ts) (`import.meta.glob` over `content/pages/**/*.json`) — `loadPage`/`listPages` never read the filesystem at request time, which keeps deployed serverless functions reliable (the glob stays HMR-aware for author dev saves). `listPages` projects `icon` into each `PageSummary`. The Tabler glyph catalog used for SSR icon rendering is bundled from `src/generated/tabler-icons.json` ([`read-tabler-glyphs.server.ts`](../../src/lib/pages/read-tabler-glyphs.server.ts); written by `scripts/sync-tabler-icons-public.mjs`), not read from `public/` at runtime.
+Shipped page content is **bundled at build time** via [`page-store.server.ts`](../../src/lib/content/page-store.server.ts) (`import.meta.glob` over `content/pages/**/*.json`) — `loadPage`/`listPages` never read the filesystem at request time, which keeps deployed serverless functions reliable (the glob stays HMR-aware for author dev saves). `listPages` projects `icon` into each `PageSummary`. The root loader prefetches Tabler glyphs for passive display via [`tablerIconNamesForSSR`](../../src/lib/pages/tabler-icon-names-from-pages.ts) and [`getSidebarTablerGlyphs`](../../src/lib/pages/get-sidebar-tabler-glyphs.ts). The full glyph catalog used on the server is bundled from `src/generated/tabler-icons.json` ([`read-tabler-glyphs.server.ts`](../../src/lib/pages/read-tabler-glyphs.server.ts); written by `scripts/sync-tabler-icons-public.mjs`), not read from `public/` at runtime.
 
 ## Create flow
 
@@ -125,19 +125,18 @@ Both tabs are code-split: preload resolves to a React component type stored in p
 
 | Preload trigger | When |
 |-----------------|------|
-| [`WarmPageIconPickerCacheEffect`](../../src/components/pages/warm-page-icon-picker-cache-effect.tsx) in [`AppProviders`](../../src/db/provider.tsx) | `requestIdleCallback` on every route |
-| Picker mount `useEffect` | Same idle preload (stores panels in state when resolved) |
+| [`WarmPageIconPickerCacheEffect`](../../src/components/pages/warm-page-icon-picker-cache-effect.tsx) in [`AppProviders`](../../src/db/provider.tsx) | `scheduleIdleCallback` on every route — panel JS chunks only |
 | Popover open | `ensurePanels` in `handleOpenChange` |
 | Trigger `onPointerEnter` | Same `ensurePanels` |
 
-All paths call the helpers in [`preload-page-icon-picker.ts`](../../src/lib/pages/preload-page-icon-picker.ts): cached dynamic imports of both panel chunks plus `prefetchPageIconCatalogs` (TanStack Query `prefetchQuery` for both deferred catalog assets). Catalogs are self-hosted JSON parsed once and cached forever (`staleTime: Infinity`):
+Intent paths call [`ensurePageIconPickerReady`](../../src/lib/pages/preload-page-icon-picker.ts) (cached dynamic imports of both panel chunks plus `prefetchPageIconCatalogs`). Global warm calls [`warmPageIconPickerChunks`](../../src/lib/pages/preload-page-icon-picker.ts) only — no JSON on routes where the picker is never opened. Catalogs are self-hosted JSON parsed once and cached forever (`staleTime: Infinity`):
 
 | Catalog | Asset | Query |
 |---------|-------|-------|
 | Emoji | `/emojibase/en/data.json` ([`PAGE_ICON_EMOJIBASE_URL`](../../src/lib/pages/page-icon-emojibase.ts); `pnpm sync:emojibase`) | [`emojiCatalogQueryOptions`](../../src/lib/pages/page-icon-emoji-catalog.ts) → `parseEmojiCatalog` |
 | Tabler | `/tabler/icons.json` (`pnpm sync:icons`, `scripts/sync-tabler-icons-public.mjs` — all ~6,100 glyphs as `{ name, keywords, filled, node }`) | [`tablerIconCatalogQueryOptions`](../../src/lib/pages/page-icon-catalog.ts) |
 
-[`PageIconDisplay`](../../src/components/pages/page-icon-display.tsx) reads a single glyph from the cached Tabler catalog via [`useTablerIconGlyph`](../../src/lib/pages/page-icon-catalog.ts) (`enabled: false` — never triggers a fetch; re-renders when the idle warm populates the cache).
+[`PageIconDisplay`](../../src/components/pages/page-icon-display.tsx) resolves Tabler icons from SSR [`sidebarTablerGlyphs`](../../src/routes/__root.tsx) (`tablerIconNamesForSSR` — page sidebar icons plus `IconFile` / `IconInfoCircle` defaults) and, when needed, a by-name fetch via [`useTablerIconGlyph`](../../src/lib/pages/page-icon-catalog.ts) (`getSidebarTablerGlyphs` — no full catalog download). The full Tabler JSON is picker-only.
 
 There is no clear/remove control: before the first pick the default file icon shows; afterward users swap emoji or Tabler icons only.
 
