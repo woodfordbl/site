@@ -59,10 +59,7 @@ function GlyphIconPickerPopoverContent({
   return (
     <Tabs className="w-full gap-0" defaultValue="emoji">
       <div className="px-2 pt-2 pb-2">
-        <TabsList
-          className="flex h-9 w-fit rounded-none p-0"
-          variant="indicator"
-        >
+        <TabsList className="flex h-9 w-fit rounded-none p-0">
           <TabsTrigger value="emoji">Emoji</TabsTrigger>
           <TabsTrigger value="icons">Icons</TabsTrigger>
         </TabsList>

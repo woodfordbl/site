@@ -73,7 +73,7 @@ Workspace chrome ([`PageSidebarChromeProvider`](../../src/components/pages/page-
 | Resize | [`PageSidebarRail`](../../src/components/pages/page-sidebar-rail.tsx) on the panel edge — **drag** resizes 12–24rem via `panel.resize()` (no visible separator handle) |
 | Width storage | `site-page-sidebar-width` cookie (rem, clamped 12–24) via [`page-sidebar-layout-cookie.ts`](../../src/lib/pages/page-sidebar-layout-cookie.ts) |
 | Collapsed | `site-page-sidebar-pin` cookie — `1` pinned, `0` collapsed ([`page-sidebar-pin-cookie.ts`](../../src/lib/pages/page-sidebar-pin-cookie.ts)); rail **click** collapses when pinned; rail click **pins** when shown in the hover overlay; collapsed layout has zero width |
-| Hover peek | [`PageSidebarHoverReveal`](../../src/components/pages/page-sidebar-hover-reveal.tsx) — left-edge hover opens floating sidebar + scrim; closes on pointer-leave |
+| Hover peek | [`PageSidebarHoverReveal`](../../src/components/pages/page-sidebar-hover-reveal.tsx) — left-edge hover opens floating sidebar + scrim; closes on pointer-leave; panel uses main surface tokens (`bg-background`, accent/border) via scoped `--sidebar-*` remap on `data-page-sidebar-hover-panel` |
 | Mobile | [`SidebarTrigger`](../../src/components/ui/sidebar.tsx) in [`PageHeader`](../../src/components/pages/page-header.tsx) opens a Sheet (`useIsMobile`, `<768px`) |
 | Shortcut | **Cmd/Ctrl+B** toggles pinned/collapsed |
 

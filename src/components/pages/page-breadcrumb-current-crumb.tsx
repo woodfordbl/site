@@ -81,7 +81,7 @@ export function PageBreadcrumbCurrentCrumb({
           </Button>
         }
       />
-      <PopoverContent align="start" className="w-72 p-2" side="bottom">
+      <PopoverContent align="start" className="w-72 gap-1.5 p-1" side="bottom">
         {open ? (
           <PageBreadcrumbCurrentCrumbEditor
             icon={icon}
@@ -141,7 +141,7 @@ function PageBreadcrumbCurrentCrumbEditor({
   }, [inputRef]);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <PageIconPicker
         className="mt-0 shrink-0"
         icon={icon}
@@ -150,12 +150,12 @@ function PageBreadcrumbCurrentCrumbEditor({
         previousSlug={previousSlug}
         seed={seed}
         title={resolvedTitle}
-        triggerButtonSize="icon"
-        triggerButtonVariant="outline"
+        triggerButtonSize="icon-sm"
+        triggerButtonVariant="ghost"
       />
       <Input
         aria-label="Page title"
-        className="min-w-0 flex-1"
+        className="h-7 min-w-0 flex-1 px-2"
         onBlur={onTitleBlur}
         onChange={(event) => onTitleChange(event.target.value)}
         onFocus={onTitleFocus}

@@ -10,12 +10,12 @@ export const buttonIconChildClassNames = {
   default:
     "[&_[role=img]]:text-base [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-4",
   "icon-xs":
-    "[&_[role=img]]:text-sm [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-4",
+    "[&_[role=img]]:text-sm [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:stroke-[1.5px]",
   "icon-sm":
-    "[&_[role=img]]:text-base [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-5",
-  icon: "[&_[role=img]]:text-base [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-6",
+    "[&_[role=img]]:text-base [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-5 [&_svg]:stroke-[1.5px]",
+  icon: "[&_[role=img]]:text-base [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-6 [&_svg]:stroke-[1.5px]",
   "icon-lg":
-    "[&_[role=img]]:text-[1.5rem] [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-7",
+    "[&_[role=img]]:text-[1.5rem] [&_[role=img]]:leading-none [&_svg:not([class*='size-'])]:size-7 [&_svg]:stroke-[1.5px]",
 } as const;
 
 export type ButtonIconChildSize = keyof typeof buttonIconChildClassNames;
@@ -33,35 +33,38 @@ export function iconSlotClassName(
 }
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-lg border border-transparent bg-clip-padding font-medium text-sm outline-none transition-[color,background-color,border-color,box-shadow,transform,opacity] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "group/button inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-lg border border-transparent bg-clip-padding font-normal text-sm outline-none transition-[color,background-color,border-color,box-shadow,transform,opacity] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary/80 dark:hover:bg-primary/80",
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-border bg-background hover:bg-muted/70 hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground dark:hover:bg-secondary/80",
+        tertiary:
+          "bg-tertiary text-tertiary-foreground hover:bg-tertiary/80 aria-expanded:bg-tertiary aria-expanded:text-tertiary-foreground dark:hover:bg-tertiary/80",
         ghost:
           "text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         overlayItem:
-          "bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
+          "bg-transparent text-muted-foreground hover:bg-secondary/60 hover:text-foreground dark:hover:bg-transparent dark:hover:text-foreground",
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 dark:hover:bg-destructive/30",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-destructive/10 text-destructive hover:bg-destructive/25 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 dark:hover:bg-destructive/30",
+        link: "text-primary underline-offset-4 hover:text-primary/80 hover:underline dark:hover:text-primary",
       },
       size: {
         xs: cn(
-          "h-6 gap-1 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),10px)] px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
+          "h-6 gap-1.5 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),10px)] px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
           buttonIconChildClassNames.xs
         ),
         sm: cn(
-          "h-7 gap-1 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
+          "h-7 gap-1.5 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
           buttonIconChildClassNames.sm
         ),
         default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-8 gap-2 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        lg: "h-9 gap-2 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         "icon-xs": cn(
           "size-6 in-data-[slot=button-group]:rounded-lg rounded-[min(var(--radius-md),10px)]",
           buttonIconChildClassNames["icon-xs"]

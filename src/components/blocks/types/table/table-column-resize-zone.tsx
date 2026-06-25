@@ -8,7 +8,7 @@ interface TableColumnResizeZoneProps {
   ) => void;
 }
 
-/** Full-height column divider — matches sidebar rail hover (`bg-sidebar-border`, 2px). */
+/** Full-height column divider — matches sidebar rail hover (`bg-selection`, 2px). */
 export function TableColumnResizeZone({
   columnIndex,
   leftPx,
@@ -21,7 +21,7 @@ export function TableColumnResizeZone({
     >
       <button
         aria-label="Resize columns"
-        className="pointer-events-auto relative h-full w-3 cursor-col-resize touch-none rounded-sm outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:bg-sidebar-border after:opacity-0 after:transition-[opacity,background-color] after:duration-150 after:ease-out hover:after:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:after:opacity-100 active:after:opacity-100"
+        className="pointer-events-auto relative h-full w-3 cursor-col-resize touch-none rounded-sm outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:bg-selection after:opacity-0 after:transition-[opacity,background-color] after:duration-150 after:ease-out hover:after:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:after:opacity-100 active:after:opacity-100"
         onPointerDown={(event) => {
           event.preventDefault();
           event.stopPropagation();

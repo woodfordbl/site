@@ -29,7 +29,7 @@ const buttonGroupVariants = cva(
         variant: "default",
         orientation: "horizontal",
         class:
-          "*:data-slot:rounded-r-none [&>[data-slot]:not(:has(~[data-slot]))]:rounded-r-lg! [&>[data-slot]~[data-slot]]:rounded-l-none [&>[data-slot]~[data-slot]]:border-l-0",
+          "*:data-slot:rounded-r-none [&>[data-slot=button-group-text]:has(+[data-slot=button-group-separator])]:border-r-0 [&>[data-slot]:not(:has(~[data-slot]))]:rounded-r-lg! [&>[data-slot]~[data-slot]]:rounded-l-none [&>[data-slot]~[data-slot]]:border-l-0",
       },
       {
         variant: "default",
@@ -73,7 +73,7 @@ function ButtonGroupText({
     props: mergeProps<"div">(
       {
         className: cn(
-          "flex items-center gap-2 rounded-lg border bg-muted px-2.5 font-medium text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none",
+          "flex h-8 items-center gap-2 rounded-lg border border-border bg-muted px-2.5 font-medium text-sm dark:border-input [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none",
           className
         ),
       },
@@ -94,7 +94,7 @@ function ButtonGroupSeparator({
   return (
     <Separator
       className={cn(
-        "relative self-stretch bg-input data-horizontal:mx-px data-vertical:my-px data-vertical:h-auto data-horizontal:w-auto",
+        "relative self-stretch bg-border data-horizontal:mx-px data-vertical:h-auto data-horizontal:w-auto",
         className
       )}
       data-slot="button-group-separator"

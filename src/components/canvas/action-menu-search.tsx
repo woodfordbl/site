@@ -3,10 +3,13 @@
 import { IconSearch } from "@tabler/icons-react";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu.tsx";
 import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu.tsx";
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from "@/components/ui/empty.tsx";
 import {
   InputGroup,
   InputGroupAddon,
@@ -53,28 +56,26 @@ export function ActionMenuSearch({
   query,
 }: ActionMenuSearchProps) {
   return (
-    <div className="px-1 pb-1">
-      <InputGroup className="h-8">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <IconSearch />
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label="Search actions"
-          autoComplete="off"
-          onChange={(event) => {
-            onQueryChange(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-          }}
-          placeholder="Search actions…"
-          ref={inputRef}
-          value={query}
-        />
-      </InputGroup>
-    </div>
+    <InputGroup className="h-8">
+      <InputGroupAddon align="inline-start">
+        <InputGroupText>
+          <IconSearch />
+        </InputGroupText>
+      </InputGroupAddon>
+      <InputGroupInput
+        aria-label="Search actions"
+        autoComplete="off"
+        onChange={(event) => {
+          onQueryChange(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+        }}
+        placeholder="Search actions…"
+        ref={inputRef}
+        value={query}
+      />
+    </InputGroup>
   );
 }
 
@@ -94,9 +95,14 @@ export function FilteredActionMenuItems({
 
   if (filteredItems.length === 0) {
     return (
-      <div className="px-2 py-6 text-center text-muted-foreground text-sm">
-        No actions found.
-      </div>
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <IconSearch />
+          </EmptyMedia>
+          <EmptyDescription>No actions found.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
@@ -135,7 +141,6 @@ export function ActionMenuSearchSection({
         onQueryChange={setQuery}
         query={query}
       />
-      <DropdownMenuSeparator />
       {isFiltering ? (
         <FilteredActionMenuItems items={items} query={query} />
       ) : (
