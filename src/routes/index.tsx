@@ -1,15 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
-import { loadPage } from "@/lib/content/load-page.ts";
 import { buildPageMeta } from "@/lib/content/page-head.ts";
+import { pageBySlugQueryOptions } from "@/lib/content/page-query.ts";
 import { pageHasLocalDraft } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { loadDirtyPageIds } from "@/lib/local-draft/load-dirty-page-ids.ts";
 
 export const Route = createFileRoute("/")({
-  loader: async () => {
+  loader: async ({ context }) => {
     const [page, dirtyPageIds] = await Promise.all([
-      loadPage({ data: { slug: "home" } }),
+      context.queryClient.ensureQueryData(pageBySlugQueryOptions("home")),
       loadDirtyPageIds(),
     ]);
 

@@ -1,32 +1,22 @@
 import { IconWorld } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { EmbedSourcePicker } from "@/components/blocks/types/embed/embed-source-picker.tsx";
 import { EmbedView } from "@/components/blocks/types/embed/embed-view.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
+import { useCanvasFocus } from "@/components/canvas/canvas-editor-context.tsx";
+import { EditableSurface } from "@/components/editor/editable-surface.tsx";
+import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
+import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
+import { SourceLinkPanel } from "@/components/ui/source-link-panel.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
 import { useUnfurlEmbedUrl } from "@/hooks/use-unfurl-embed-url.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
+import { mergeEmbedUnfurlPreview } from "@/lib/media/merge-embed-unfurl.ts";
 import { resolveEmbedDisplay } from "@/lib/media/resolve-embed-display.ts";
-import { normalizeEmbedUrl } from "@/lib/media/resolve-embed-provider.ts";
 import type { EmbedProps } from "@/lib/schemas/block-props.ts";
 
 type EmbedEditProps = BlockEditProps<"embed">;
-
-function mergeUnfurlPreview(
-  props: EmbedProps,
-  url: string,
-  preview: { description?: string; imageUrl?: string; title?: string }
-): EmbedProps {
-  return {
-    ...props,
-    url,
-    ...(preview.title ? { title: preview.title } : {}),
-    ...(preview.description ? { description: preview.description } : {}),
-    ...(preview.imageUrl ? { imageUrl: preview.imageUrl } : {}),
-  };
-}
 
 export function EmbedEdit({
   autoFocus,
@@ -41,8 +31,9 @@ export function EmbedEdit({
   onNavigateUp,
   onStructuralKey,
 }: EmbedEditProps) {
-  const [urlDraft, setUrlDraft] = useState("");
-  const focusRef = useRef<HTMLDivElement | HTMLInputElement>(null);
+  const focus = useCanvasFocus();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const focusRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
   const unfurlAttemptedRef = useRef<string | null>(null);
   const unfurl = useUnfurlEmbedUrl();
   const hasUrl = props.url.trim().length > 0;
@@ -53,13 +44,34 @@ export function EmbedEdit({
     (unfurl.isPending || unfurlAttemptedRef.current === props.url);
 
   const applyAutoFocus = useCallback(() => {
+    if (focus?.embedAction === "replace") {
+      setPickerOpen(true);
+      onAutoFocusHandled?.();
+      return;
+    }
+
+    if (focus?.embedAction === "caption") {
+      queueMicrotask(() => {
+        const shell = focusRef.current?.closest("[data-canvas-row-id]");
+        const field = shell?.querySelector("input, textarea");
+        if (field instanceof HTMLElement) {
+          field.focus();
+        }
+        onAutoFocusHandled?.();
+      });
+      return;
+    }
+
     focusRef.current?.focus();
-  }, []);
+    if (!hasUrl) {
+      setPickerOpen(true);
+    }
+    onAutoFocusHandled?.();
+  }, [focus?.embedAction, hasUrl, onAutoFocusHandled]);
 
   useAutoFocus({
     enabled: autoFocus,
     onFocus: applyAutoFocus,
-    onHandled: onAutoFocusHandled,
   });
 
   const handleKeyDown = useInlineCustomBlockKeys({
@@ -71,12 +83,13 @@ export function EmbedEdit({
     onNavigateUp,
     onStructuralKey,
   });
+
   const runBookmarkUnfurl = useCallback(
     (url: string, baseProps: EmbedProps) => {
       unfurlAttemptedRef.current = url;
       unfurl.mutate(url, {
         onSuccess: (preview) => {
-          onChange(mergeUnfurlPreview(baseProps, url, preview));
+          onChange(mergeEmbedUnfurlPreview(baseProps, url, preview));
         },
       });
     },
@@ -97,12 +110,7 @@ export function EmbedEdit({
     runBookmarkUnfurl(props.url, props);
   }, [hasUrl, props, runBookmarkUnfurl]);
 
-  const handleUrlSubmit = () => {
-    const normalized = normalizeEmbedUrl(urlDraft);
-    if (!normalized) {
-      return;
-    }
-
+  const handleUrlSubmit = (normalized: string) => {
     const resolution = resolveEmbedDisplay(normalized);
     if (resolution.kind === "bookmark") {
       const nextProps: EmbedProps = {
@@ -119,40 +127,24 @@ export function EmbedEdit({
         imageUrl: undefined,
       });
     }
-    setUrlDraft("");
+    setPickerOpen(false);
   };
 
   if (!hasUrl) {
     return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <IconWorld />
-          Paste a URL to embed
-        </div>
-        <Input
-          className="px-1"
-          onChange={(event) => setUrlDraft(event.target.value)}
-          onKeyDown={(event) => {
-            handleKeyDown(event);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              handleUrlSubmit();
-            }
-          }}
-          placeholder="https://youtube.com/watch?v=…"
-          ref={focusRef as React.RefObject<HTMLInputElement>}
-          value={urlDraft}
-        />
-        <Button
-          disabled={!urlDraft.trim()}
-          onClick={handleUrlSubmit}
-          size="sm"
-          type="button"
-          variant="outline"
+      <EmbedSourcePicker
+        onOpenChange={setPickerOpen}
+        onSubmit={handleUrlSubmit}
+        open={pickerOpen}
+      >
+        <PlaceholderTrigger
+          icon={<IconWorld />}
+          onKeyDown={handleKeyDown}
+          ref={focusRef as React.RefObject<HTMLButtonElement>}
         >
-          Embed URL
-        </Button>
-      </div>
+          Embed files and supported websites
+        </PlaceholderTrigger>
+      </EmbedSourcePicker>
     );
   }
 
@@ -172,6 +164,32 @@ export function EmbedEdit({
       tabIndex={0}
     >
       <EmbedView isLoading={isBookmarkLoading} props={props} />
+      {props.showCaption ? (
+        <EditableSurface
+          ariaLabel="Embed caption"
+          className="text-muted-foreground text-sm italic"
+          onChange={(caption) => {
+            onChange({ ...props, caption });
+          }}
+          placeholder="Embed Caption"
+          placeholderVisibility="when-focused"
+          value={props.caption ?? ""}
+        />
+      ) : null}
+      <Popover onOpenChange={setPickerOpen} open={pickerOpen}>
+        <PopoverContent
+          anchor={focusRef}
+          className="w-80"
+          finalFocus={false}
+          initialFocus={false}
+        >
+          <SourceLinkPanel
+            onSubmit={handleUrlSubmit}
+            placeholder="Paste in https://…"
+            submitLabel="Embed link"
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

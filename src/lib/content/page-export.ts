@@ -1,6 +1,7 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { flattenRows } from "@/lib/blocks/block-tree.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import type { PageFont } from "@/lib/schemas/page-settings.ts";
 
 export function exportPageBlocks(rows: CanvasRow[]): Block[] {
   const flat = flattenRows(rows);
@@ -10,11 +11,13 @@ export function exportPageBlocks(rows: CanvasRow[]): Block[] {
 export function exportPageDocument(
   rows: CanvasRow[],
   meta: {
-    id: string;
-    slug: string;
-    title: string;
-    parentId: string | null;
+    font?: PageFont;
     icon?: string;
+    id: string;
+    parentId: string | null;
+    slug: string;
+    smallText?: boolean;
+    title: string;
   }
 ) {
   return {
@@ -23,6 +26,10 @@ export function exportPageDocument(
     title: meta.title,
     parentId: meta.parentId,
     ...(meta.icon === undefined ? {} : { icon: meta.icon }),
+    ...(meta.font === undefined || meta.font === "default"
+      ? {}
+      : { font: meta.font }),
+    ...(meta.smallText ? { smallText: true } : {}),
     blocks: exportPageBlocks(rows),
   };
 }

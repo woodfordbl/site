@@ -13,7 +13,6 @@ import {
 } from "@/hooks/use-resolved-page.ts";
 import { useSlugPageResolution } from "@/hooks/use-slug-page-resolution.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
-import { loadPage } from "@/lib/content/load-page.ts";
 import { buildNoIndexMeta, buildPageMeta } from "@/lib/content/page-head.ts";
 import { pageBySlugQueryOptions } from "@/lib/content/page-query.ts";
 import {
@@ -32,12 +31,14 @@ import {
 } from "@/lib/schemas/local-page.ts";
 
 export const Route = createFileRoute("/$")({
-  loader: async ({ params }) => {
+  loader: async ({ context, params }) => {
     const slug = pagePathFromParam(params._splat ?? "");
     const dirtyPageIds = await loadDirtyPageIds();
 
     try {
-      const page = await loadPage({ data: { slug } });
+      const page = await context.queryClient.ensureQueryData(
+        pageBySlugQueryOptions(slug)
+      );
       return {
         kind: "server" as const,
         page,

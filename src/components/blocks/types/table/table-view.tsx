@@ -102,7 +102,7 @@ function TableBlockGutter({
   return (
     <div
       className={cn(
-        "pointer-events-auto w-12 shrink-0 pt-3 [&_.canvas-block-gutter]:opacity-0",
+        "pointer-events-auto w-auto shrink-0 pt-3 [&_.canvas-block-gutter]:opacity-0",
         revealed && "[&_.canvas-block-gutter]:opacity-100"
       )}
       data-table-block-gutter

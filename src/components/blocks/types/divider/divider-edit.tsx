@@ -46,13 +46,13 @@ export function DividerEdit({
     <button
       aria-label="Divider"
       className={cn(
-        "flex w-full items-center rounded-sm border-0 bg-transparent p-0 text-left outline-none"
+        "flex min-h-10 w-full items-center rounded-sm border-0 bg-transparent p-0 text-left outline-none"
       )}
       onKeyDown={handleKeyDown}
       ref={focusRef}
       type="button"
     >
-      <hr className="my-0 w-full border-0 border-border border-t" />
+      <hr aria-hidden className="h-px w-full shrink-0 border-0 bg-border" />
     </button>
   );
 }

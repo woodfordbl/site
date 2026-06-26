@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import "@/db/collections/local-collections.ts";
+import { PrefetchPageCanvasEditorEffect } from "@/components/canvas/prefetch-page-canvas-editor-effect.tsx";
 import { MigrateUserPageRoutesEffect } from "@/components/pages/migrate-user-page-routes-effect.tsx";
 import { OrphanLocalPagesEffect } from "@/components/pages/orphan-local-pages-effect.tsx";
 import { SyncPageListLocalPreviewEffect } from "@/components/pages/sync-page-list-local-preview-effect.tsx";
@@ -29,10 +30,11 @@ export function AppProviders({ children }: AppProvidersProps) {
       <SyncPageListLocalPreviewEffect />
       <OrphanLocalPagesEffect />
       <WarmPageIconPickerCacheEffect />
+      <PrefetchPageCanvasEditorEffect />
       <NativeScrollbarEffect />
       <TooltipProvider>
         {children}
-        <Toaster closeButton position="top-center" richColors />
+        <Toaster closeButton position="top-center" />
       </TooltipProvider>
     </>
   );

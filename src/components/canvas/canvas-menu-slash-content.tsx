@@ -14,8 +14,8 @@ const slashMenuItemClassName =
 const slashMenuLabelClassName =
   "px-1.5 py-1 font-medium text-muted-foreground text-xs";
 
-const slashMenuScrollClassName = "max-h-72";
-const slashMenuScrollViewportClassName = "p-1";
+const slashMenuScrollClassName = "max-h-72 overflow-hidden";
+const slashMenuScrollViewportClassName = "max-h-72 p-1";
 
 function SlashMenuScrollArea({ children }: { children: React.ReactNode }) {
   return (
@@ -106,7 +106,7 @@ export function CanvasMenuSlashContent() {
   if (session.slashPhase === "link") {
     return (
       <div className="p-1" data-canvas-row-menu>
-        <div className="p-1 pb-0">
+        <div className="p-1 pb-2">
           <Input
             aria-label="Search pages"
             onChange={(event) => setLinkQuery(event.target.value)}

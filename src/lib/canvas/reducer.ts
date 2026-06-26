@@ -934,6 +934,7 @@ export function canvasReducer(
         rowId: command.rowId,
         placement: command.placement,
         offset: command.offset,
+        embedAction: command.embedAction,
       });
       return { state, effects };
     }

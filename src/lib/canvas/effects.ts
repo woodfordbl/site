@@ -27,6 +27,7 @@ export type CanvasEffect =
       rowId: string;
       placement?: "start" | "end";
       offset?: number;
+      embedAction?: "replace" | "caption";
     }
   | {
       type: "columns.apply";
@@ -74,6 +75,7 @@ export type FocusState = {
   rowId: string;
   placement?: "start" | "end";
   offset?: number;
+  embedAction?: "replace" | "caption";
 } | null;
 
 export interface CanvasPersistenceApi {

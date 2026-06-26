@@ -6,6 +6,7 @@ import {
   type ComponentType,
   type RefObject,
   useCallback,
+  useEffect,
   useState,
 } from "react";
 
@@ -173,6 +174,14 @@ export function GlyphIconPicker({
     },
     [ensurePanels, setOpen]
   );
+
+  // Controlled open (e.g. sidebar "Change icon") sets `open` directly and skips
+  // `onOpenChange`, so preload panels whenever the popover becomes visible.
+  useEffect(() => {
+    if (open) {
+      ensurePanels();
+    }
+  }, [ensurePanels, open]);
 
   return (
     <Popover onOpenChange={handleOpenChange} open={open}>

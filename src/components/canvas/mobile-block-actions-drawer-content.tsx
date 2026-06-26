@@ -8,10 +8,14 @@ import {
   IconColumnInsertRight,
   IconCopy,
   IconExchange,
+  IconExternalLink,
+  IconLink,
+  IconRefresh,
   IconRowInsertBottom,
   IconTableColumn,
   IconTableRow,
   IconTrash,
+  IconTypography,
 } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
 
@@ -93,21 +97,23 @@ export function MobileBlockActionsDrawerContent({
   const {
     blockTypeLabel,
     canTurnInto,
+    embedBlock,
     handleAddColumn,
     handleAddRow,
     handleDelete,
     handleDuplicate,
+    handleEmbedCopyLink,
+    handleEmbedOpenInBrowser,
+    handleEmbedReplace,
+    handleEmbedToggleCaption,
     handleFitToWidth,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
-    handleViewToggle,
     lastTableRowId,
-    resolvedViewChecks,
     tableBlock,
     turnIntoItems,
     turnIntoValue,
-    viewOptions,
   } = useBlockGutterMenu();
   const [screen, setScreen] = useState<Screen>("root");
 
@@ -166,20 +172,34 @@ export function MobileBlockActionsDrawerContent({
         />
       ) : null}
 
-      {viewOptions ? (
+      {embedBlock ? (
         <>
-          <SectionLabel>{viewOptions.label}</SectionLabel>
-          {viewOptions.items.map((item) => {
-            const checked = resolvedViewChecks[item.id] ?? item.checked;
-            return (
-              <DrawerRow
-                key={item.id}
-                label={item.label}
-                onClick={() => handleViewToggle(item.id, !checked)}
-                trailing={<CheckTrailing checked={checked} />}
-              />
-            );
-          })}
+          <DrawerRow
+            icon={<IconRefresh />}
+            label="Replace"
+            onClick={() => runAndClose(handleEmbedReplace)}
+          />
+          <DrawerRow
+            icon={<IconTypography />}
+            label="Caption"
+            onClick={() =>
+              handleEmbedToggleCaption(!(embedBlock.props.showCaption ?? false))
+            }
+            trailing={
+              <CheckTrailing checked={Boolean(embedBlock.props.showCaption)} />
+            }
+          />
+          <DrawerRow
+            icon={<IconExternalLink />}
+            label="Open in browser"
+            onClick={() => runAndClose(handleEmbedOpenInBrowser)}
+          />
+          <div className="my-1 h-px bg-border" />
+          <DrawerRow
+            icon={<IconLink />}
+            label="Copy link"
+            onClick={() => runAndClose(handleEmbedCopyLink)}
+          />
         </>
       ) : null}
 

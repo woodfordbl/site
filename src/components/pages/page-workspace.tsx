@@ -1,7 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
+import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -14,14 +15,17 @@ import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
+import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
+import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import { rememberSlugPageResolution } from "@/lib/pages/remember-slug-page-resolution.ts";
 import {
   isLocallyDeletedPage,
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
+import { cn } from "@/lib/utils.ts";
 
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
@@ -55,7 +59,6 @@ export function PageWorkspace(props: PageWorkspaceProps) {
   const navigate = useNavigate();
   const activePageRef = useActivePageRef();
   const localPage = useLocalPageById(page.id);
-  const [footerHost, setFooterHost] = useState<HTMLDivElement | null>(null);
   useSyncPageUrl(page.id);
 
   const serverPage = props.kind === "server" ? props.page : null;
@@ -95,11 +98,10 @@ export function PageWorkspace(props: PageWorkspaceProps) {
   return (
     <PageSidebarChromeProvider sidebar={<PageSidebar />}>
       <PageWorkspaceBody
-        footerHost={footerHost}
         initialBlocks={initialBlocks}
         page={page}
         pageHasLocalDraft={pageHasLocalDraft}
-        setFooterHost={setFooterHost}
+        serverPage={serverPage}
         titleSeed={titleSeed}
       />
     </PageSidebarChromeProvider>
@@ -107,30 +109,77 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 }
 
 function PageWorkspaceBody({
-  footerHost,
   initialBlocks,
   page,
   pageHasLocalDraft,
-  setFooterHost,
+  serverPage,
   titleSeed,
 }: {
-  footerHost: HTMLDivElement | null;
   initialBlocks: Page["blocks"];
   page: Page | LocalPage;
   pageHasLocalDraft: boolean;
-  setFooterHost: (node: HTMLDivElement | null) => void;
+  serverPage: Page | null;
   titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
 }) {
   const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
+  const { font, smallText } = usePageSettings({
+    pageId: page.id,
+    seed: titleSeed,
+    serverPage,
+  });
+  const typographyProps = pageContentTypographyProps({ font, smallText });
+  const { className: typographyClassName, ...typographyDataProps } =
+    typographyProps;
+  // Bumped after a reset/refresh/save-all clears local state for the open page
+  // so the canvas remounts and re-reads fresh (shipped) data.
+  const [canvasNonce, setCanvasNonce] = useState(0);
+  const bumpCanvasNonce = useCallback(() => {
+    setCanvasNonce((nonce) => nonce + 1);
+  }, []);
 
-  const header = <PageHeader pageId={page.id} titleSeed={titleSeed} />;
+  const header = (
+    <PageHeader
+      onAfterReset={bumpCanvasNonce}
+      pageId={page.id}
+      seed={titleSeed}
+      serverPage={serverPage}
+    />
+  );
+
+  const canvasContent = (
+    <div
+      className={cn("min-h-0 min-w-0 flex-1", typographyClassName)}
+      {...typographyDataProps}
+    >
+      <PageCanvas
+        headerSlot={
+          isNarrowViewport ? (
+            <div className="-mr-4 mb-4 -ml-7 md:hidden">{header}</div>
+          ) : null
+        }
+        key={`${page.id}:${canvasNonce}`}
+        pageHasLocalDraft={pageHasLocalDraft}
+        serverPage={toServerPageSource(page, initialBlocks)}
+        titleSlot={
+          <PageTitleEditor
+            icon={page.icon}
+            pageHasLocalDraft={pageHasLocalDraft}
+            pageId={page.id}
+            seed={titleSeed}
+            slug={page.slug}
+            title={page.title}
+          />
+        }
+      />
+    </div>
+  );
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <div
-        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background md:rounded-xl"
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"
         data-page-main-panel=""
       >
         {showSidebarRail ? <PageSidebarRail /> : null}
@@ -138,32 +187,12 @@ function PageWorkspaceBody({
             inside the scroll region (as headerSlot) so it scrolls away. */}
         {isNarrowViewport ? null : header}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <PageCanvas
-            footerHost={footerHost}
-            headerSlot={
-              isNarrowViewport ? (
-                <div className="-mr-4 mb-4 -ml-8 md:hidden">{header}</div>
-              ) : null
-            }
-            pageHasLocalDraft={pageHasLocalDraft}
-            serverPage={toServerPageSource(page, initialBlocks)}
-            titleSlot={
-              <PageTitleEditor
-                icon={page.icon}
-                pageHasLocalDraft={pageHasLocalDraft}
-                pageId={page.id}
-                seed={titleSeed}
-                slug={page.slug}
-                title={page.title}
-              />
-            }
-          />
+          {canvasContent}
         </div>
       </div>
-      <div
-        className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 md:px-0"
-        ref={setFooterHost}
-      />
+      <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 max-md:hidden md:px-0">
+        <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
+      </div>
     </div>
   );
 }

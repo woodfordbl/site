@@ -11,14 +11,19 @@ import {
   useCanvasSelection,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useBlockTouchGesture } from "@/hooks/use-block-touch-gesture.ts";
 import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
+import {
+  pageCanvasGutterMobileClassName,
+  pageCanvasGutterPullClassName,
+} from "@/lib/pages/page-title-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 /** Wait before revealing gutter controls so quick row passes do not flash. */
-const CANVAS_GUTTER_REVEAL_DELAY_MS = 300;
+const CANVAS_GUTTER_REVEAL_DELAY_MS = 100;
 
 function setRowGutterRevealed(
   layout: HTMLDivElement | null,
@@ -91,6 +96,7 @@ export function CanvasRowShell({
   const { isRowSelected } = useCanvasSelection();
   const { setOpenRowId } = useBlockActionsMenu();
   const isSelected = isRowSelected(row.rowId);
+  const isNarrowViewport = useIsNarrowViewport();
   const rowLayoutRef = useRef<HTMLDivElement>(null);
   const gutterOpenTimeout = useTimeout();
   const touchGesture = useBlockTouchGesture({
@@ -162,7 +168,12 @@ export function CanvasRowShell({
   if (gutter) {
     gutterHost = (
       <div
-        className="pointer-events-none -ml-8 w-8 shrink-0 md:-ml-12 md:w-12 [&_.canvas-block-gutter]:opacity-0"
+        className={cn(
+          "pointer-events-none z-10 w-auto [&_.canvas-block-gutter]:opacity-0",
+          isNarrowViewport
+            ? cn("absolute top-0", pageCanvasGutterMobileClassName)
+            : cn("shrink-0", pageCanvasGutterPullClassName, "w-auto")
+        )}
         data-canvas-row-gutter-host
       >
         <div
@@ -176,7 +187,12 @@ export function CanvasRowShell({
     gutterHost = (
       <div
         aria-hidden
-        className="-ml-8 w-8 shrink-0 md:-ml-12 md:w-12"
+        className={cn(
+          "shrink-0",
+          isNarrowViewport
+            ? "w-0"
+            : cn(pageCanvasGutterPullClassName, "w-8 md:w-12")
+        )}
         data-canvas-row-gutter-host
       />
     );
@@ -191,12 +207,13 @@ export function CanvasRowShell({
       {showBefore ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 bg-primary"
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 -translate-y-1/2 bg-selection-primary"
         />
       ) : null}
       <div
         className={cn(
           "flex min-w-0",
+          gutter && isNarrowViewport && "relative",
           gutterAlignCenter ? "items-center" : "items-start",
           gutter &&
             "[&:has([data-canvas-row-content]_[data-canvas-row-shell]:hover)>_[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-0!",
@@ -229,7 +246,7 @@ export function CanvasRowShell({
       {showAfter ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-0.5 bg-primary"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1 translate-y-1/2 bg-selection-primary"
         />
       ) : null}
     </div>

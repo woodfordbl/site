@@ -79,6 +79,10 @@ export function useCanvasEditor(
       return;
     }
 
+    if (focus.embedAction) {
+      return;
+    }
+
     let frame = 0;
     let cancelled = false;
 

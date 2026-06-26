@@ -114,13 +114,13 @@ export function TableStructureDropIndicators({
     >
       {columnBoundaryX == null ? null : (
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-primary"
+          className="absolute top-0 bottom-0 w-1 -translate-x-1/2 bg-selection-primary"
           style={{ left: columnBoundaryX }}
         />
       )}
       {rowBoundaryY == null ? null : (
         <div
-          className="absolute left-0 h-0.5 bg-primary"
+          className="absolute left-0 h-1 -translate-y-1/2 bg-selection-primary"
           style={{ top: rowBoundaryY, width: tableWidthPx }}
         />
       )}

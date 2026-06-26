@@ -120,6 +120,7 @@ export type CanvasCommand =
       rowId: string;
       placement?: "start" | "end";
       offset?: number;
+      embedAction?: "replace" | "caption";
     }
   | { type: "row.focusAdjacent"; rowId: string; direction: "up" | "down" }
   | { type: "row.moveAdjacent"; rowId: string; direction: "up" | "down" }

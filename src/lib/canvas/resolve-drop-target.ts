@@ -4,6 +4,7 @@ import {
   type DropTarget,
   normalizeDropTarget,
 } from "@/lib/canvas/drop-target.ts";
+import { COLUMN_SCOPE_EDGE_PX } from "@/lib/canvas/resolve-column-row-at-y.ts";
 import { resolveTableLayoutDrop } from "@/lib/canvas/resolve-table-drop-target.ts";
 import { collectRects } from "@/lib/dnd/rects.ts";
 
@@ -11,9 +12,6 @@ export type { DropTarget } from "@/lib/canvas/drop-target.ts";
 
 /** Attribute marking canvas rows so the DnD surface can snapshot their rects. */
 export const CANVAS_ROW_ATTRIBUTE = "data-canvas-row-id";
-
-/** Minimum vertical band (px) for column start/end drop targets. */
-const COLUMN_SCOPE_EDGE_PX = 20;
 
 function resolveDropEdge(clientY: number, rect: DOMRect): "before" | "after" {
   return clientY < rect.top + rect.height / 2 ? "before" : "after";

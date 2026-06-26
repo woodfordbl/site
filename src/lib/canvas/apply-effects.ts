@@ -40,6 +40,7 @@ export function applyCanvasEffects(
           rowId: effect.rowId,
           placement: effect.placement,
           offset: effect.offset,
+          embedAction: effect.embedAction,
         });
         break;
       }

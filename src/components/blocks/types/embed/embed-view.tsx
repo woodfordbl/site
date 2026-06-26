@@ -19,24 +19,17 @@ function embedHostname(url: string): string {
   }
 }
 
-function EmbedCaptions({ props, url }: { props: EmbedProps; url: string }) {
-  const title = props.title?.trim();
-  const showTitle = props.showTitle && title;
-  const showUrl = props.showUrl;
-
-  if (!(showTitle || showUrl)) {
-    return null;
-  }
-
+export function EmbedCaptionDisplay({
+  caption,
+  className,
+}: {
+  caption: string;
+  className?: string;
+}) {
   return (
-    <div className="space-y-1 px-1">
-      {showTitle ? (
-        <p className="text-muted-foreground text-sm italic">{title}</p>
-      ) : null}
-      {showUrl ? (
-        <p className="truncate text-muted-foreground text-sm italic">{url}</p>
-      ) : null}
-    </div>
+    <p className={cn("px-1 text-muted-foreground text-sm italic", className)}>
+      {caption}
+    </p>
   );
 }
 
@@ -50,6 +43,12 @@ export function EmbedView({
   props,
 }: EmbedViewProps) {
   const url = props.url.trim();
+  const captionText = props.caption?.trim() ?? "";
+  const captionNode =
+    props.showCaption && captionText ? (
+      <EmbedCaptionDisplay caption={captionText} />
+    ) : null;
+
   if (!url) {
     return (
       <div className={cn("text-muted-foreground text-sm", className)}>
@@ -82,7 +81,7 @@ export function EmbedView({
             title={props.title ?? `${display.provider.provider} embed`}
           />
         </div>
-        <EmbedCaptions props={props} url={url} />
+        {captionNode}
       </div>
     );
   }
@@ -98,7 +97,7 @@ export function EmbedView({
           src={url}
           width={800}
         />
-        <EmbedCaptions props={props} url={url} />
+        {captionNode}
       </div>
     );
   }
@@ -134,7 +133,7 @@ export function EmbedView({
           <span className="truncate px-4">{embedHostname(url)}</span>
         </a>
       )}
-      <EmbedCaptions props={props} url={url} />
+      {captionNode}
     </div>
   );
 }

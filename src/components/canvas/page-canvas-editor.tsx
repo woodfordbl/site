@@ -1,5 +1,11 @@
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import "@/components/blocks/register-containers.ts";
 import {
@@ -23,7 +29,6 @@ import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
-import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
   CanvasRowDragPreview,
@@ -38,6 +43,7 @@ import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
 import { useCanvasKeyboard } from "@/hooks/use-canvas-keyboard.ts";
+import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
@@ -56,10 +62,10 @@ import {
   canDropPageIntoCanvas,
   PAGE_DRAG_MIME_TYPE,
 } from "@/lib/pages/page-canvas-drop.ts";
+import { pageCanvasMobileScrollClassName } from "@/lib/pages/page-title-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
-  footerHost?: HTMLElement | null;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
   pageHasLocalDraft: boolean;
@@ -80,19 +86,27 @@ function isTableRowDragSource(sourceId: string): boolean {
 
 type CanvasEditorState = ReturnType<typeof useCanvasEditor>;
 
+function CanvasOverclickListener({
+  scrollRootRef,
+}: {
+  scrollRootRef: RefObject<HTMLElement | null>;
+}) {
+  useCanvasOverclick(scrollRootRef);
+  return null;
+}
+
 function PageCanvasEditorBody({
   editor,
-  footerHost,
   headerSlot,
   serverPage,
   titleSlot,
 }: {
   editor: CanvasEditorState;
-  footerHost?: HTMLElement | null;
   headerSlot?: ReactNode;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }) {
+  const scrollRootRef = useRef<HTMLDivElement>(null);
   const runAfterBlockActionsMenuClose = useCloseBlockActionsMenuBeforeAction();
   const { pages } = useMergedPageListItems();
   const dispatchPage = usePageDispatch(pages);
@@ -350,30 +364,13 @@ function PageCanvasEditorBody({
     [editor.clipboard, editor.rows]
   );
 
-  const footer = (
-    <PageCanvasFooter
-      hasLocalChanges={editor.hasLocalChanges}
-      isStale={editor.isStale}
-      onAcknowledgeStale={() =>
-        editor.dispatch({ type: "page.acknowledgeServerBaseline" })
-      }
-      onReset={editor.resetToServer}
-      onRevertToServer={() => editor.dispatch({ type: "page.revertToServer" })}
-      pageIcon={serverPage.icon}
-      pageId={serverPage.id}
-      pageParentId={serverPage.parentId}
-      pageSlug={serverPage.slug}
-      pageTitle={serverPage.title}
-      rows={editor.rows}
-    />
-  );
-
   return (
     <CanvasEditorContext.Provider value={actions}>
       <CanvasSelectionContext.Provider value={selectionValue}>
         <CanvasFocusContext.Provider value={editor.focus}>
           <CanvasEditorStateContext.Provider value={stateValue}>
             <CanvasSlashProvider pages={pages}>
+              <CanvasOverclickListener scrollRootRef={scrollRootRef} />
               <DndSurface config={dndConfig}>
                 <DragOverlay>
                   {({ pointer }) => {
@@ -402,8 +399,12 @@ function PageCanvasEditorBody({
                 <CanvasRowDndBridge>
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
-                      className="relative flex min-h-0 flex-1 flex-col overflow-auto pr-4 pb-12 pl-8 md:px-12 md:py-12"
+                      className={cn(
+                        "relative flex min-h-0 flex-1 flex-col",
+                        pageCanvasMobileScrollClassName
+                      )}
                       data-scroll-restoration-id="page-canvas-scroll"
+                      ref={scrollRootRef}
                     >
                       {headerSlot}
                       {titleSlot}
@@ -424,7 +425,6 @@ function PageCanvasEditorBody({
                   </div>
                 </CanvasRowDndBridge>
               </DndSurface>
-              {footerHost ? createPortal(footer, footerHost) : null}
             </CanvasSlashProvider>
           </CanvasEditorStateContext.Provider>
         </CanvasFocusContext.Provider>
@@ -498,8 +498,9 @@ function CanvasDropZone({
         "flex-1",
         isDragging &&
           "cursor-grabbing [&_input]:pointer-events-none [&_textarea]:pointer-events-none",
-        pageDragOver && "rounded-lg ring-2 ring-accent ring-inset"
+        pageDragOver && "rounded-lg ring-2 ring-selection-primary ring-inset"
       )}
+      data-canvas-drop-zone
       {...dropZoneProps}
     >
       {children}
@@ -508,7 +509,6 @@ function CanvasDropZone({
 }
 
 export function PageCanvasEditor({
-  footerHost,
   headerSlot,
   pageHasLocalDraft,
   serverPage,
@@ -521,7 +521,6 @@ export function PageCanvasEditor({
       <BlockActionsMenuProvider>
         <PageCanvasEditorBody
           editor={editor}
-          footerHost={footerHost}
           headerSlot={headerSlot}
           serverPage={serverPage}
           titleSlot={titleSlot}

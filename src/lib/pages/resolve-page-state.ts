@@ -125,6 +125,53 @@ export function resolvePageCatalog(
   );
 }
 
+/**
+ * True when a locally-overridden shipped page's body diverges from the current
+ * shipped content (the author posted new content). Content-only by design: it
+ * compares `serverBaselineHash` to the catalog `contentHash` so a global refresh
+ * never nags users over metadata-only hash differences.
+ */
+export function isOverriddenSummaryContentStale(
+  summary: PageSummary,
+  localPage: LocalPage | null
+): boolean {
+  if (
+    !localPage ||
+    isLocallyDeletedPage(localPage) ||
+    isUserCreatedPage(localPage)
+  ) {
+    return false;
+  }
+
+  if (localPage.serverBaselineHash == null || summary.contentHash == null) {
+    return false;
+  }
+
+  return localPage.serverBaselineHash !== summary.contentHash;
+}
+
+/** Ids of overridden shipped pages whose shipped content changed since the local copy. */
+export function findStaleOverriddenPageIds(
+  serverSummaries: PageSummary[],
+  localPages: LocalPage[]
+): string[] {
+  const localById = new Map(localPages.map((page) => [page.id, page]));
+  const stale: string[] = [];
+
+  for (const summary of serverSummaries) {
+    if (
+      isOverriddenSummaryContentStale(
+        summary,
+        localById.get(summary.id) ?? null
+      )
+    ) {
+      stale.push(summary.id);
+    }
+  }
+
+  return stale;
+}
+
 export function findOrphanLocalPages(
   serverPages: PageSummary[],
   localPages: LocalPage[]

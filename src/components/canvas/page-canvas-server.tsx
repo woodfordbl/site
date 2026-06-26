@@ -11,9 +11,11 @@ import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
+import type { Block } from "@/lib/schemas/block.ts";
 
-interface PageCanvasServerProps {
-  serverPage: ServerPageSource;
+interface CanvasBlocksReadOnlyProps {
+  blocks: Block[];
+  pageId: string;
   titleSlot?: ReactNode;
 }
 
@@ -51,17 +53,23 @@ function createNoopCanvasEditorActions(
   };
 }
 
-export function PageCanvasServer({
-  serverPage,
+/**
+ * Read-only block renderer shared by the SSR server view and the local-first
+ * bootstrap view. The markup mirrors the editor body so swapping to the live
+ * editor causes no layout shift.
+ */
+export function CanvasBlocksReadOnly({
+  blocks,
+  pageId,
   titleSlot,
-}: PageCanvasServerProps) {
+}: CanvasBlocksReadOnlyProps) {
   const rows = useMemo(
-    () => buildBlockTree(rewriteLegacyEditorBlockIds(serverPage.blocks)),
-    [serverPage.blocks]
+    () => buildBlockTree(rewriteLegacyEditorBlockIds(blocks)),
+    [blocks]
   );
   const actions = useMemo(
-    () => createNoopCanvasEditorActions(rows, serverPage.id),
-    [rows, serverPage.id]
+    () => createNoopCanvasEditorActions(rows, pageId),
+    [rows, pageId]
   );
 
   return (
@@ -84,5 +92,23 @@ export function PageCanvasServer({
         </BlockActionsMenuProvider>
       </CanvasMenuProvider>
     </CanvasEditorContext.Provider>
+  );
+}
+
+interface PageCanvasServerProps {
+  serverPage: ServerPageSource;
+  titleSlot?: ReactNode;
+}
+
+export function PageCanvasServer({
+  serverPage,
+  titleSlot,
+}: PageCanvasServerProps) {
+  return (
+    <CanvasBlocksReadOnly
+      blocks={serverPage.blocks}
+      pageId={serverPage.id}
+      titleSlot={titleSlot}
+    />
   );
 }
