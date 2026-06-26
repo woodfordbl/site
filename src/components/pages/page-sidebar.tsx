@@ -18,6 +18,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar.tsx";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { cn } from "@/lib/utils.ts";
 
 /** Pins the sidebar when collapsed (hover peek overlay). */
 function PageSidebarExpandAction() {
@@ -40,10 +41,13 @@ function PageSidebarExpandAction() {
   );
 }
 
-function PageSidebarPanel() {
+function PageSidebarPanel({ className }: { className?: string }) {
   return (
     <div
-      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+      className={cn(
+        "relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground",
+        className
+      )}
       data-side="left"
       data-sidebar="sidebar"
       data-state="expanded"
@@ -72,14 +76,14 @@ function PageSidebarMobileSheet() {
   return (
     <Sheet onOpenChange={setOpenMobile} open={openMobile}>
       <SheetContent
-        className="w-[min(18rem,85vw)] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+        className="w-[min(18rem,85vw)] bg-background p-0 text-foreground [&>button]:hidden"
         side="left"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Pages</SheetTitle>
           <SheetDescription>Page navigation sidebar.</SheetDescription>
         </SheetHeader>
-        <PageSidebarPanel />
+        <PageSidebarPanel className="bg-background text-foreground" />
       </SheetContent>
     </Sheet>
   );
