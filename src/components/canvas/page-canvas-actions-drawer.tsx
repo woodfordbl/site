@@ -13,12 +13,15 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer.tsx";
+import {
+  DrawerMenuRow,
+  DrawerMenuSectionLabel as SectionLabel,
+} from "@/components/ui/menu-presentation.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import {
   type PageCanvasFooterActionsInput,
   usePageCanvasFooterActions,
 } from "@/hooks/use-page-canvas-footer-actions.ts";
-import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasActionsDrawerProps extends PageCanvasFooterActionsInput {
   triggerHost: HTMLElement | null;
@@ -36,34 +39,10 @@ function DrawerRow({
   onClick: () => void;
 }) {
   return (
-    <button
-      className={cn(
-        "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-[15px] transition-colors active:bg-accent",
-        destructive ? "text-destructive" : "text-foreground"
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      {icon ? (
-        <span
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center [&_svg]:size-5",
-            destructive ? "text-destructive" : "text-muted-foreground"
-          )}
-        >
-          {icon}
-        </span>
-      ) : null}
+    <DrawerMenuRow destructive={destructive} onClick={onClick}>
+      {icon}
       <span className="flex-1 truncate">{label}</span>
-    </button>
-  );
-}
-
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="px-3 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      {children}
-    </div>
+    </DrawerMenuRow>
   );
 }
 

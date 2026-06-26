@@ -16,6 +16,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   type ActionMenuEntry,
   filterActionMenuItems,
@@ -25,6 +26,9 @@ export function useActionMenuSearch(activeKey: string | null) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const isFiltering = query.trim().length > 0;
+  // On touch the menu renders as a drawer; auto-focusing would pop the
+  // on-screen keyboard and shove the actions out of view.
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
 
   useEffect(() => {
     if (activeKey === null) {
@@ -32,6 +36,10 @@ export function useActionMenuSearch(activeKey: string | null) {
     }
 
     setQuery("");
+    if (isCoarsePrimaryPointer) {
+      return;
+    }
+
     const frame = requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
@@ -39,7 +47,7 @@ export function useActionMenuSearch(activeKey: string | null) {
     return () => {
       cancelAnimationFrame(frame);
     };
-  }, [activeKey]);
+  }, [activeKey, isCoarsePrimaryPointer]);
 
   return { inputRef, isFiltering, query, setQuery };
 }
