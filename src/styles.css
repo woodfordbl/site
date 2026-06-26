@@ -633,19 +633,9 @@
   margin: 0;
 }
 
-[data-sonner-toast].cn-toast:has(> [data-icon]) > [data-cancel][data-button] {
-  grid-column: 2;
-}
-
-[data-sonner-toast].cn-toast:has(> [data-icon])
-  > [data-cancel][data-button]
-  ~ [data-action][data-button] {
-  grid-column: 3;
-}
-
-[data-sonner-toast].cn-toast:has(> [data-icon]):not(:has([data-cancel]))
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])):not(:has([data-cancel]))
   > [data-action][data-button] {
-  grid-column: 2;
+  grid-column: 1;
 }
 
 [data-sonner-toast].cn-toast:not(:has(> [data-icon]))
@@ -659,9 +649,19 @@
   grid-column: 2;
 }
 
-[data-sonner-toast].cn-toast:not(:has(> [data-icon])):not(:has([data-cancel]))
+[data-sonner-toast].cn-toast:has(> [data-icon]) > [data-cancel][data-button] {
+  grid-column: 2;
+}
+
+[data-sonner-toast].cn-toast:has(> [data-icon]):not(:has([data-cancel]))
   > [data-action][data-button] {
-  grid-column: 1;
+  grid-column: 2;
+}
+
+[data-sonner-toast].cn-toast:has(> [data-icon])
+  > [data-cancel][data-button]
+  ~ [data-action][data-button] {
+  grid-column: 3;
 }
 
 /* Collapsed stack — Sonner clips height but unstyled toasts skip the default opacity:0 on children. */

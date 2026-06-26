@@ -23,6 +23,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  // biome-ignore lint/suspicious/noDeprecatedImports: recharts still ships Cell for pie/bar fills
   Cell,
   Line,
   LineChart,
