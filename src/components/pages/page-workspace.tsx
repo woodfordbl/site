@@ -11,9 +11,9 @@ import {
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { rememberSlugPageResolution } from "@/lib/pages/remember-slug-page-resolution.ts";
@@ -121,9 +121,9 @@ function PageWorkspaceBody({
   setFooterHost: (node: HTMLDivElement | null) => void;
   titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
 }) {
-  const isMobile = useIsMobile();
+  const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed } = usePageSidebarChrome();
-  const showSidebarRail = !(isMobile || isCollapsed);
+  const showSidebarRail = !(isNarrowViewport || isCollapsed);
 
   const header = <PageHeader pageId={page.id} titleSeed={titleSeed} />;
 
@@ -136,12 +136,12 @@ function PageWorkspaceBody({
         {showSidebarRail ? <PageSidebarRail /> : null}
         {/* Desktop: header is fixed above the scroll region. Mobile: it lives
             inside the scroll region (as headerSlot) so it scrolls away. */}
-        {isMobile ? null : header}
+        {isNarrowViewport ? null : header}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <PageCanvas
             footerHost={footerHost}
             headerSlot={
-              isMobile ? (
+              isNarrowViewport ? (
                 <div className="-mr-4 mb-4 -ml-8 md:hidden">{header}</div>
               ) : null
             }

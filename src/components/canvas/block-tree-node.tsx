@@ -12,11 +12,20 @@ import {
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasRowShell } from "@/components/canvas/canvas-row-shell.tsx";
 import { RowGutter } from "@/components/canvas/row-gutter.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
+
+function getCanvasRowChrome(mode: BlockMode, isCoarsePrimaryPointer: boolean) {
+  const edit = mode === "edit";
+  return {
+    longPressMenu: edit && isCoarsePrimaryPointer,
+    showEditGutter: edit && !isCoarsePrimaryPointer,
+  };
+}
 
 /** Matches page title `PageIconPicker` trigger (`size-9` / 36px). */
 const topLevelPageTitleAlignClassName = "pl-9";
@@ -32,7 +41,12 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
   const { clearFocus, insertAfter, insertAtScopeStart, insertBefore } =
     useCanvasEditorContext();
   const focus = useCanvasFocus();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const isFocusTarget = focus?.rowId === row.rowId;
+  const { longPressMenu, showEditGutter } = getCanvasRowChrome(
+    mode,
+    isCoarsePrimaryPointer
+  );
 
   const spec = getBlockSpec(row.effectiveBlock.type);
 
@@ -48,7 +62,7 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
           alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
         }
         gutter={
-          mode === "edit" && !isTable ? (
+          showEditGutter && !isTable ? (
             <RowGutter
               onInsert={(edge) => {
                 handleContainerGutterInsert(row, edge, {
@@ -61,7 +75,8 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
             />
           ) : null
         }
-        reserveGutterSpace={mode === "edit" && isTable}
+        longPressMenu={longPressMenu}
+        reserveGutterSpace={showEditGutter && isTable}
         row={row}
       >
         <Container mode={mode} row={row} />
@@ -71,11 +86,10 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
 
   const block = row.effectiveBlock;
   const isDivider = block.type === "divider";
-  const showGutter = mode === "edit";
   const isContainerChild = Boolean(block.parentId);
   const alignWithPageTitle = !isContainerChild;
   let contentSpacingClassName: string | undefined;
-  if (showGutter && !isContainerChild) {
+  if (showEditGutter && !isContainerChild) {
     contentSpacingClassName =
       block.type === "divider"
         ? "min-h-10 items-center"
@@ -91,8 +105,9 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
         alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
       }
       contentSpacingClassName={contentSpacingClassName}
-      gutter={showGutter ? <RowGutter row={row} /> : null}
+      gutter={showEditGutter ? <RowGutter row={row} /> : null}
       gutterAlignCenter={isDivider}
+      longPressMenu={longPressMenu}
       row={row}
     >
       <BlockRenderer
@@ -100,7 +115,7 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
         autoFocusOffset={isFocusTarget ? focus?.offset : undefined}
         autoFocusPlacement={isFocusTarget ? focus?.placement : undefined}
         mode={mode}
-        omitShellSpacing={showGutter && !isContainerChild}
+        omitShellSpacing={showEditGutter && !isContainerChild}
         onFocusHandled={clearFocus}
         parentType={parentType}
         row={row}

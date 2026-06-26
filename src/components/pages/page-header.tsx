@@ -7,7 +7,7 @@ import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-c
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
@@ -19,10 +19,10 @@ interface PageHeaderProps {
 
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */
 function PageHeaderSidebarToggle() {
-  const isMobile = useIsMobile();
+  const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed, pinSidebar } = usePageSidebarChrome();
 
-  if (isMobile) {
+  if (isNarrowViewport) {
     return <SidebarTrigger className="shrink-0 text-muted-foreground" />;
   }
 

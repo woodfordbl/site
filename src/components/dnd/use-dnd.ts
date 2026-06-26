@@ -15,7 +15,7 @@ import {
   DndContext,
   type DndContextValue,
 } from "@/components/dnd/dnd-surface.tsx";
-import { useCoarsePointer } from "@/hooks/use-coarse-pointer.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { usePointerClickVsDrag } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { prepareDataTransferForMove } from "@/lib/dnd/drag-channel.ts";
 import type { DragState, DragStore } from "@/lib/dnd/drag-store.ts";
@@ -182,7 +182,7 @@ export function useDragSource(options: UseDragSourceOptions): {
   const canvasRowCtx = useCanvasRowDndContext();
   const ctx = useCanvasRowSurface ? canvasRowCtx : nestedCtx;
   const isDragging = useDragState((state) => state.draggingId === id);
-  const coarse = useCoarsePointer();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
 
   const [holdReady, setHoldReady] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
@@ -347,7 +347,7 @@ export function useDragSource(options: UseDragSourceOptions): {
     (overrides = {}) => ({
       // On touch (coarse) pointers, native HTML5 DnD never starts, so the grip
       // is not `draggable` and reorder is driven entirely by pointer events.
-      draggable: !coarse,
+      draggable: !isCoarsePrimaryPointer,
       onClick: compose(handleClick, overrides.onClick),
       onDragStartCapture: compose((event) => {
         const dataTransfer = event.dataTransfer;
@@ -371,26 +371,26 @@ export function useDragSource(options: UseDragSourceOptions): {
         ctx?.cancelDrag();
       }, overrides.onDragEnd),
       onPointerDown: compose(
-        coarse ? touchPointerDown : nativePointerDown,
+        isCoarsePrimaryPointer ? touchPointerDown : nativePointerDown,
         overrides.onPointerDown
       ),
       onPointerMove: compose(
-        coarse ? touchPointerMove : nativePointerMove,
+        isCoarsePrimaryPointer ? touchPointerMove : nativePointerMove,
         overrides.onPointerMove
       ),
       onPointerUp: compose(
-        coarse ? touchPointerUp : nativePointerUp,
+        isCoarsePrimaryPointer ? touchPointerUp : nativePointerUp,
         overrides.onPointerUp
       ),
       onPointerCancel: compose(
-        coarse ? touchPointerCancel : resetHold,
+        isCoarsePrimaryPointer ? touchPointerCancel : resetHold,
         overrides.onPointerCancel
       ),
     }),
     [
       clickVsDragEnd,
       clickVsDragStart,
-      coarse,
+      isCoarsePrimaryPointer,
       ctx,
       handleClick,
       id,

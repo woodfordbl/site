@@ -17,7 +17,7 @@ import {
   SidebarGroupLabel,
   useSidebar,
 } from "@/components/ui/sidebar.tsx";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 /** Pins the sidebar when collapsed (hover peek overlay). */
@@ -90,9 +90,9 @@ function PageSidebarMobileSheet() {
 }
 
 export function PageSidebar() {
-  const isMobile = useIsMobile();
+  const isNarrowViewport = useIsNarrowViewport();
 
-  if (isMobile) {
+  if (isNarrowViewport) {
     return <PageSidebarMobileSheet />;
   }
 

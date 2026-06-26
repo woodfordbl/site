@@ -21,9 +21,10 @@ describe("hover-reveal stylesheet", () => {
     expect(css).toContain("prefers-reduced-motion: reduce");
   });
 
-  it("keeps the gutter grip reachable and hides the insert button on touch", () => {
-    expect(css).toContain(".canvas-block-gutter");
-    expect(css).toContain("[data-gutter-insert]");
+  it("suppresses iOS text-selection callout on touch canvas rows", () => {
+    expect(css).toContain("@media (hover: none)");
+    expect(css).toContain("[data-canvas-row-content]");
+    expect(css).toContain("-webkit-touch-callout: none");
   });
 });
 

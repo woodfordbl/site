@@ -61,19 +61,25 @@ Overrides in use:
 
 ## Touch / no-hover
 
-On `@media (hover: none)` pointers, simple `.hover-reveal` controls stay at full
-opacity so they remain reachable (there is no hover to reveal them). Swaps are
-left at rest (concealed element shown, revealed element hidden) so the two
-slot-stacked elements never both show.
+On `@media (hover: none)` pointers (`MEDIA_HOVER_NONE` in
+[`device-layout.constants.ts`](../../src/lib/device/device-layout.constants.ts)),
+simple `.hover-reveal` controls stay at full opacity so they remain reachable
+(there is no hover to reveal them). Swaps are left at rest (concealed element
+shown, revealed element hidden) so the two slot-stacked elements never both
+show. This axis is **hover capability**, not viewport width and not
+`(pointer: coarse)` — canvas touch UX uses
+[`useIsCoarsePrimaryPointer`](../../src/hooks/device-layout.ts) separately; see
+[canvas-editor — Device signals](./canvas-editor.md#device-signals).
 
 ### Canvas block gutter
 
-The gutter is a special case (its reveal is JS pointer-driven in
-[`canvas-row-shell.tsx`](../../src/components/canvas/canvas-row-shell.tsx) with a
-300ms delay, not this CSS primitive). On touch the styles in `styles.css` keep the
-`.canvas-block-gutter` visible and hide the insert (`+`) button
-(`[data-gutter-insert]`), leaving only the grip — which already maps **tap →
-block-actions menu** and **press-drag → move**.
+On coarse primary pointers the gutter is not mounted (`showEditGutter` in
+[`block-tree-node.tsx`](../../src/components/canvas/block-tree-node.tsx)); block
+actions open from long-press on row content via
+[`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx).
+Fine pointers keep the JS pointer-driven reveal in
+[`canvas-row-shell.tsx`](../../src/components/canvas/canvas-row-shell.tsx) (300ms
+delay, not this CSS primitive).
 
 ## Reduced motion
 

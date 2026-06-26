@@ -63,6 +63,27 @@ Schema-driven block items from `BLOCK_SPECS` in [`src/components/blocks/registry
 
 Leaf edit components receive canvas keyboard wiring from `useBlockFieldActions` according to their `behavior.editStrategy`. Block and container specs live in [`registry.ts`](../../src/components/blocks/registry.ts); container helpers in [`block-container-config.ts`](../../src/lib/canvas/block-container-config.ts). See [block-types](./block-types.md).
 
+## Device signals
+
+Layout and canvas intentionally use **two axes** — do not merge them into one `isMobile` boolean or `(narrow OR coarse)`.
+
+| Axis | Hook | Signal | Used for |
+|------|------|--------|----------|
+| Layout | [`useIsNarrowViewport`](../../src/hooks/device-layout.ts) | `(max-width: 767px)` — Tailwind `md:` parity | Sidebar Sheet, header slot, rail, inset spacing |
+| Canvas | [`useIsCoarsePrimaryPointer`](../../src/hooks/device-layout.ts) | `(pointer: coarse)` | Long-press drawer, hide gutter, pointer DnD |
+
+CSS `@media (hover: none)` in [`styles.css`](../../src/styles.css) covers touch-only affordances (hover-reveal, iOS callout suppression) — hover **capability**, not viewport width.
+
+[`DeviceLayoutProvider`](../../src/components/layout/device-layout-provider.tsx) seeds both values from SSR hints, then reconciles to live `matchMedia` after mount (avoids hydration mismatch). Resolution order:
+
+1. **Client-measured cookie** (`site-device-layout`, `{"nv":0|1,"cp":0|1}`) — authoritative on return visits; written by [`SyncDeviceLayoutCookieEffect`](../../src/components/layout/device-layout-provider.tsx).
+2. **Server UA inference** — Bowser + optional Client Hints (`Sec-CH-UA-Mobile`, etc.) when no cookie yet ([`inferDeviceLayoutFromUserAgent`](../../src/lib/device/infer-device-layout-from-user-agent.ts)): mobile → both true; tablet → coarse only; desktop/unknown → both false. Bowser (MIT) over `ua-parser-js` (AGPL/commercial dual license).
+3. **Live client truth** — `matchMedia` listeners update provider state + re-sync the cookie.
+
+Edge cases: iPad gets desktop shell + touch canvas; narrow desktop windows SSR as desktop until client width corrects; DevTools must emulate viewport **and** pointer separately; Chromium Client Hints require opt-in headers on the response.
+
+Constants: [`device-layout.constants.ts`](../../src/lib/device/device-layout.constants.ts). SSR loader: [`loadDeviceLayoutHints`](../../src/lib/device/load-device-layout-hints.ts) in [`__root.tsx`](../../src/routes/__root.tsx) `beforeLoad`. See also [local-first-persistence — SSR hint cookies](./local-first-persistence.md#ssr-hint-cookies).
+
 | Label | Block type |
 |-------|------------|
 | Heading 1–4 | `heading` (`props.level`: 1–4) |
@@ -80,12 +101,13 @@ Leaf edit components receive canvas keyboard wiring from `useBlockFieldActions` 
 
 ## Block selection
 
-Grab handles in the gutter expose block actions and multi-select:
+On fine pointers (mouse/trackpad), grab handles in the gutter expose block actions and multi-select. On coarse pointers (touch), the gutter is hidden — **long-press** row content (~400ms) opens the same actions in a bottom [`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx) (Vaul). Long-press suppresses iOS text selection via [`useLongPress`](../../src/hooks/use-long-press.ts) and blurs the field before the drawer opens.
 
 | Input | Action |
 |-------|--------|
-| Tap / click grab (press and release without dragging) | Open block menu and highlight the row (Turn into, Duplicate, Delete) |
-| Drag grab (mouse click-hold, or touch press-and-move) | Reorder row; no highlight and no menu |
+| Click grab (press and release without dragging) | Open block menu dropdown and highlight the row (desktop) |
+| **Long-press row content** | Open block-actions drawer and highlight the row (touch) |
+| Drag grab (mouse click-hold, or touch press-and-move on grip when shown) | Reorder row; no highlight and no menu |
 | Shift+click grab or row content (field area) | Extend range from selection anchor, or from the row with the active caret if selection was cleared by editing; blurs the active field |
 | Shift+↑ / Shift+↓ (focused block) | Same range extension as Shift+click, stepping one focusable row at a time |
 | Option+↑ / Option+↓ (focused block) | Move the row before/after the adjacent focusable row (`row.moveAdjacent` → `row.move`) |
@@ -99,7 +121,7 @@ Grab handles in the gutter expose block actions and multi-select:
 
 **Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL also get **Change view** — checkboxes for **Show title** and **Show URL** (plain captions below the preview; default off). Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children.
 
-Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Base UI handles dismiss; opening the grip calls `closeMenu()` on the slash provider so only one overlay is active at a time.
+Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Touch reuses the same menu body inside [`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx). Base UI / Vaul handle dismiss; opening block actions calls `closeMenu()` on the slash provider so only one overlay is active at a time.
 
 Text fields keep native copy/paste while focused. Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. The block-actions menu closes immediately (no exit animation) when dismissed.
 
@@ -161,7 +183,7 @@ When a structural edit needs a new trailing blank, the session's `ensureTrailing
 
 ## Page footer
 
-`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height inside the inset card. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) breadcrumb is a fixed bar above the scroll region; on mobile it is passed as `headerSlot` and rendered **inside** the scroll region so it scrolls away with the content (nothing pinned to the top). The scroll region also tightens its padding on mobile (`pl-8 pr-4`, narrower than the desktop `px-12`) and the gutter grip shrinks to match (`w-8` vs `w-12`) so blocks get more usable width. The author toolbar (`PageCanvasFooter`) is **not** an in-flow footer — it is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset):
+`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height inside the inset card. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) breadcrumb is a fixed bar above the scroll region; on mobile it is passed as `headerSlot` and rendered **inside** the scroll region so it scrolls away with the content (nothing pinned to the top). The scroll region uses symmetric `px-4` on mobile (no gutter column) and `px-12 py-12` on desktop. The author toolbar (`PageCanvasFooter`) is **not** an in-flow footer — it is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset):
 
 | Button | When | Action |
 |--------|------|--------|

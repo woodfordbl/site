@@ -29,7 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 const SIDEBAR_WIDTH = "12rem";
@@ -38,7 +38,7 @@ const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 interface SidebarContextProps {
-  isMobile: boolean;
+  isNarrowViewport: boolean;
   open: boolean;
   openMobile: boolean;
   setOpen: (open: boolean) => void;
@@ -71,7 +71,7 @@ function SidebarProvider({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const isMobile = useIsMobile();
+  const isNarrowViewport = useIsNarrowViewport();
   const [openMobile, setOpenMobile] = useState(false);
 
   // This is the internal state of the sidebar.
@@ -93,8 +93,10 @@ function SidebarProvider({
   // Helper to toggle the sidebar.
   const toggleSidebar = useCallback(
     () =>
-      isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open),
-    [isMobile, setOpen]
+      isNarrowViewport
+        ? setOpenMobile((open) => !open)
+        : setOpen((open) => !open),
+    [isNarrowViewport, setOpen]
   );
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
@@ -106,12 +108,12 @@ function SidebarProvider({
       state,
       open,
       setOpen,
-      isMobile,
+      isNarrowViewport,
       openMobile,
       setOpenMobile,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, toggleSidebar]
+    [state, open, setOpen, isNarrowViewport, openMobile, toggleSidebar]
   );
 
   return (
@@ -150,7 +152,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isNarrowViewport, state, openMobile, setOpenMobile } = useSidebar();
 
   if (collapsible === "none") {
     return (
@@ -167,7 +169,7 @@ function Sidebar({
     );
   }
 
-  if (isMobile) {
+  if (isNarrowViewport) {
     return (
       <Sheet onOpenChange={setOpenMobile} open={openMobile} {...props}>
         <SheetContent
@@ -491,7 +493,7 @@ function SidebarMenuButton({
     isActive?: boolean;
     tooltip?: string | ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  const { isMobile, state } = useSidebar();
+  const { isNarrowViewport, state } = useSidebar();
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -524,7 +526,7 @@ function SidebarMenuButton({
       {comp}
       <TooltipContent
         align="center"
-        hidden={state !== "collapsed" || isMobile}
+        hidden={state !== "collapsed" || isNarrowViewport}
         side="right"
         {...tooltip}
       />

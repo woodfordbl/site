@@ -1,15 +1,14 @@
-import {
-  type MouseEvent,
-  type PointerEvent,
-  type ReactNode,
-  useRef,
-} from "react";
+import { type PointerEvent, type ReactNode, useEffect, useRef } from "react";
 
+import { useOpenBlockActionsDrawer } from "@/components/canvas/block-actions-drawer.tsx";
 import {
   useCanvasEditorContext,
   useCanvasSelection,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { useCanvasMenu } from "@/components/canvas/canvas-menu-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
+import { useLongPress } from "@/hooks/use-long-press.ts";
+import { useRowBlockActions } from "@/hooks/use-row-block-actions.ts";
 import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
@@ -51,6 +50,18 @@ function isNestedRowShellTarget(
   );
 }
 
+function shouldSkipLongPressTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      'button, a[href], input[type="checkbox"], [data-no-row-long-press]'
+    )
+  );
+}
+
 interface CanvasRowShellProps {
   children: ReactNode;
   className?: string;
@@ -60,6 +71,8 @@ interface CanvasRowShellProps {
   gutter?: ReactNode;
   /** Vertically centers gutter controls with short, non-text rows (e.g. divider). */
   gutterAlignCenter?: boolean;
+  /** Touch: long-press row content opens the block-actions drawer. */
+  longPressMenu?: boolean;
   /**
    * Keep the gutter column width without rendering gutter controls (e.g. table
    * blocks render gutter inside their horizontal scroll area).
@@ -77,12 +90,44 @@ export function CanvasRowShell({
   children,
   className,
   contentClassName,
+  longPressMenu = false,
 }: CanvasRowShellProps) {
   const { toggleRowSelection } = useCanvasEditorContext();
   const { isRowSelected } = useCanvasSelection();
+  const { onMenuOpen } = useRowBlockActions(row);
+  const { closeMenu: closeSlashMenu } = useCanvasMenu();
+  const openBlockActionsDrawer = useOpenBlockActionsDrawer();
   const isSelected = isRowSelected(row.rowId);
   const rowLayoutRef = useRef<HTMLDivElement>(null);
+  const rowContentRef = useRef<HTMLDivElement>(null);
   const gutterOpenTimeout = useTimeout();
+
+  const longPress = useLongPress({
+    disabled: !longPressMenu,
+    onLongPress: () => {
+      closeSlashMenu();
+      openBlockActionsDrawer(row.rowId, onMenuOpen);
+    },
+  });
+
+  useEffect(() => {
+    if (!longPressMenu) {
+      return;
+    }
+
+    const node = rowContentRef.current;
+    if (!node) {
+      return;
+    }
+
+    const handleSelectStart = longPress.onSelectStart;
+    node.addEventListener("selectstart", handleSelectStart, { capture: true });
+    return () => {
+      node.removeEventListener("selectstart", handleSelectStart, {
+        capture: true,
+      });
+    };
+  }, [longPress.onSelectStart, longPressMenu]);
 
   const dropEdge = useDropTarget((target: DropTarget | null) => {
     if (target?.rowId !== row.rowId) {
@@ -127,19 +172,28 @@ export function CanvasRowShell({
     }
   };
 
-  const handleContentPointerDown = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !event.shiftKey) {
+  const handleContentPointerDownCapture = (
+    event: PointerEvent<HTMLDivElement>
+  ) => {
+    if (event.button === 0 && event.shiftKey) {
+      const layout = rowLayoutRef.current;
+      if (layout && isNestedRowShellTarget(layout, event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      toggleRowSelection(row.rowId, { shiftKey: true });
       return;
     }
 
-    const layout = rowLayoutRef.current;
-    if (layout && isNestedRowShellTarget(layout, event.target)) {
-      return;
+    if (
+      longPressMenu &&
+      event.button === 0 &&
+      !shouldSkipLongPressTarget(event.target)
+    ) {
+      longPress.onPointerDown(event);
     }
-
-    event.preventDefault();
-    event.stopPropagation();
-    toggleRowSelection(row.rowId, { shiftKey: true });
   };
   const showBefore = dropEdge === "before";
   const showAfter = dropEdge === "after";
@@ -196,6 +250,8 @@ export function CanvasRowShell({
         ref={rowLayoutRef}
       >
         {gutterHost}
+        {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: editable canvas row — tap to type, long-press for block menu on touch. */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: same */}
         <div
           className={cn(
             "min-h-0 min-w-0 flex-1 rounded-lg transition-colors",
@@ -204,7 +260,15 @@ export function CanvasRowShell({
             contentClassName
           )}
           data-canvas-row-content
-          onPointerDownCapture={handleContentPointerDown}
+          onClickCapture={longPressMenu ? longPress.onClickCapture : undefined}
+          onContextMenu={longPressMenu ? longPress.onContextMenu : undefined}
+          onPointerCancel={
+            longPressMenu ? longPress.onPointerCancel : undefined
+          }
+          onPointerDownCapture={handleContentPointerDownCapture}
+          onPointerMove={longPressMenu ? longPress.onPointerMove : undefined}
+          onPointerUp={longPressMenu ? longPress.onPointerUp : undefined}
+          ref={rowContentRef}
         >
           {children}
         </div>

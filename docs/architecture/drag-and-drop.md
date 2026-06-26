@@ -63,9 +63,10 @@ flowchart TD
 
 ### Touch (pointer) drags
 
-Native HTML5 DnD never starts on touch, so on coarse pointers (`(pointer: coarse)` via [`useCoarsePointer`](../../src/hooks/use-coarse-pointer.ts)) [`useDragSource`](../../src/components/dnd/use-dnd.ts) drives the drag from pointer events instead:
+Native HTML5 DnD never starts on touch, so on coarse primary pointers (`(pointer: coarse)` via [`useIsCoarsePrimaryPointer`](../../src/hooks/device-layout.ts)) [`useDragSource`](../../src/components/dnd/use-dnd.ts) drives the drag from pointer events instead:
 
 - The grip drops its `draggable` attribute and gets `touch-action: none`. A press that travels past `TOUCH_DRAG_THRESHOLD_PX` captures the pointer, marks the click suppressed (so the trailing `click` can't open the [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx)), and calls `ctx.beginPointerDrag`. A press that releases without moving is a tap and opens the menu via the native click. `store.startDrag(..., pointerDrag: true)` flags the drag so previews can distinguish it.
+- On coarse pointers the canvas **gutter is hidden**; block actions open from a long-press on row content into [`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx) instead (see [canvas-editor — Block selection](./canvas-editor.md#block-selection)).
 - [`DndSurface.beginPointerDrag`](../../src/components/dnd/dnd-surface.tsx) starts the store, resolves the first target, and runs an rAF **edge auto-scroll** loop against the nearest scrollable ancestor (the native `dragover` path gets browser auto-scroll for free). `movePointer` feeds subsequent positions; `commitPointerDrop` applies `onDrop` from the store snapshot.
 - Because the finger grabs the left gutter (outside the row content rects), the canvas `resolveDropTarget` nudges the pointer X into the content column for pointer drags only (`pointerDragActiveRef` in [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)); native (mouse) drags keep their true X.
 - The drag image is a React overlay, not a native chip: [`CanvasRowDragPreview`](../../src/components/dnd/canvas-row-drag-preview.tsx) renders a clone of `[data-canvas-row-content]` (live field values copied via [`cloneNodeWithFieldValues`](../../src/lib/dnd/drag-image.ts)) so the dragged block reads as itself, not the browser's translucent box. Sidebar/table touch drags reuse their existing overlays.
@@ -92,7 +93,7 @@ When the pointer is inside `[data-table-layout]`, [`resolveTableLayoutDrop`](../
 
 Full grid model, structure handles, and keyboard map: [table-blocks](./table-blocks.md).
 
-Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows — same grab button composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) for tap/click-to-open and `useDragSource` for drag reorder; on touch the gutter is always visible and narrower, see [canvas-editor](./canvas-editor.md)) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
+Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows on fine pointers — same grab button composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) for tap/click-to-open and `useDragSource` for drag reorder) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
 
 ## Drop bands & zones
 
