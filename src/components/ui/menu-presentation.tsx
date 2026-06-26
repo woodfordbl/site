@@ -14,8 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
-
+import { DrawerContent, DrawerNestedRoot } from "@/components/ui/drawer.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
@@ -187,15 +186,12 @@ export function DrawerMenuTrigger({
 // --- Item presentation context (read by item-level components) --------------
 
 interface MenuPresentationValue {
-  /** Portal target for submenu screens (the relative drawer body). */
-  bodyEl: HTMLDivElement | null;
-  /** Closes the whole drawer. */
+  /** Closes the whole menu stack (every nested drawer back to the root). */
   close: () => void;
   presentation: MenuPresentation;
 }
 
 const MenuPresentationContext = createContext<MenuPresentationValue>({
-  bodyEl: null,
   close: () => {
     /* no-op in popover mode */
   },
@@ -207,8 +203,8 @@ export function useMenuPresentation(): MenuPresentationValue {
 }
 
 /**
- * Wraps drawer-mode menu/popover content. Provides the scrollable body and the
- * portal target that submenu screens slide in over.
+ * Wraps drawer-mode menu/popover content in the scrollable body and supplies
+ * the presentation context its rows read.
  */
 export function MenuPresentationProvider({
   children,
@@ -219,81 +215,69 @@ export function MenuPresentationProvider({
   className?: string;
   close: () => void;
 }) {
-  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
-
   return (
-    <MenuPresentationContext.Provider
-      value={{ bodyEl, close, presentation: "drawer" }}
-    >
+    <MenuPresentationContext.Provider value={{ close, presentation: "drawer" }}>
       <div
-        className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
-        ref={setBodyEl}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-3",
+          className
+        )}
       >
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-3",
-            className
-          )}
-        >
-          {children}
-        </div>
+        {children}
       </div>
     </MenuPresentationContext.Provider>
   );
 }
 
 /**
- * A submenu rendered as a screen that slides in over the drawer body, with a
- * back button. Mounts via portal into the drawer body so it covers the full
- * surface regardless of scroll position.
+ * A submenu rendered as its own drawer stacked on top of its parent. vaul keeps
+ * the parent mounted and scales it back behind this one; the back button (and a
+ * swipe-down) dismiss only this level. Selecting a row closes the whole stack.
  */
-export function MenuDrawerScreen({
+export function MenuDrawerSubDrawer({
   children,
-  onBack,
+  onOpenChange,
   open,
   title,
 }: {
   children: ReactNode;
-  onBack: () => void;
+  onOpenChange: (open: boolean) => void;
   open: boolean;
   title?: ReactNode;
 }) {
-  const { bodyEl } = useMenuPresentation();
+  // The parent menu's close — selecting a row in a submenu should dismiss the
+  // entire stack, not just pop back one level. Read before this level opens its
+  // own provider, so it resolves to the parent (root or ancestor submenu).
+  const { close: closeParent } = useMenuPresentation();
 
-  if (!bodyEl) {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      aria-hidden={open ? undefined : true}
-      className={cn(
-        "absolute inset-0 z-10 flex flex-col bg-popover transition-transform duration-200",
-        "motion-reduce:transition-none",
-        open ? "translate-x-0" : "pointer-events-none translate-x-full"
-      )}
-      data-slot="menu-drawer-screen"
-    >
-      <div className="flex items-center gap-1 px-1 py-2">
-        <button
-          aria-label="Back"
-          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground active:bg-accent"
-          onClick={onBack}
-          type="button"
+  return (
+    <DrawerNestedRoot onOpenChange={onOpenChange} open={open}>
+      <DrawerContent hasTitle={false} variant="menu">
+        <div className="flex items-center gap-1 px-1 py-2">
+          <button
+            aria-label="Back"
+            className="flex size-9 items-center justify-center rounded-lg text-muted-foreground active:bg-accent"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          >
+            <IconChevronLeft className="size-5" />
+          </button>
+          {title ? (
+            <span className="cn-font-heading font-medium text-base text-foreground">
+              {title}
+            </span>
+          ) : null}
+        </div>
+        <MenuPresentationProvider
+          close={() => {
+            onOpenChange(false);
+            closeParent();
+          }}
         >
-          <IconChevronLeft className="size-5" />
-        </button>
-        {title ? (
-          <span className="cn-font-heading font-medium text-base text-foreground">
-            {title}
-          </span>
-        ) : null}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-3">
-        {children}
-      </div>
-    </div>,
-    bodyEl
+          {children}
+        </MenuPresentationProvider>
+      </DrawerContent>
+    </DrawerNestedRoot>
   );
 }
 

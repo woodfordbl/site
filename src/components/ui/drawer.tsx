@@ -13,6 +13,18 @@ function Drawer({
   return <DrawerPrimitive.Root data-slot="drawer" {...props} />;
 }
 
+/**
+ * A drawer nested inside another drawer. vaul scales the parent drawer back and
+ * stacks this one on top (parent stays mounted, dimmed behind). Used by menu
+ * submenus so each level opens as its own drawer rather than a slide-over
+ * screen.
+ */
+function DrawerNestedRoot({
+  ...props
+}: React.ComponentProps<typeof DrawerPrimitive.NestedRoot>) {
+  return <DrawerPrimitive.NestedRoot data-slot="drawer-nested" {...props} />;
+}
+
 function DrawerTrigger({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
@@ -157,6 +169,7 @@ export {
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
+  DrawerNestedRoot,
   DrawerOverlay,
   DrawerPortal,
   DrawerTitle,
