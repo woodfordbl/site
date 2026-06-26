@@ -28,6 +28,7 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
     parentId: localPage.parentId ?? null,
     icon: localPage.icon,
     font: localPage.font,
+    fullWidth: localPage.fullWidth,
     smallText: localPage.smallText,
   });
 

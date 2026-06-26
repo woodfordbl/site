@@ -62,12 +62,19 @@ import {
   canDropPageIntoCanvas,
   PAGE_DRAG_MIME_TYPE,
 } from "@/lib/pages/page-canvas-drop.ts";
+import {
+  pageContentColumnClassName,
+  resolveUseFullPanelCanvasWidth,
+} from "@/lib/pages/page-content-layout.ts";
+import { PageContentLayoutProvider } from "@/lib/pages/page-content-layout-context.tsx";
 import { pageCanvasMobileScrollClassName } from "@/lib/pages/page-title-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
+  fullWidth: boolean;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
+  isNarrowViewport: boolean;
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
@@ -97,16 +104,24 @@ function CanvasOverclickListener({
 
 function PageCanvasEditorBody({
   editor,
+  fullWidth,
   headerSlot,
+  isNarrowViewport,
   serverPage,
   titleSlot,
 }: {
   editor: CanvasEditorState;
+  fullWidth: boolean;
   headerSlot?: ReactNode;
+  isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
+  const useFullPanelWidth = resolveUseFullPanelCanvasWidth({
+    fullWidth,
+    isNarrowViewport,
+  });
   const runAfterBlockActionsMenuClose = useCloseBlockActionsMenuBeforeAction();
   const { pages } = useMergedPageListItems();
   const dispatchPage = usePageDispatch(pages);
@@ -397,32 +412,46 @@ function PageCanvasEditorBody({
                   }}
                 </DragOverlay>
                 <CanvasRowDndBridge>
-                  <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div
-                      className={cn(
-                        "relative flex min-h-0 flex-1 flex-col",
-                        pageCanvasMobileScrollClassName
-                      )}
-                      data-scroll-restoration-id="page-canvas-scroll"
-                      ref={scrollRootRef}
-                    >
-                      {headerSlot}
-                      {titleSlot}
-                      <CanvasDropZone onDropPage={handleDropPageIntoCanvas}>
-                        <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                          {editor.rows.map((row) => (
-                            <CanvasRowView
-                              key={row.rowId}
-                              mode="edit"
-                              row={row}
-                            />
-                          ))}
+                  <PageContentLayoutProvider
+                    useFullPanelWidth={useFullPanelWidth}
+                  >
+                    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div
+                        className={cn(
+                          "relative flex min-h-0 flex-1 flex-col overflow-auto",
+                          pageCanvasMobileScrollClassName
+                        )}
+                        data-scroll-restoration-id="page-canvas-scroll"
+                        ref={scrollRootRef}
+                        {...(useFullPanelWidth
+                          ? { "data-page-full-width": "" }
+                          : {})}
+                      >
+                        <div
+                          className={pageContentColumnClassName({
+                            fullWidth,
+                            isNarrowViewport,
+                          })}
+                        >
+                          {headerSlot}
+                          {titleSlot}
+                          <CanvasDropZone onDropPage={handleDropPageIntoCanvas}>
+                            <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                              {editor.rows.map((row) => (
+                                <CanvasRowView
+                                  key={row.rowId}
+                                  mode="edit"
+                                  row={row}
+                                />
+                              ))}
+                            </div>
+                          </CanvasDropZone>
                         </div>
-                      </CanvasDropZone>
+                      </div>
+                      <CanvasMenuRoot />
+                      <MobileBlockActionsDrawer />
                     </div>
-                    <CanvasMenuRoot />
-                    <MobileBlockActionsDrawer />
-                  </div>
+                  </PageContentLayoutProvider>
                 </CanvasRowDndBridge>
               </DndSurface>
             </CanvasSlashProvider>
@@ -509,7 +538,9 @@ function CanvasDropZone({
 }
 
 export function PageCanvasEditor({
+  fullWidth,
   headerSlot,
+  isNarrowViewport,
   pageHasLocalDraft,
   serverPage,
   titleSlot,
@@ -521,7 +552,9 @@ export function PageCanvasEditor({
       <BlockActionsMenuProvider>
         <PageCanvasEditorBody
           editor={editor}
+          fullWidth={fullWidth}
           headerSlot={headerSlot}
+          isNarrowViewport={isNarrowViewport}
           serverPage={serverPage}
           titleSlot={titleSlot}
         />

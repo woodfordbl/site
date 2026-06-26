@@ -6,7 +6,7 @@ import {
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDragSource, useDropTarget } from "@/components/dnd/use-dnd.ts";
@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/sidebar.tsx";
 import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
+import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
@@ -404,6 +405,11 @@ export function PageListItem({
   const navigate = useNavigate();
   const activePage = useActivePageRef();
   const localPage = useLocalPageById(page.id);
+  // The row body (and its context menu) render identically on SSR and client so
+  // hydration reconciles in place with no remount. The closed-by-default portal
+  // siblings below only mount on the client, keeping their heavy modules out of
+  // the server render without disturbing the row DOM.
+  const isClient = useIsClient();
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -697,7 +703,7 @@ export function PageListItem({
     <>
       {menu}
 
-      {isRenaming ? null : (
+      {isClient && !isRenaming ? (
         <PageIconPicker
           anchor={menuActionRef}
           contentAlign="start"
@@ -716,63 +722,38 @@ export function PageListItem({
           }
           title={iconPickerTitle}
         />
-      )}
+      ) : null}
 
-      <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete page?</DialogTitle>
-            <DialogDescription>
-              {localPage && localPage.serverBaselineHash === null
-                ? "This page and its blocks will be removed. This cannot be undone."
-                : "This page will be hidden locally. The published version will remain."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => setDeleteOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleDelete} type="button" variant="destructive">
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {isClient ? (
+        <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
+          <DialogContent showCloseButton={false}>
+            <DialogHeader>
+              <DialogTitle>Delete page?</DialogTitle>
+              <DialogDescription>
+                {localPage && localPage.serverBaselineHash === null
+                  ? "This page and its blocks will be removed. This cannot be undone."
+                  : "This page will be hidden locally. The published version will remain."}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                onClick={() => setDeleteOpen(false)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDelete}
+                type="button"
+                variant="destructive"
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
-  );
-}
-
-interface PageListItemStaticProps {
-  depth: number;
-  row: PageRow;
-}
-
-export function PageListItemStatic({ depth, row }: PageListItemStaticProps) {
-  const page = row.page;
-  const navTarget = resolvePageNavTarget(page.id, [page]);
-  const link = <Link {...navTarget} />;
-  const label = (
-    <>
-      <span className={iconSlotClassName("icon-xs", "size-4")}>
-        <PageIconDisplay icon={page.icon} />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-left">{page.title}</span>
-    </>
-  );
-
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        className={cn("w-full py-1", pageListRowPaddingLeft(depth))}
-        render={link}
-        tooltip={depth === 0 ? page.title : undefined}
-      >
-        {label}
-      </SidebarMenuButton>
-    </SidebarMenuItem>
   );
 }

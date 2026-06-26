@@ -1,4 +1,5 @@
 import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
+import { DEFAULT_CODE_LANGUAGE } from "@/lib/code/code-languages.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 /**
@@ -84,6 +85,11 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
   },
   callout: {
     defaultProps: () => ({ text: "", icon: DEFAULT_CALLOUT_ICON }),
+    isEmpty: textIsEmpty,
+    hasPrimaryText: true,
+  },
+  code: {
+    defaultProps: () => ({ text: "", language: DEFAULT_CODE_LANGUAGE }),
     isEmpty: textIsEmpty,
     hasPrimaryText: true,
   },

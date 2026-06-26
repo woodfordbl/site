@@ -21,6 +21,8 @@ function countWordsInBlock(block: Block): number {
       return countWordsInText(block.props.text);
     case "callout":
       return countWordsInText(block.props.text);
+    case "code":
+      return countWordsInText(block.props.text);
     case "embed":
       return countWordsInText(block.props.caption ?? "");
     case "media":

@@ -9,7 +9,14 @@ import {
   DeviceLayoutProvider,
   SyncDeviceLayoutCookieEffect,
 } from "@/components/layout/device-layout-provider.tsx";
+import {
+  SyncSiteAppearanceCookieEffect,
+  ThemeProvider,
+} from "@/components/layout/theme-provider.tsx";
+import { NotFoundPage } from "@/components/ui/not-found-page.tsx";
 import { AppProviders } from "@/db/provider.tsx";
+import { loadSiteAppearance } from "@/lib/appearance/load-site-appearance.ts";
+import { buildNotFoundMeta } from "@/lib/content/page-head.ts";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
 import { loadDeviceLayoutHints } from "@/lib/device/load-device-layout-hints.ts";
@@ -32,16 +39,18 @@ const AppDevtools = import.meta.env.DEV
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
-    const [localPagePreview, sidebarPrefs, deviceLayoutHints] =
+    const [localPagePreview, sidebarPrefs, deviceLayoutHints, siteAppearance] =
       await Promise.all([
         loadPageListLocalPreview(),
         loadPageSidebarPrefs(),
         loadDeviceLayoutHints(),
+        loadSiteAppearance(),
       ]);
     return {
       deviceLayoutHints,
       localPagePreview,
       sidebarPrefs,
+      siteAppearance,
     };
   },
   loader: async ({ context }) => {
@@ -58,48 +67,66 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       sidebarTablerGlyphs,
     };
   },
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "Blake Woodford",
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
-  notFoundComponent: () => (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>404</h1>
-      <p>The requested page could not be found.</p>
-    </main>
-  ),
+  head: ({ matches }) => {
+    const isNotFound = matches.some((match) => match.status === "notFound");
+
+    return {
+      meta: isNotFound
+        ? [
+            {
+              charSet: "utf-8",
+            },
+            {
+              name: "viewport",
+              content: "width=device-width, initial-scale=1",
+            },
+            ...buildNotFoundMeta(),
+          ]
+        : [
+            {
+              charSet: "utf-8",
+            },
+            {
+              name: "viewport",
+              content: "width=device-width, initial-scale=1",
+            },
+            {
+              title: "Blake Woodford",
+            },
+          ],
+      links: [
+        {
+          rel: "stylesheet",
+          href: appCss,
+        },
+      ],
+    };
+  },
+  notFoundComponent: NotFoundPage,
   shellComponent: RootDocument,
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { deviceLayoutHints } = useRouteContext({ from: "__root__" });
+  const { deviceLayoutHints, siteAppearance } = useRouteContext({
+    from: "__root__",
+  });
 
   return (
-    <html lang="en">
+    <html
+      className={siteAppearance.resolvedTheme === "dark" ? "dark" : undefined}
+      lang="en"
+    >
       <head>
         <HeadContent />
       </head>
       <body>
-        <DeviceLayoutProvider initialHints={deviceLayoutHints}>
-          <AppProviders>{children}</AppProviders>
-          <SyncDeviceLayoutCookieEffect />
-        </DeviceLayoutProvider>
+        <ThemeProvider initialHints={siteAppearance}>
+          <DeviceLayoutProvider initialHints={deviceLayoutHints}>
+            <AppProviders>{children}</AppProviders>
+            <SyncDeviceLayoutCookieEffect />
+            <SyncSiteAppearanceCookieEffect />
+          </DeviceLayoutProvider>
+        </ThemeProvider>
         {AppDevtools ? <AppDevtools /> : null}
         <Scripts />
       </body>

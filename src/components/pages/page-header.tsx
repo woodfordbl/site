@@ -9,16 +9,15 @@ import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
-import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
-interface PageHeaderProps extends PageCanvasFooterActionsInput {
+interface PageHeaderProps {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
 }
 
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */
@@ -98,12 +97,7 @@ function PageHeaderBreadcrumb({
   );
 }
 
-export function PageHeader({
-  onAfterReset,
-  pageId,
-  seed,
-  serverPage,
-}: PageHeaderProps) {
+export function PageHeader({ pageId, seed, serverPage }: PageHeaderProps) {
   const { pages } = useMergedPageListItems();
 
   return (
@@ -111,12 +105,7 @@ export function PageHeader({
       <PageHeaderSidebarToggle />
       <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <PageHeaderMenu
-          onAfterReset={onAfterReset}
-          pageId={pageId}
-          seed={seed}
-          serverPage={serverPage}
-        />
+        <PageHeaderMenu pageId={pageId} seed={seed} serverPage={serverPage} />
       </div>
     </header>
   );

@@ -1,8 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
-import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -11,6 +10,7 @@ import {
 } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
+import { SiteSettingsTrigger } from "@/components/settings/site-settings-trigger.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
@@ -124,7 +124,7 @@ function PageWorkspaceBody({
   const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const { font, smallText } = usePageSettings({
+  const { font, fullWidth, smallText } = usePageSettings({
     pageId: page.id,
     seed: titleSeed,
     serverPage,
@@ -132,20 +132,9 @@ function PageWorkspaceBody({
   const typographyProps = pageContentTypographyProps({ font, smallText });
   const { className: typographyClassName, ...typographyDataProps } =
     typographyProps;
-  // Bumped after a reset/refresh/save-all clears local state for the open page
-  // so the canvas remounts and re-reads fresh (shipped) data.
-  const [canvasNonce, setCanvasNonce] = useState(0);
-  const bumpCanvasNonce = useCallback(() => {
-    setCanvasNonce((nonce) => nonce + 1);
-  }, []);
 
   const header = (
-    <PageHeader
-      onAfterReset={bumpCanvasNonce}
-      pageId={page.id}
-      seed={titleSeed}
-      serverPage={serverPage}
-    />
+    <PageHeader pageId={page.id} seed={titleSeed} serverPage={serverPage} />
   );
 
   const canvasContent = (
@@ -154,12 +143,14 @@ function PageWorkspaceBody({
       {...typographyDataProps}
     >
       <PageCanvas
+        fullWidth={fullWidth}
         headerSlot={
           isNarrowViewport ? (
             <div className="-mr-4 mb-4 -ml-7 md:hidden">{header}</div>
           ) : null
         }
-        key={`${page.id}:${canvasNonce}`}
+        isNarrowViewport={isNarrowViewport}
+        key={page.id}
         pageHasLocalDraft={pageHasLocalDraft}
         serverPage={toServerPageSource(page, initialBlocks)}
         titleSlot={
@@ -190,8 +181,8 @@ function PageWorkspaceBody({
           {canvasContent}
         </div>
       </div>
-      <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 max-md:hidden md:px-0">
-        <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
+      <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end">
+        <SiteSettingsTrigger pageId={page.id} />
       </div>
     </div>
   );

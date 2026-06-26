@@ -34,7 +34,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       <NativeScrollbarEffect />
       <TooltipProvider>
         {children}
-        <Toaster closeButton position="top-center" />
+        <Toaster closeButton position="bottom-right" />
       </TooltipProvider>
     </>
   );

@@ -8,13 +8,14 @@ import type { Page } from "@/lib/schemas/page.ts";
 import {
   type PageFont,
   resolvePageFont,
+  resolvePageFullWidth,
   resolvePageSmallText,
 } from "@/lib/schemas/page-settings.ts";
 
 interface UsePageSettingsOptions {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
 }
 
 /**
@@ -42,6 +43,13 @@ export function usePageSettings({
     return resolvePageSmallText(serverPage?.smallText);
   }, [localPage?.smallText, serverPage?.smallText]);
 
+  const fullWidth = useMemo(() => {
+    if (localPage?.fullWidth !== undefined) {
+      return resolvePageFullWidth(localPage.fullWidth);
+    }
+    return resolvePageFullWidth(serverPage?.fullWidth);
+  }, [localPage?.fullWidth, serverPage?.fullWidth]);
+
   const setFont = useCallback(
     (nextFont: PageFont) => {
       persistPageSettings({
@@ -66,5 +74,17 @@ export function usePageSettings({
     [pageId, pages, seed]
   );
 
-  return { font, setFont, setSmallText, smallText };
+  const setFullWidth = useCallback(
+    (nextFullWidth: boolean) => {
+      persistPageSettings({
+        pageId,
+        fullWidth: nextFullWidth,
+        pages,
+        seed,
+      });
+    },
+    [pageId, pages, seed]
+  );
+
+  return { font, fullWidth, setFont, setFullWidth, setSmallText, smallText };
 }

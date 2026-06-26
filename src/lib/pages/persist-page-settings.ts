@@ -8,6 +8,7 @@ import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-lo
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import {
   recordFontSettingActivity,
+  recordFullWidthSettingActivity,
   recordSmallTextSettingActivity,
 } from "@/lib/pages/record-page-activity.ts";
 import {
@@ -28,13 +29,40 @@ function hasLocalPageDocument(pageId: string): boolean {
   );
 }
 
+function applyPageSettingsDraft(
+  draft: {
+    font?: "default" | "serif" | "mono";
+    fullWidth?: boolean;
+    smallText?: boolean;
+    updatedAt: string;
+  },
+  options: {
+    font?: PageFont;
+    fullWidth?: boolean;
+    smallText?: boolean;
+    updatedAt: string;
+  }
+): void {
+  if (options.font !== undefined) {
+    draft.font = options.font === "default" ? undefined : options.font;
+  }
+  if (options.smallText !== undefined) {
+    draft.smallText = options.smallText ? true : undefined;
+  }
+  if (options.fullWidth !== undefined) {
+    draft.fullWidth = options.fullWidth ? true : undefined;
+  }
+  draft.updatedAt = options.updatedAt;
+}
+
 /**
- * Persists display settings (`font`, `smallText`) to `localPagesCollection` (lazy-seeds when needed).
+ * Persists display settings (`font`, `smallText`, `fullWidth`) to `localPagesCollection` (lazy-seeds when needed).
  * @see docs/architecture/pages.md#page-settings
  */
 export function persistPageSettings(options: {
   pageId: string;
   font?: PageFont;
+  fullWidth?: boolean;
   smallText?: boolean;
   seed?: PageMetadataSeed;
   pages?: PageSummary[];
@@ -45,13 +73,7 @@ export function persistPageSettings(options: {
 
   if (hasLocalPageDocument(options.pageId)) {
     localPagesCollection.update(options.pageId, (draft) => {
-      if (options.font !== undefined) {
-        draft.font = options.font === "default" ? undefined : options.font;
-      }
-      if (options.smallText !== undefined) {
-        draft.smallText = options.smallText ? true : undefined;
-      }
-      draft.updatedAt = now;
+      applyPageSettingsDraft(draft, { ...options, updatedAt: now });
     });
     markPageDirty(options.pageId);
   } else if (options.seed && existingPage) {
@@ -62,6 +84,7 @@ export function persistPageSettings(options: {
       slug: existingPage.slug,
       title: existingPage.title,
       font: undefined,
+      fullWidth: undefined,
       smallText: undefined,
     });
 
@@ -77,6 +100,7 @@ export function persistPageSettings(options: {
           ? options.font
           : undefined,
       smallText: options.smallText ? true : undefined,
+      fullWidth: options.fullWidth ? true : undefined,
       serverBaselineHash: options.seed.serverBaselineHash,
       serverMetadataBaseline,
       createdAt: now,
@@ -96,5 +120,8 @@ export function persistPageSettings(options: {
   }
   if (options.smallText !== undefined) {
     recordSmallTextSettingActivity(options.pageId, options.smallText);
+  }
+  if (options.fullWidth !== undefined) {
+    recordFullWidthSettingActivity(options.pageId, options.fullWidth);
   }
 }
