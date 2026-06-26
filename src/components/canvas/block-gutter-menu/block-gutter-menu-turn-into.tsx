@@ -24,7 +24,7 @@ export function BlockGutterMenuTurnInto() {
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         align="center"
-        className="min-w-40"
+        className="min-w-56"
         data-canvas-row-menu
       >
         <DropdownMenuRadioGroup

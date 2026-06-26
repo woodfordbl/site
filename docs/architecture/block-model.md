@@ -50,7 +50,7 @@ page (canvas)
 │   │   └── tableCell …
 │   └── tableRow …
 ├── media (parentId: null | column, props.kind: image | video, props.source: url | asset, props.src, optional props.widthPercent 25–100)
-├── embed (parentId: null | column, props.url; optional title/description/imageUrl; showTitle/showUrl captions)
+├── embed (parentId: null | column, props.url; optional title/description/imageUrl; showCaption + caption below preview)
 └── divider (parentId: null, horizontal rule)
 ```
 

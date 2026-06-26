@@ -1,3 +1,4 @@
+import { clearPageActivity } from "@/db/activity/page-activity-store.ts";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { deleteAllBlocksForPage } from "@/db/queries/block-collection-ops.ts";
@@ -15,5 +16,6 @@ export function resetPageToRemote(pageId: string): void {
 
   deleteAllBlocksForPage(readBlockShardForPage(pageId));
   markPageClean(pageId);
+  clearPageActivity(pageId).catch(() => undefined);
   syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
 }

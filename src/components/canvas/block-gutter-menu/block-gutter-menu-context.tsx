@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
 import {
   getBlockSpec,
@@ -14,8 +8,8 @@ import {
 } from "@/components/blocks/registry.ts";
 import { useBlockActionsMenu } from "@/components/canvas/block-actions-menu.tsx";
 import {
-  buildEmbedViewOptions,
   canTurnIntoBlock,
+  resolveConfiguredEmbedBlock,
   turnIntoValueFromBlock,
 } from "@/components/canvas/block-gutter-menu/block-gutter-menu-config.ts";
 import type {
@@ -28,6 +22,10 @@ import {
   useCanvasEditorState,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
+import {
+  copyEmbedLink,
+  openEmbedInBrowser,
+} from "@/lib/media/embed-actions.ts";
 
 export type {
   BlockGutterMenuContextValue,
@@ -57,29 +55,14 @@ export function BlockGutterMenuProvider({
 }: BlockGutterMenuProviderProps) {
   const { dispatch } = useCanvasEditorContext();
   const { rows } = useCanvasEditorState();
-  const { openRowId } = useBlockActionsMenu();
-  const [viewCheckOverrides, setViewCheckOverrides] = useState<
-    Record<string, boolean>
-  >({});
+  const { closeBlockActionsMenu, openRowId } = useBlockActionsMenu();
 
   const row = rows.find((entry) => entry.rowId === rowId);
   const canTurnInto = row ? canTurnIntoBlock(row) : false;
   const turnIntoValue = row
     ? turnIntoValueFromBlock(row.effectiveBlock)
     : undefined;
-  const viewOptions = row ? buildEmbedViewOptions(row) : undefined;
-
-  const defaultViewChecks = useMemo(
-    () =>
-      Object.fromEntries(
-        viewOptions?.items.map((item) => [item.id, item.checked]) ?? []
-      ),
-    [viewOptions]
-  );
-
-  const resolvedViewChecks = viewOptions
-    ? { ...defaultViewChecks, ...viewCheckOverrides }
-    : viewCheckOverrides;
+  const embedBlock = row ? resolveConfiguredEmbedBlock(row) : null;
 
   const tableBlock =
     row?.effectiveBlock.type === "table" ? row.effectiveBlock : null;
@@ -94,22 +77,35 @@ export function BlockGutterMenuProvider({
     currentTurnIntoLabel ??
     (row ? getBlockSpec(row.effectiveBlock.type).label : undefined);
   const hasBlockSpecificActions =
-    canTurnInto || viewOptions !== undefined || tableBlock !== null;
+    canTurnInto || embedBlock !== null || tableBlock !== null;
   const menuOpen = openRowId === rowId;
 
-  const handleViewToggle = useCallback(
-    (id: string, checked: boolean) => {
-      if (id !== "showTitle" && id !== "showUrl") {
-        return;
-      }
+  const runAfterMenuClose = useCallback(
+    (action: () => void) => {
+      closeBlockActionsMenu();
+      queueMicrotask(action);
+    },
+    [closeBlockActionsMenu]
+  );
 
+  const handleEmbedReplace = useCallback(() => {
+    runAfterMenuClose(() => {
+      dispatch({
+        type: "focus.set",
+        rowId,
+        embedAction: "replace",
+      });
+    });
+  }, [dispatch, rowId, runAfterMenuClose]);
+
+  const handleEmbedToggleCaption = useCallback(
+    (enabled: boolean) => {
       const currentRow = rows.find((entry) => entry.rowId === rowId);
       const block = currentRow?.effectiveBlock;
       if (block?.type !== "embed") {
         return;
       }
 
-      setViewCheckOverrides((current) => ({ ...current, [id]: checked }));
       dispatch({
         type: "row.update",
         rowId,
@@ -117,13 +113,37 @@ export function BlockGutterMenuProvider({
           ...block,
           props: {
             ...block.props,
-            [id]: checked,
+            showCaption: enabled,
           },
         },
       });
+
+      if (enabled) {
+        runAfterMenuClose(() => {
+          dispatch({
+            type: "focus.set",
+            rowId,
+            embedAction: "caption",
+          });
+        });
+      }
     },
-    [dispatch, rowId, rows]
+    [dispatch, rowId, rows, runAfterMenuClose]
   );
+
+  const handleEmbedOpenInBrowser = useCallback(() => {
+    if (!embedBlock) {
+      return;
+    }
+    openEmbedInBrowser(embedBlock.props.url);
+  }, [embedBlock]);
+
+  const handleEmbedCopyLink = useCallback(() => {
+    if (!embedBlock) {
+      return;
+    }
+    copyEmbedLink(embedBlock.props.url).catch(() => undefined);
+  }, [embedBlock]);
 
   const handleTurnInto = useCallback(
     (key: string) => {
@@ -217,20 +237,22 @@ export function BlockGutterMenuProvider({
 
   const actionItems = useBlockGutterMenuItems({
     canTurnInto,
+    embedBlock,
     handleAddColumn,
     handleAddRow,
     handleDelete,
     handleDuplicate,
+    handleEmbedCopyLink,
+    handleEmbedOpenInBrowser,
+    handleEmbedReplace,
+    handleEmbedToggleCaption,
     handleFitToWidth,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
-    handleViewToggle,
     lastTableRowId,
-    resolvedViewChecks,
     tableBlock,
     turnIntoItems,
-    viewOptions,
   });
 
   const value = useMemo<BlockGutterMenuContextValue>(
@@ -238,49 +260,53 @@ export function BlockGutterMenuProvider({
       actionItems,
       blockTypeLabel,
       canTurnInto,
+      embedBlock,
       handleAddColumn,
       handleAddRow,
       handleDelete,
       handleDuplicate,
+      handleEmbedCopyLink,
+      handleEmbedOpenInBrowser,
+      handleEmbedReplace,
+      handleEmbedToggleCaption,
       handleFitToWidth,
       handleToggleHeaderColumn,
       handleToggleHeaderRow,
       handleTurnInto,
-      handleViewToggle,
       hasBlockSpecificActions,
       lastTableRowId,
       menuOpen,
-      resolvedViewChecks,
       rowId,
       tableBlock,
       tableColumnCount,
       turnIntoItems,
       turnIntoValue,
-      viewOptions,
     }),
     [
       actionItems,
       blockTypeLabel,
       canTurnInto,
+      embedBlock,
       handleAddColumn,
       handleAddRow,
       handleDelete,
       handleDuplicate,
+      handleEmbedCopyLink,
+      handleEmbedOpenInBrowser,
+      handleEmbedReplace,
+      handleEmbedToggleCaption,
       handleFitToWidth,
       handleToggleHeaderColumn,
       handleToggleHeaderRow,
       handleTurnInto,
-      handleViewToggle,
       hasBlockSpecificActions,
       lastTableRowId,
       menuOpen,
-      resolvedViewChecks,
       rowId,
       tableBlock,
       tableColumnCount,
       turnIntoItems,
       turnIntoValue,
-      viewOptions,
     ]
   );
 

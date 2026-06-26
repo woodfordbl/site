@@ -21,18 +21,22 @@ function hashString(input: string): string {
 
 /** Stable hash of shipped page metadata fields used for stale detection. */
 export function hashPageMetadata(fields: {
+  font?: "default" | "serif" | "mono";
   icon?: string;
   parentId: string | null;
   sidebarOrder?: number;
   slug: string;
+  smallText?: boolean;
   title: string;
 }): string {
   return hashString(
     stableStringify({
+      font: fields.font ?? null,
       icon: fields.icon ?? null,
       parentId: fields.parentId,
       sidebarOrder: fields.sidebarOrder ?? null,
       slug: fields.slug,
+      smallText: fields.smallText ?? null,
       title: fields.title,
     })
   );

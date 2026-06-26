@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { CANVAS_ROW_DRAG_PREVIEW_OPACITY } from "@/lib/dnd/drag-image.ts";
 import type { DragPointer } from "@/lib/dnd/drag-store.ts";
 
 export interface CanvasRowDragPreviewState {
@@ -44,9 +45,10 @@ export function CanvasRowDragPreview({
 
   return (
     <div
-      className="absolute top-0 left-0 origin-top-left rounded-lg bg-background px-3 py-1.5 opacity-90 shadow-[0_8px_24px_oklch(0_0_0/0.12)] ring-1 ring-foreground/10"
+      className="absolute top-0 left-0 origin-top-left rounded-lg bg-background px-3 py-1.5 ring-1 ring-foreground/10"
       ref={hostRef}
       style={{
+        opacity: CANVAS_ROW_DRAG_PREVIEW_OPACITY,
         width: `${preview.width}px`,
         transform: `translate3d(${x}px, ${y}px, 0) rotate(1deg)`,
       }}

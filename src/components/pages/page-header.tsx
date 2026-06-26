@@ -4,17 +4,21 @@ import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
 
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
+import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
+import type { Page } from "@/lib/schemas/page.ts";
 
-interface PageHeaderProps {
+interface PageHeaderProps extends PageCanvasFooterActionsInput {
   pageId: string;
-  titleSeed?: PageMetadataSeed;
+  seed?: PageMetadataSeed;
+  serverPage?: Pick<Page, "font" | "smallText"> | null;
 }
 
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */
@@ -94,17 +98,26 @@ function PageHeaderBreadcrumb({
   );
 }
 
-export function PageHeader({ pageId, titleSeed }: PageHeaderProps) {
+export function PageHeader({
+  onAfterReset,
+  pageId,
+  seed,
+  serverPage,
+}: PageHeaderProps) {
   const { pages } = useMergedPageListItems();
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-1 border-sidebar-border border-b px-3">
       <PageHeaderSidebarToggle />
-      <PageHeaderBreadcrumb
-        pageId={pageId}
-        pages={pages}
-        titleSeed={titleSeed}
-      />
+      <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <PageHeaderMenu
+          onAfterReset={onAfterReset}
+          pageId={pageId}
+          seed={seed}
+          serverPage={serverPage}
+        />
+      </div>
     </header>
   );
 }

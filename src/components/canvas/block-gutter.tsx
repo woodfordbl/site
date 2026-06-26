@@ -18,7 +18,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import {
+  useIsCoarsePrimaryPointer,
+  useIsNarrowViewport,
+} from "@/hooks/device-layout.ts";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { canvasGutterBodyFirstLineClassName } from "@/lib/blocks/block-spacing.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
@@ -58,6 +61,7 @@ export function BlockGutter({
   const { openRowId, setOpenRowId } = useBlockActionsMenu();
   const { closeMenu: closeSlashMenu } = useCanvasMenu();
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
+  const isNarrowViewport = useIsNarrowViewport();
   const menuOpen = openRowId === rowId;
   const [isPointerMoving, setIsPointerMoving] = useState(false);
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -94,7 +98,7 @@ export function BlockGutter({
   return (
     <div
       className={cn(
-        "canvas-block-gutter flex h-fit w-8 shrink-0 items-start justify-end gap-0 pr-0 md:w-12",
+        "canvas-block-gutter flex h-fit w-auto shrink-0 items-start gap-0",
         alignClassName
       )}
     >
@@ -103,42 +107,44 @@ export function BlockGutter({
           delay={GUTTER_TOOLTIP_DELAY_MS}
           timeout={GUTTER_TOOLTIP_GROUP_TIMEOUT_MS}
         >
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  aria-label="Insert block"
-                  data-gutter-insert
-                  onClick={(event) => {
-                    const edge =
-                      event.altKey || event.getModifierState("Alt")
-                        ? "before"
-                        : "after";
-                    onInsert(edge);
-                  }}
-                  size="icon-xs"
-                  type="button"
-                  variant="ghost"
-                >
-                  <IconPlus />
-                </Button>
-              }
-            />
-            <TooltipContent
-              className="flex-col items-start gap-1 py-2"
-              side="top"
-            >
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Click</Kbd>
-                to add row
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>⌥</Kbd>
-                <Kbd>Click</Kbd>
-                to add above
-              </span>
-            </TooltipContent>
-          </Tooltip>
+          {isNarrowViewport ? null : (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    aria-label="Insert block"
+                    data-gutter-insert
+                    onClick={(event) => {
+                      const edge =
+                        event.altKey || event.getModifierState("Alt")
+                          ? "before"
+                          : "after";
+                      onInsert(edge);
+                    }}
+                    size="icon-xs"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <IconPlus />
+                  </Button>
+                }
+              />
+              <TooltipContent
+                className="flex-col items-start gap-1 py-2"
+                side="top"
+              >
+                <span className="inline-flex items-center gap-1">
+                  <Kbd>Click</Kbd>
+                  to add row
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Kbd>⌥</Kbd>
+                  <Kbd>Click</Kbd>
+                  to add above
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger
               render={

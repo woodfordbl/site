@@ -62,6 +62,9 @@ function syncFormValues(source: Element, clone: Element): void {
 
 const CLONE_MIN_HEIGHT_PX = 32;
 
+/** Shared opacity for canvas block drag previews (native clone + touch overlay). */
+export const CANVAS_ROW_DRAG_PREVIEW_OPACITY = 0.5;
+
 export interface ClonedDragImageOptions {
   /** Cursor hotspot within the drag image; defaults to the pointer position on `node`. */
   hotspotX?: number;
@@ -97,8 +100,7 @@ export function setClonedDragImage(
     minHeight: `${Math.max(rect.height, CLONE_MIN_HEIGHT_PX)}px`,
     boxSizing: "border-box",
     borderRadius: "var(--radius-lg)",
-    boxShadow: "0 8px 24px oklch(0 0 0 / 0.12)",
-    opacity: "0.92",
+    opacity: String(CANVAS_ROW_DRAG_PREVIEW_OPACITY),
     pointerEvents: "none",
     zIndex: "9999",
   });

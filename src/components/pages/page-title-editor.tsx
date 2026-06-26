@@ -10,6 +10,12 @@ import {
 } from "@/lib/blocks/heading-typography.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import {
+  pageTitleEditorLayoutClassName,
+  pageTitleIconButtonClassName,
+  pageTitleIconPickerClassName,
+  pageTitleIconSlotClassName,
+} from "@/lib/pages/page-title-layout.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import { cn } from "@/lib/utils.ts";
@@ -107,15 +113,18 @@ function PageTitleEditorView({
   }, []);
 
   return (
-    <div className="flex flex-row items-end">
-      <div className="w-9 shrink-0">
+    <div className={pageTitleEditorLayoutClassName}>
+      <div className={pageTitleIconSlotClassName}>
         <PageIconPicker
+          className={pageTitleIconPickerClassName}
           icon={persistedIcon}
           pageId={pageId}
           pages={pages}
           previousSlug={previousSlugRef.current}
           seed={localPage ? undefined : seed}
           title={title.trim() === "" ? DEFAULT_PAGE_TITLE : title}
+          triggerButtonSize="icon"
+          triggerClassName={pageTitleIconButtonClassName}
         />
       </div>
       <EditableSurface

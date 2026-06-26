@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { pageSettingsSchema } from "./page-settings.ts";
+
 export const localPageSchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -17,6 +19,7 @@ export const localPageSchema = z.object({
   deletedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  ...pageSettingsSchema.shape,
 });
 
 export type LocalPage = z.infer<typeof localPageSchema>;

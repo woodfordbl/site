@@ -93,7 +93,7 @@ export function getBlockShellSpacingClass(
   }
 
   if (blockType === "divider") {
-    return "flex min-h-10 w-full items-center";
+    return "grid min-h-10 w-full items-center";
   }
 
   return "";

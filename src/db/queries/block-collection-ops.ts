@@ -6,6 +6,11 @@ import {
 } from "@/db/collections/local-collections.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import {
+  recordBlockInsertedActivity,
+  recordBlockUpdatedActivity,
+  recordPageBlockDiffActivity,
+} from "@/lib/pages/record-page-activity.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import type { LocalBlock } from "@/lib/schemas/local-block.ts";
 import { toLocalBlock } from "@/lib/schemas/local-block.ts";
@@ -246,6 +251,7 @@ export function applyPageBlockDiff(
 
   if (options?.tx) {
     queuePageBlockDiffMutations(pageId, previousBlocks, nextBlocks, options.tx);
+    recordPageBlockDiffActivity(pageId, previousBlocks, nextBlocks);
     return;
   }
 
@@ -255,6 +261,7 @@ export function applyPageBlockDiff(
     deletedInTransaction
   );
   queuePageBlockDiffMutations(pageId, previousBlocks, nextBlocks, tx);
+  recordPageBlockDiffActivity(pageId, previousBlocks, nextBlocks);
   commitPageBlockTransaction(tx);
 }
 
@@ -326,11 +333,13 @@ export function upsertPageBlock(
       Object.assign(draft, localBlock);
     });
     markPageDirty(pageId);
+    recordBlockUpdatedActivity(pageId, block);
     return;
   }
 
   localBlocksCollection.insert(localBlock);
   markPageDirty(pageId);
+  recordBlockInsertedActivity(pageId, block);
 }
 
 export function deletePageBlocks(blockIds: string[]): void {

@@ -2,10 +2,14 @@ import {
   IconArrowsHorizontal,
   IconColumnInsertRight,
   IconCopy,
+  IconExternalLink,
+  IconLink,
+  IconRefresh,
   IconRowInsertBottom,
   IconTableColumn,
   IconTableRow,
   IconTrash,
+  IconTypography,
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 
@@ -17,20 +21,22 @@ export function useBlockGutterMenuItems(
 ): ActionMenuEntry[] {
   const {
     canTurnInto,
+    embedBlock,
     handleDuplicate,
     handleDelete,
+    handleEmbedCopyLink,
+    handleEmbedOpenInBrowser,
+    handleEmbedReplace,
+    handleEmbedToggleCaption,
     handleFitToWidth,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleAddRow,
     handleAddColumn,
     handleTurnInto,
-    handleViewToggle,
     lastTableRowId,
-    resolvedViewChecks,
     tableBlock,
     turnIntoItems,
-    viewOptions,
   } = context;
 
   return useMemo(() => {
@@ -51,20 +57,37 @@ export function useBlockGutterMenuItems(
       }
     }
 
-    if (viewOptions) {
-      for (const item of viewOptions.items) {
-        items.push({
-          id: `view-${item.id}`,
-          label: item.label,
-          keywords: [viewOptions.label.toLowerCase(), "view", "embed"],
-          onSelect: () => {
-            handleViewToggle(
-              item.id,
-              !(resolvedViewChecks[item.id] ?? item.checked)
-            );
-          },
-        });
-      }
+    if (embedBlock) {
+      items.push({
+        id: "embed-replace",
+        label: "Replace",
+        keywords: ["embed", "replace", "url", "link"],
+        icon: <IconRefresh />,
+        onSelect: handleEmbedReplace,
+      });
+      items.push({
+        id: "embed-caption",
+        label: "Caption",
+        keywords: ["embed", "caption", "description"],
+        icon: <IconTypography />,
+        onSelect: () => {
+          handleEmbedToggleCaption(!(embedBlock.props.showCaption ?? false));
+        },
+      });
+      items.push({
+        id: "embed-open-in-browser",
+        label: "Open in browser",
+        keywords: ["embed", "open", "browser", "external"],
+        icon: <IconExternalLink />,
+        onSelect: handleEmbedOpenInBrowser,
+      });
+      items.push({
+        id: "embed-copy-link",
+        label: "Copy link",
+        keywords: ["embed", "copy", "link", "url"],
+        icon: <IconLink />,
+        onSelect: handleEmbedCopyLink,
+      });
     }
 
     if (tableBlock) {
@@ -131,19 +154,21 @@ export function useBlockGutterMenuItems(
     return items;
   }, [
     canTurnInto,
+    embedBlock,
     handleAddColumn,
     handleAddRow,
     handleDelete,
     handleDuplicate,
+    handleEmbedCopyLink,
+    handleEmbedOpenInBrowser,
+    handleEmbedReplace,
+    handleEmbedToggleCaption,
     handleFitToWidth,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
-    handleViewToggle,
     lastTableRowId,
-    resolvedViewChecks,
     tableBlock,
     turnIntoItems,
-    viewOptions,
   ]);
 }

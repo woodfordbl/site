@@ -11,6 +11,7 @@ import {
 } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
+import { recordPageMetadataActivity } from "@/lib/pages/record-page-activity.ts";
 import {
   normalizePageSlug,
   pageSlugsEqual,
@@ -63,6 +64,7 @@ function cascadeDescendantSlugs(
  * Cascades descendant slug prefixes; `syncPageUrl` uses `{ userPage: true }` when `routeBy === "id"`.
  * @see docs/architecture/pages.md#title-editing
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: metadata persist coordinates slug cascade and lazy seed
 export function persistPageMetadata(options: {
   pageId: string;
   icon?: string;
@@ -87,6 +89,7 @@ export function persistPageMetadata(options: {
     slug = buildSlugFromTitle(existingPage, pages, title, slugifyPageSegment);
   }
   const now = new Date().toISOString();
+  let didPersist = false;
 
   if (hasLocalPageDocument(options.pageId)) {
     localPagesCollection.update(options.pageId, (draft) => {
@@ -98,6 +101,7 @@ export function persistPageMetadata(options: {
       draft.updatedAt = now;
     });
     markPageDirty(options.pageId);
+    didPersist = true;
   } else if (options.seed) {
     const serverMetadataBaseline = existingPage
       ? hashPageMetadata({
@@ -123,6 +127,7 @@ export function persistPageMetadata(options: {
     seedPageBlocks(options.pageId, options.seed.blocks);
     seededPageIds.add(options.pageId);
     markPageDirty(options.pageId);
+    didPersist = true;
   }
 
   if (
@@ -144,6 +149,14 @@ export function persistPageMetadata(options: {
 
   if (hasLocalPageDocument(options.pageId) || options.seed) {
     syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
+  }
+
+  if (didPersist) {
+    if (options.icon === undefined) {
+      recordPageMetadataActivity(options.pageId, "Updated page title");
+    } else {
+      recordPageMetadataActivity(options.pageId, "Changed page icon");
+    }
   }
 
   return { slug };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { blockSchema } from "./block.ts";
+import { pageSettingsSchema } from "./page-settings.ts";
 
 export const pageSchema = z.object({
   id: z.string(),
@@ -10,6 +11,7 @@ export const pageSchema = z.object({
   parentId: z.string().nullable(),
   sidebarOrder: z.number().optional(),
   blocks: z.array(blockSchema),
+  ...pageSettingsSchema.shape,
 });
 
 export type Page = z.infer<typeof pageSchema>;

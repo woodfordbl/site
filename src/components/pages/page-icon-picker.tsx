@@ -29,6 +29,7 @@ interface PageIconPickerProps extends PageIconPickerSharedProps {
   open?: boolean;
   triggerButtonSize?: "icon" | "icon-xs" | "icon-sm" | "icon-lg";
   triggerButtonVariant?: VariantProps<typeof buttonVariants>["variant"];
+  triggerClassName?: string;
 }
 
 export function PageIconPicker({
@@ -47,6 +48,7 @@ export function PageIconPicker({
   title,
   triggerButtonSize = "icon-lg",
   triggerButtonVariant,
+  triggerClassName,
 }: PageIconPickerProps) {
   const persistIcon = useCallback(
     (nextIcon: string) => {
@@ -76,6 +78,7 @@ export function PageIconPicker({
       open={open}
       triggerButtonSize={triggerButtonSize}
       triggerButtonVariant={triggerButtonVariant}
+      triggerClassName={triggerClassName}
     />
   );
 }

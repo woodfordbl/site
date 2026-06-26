@@ -90,6 +90,12 @@ export function useCanvasKeyboard({
       if (target.closest("[data-canvas-row-menu]")) {
         return;
       }
+      if (target.closest("[data-canvas-drop-zone]")) {
+        return;
+      }
+      if (target.closest("[data-column-content]")) {
+        return;
+      }
       clearSelectionRef.current();
     };
 

@@ -22,7 +22,9 @@ import {
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
 import {
@@ -38,7 +40,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
 } from "@/components/ui/sidebar.tsx";
-import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
+import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
@@ -60,7 +62,6 @@ import {
   resolvePageNavTarget,
 } from "@/lib/pages/resolve-page-nav-target.ts";
 import type { PageNavTarget } from "@/lib/pages/slugify.ts";
-import type { Block } from "@/lib/schemas/block.ts";
 import { isLocallyDeletedPage } from "@/lib/schemas/local-page.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -72,20 +73,8 @@ interface PageListItemProps {
   row: PageRow;
 }
 
-function resolveSourceBlocks(
-  page: PageSummary,
-  localBlocks: Block[]
-): Promise<Block[]> {
-  if (localBlocks.length > 0) {
-    return Promise.resolve(localBlocks);
-  }
+import { resolveSourceBlocksForPage } from "@/lib/pages/resolve-source-page-blocks.ts";
 
-  return loadPage({ data: { slug: page.slug } }).then(
-    (loaded) => loaded.blocks
-  );
-}
-
-/** Hold duration before grab cursor activates; move within row shows grabbing. */
 const PAGE_LIST_DRAG_HOLD_MS = 50;
 
 function PageListRowDropIndicators({
@@ -98,13 +87,13 @@ function PageListRowDropIndicators({
       {dropIndicator === "before" ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 -translate-y-1/2 rounded-full bg-accent"
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 -translate-y-1/2 rounded-full bg-selection-primary"
         />
       ) : null}
       {dropIndicator === "after" ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1 translate-y-1/2 rounded-full bg-accent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1 translate-y-1/2 rounded-full bg-selection-primary"
         />
       ) : null}
     </>
@@ -175,7 +164,7 @@ function PageListRowLink({
 
   const menuButtonClassName = cn(
     pageListRowPaddingLeft(depth),
-    isNestTarget && "bg-accent",
+    isNestTarget && "bg-selection-primary",
     isDragging &&
       "text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
   );
@@ -415,7 +404,6 @@ export function PageListItem({
   const navigate = useNavigate();
   const activePage = useActivePageRef();
   const localPage = useLocalPageById(page.id);
-  const { blocks: localBlocks } = usePageBlocks(page.id);
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -520,7 +508,10 @@ export function PageListItem({
   }, [dispatch, page.id]);
 
   const handleDuplicate = useCallback(() => {
-    resolveSourceBlocks(page, localBlocks)
+    // Read local blocks lazily (non-reactively) so the sidebar row stays
+    // SSR-safe — a live query here would abort server rendering.
+    const localBlocks = readBootstrapPageBlocks(page.id).blocks;
+    resolveSourceBlocksForPage(page, localBlocks)
       .then((sourceBlocks) => {
         dispatch({
           type: "page.create",
@@ -530,7 +521,7 @@ export function PageListItem({
         });
       })
       .catch(() => undefined);
-  }, [dispatch, localBlocks, page]);
+  }, [dispatch, page]);
 
   const handleDelete = useCallback(() => {
     dispatch({ type: "page.delete", pageId: page.id });
@@ -667,32 +658,35 @@ export function PageListItem({
         {rowContent}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onClick={handleDuplicate}>
-          <IconCopy />
-          Duplicate page
-        </ContextMenuItem>
-        <ContextMenuItem onClick={startRenaming}>
-          <IconPencil />
-          Rename
-        </ContextMenuItem>
-        <ContextMenuItem onClick={openChangeIcon}>
-          <IconPhoto />
-          Change icon
-        </ContextMenuItem>
-        {canResetToRemote ? (
-          <ContextMenuItem onClick={handleResetToRemote}>
-            <IconRefresh />
-            Reset to site version
+        <ContextMenuGroup>
+          <ContextMenuLabel>Page</ContextMenuLabel>
+          <ContextMenuItem onClick={handleDuplicate}>
+            <IconCopy />
+            Duplicate page
           </ContextMenuItem>
-        ) : null}
-        <ContextMenuItem
-          disabled={!canDeleteRow}
-          onClick={() => setDeleteOpen(true)}
-          variant="destructive"
-        >
-          <IconTrash />
-          Delete
-        </ContextMenuItem>
+          <ContextMenuItem onClick={startRenaming}>
+            <IconPencil />
+            Rename
+          </ContextMenuItem>
+          <ContextMenuItem onClick={openChangeIcon}>
+            <IconPhoto />
+            Change icon
+          </ContextMenuItem>
+          {canResetToRemote ? (
+            <ContextMenuItem onClick={handleResetToRemote}>
+              <IconRefresh />
+              Reset to site version
+            </ContextMenuItem>
+          ) : null}
+          <ContextMenuItem
+            disabled={!canDeleteRow}
+            onClick={() => setDeleteOpen(true)}
+            variant="destructive"
+          >
+            <IconTrash />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuGroup>
       </ContextMenuContent>
     </ContextMenu>
   );

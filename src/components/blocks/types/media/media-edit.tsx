@@ -1,22 +1,16 @@
-import { IconPhoto, IconUpload, IconWorld } from "@tabler/icons-react";
+import { IconPhoto } from "@tabler/icons-react";
 import { useCallback, useRef, useState } from "react";
 
 import { MediaView } from "@/components/blocks/types/media/media-view.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
+import { LinkUploadTabs } from "@/components/ui/link-upload-tabs.tsx";
+import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
 import {
   Popover,
   PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover.tsx";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs.tsx";
+import { SourceLinkPanel } from "@/components/ui/source-link-panel.tsx";
+import { SourceUploadPanel } from "@/components/ui/source-upload-panel.tsx";
 import { putAsset } from "@/db/assets/asset-store.ts";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
@@ -25,6 +19,7 @@ import {
   inferMediaKindFromMime,
   inferMediaKindFromUrl,
 } from "@/lib/media/infer-media-kind.ts";
+import { parseValidatedUrlInput } from "@/lib/schemas/url-input.ts";
 
 type MediaEditProps = BlockEditProps<"media">;
 
@@ -42,11 +37,9 @@ export function MediaEdit({
   onStructuralKey,
 }: MediaEditProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [urlDraft, setUrlDraft] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const focusRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const hasMedia = props.src.trim().length > 0;
 
   const applyAutoFocus = useCallback(() => {
@@ -72,15 +65,7 @@ export function MediaEdit({
     onStructuralKey,
   });
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) {
-      return;
-    }
-
+  const handleFileSelect = async (file: File) => {
     setUploadError(null);
     setIsUploading(true);
     try {
@@ -101,18 +86,17 @@ export function MediaEdit({
     }
   };
 
-  const handleUrlSubmit = () => {
-    const trimmed = urlDraft.trim();
-    if (!trimmed) {
+  const handleUrlSubmit = (url: string) => {
+    const normalized = parseValidatedUrlInput(url);
+    if (!normalized) {
       return;
     }
     onChange({
-      kind: inferMediaKindFromUrl(trimmed),
+      kind: inferMediaKindFromUrl(normalized),
       source: "url",
-      src: trimmed,
+      src: normalized,
       alt: props.alt,
     });
-    setUrlDraft("");
     setPickerOpen(false);
   };
 
@@ -121,79 +105,39 @@ export function MediaEdit({
       <Popover onOpenChange={setPickerOpen} open={pickerOpen}>
         <PopoverTrigger
           render={
-            <Button
-              className="w-full justify-start px-1 font-normal text-base focus-visible:border-none focus-visible:ring-0"
+            <PlaceholderTrigger
+              icon={<IconPhoto />}
               onKeyDown={handleKeyDown}
               ref={focusRef as React.RefObject<HTMLButtonElement>}
-              size="lg"
-              type="button"
-              variant="ghost"
             >
-              <IconPhoto />
-              Add image, gif, or video
-            </Button>
+              Add an image, gif, or video
+            </PlaceholderTrigger>
           }
         />
-        <PopoverContent align="start" className="w-80">
-          <PopoverHeader>
-            <PopoverTitle>Insert media</PopoverTitle>
-          </PopoverHeader>
-          <Tabs defaultValue="upload">
-            <TabsList className="w-full">
-              <TabsTrigger value="upload">
-                <IconUpload />
-                Upload
-              </TabsTrigger>
-              <TabsTrigger value="url">
-                <IconWorld />
-                Link
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent className="mt-3 space-y-2" value="upload">
-              <input
-                accept="image/*,video/*"
-                className="hidden"
-                onChange={(event) => {
-                  handleFileChange(event).catch(() => undefined);
-                }}
-                ref={fileInputRef}
-                type="file"
-              />
-              <Button
-                className="w-full"
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                type="button"
-                variant="outline"
-              >
-                {isUploading ? "Uploading…" : "Choose file"}
-              </Button>
-              {uploadError ? (
-                <p className="text-destructive text-sm">{uploadError}</p>
-              ) : null}
-            </TabsContent>
-            <TabsContent className="mt-3 space-y-2" value="url">
-              <Input
-                onChange={(event) => setUrlDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleUrlSubmit();
-                  }
-                }}
+        <PopoverContent
+          className="w-80"
+          finalFocus={false}
+          initialFocus={false}
+        >
+          <LinkUploadTabs
+            linkPanel={
+              <SourceLinkPanel
+                key={pickerOpen ? "open" : "closed"}
+                onSubmit={handleUrlSubmit}
                 placeholder="https://example.com/image.png"
-                value={urlDraft}
+                submitLabel="Insert link"
               />
-              <Button
-                className="w-full"
-                disabled={!urlDraft.trim()}
-                onClick={handleUrlSubmit}
-                type="button"
-              >
-                Insert link
-              </Button>
-            </TabsContent>
-          </Tabs>
+            }
+            uploadPanel={
+              <SourceUploadPanel
+                isUploading={isUploading}
+                onFileSelect={(file) => {
+                  handleFileSelect(file).catch(() => undefined);
+                }}
+                uploadError={uploadError}
+              />
+            }
+          />
         </PopoverContent>
       </Popover>
     );

@@ -1,3 +1,5 @@
+import { normalizeUrlInput } from "@/lib/schemas/url-input.ts";
+
 export interface EmbedProviderMatch {
   embedUrl: string;
   provider: "youtube" | "vimeo";
@@ -5,7 +7,6 @@ export interface EmbedProviderMatch {
 
 const YOUTUBE_SHORTS_PATH_RE = /^\/shorts\/([^/]+)/;
 const VIMEO_ID_PATH_RE = /^\/(\d+)/;
-const HTTP_SCHEME_RE = /^https?:\/\//i;
 
 function parseYouTubeEmbedUrl(url: string): string | null {
   try {
@@ -59,12 +60,5 @@ export function resolveEmbedProvider(url: string): EmbedProviderMatch | null {
 }
 
 export function normalizeEmbedUrl(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (HTTP_SCHEME_RE.test(trimmed)) {
-    return trimmed;
-  }
-  return `https://${trimmed}`;
+  return normalizeUrlInput(raw);
 }

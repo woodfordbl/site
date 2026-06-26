@@ -56,26 +56,28 @@ export function ActionMenuSearch({
   query,
 }: ActionMenuSearchProps) {
   return (
-    <InputGroup className="h-8">
-      <InputGroupAddon align="inline-start">
-        <InputGroupText>
-          <IconSearch />
-        </InputGroupText>
-      </InputGroupAddon>
-      <InputGroupInput
-        aria-label="Search actions"
-        autoComplete="off"
-        onChange={(event) => {
-          onQueryChange(event.target.value);
-        }}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-        }}
-        placeholder="Search actions…"
-        ref={inputRef}
-        value={query}
-      />
-    </InputGroup>
+    <div className="p-1 pb-2">
+      <InputGroup className="h-8">
+        <InputGroupAddon align="inline-start">
+          <InputGroupText>
+            <IconSearch />
+          </InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput
+          aria-label="Search actions"
+          autoComplete="off"
+          onChange={(event) => {
+            onQueryChange(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+          }}
+          placeholder="Search actions…"
+          ref={inputRef}
+          value={query}
+        />
+      </InputGroup>
+    </div>
   );
 }
 

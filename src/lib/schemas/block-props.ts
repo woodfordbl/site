@@ -89,8 +89,8 @@ export const embedPropsSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
-  showTitle: z.boolean().optional(),
-  showUrl: z.boolean().optional(),
+  caption: z.string().optional(),
+  showCaption: z.boolean().optional(),
 });
 
 export type HeadingProps = z.infer<typeof headingPropsSchema>;
