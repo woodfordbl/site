@@ -169,7 +169,7 @@ export function selectionIncludesAllListChildren(
   listRowId: string
 ): boolean {
   const row = findRowById(rows, listRowId);
-  if (!row || row.effectiveBlock.type !== "list") {
+  if (row?.effectiveBlock.type !== "list") {
     return false;
   }
 
@@ -187,7 +187,7 @@ export function expandListContainerSelection(
   rowId: string
 ): string[] {
   const row = findRowById(rows, rowId);
-  if (!row || row.effectiveBlock.type !== "list") {
+  if (row?.effectiveBlock.type !== "list") {
     return [rowId];
   }
 

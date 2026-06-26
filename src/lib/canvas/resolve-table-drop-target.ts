@@ -134,7 +134,7 @@ function resolveTableLayoutInElement(
   }
 
   const tableCtx = findRowContext(rows, tableId);
-  if (!tableCtx || tableCtx.row.effectiveBlock.type !== "table") {
+  if (tableCtx?.row.effectiveBlock.type !== "table") {
     return null;
   }
 
