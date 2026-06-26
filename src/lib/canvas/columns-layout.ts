@@ -232,7 +232,7 @@ export function planColumnsUnwrap(
   options?: { excludeColumnRowIds?: string[] }
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, columnsRowId);
-  if (!ctx || ctx.row.effectiveBlock.type !== "columns") {
+  if (ctx?.row.effectiveBlock.type !== "columns") {
     return [];
   }
 
@@ -318,7 +318,7 @@ export function planColumnsAddColumn(
   columnsRowId: string
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, columnsRowId);
-  if (!ctx || ctx.row.effectiveBlock.type !== "columns") {
+  if (ctx?.row.effectiveBlock.type !== "columns") {
     return [];
   }
 
@@ -386,12 +386,12 @@ export function planColumnsRemoveColumn(
   columnRowId: string
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, columnRowId);
-  if (!ctx || ctx.row.effectiveBlock.type !== "column") {
+  if (ctx?.row.effectiveBlock.type !== "column") {
     return [];
   }
 
   const columnsParent = ctx.parent;
-  if (!columnsParent || columnsParent.effectiveBlock.type !== "columns") {
+  if (columnsParent?.effectiveBlock.type !== "columns") {
     return [];
   }
 

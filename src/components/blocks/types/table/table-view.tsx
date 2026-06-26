@@ -652,7 +652,7 @@ function TableCellEditor({
 }) {
   const { dispatch } = useCanvasEditorContext();
 
-  if (!cellRow || cellRow.effectiveBlock.type !== "tableCell") {
+  if (cellRow?.effectiveBlock.type !== "tableCell") {
     return null;
   }
 
