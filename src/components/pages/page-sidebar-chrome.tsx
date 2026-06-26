@@ -19,7 +19,7 @@ import {
   SIDEBAR_KEYBOARD_SHORTCUT,
   SidebarProvider,
 } from "@/components/ui/sidebar.tsx";
-import { useIsMobile } from "@/hooks/use-mobile.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import {
   clampSidebarWidthRem,
   PAGE_MAIN_PANEL_ID,
@@ -71,7 +71,7 @@ export function PageSidebarChromeProvider({
   sidebar,
 }: PageSidebarChromeProviderProps) {
   const { sidebarPrefs } = useRouteContext({ from: "__root__" });
-  const isMobile = useIsMobile();
+  const isNarrowViewport = useIsNarrowViewport();
   const sidebarPanelRef = usePanelRef();
   const [pin, setPin] = useState<PageSidebarPin>(sidebarPrefs.pin);
   const [sidebarWidthRem, setSidebarWidthRem] = useState(sidebarPrefs.widthRem);
@@ -182,7 +182,7 @@ export function PageSidebarChromeProvider({
   const sidebarDefaultSize = sidebarWidthRemToCss(sidebarWidthRem);
 
   const chromeBody = (() => {
-    if (isMobile) {
+    if (isNarrowViewport) {
       return (
         <>
           {sidebar}

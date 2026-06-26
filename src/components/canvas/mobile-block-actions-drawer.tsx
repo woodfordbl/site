@@ -8,7 +8,7 @@ import { useCanvasEditorState } from "@/components/canvas/canvas-editor-context.
 import { MobileBlockActionsDrawerContent } from "@/components/canvas/mobile-block-actions-drawer-content.tsx";
 import { useRowGutterHandlers } from "@/components/canvas/use-row-gutter-handlers.ts";
 import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
-import { useCoarsePointer } from "@/hooks/use-coarse-pointer.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { type CanvasRow, flattenRows } from "@/lib/blocks/block-tree.ts";
 
 function DrawerRowContent({
@@ -38,7 +38,7 @@ function DrawerRowContent({
  * and action data as the desktop gutter menu. Mounted once at the editor root.
  */
 export function MobileBlockActionsDrawer() {
-  const coarse = useCoarsePointer();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { openRowId, closeBlockActionsMenu } = useBlockActionsMenu();
   const { rows } = useCanvasEditorState();
 
@@ -59,7 +59,7 @@ export function MobileBlockActionsDrawer() {
     }
   }, [row]);
 
-  if (!coarse) {
+  if (!isCoarsePrimaryPointer) {
     return null;
   }
 

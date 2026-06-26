@@ -267,7 +267,9 @@
   }
 
   /* No-hover (touch) pointers: simple reveals stay reachable; swaps rest so the
-     two slot elements never both show. */
+     two slot elements never both show. Uses `(hover: none)` — hover capability,
+     not viewport width or `(pointer: coarse)` (see MEDIA_HOVER_NONE in
+     device-layout.constants.ts). */
   @media (hover: none) {
     :where(.hover-reveal) {
       opacity: 1;
@@ -280,16 +282,13 @@
     }
   }
 
-  /* Canvas block gutter on touch: keep the grip reachable (the JS pointer-hover
-     reveal never fires without hover) and drop the insert (+) button so only the
-     drag/menu grip shows. The grip already maps tap→menu, press-drag→move. */
+  /* Touch canvas: long-press row content opens the block-actions drawer; suppress
+     iOS text-selection callout while pressing. Same `(hover: none)` axis as
+     hover-reveal — canvas touch UX also keys off `(pointer: coarse)` via
+     useIsCoarsePrimaryPointer (MEDIA_COARSE_PRIMARY_POINTER). */
   @media (hover: none) {
-    .canvas-block-gutter {
-      opacity: 1 !important;
-    }
-
-    [data-gutter-insert] {
-      display: none !important;
+    [data-canvas-row-content] {
+      -webkit-touch-callout: none;
     }
   }
 }

@@ -12,7 +12,7 @@ import {
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasRowShell } from "@/components/canvas/canvas-row-shell.tsx";
 import { RowGutter } from "@/components/canvas/row-gutter.tsx";
-import { useCoarsePointer } from "@/hooks/use-coarse-pointer.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
@@ -138,14 +138,14 @@ function LeafRowNode({
 }
 
 function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
-  const coarse = useCoarsePointer();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
 
   // On coarse pointers the gutter is removed; block actions and reordering move
   // to a long-press drawer / touch drag on the block body instead.
   const editable = mode === "edit";
   const chrome: RowChromeProps = {
-    enableTouchGesture: editable && coarse,
-    showGutter: editable && !coarse,
+    enableTouchGesture: editable && isCoarsePrimaryPointer,
+    showGutter: editable && !isCoarsePrimaryPointer,
   };
 
   const spec = getBlockSpec(row.effectiveBlock.type);

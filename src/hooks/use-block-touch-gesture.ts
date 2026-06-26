@@ -2,7 +2,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { usePointerRowDrag } from "@/components/dnd/use-dnd.ts";
-import { useCoarsePointer } from "@/hooks/use-coarse-pointer.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 
 /** Hold this long (no significant move) before the block "arms" for drawer/drag. */
 const LONG_PRESS_MS = 450;
@@ -53,7 +53,7 @@ export function useBlockTouchGesture({
   rowId,
   onOpenDrawer,
 }: UseBlockTouchGestureOptions): BlockTouchGesture {
-  const coarse = useCoarsePointer();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const rowDrag = usePointerRowDrag(rowId);
 
   const phaseRef = useRef<Phase>("idle");
@@ -242,7 +242,7 @@ export function useBlockTouchGesture({
     [reset, rowDrag]
   );
 
-  if (!coarse) {
+  if (!isCoarsePrimaryPointer) {
     return { props: EMPTY_PROPS, isPressing: false, isDragging: false };
   }
 

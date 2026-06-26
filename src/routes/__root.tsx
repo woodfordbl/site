@@ -2,12 +2,17 @@ import {
   createRootRouteWithContext,
   HeadContent,
   Scripts,
+  useRouteContext,
 } from "@tanstack/react-router";
 import { lazy } from "react";
-
+import {
+  DeviceLayoutProvider,
+  SyncDeviceLayoutCookieEffect,
+} from "@/components/layout/device-layout-provider.tsx";
 import { AppProviders } from "@/db/provider.tsx";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
+import { loadDeviceLayoutHints } from "@/lib/device/load-device-layout-hints.ts";
 import { getSidebarTablerGlyphs } from "@/lib/pages/get-sidebar-tabler-glyphs.ts";
 import { loadPageListLocalPreview } from "@/lib/pages/load-page-list-local-preview.ts";
 import { loadPageSidebarPrefs } from "@/lib/pages/load-page-sidebar-prefs.ts";
@@ -27,11 +32,14 @@ const AppDevtools = import.meta.env.DEV
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
-    const [localPagePreview, sidebarPrefs] = await Promise.all([
-      loadPageListLocalPreview(),
-      loadPageSidebarPrefs(),
-    ]);
+    const [localPagePreview, sidebarPrefs, deviceLayoutHints] =
+      await Promise.all([
+        loadPageListLocalPreview(),
+        loadPageSidebarPrefs(),
+        loadDeviceLayoutHints(),
+      ]);
     return {
+      deviceLayoutHints,
       localPagePreview,
       sidebarPrefs,
     };
@@ -80,13 +88,18 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const { deviceLayoutHints } = useRouteContext({ from: "__root__" });
+
   return (
     <html lang="en">
       <head>
         <HeadContent />
       </head>
       <body>
-        <AppProviders>{children}</AppProviders>
+        <DeviceLayoutProvider initialHints={deviceLayoutHints}>
+          <AppProviders>{children}</AppProviders>
+          <SyncDeviceLayoutCookieEffect />
+        </DeviceLayoutProvider>
         {AppDevtools ? <AppDevtools /> : null}
         <Scripts />
       </body>
