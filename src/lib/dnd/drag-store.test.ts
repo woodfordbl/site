@@ -8,6 +8,7 @@ describe("createDragStore", () => {
       draggingId: null,
       pointer: null,
       dropTarget: null,
+      pointerDrag: false,
     });
   });
 
@@ -22,7 +23,14 @@ describe("createDragStore", () => {
       draggingId: "a",
       pointer: { x: 1, y: 2 },
       dropTarget: null,
+      pointerDrag: false,
     });
+  });
+
+  it("flags pointer drags via startDrag", () => {
+    const store = createDragStore<string>();
+    store.startDrag("a", { x: 1, y: 2 }, true);
+    expect(store.getSnapshot().pointerDrag).toBe(true);
   });
 
   it("returns a stable snapshot reference until mutated", () => {
@@ -65,6 +73,7 @@ describe("createDragStore", () => {
       draggingId: null,
       pointer: null,
       dropTarget: null,
+      pointerDrag: false,
     });
   });
 

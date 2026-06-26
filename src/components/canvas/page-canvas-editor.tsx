@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import "@/components/blocks/register-containers.ts";
@@ -25,6 +25,10 @@ import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.ts
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
+  CanvasRowDragPreview,
+  type CanvasRowDragPreviewState,
+} from "@/components/dnd/canvas-row-drag-preview.tsx";
+import {
   DndSurface,
   type DndSurfaceConfig,
 } from "@/components/dnd/dnd-surface.tsx";
@@ -46,6 +50,7 @@ import {
 } from "@/lib/canvas/resolve-drop-target.ts";
 import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
+import { cloneNodeWithFieldValues } from "@/lib/dnd/drag-image.ts";
 import {
   canDropPageIntoCanvas,
   PAGE_DRAG_MIME_TYPE,
@@ -54,6 +59,8 @@ import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
   footerHost?: HTMLElement | null;
+  /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
+  headerSlot?: ReactNode;
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
@@ -75,11 +82,13 @@ type CanvasEditorState = ReturnType<typeof useCanvasEditor>;
 function PageCanvasEditorBody({
   editor,
   footerHost,
+  headerSlot,
   serverPage,
   titleSlot,
 }: {
   editor: CanvasEditorState;
   footerHost?: HTMLElement | null;
+  headerSlot?: ReactNode;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }) {
@@ -182,19 +191,36 @@ function PageCanvasEditorBody({
     TableRowDragPreviewState,
     "clientX" | "clientY"
   > | null>(null);
+  const [canvasRowPreview, setCanvasRowPreview] =
+    useState<CanvasRowDragPreviewState | null>(null);
+  // Touch grabs the left gutter, which sits outside the row content rects, so
+  // X hit-testing would never match a row. Nudge X into the content column for
+  // pointer (touch) drags only — native (mouse) drags keep their true X.
+  const pointerDragActiveRef = useRef(false);
 
   const dndConfig = useMemo<DndSurfaceConfig<DropTarget>>(
     () => ({
       channel: canvasRowChannel,
       rowAttribute: CANVAS_ROW_ATTRIBUTE,
-      resolveDropTarget: ({ sourceId, pointer, rects }) =>
-        resolveDropTargetFromPointer(
+      resolveDropTarget: ({ sourceId, pointer, rects }) => {
+        let x = pointer.x;
+        if (pointerDragActiveRef.current && rects.size > 0) {
+          let minLeft = Number.POSITIVE_INFINITY;
+          let maxRight = Number.NEGATIVE_INFINITY;
+          for (const rect of rects.values()) {
+            minLeft = Math.min(minLeft, rect.left);
+            maxRight = Math.max(maxRight, rect.right);
+          }
+          x = Math.min(Math.max(x, minLeft + 1), maxRight - 1);
+        }
+        return resolveDropTargetFromPointer(
           editor.getRows(),
-          pointer.x,
+          x,
           pointer.y,
           rects,
           sourceId
-        ),
+        );
+      },
       onDrop: ({ sourceId, target }) => {
         if (target.atScopeStart) {
           editor.dispatch({
@@ -218,14 +244,33 @@ function PageCanvasEditorBody({
           getNode: resolveCanvasRowDragPreviewNode,
         };
       },
-      onDragStart: ({ sourceId, pointer }) => {
-        if (!isTableRowDragSource(sourceId)) {
+      onDragStart: ({ sourceId, pointer, pointerDrag }) => {
+        pointerDragActiveRef.current = pointerDrag;
+        if (isTableRowDragSource(sourceId)) {
+          setTableRowPreviewMeta(measureTableRowDragPreview(sourceId, pointer));
           return;
         }
-        setTableRowPreviewMeta(measureTableRowDragPreview(sourceId, pointer));
+        // Native (mouse) drags use the browser drag image; only the pointer
+        // (touch) path needs a React-rendered follow-the-pointer preview.
+        if (!pointerDrag) {
+          return;
+        }
+        const node = resolveCanvasRowDragPreviewNode(sourceId);
+        if (!node) {
+          return;
+        }
+        const rect = node.getBoundingClientRect();
+        setCanvasRowPreview({
+          node: cloneNodeWithFieldValues(node),
+          offsetX: pointer.x - rect.left,
+          offsetY: pointer.y - rect.top,
+          width: rect.width,
+        });
       },
       onDragEnd: () => {
+        pointerDragActiveRef.current = false;
         setTableRowPreviewMeta(null);
+        setCanvasRowPreview(null);
       },
     }),
     [
@@ -330,24 +375,36 @@ function PageCanvasEditorBody({
             <CanvasSlashProvider pages={pages}>
               <DndSurface config={dndConfig}>
                 <DragOverlay>
-                  {({ pointer }) =>
-                    tableRowPreviewMeta ? (
-                      <TableRowDragPreview
-                        preview={{
-                          ...tableRowPreviewMeta,
-                          clientX: pointer.x,
-                          clientY: pointer.y,
-                        }}
-                      />
-                    ) : null
-                  }
+                  {({ pointer }) => {
+                    if (tableRowPreviewMeta) {
+                      return (
+                        <TableRowDragPreview
+                          preview={{
+                            ...tableRowPreviewMeta,
+                            clientX: pointer.x,
+                            clientY: pointer.y,
+                          }}
+                        />
+                      );
+                    }
+                    if (canvasRowPreview) {
+                      return (
+                        <CanvasRowDragPreview
+                          pointer={pointer}
+                          preview={canvasRowPreview}
+                        />
+                      );
+                    }
+                    return null;
+                  }}
                 </DragOverlay>
                 <CanvasRowDndBridge>
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
-                      className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
+                      className="relative flex min-h-0 flex-1 flex-col overflow-auto pr-4 pb-12 pl-8 md:px-12 md:py-12"
                       data-scroll-restoration-id="page-canvas-scroll"
                     >
+                      {headerSlot}
                       {titleSlot}
                       <CanvasDropZone onDropPage={handleDropPageIntoCanvas}>
                         <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
@@ -450,6 +507,7 @@ function CanvasDropZone({
 
 export function PageCanvasEditor({
   footerHost,
+  headerSlot,
   pageHasLocalDraft,
   serverPage,
   titleSlot,
@@ -462,6 +520,7 @@ export function PageCanvasEditor({
         <PageCanvasEditorBody
           editor={editor}
           footerHost={footerHost}
+          headerSlot={headerSlot}
           serverPage={serverPage}
           titleSlot={titleSlot}
         />

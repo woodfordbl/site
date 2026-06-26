@@ -8,6 +8,8 @@ import { PageCanvasServer } from "./page-canvas-server.tsx";
 
 interface PageCanvasProps {
   footerHost?: HTMLElement | null;
+  /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
+  headerSlot?: ReactNode;
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   /** Rendered at the top of the scroll region, above the blocks (page title). */
@@ -16,6 +18,7 @@ interface PageCanvasProps {
 
 export function PageCanvas({
   footerHost,
+  headerSlot,
   pageHasLocalDraft,
   serverPage,
   titleSlot,
@@ -29,6 +32,7 @@ export function PageCanvas({
   return (
     <PageCanvasEditor
       footerHost={footerHost}
+      headerSlot={headerSlot}
       pageHasLocalDraft={pageHasLocalDraft}
       serverPage={serverPage}
       titleSlot={titleSlot}

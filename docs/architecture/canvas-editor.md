@@ -84,8 +84,8 @@ Grab handles in the gutter expose block actions and multi-select:
 
 | Input | Action |
 |-------|--------|
-| Click grab (press and release without dragging) | Open block menu and highlight the row (Turn into, Duplicate, Delete) |
-| Click-hold and drag grab | Reorder row; no highlight and no menu |
+| Tap / click grab (press and release without dragging) | Open block menu and highlight the row (Turn into, Duplicate, Delete) |
+| Drag grab (mouse click-hold, or touch press-and-move) | Reorder row; no highlight and no menu |
 | Shift+click grab or row content (field area) | Extend range from selection anchor, or from the row with the active caret if selection was cleared by editing; blurs the active field |
 | Shift+↑ / Shift+↓ (focused block) | Same range extension as Shift+click, stepping one focusable row at a time |
 | Option+↑ / Option+↓ (focused block) | Move the row before/after the adjacent focusable row (`row.moveAdjacent` → `row.move`) |
@@ -107,7 +107,7 @@ Text fields keep native copy/paste while focused. Block selection clears when ed
 
 Grab-handle drag calls `moveAfter` / `moveBefore` (dispatches `row.move`). Drag start clears block selection so the source row is not highlighted during the move. Row id travels on a custom drag type (`application/x-canvas-row-id`), not `text/plain`, so editor fields do not show a text-insertion caret while hovering. Plumbing lives in the shared [drag-and-drop toolkit](./drag-and-drop.md) (`DndSurface` + `useDragSource` on the gutter). [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) wraps the canvas in `DndSurface` + [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) so nested table column surfaces can still bind row drags to the canvas channel (`useCanvasRowSurface`). While dragging:
 
-- A native drag image clones `[data-canvas-row-content]` via [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts) (`native-clone` on [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)).
+- A native drag image clones `[data-canvas-row-content]` via [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts) (`native-clone` on [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)). On touch (where native DnD never starts) the same content is cloned into a React overlay preview ([`CanvasRowDragPreview`](../../src/components/dnd/canvas-row-drag-preview.tsx)) instead — see [drag-and-drop — Touch drags](./drag-and-drop.md#touch-pointer-drags).
 - [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) (`useDropZone`) resolves the insertion target from pointer position via [`resolveDropTargetFromPointer`](../../src/lib/canvas/resolve-drop-target.ts) (row rects from `[data-canvas-row-id]` cached by the surface). The same resolver runs on each batched `dragover` and on `drop` so the line and committed move always match.
 - Drop targets show a single `--selection` insertion line before/after the resolved row ([`normalizeDropTarget`](../../src/lib/canvas/drop-target.ts) dedupes adjacent edges). Nested list rows win over their parent container when rects overlap (deepest row first). Empty **column** shells accept drops via `row.moveToPosition` with `atScopeStart`; horizontal pointer position resolves across `[data-column-id]` regions inside `[data-columns-layout]`. **Table** body rows reorder via [`resolveTableLayoutDrop`](../../src/lib/canvas/resolve-table-drop-target.ts) and [`TableRowHandle`](../../src/components/blocks/types/table/table-row-handle.tsx) (`useCanvasRowSurface`); column reorder uses a nested `TableColumnDnD` surface inside [`TableView`](../../src/components/blocks/types/table/table-view.tsx) — see [table-blocks](./table-blocks.md#structure-handles). Trailing plus controls use a separate pointer scrub (not HTML5 DnD) — [table-blocks — Trailing plus controls](./table-blocks.md#trailing-plus-controls).
 - When the pointer is above the first top-level row or below the last top-level row (including the empty space below the block list), the target snaps to the beginning or end of the page row list.
@@ -161,7 +161,7 @@ When a structural edit needs a new trailing blank, the session's `ensureTrailing
 
 ## Page footer
 
-`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height under [`PageHeader`](../../src/components/pages/page-header.tsx) inside the inset card. The author toolbar (`PageCanvasFooter`) is **not** an in-flow footer — it is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset):
+`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height inside the inset card. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) breadcrumb is a fixed bar above the scroll region; on mobile it is passed as `headerSlot` and rendered **inside** the scroll region so it scrolls away with the content (nothing pinned to the top). The scroll region also tightens its padding on mobile (`pl-8 pr-4`, narrower than the desktop `px-12`) and the gutter grip shrinks to match (`w-8` vs `w-12`) so blocks get more usable width. The author toolbar (`PageCanvasFooter`) is **not** an in-flow footer — it is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset):
 
 | Button | When | Action |
 |--------|------|--------|

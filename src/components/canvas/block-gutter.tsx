@@ -18,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
+import { useCoarsePointer } from "@/hooks/use-coarse-pointer.ts";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { canvasGutterBodyFirstLineClassName } from "@/lib/blocks/block-spacing.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
@@ -56,6 +57,7 @@ export function BlockGutter({
 }: BlockGutterProps) {
   const { openRowId, setOpenRowId } = useBlockActionsMenu();
   const { closeMenu: closeSlashMenu } = useCanvasMenu();
+  const coarse = useCoarsePointer();
   const menuOpen = openRowId === rowId;
   const [isPointerMoving, setIsPointerMoving] = useState(false);
   const pressOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -92,7 +94,7 @@ export function BlockGutter({
   return (
     <div
       className={cn(
-        "canvas-block-gutter flex h-fit w-12 shrink-0 items-start justify-end gap-0 pr-0",
+        "canvas-block-gutter flex h-fit w-8 shrink-0 items-start justify-end gap-0 pr-0 md:w-12",
         alignClassName
       )}
     >
@@ -149,6 +151,7 @@ export function BlockGutter({
                       aria-pressed={isSelected}
                       className={cn(
                         "cursor-pointer",
+                        coarse && "touch-none",
                         isMoveCursor &&
                           (isDragging ? "cursor-grabbing" : "cursor-grab")
                       )}
