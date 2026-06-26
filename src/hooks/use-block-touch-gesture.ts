@@ -140,6 +140,12 @@ export function useBlockTouchGesture({
       ) {
         return;
       }
+      // When this block already holds the caret, a long press should select text
+      // natively rather than arm the drawer/reorder gesture. A long press on a
+      // *different* block still arms, since its content does not hold focus.
+      if (event.currentTarget.contains(document.activeElement)) {
+        return;
+      }
 
       reset();
       elementRef.current = event.currentTarget;
