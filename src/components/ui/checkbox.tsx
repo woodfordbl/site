@@ -1,8 +1,14 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { IconCheck } from "@tabler/icons-react";
+import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
 
-function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
+function Checkbox({
+  className,
+  onCheckedChange,
+  ...props
+}: CheckboxPrimitive.Root.Props) {
+  const haptic = useHaptics();
   return (
     <CheckboxPrimitive.Root
       className={cn(
@@ -10,6 +16,13 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
         className
       )}
       data-slot="checkbox"
+      onCheckedChange={(checked, eventDetails) => {
+        // A toggle is a discrete choice changing — light tick on coarse pointers
+        // (no-op on desktop via the provider). Fire before delegating so the
+        // feedback is immediate regardless of what the handler does.
+        haptic("selection");
+        onCheckedChange?.(checked, eventDetails);
+      }}
       {...props}
     >
       <CheckboxPrimitive.Indicator
