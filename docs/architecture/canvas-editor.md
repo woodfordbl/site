@@ -95,8 +95,8 @@ Constants: [`device-layout.constants.ts`](../../src/lib/device/device-layout.con
 | Checklist | `checklist` |
 | 2 / 3 / 4 columns | `columns` (`columns.create` with `count`) |
 | Table | `table` (`table.create`, default 3×3) |
-| Media | `media` (upload or URL for image/gif/video; local uploads in IndexedDB) |
-| Embed | `embed` (YouTube/Vimeo iframe, direct image URL, or OG bookmark preview) |
+| Media | `media` (muted placeholder trigger → popover with Link \| Upload; local uploads in IndexedDB) |
+| Embed | `embed` (muted placeholder trigger → link popover; YouTube/Vimeo iframe, direct image URL, or OG bookmark preview) |
 | Divider | `divider` |
 
 ## Block selection
@@ -109,6 +109,7 @@ On fine pointers (mouse/trackpad), grab handles in the gutter expose block actio
 | **Long-press row content** | Open block-actions drawer and highlight the row (touch) |
 | Drag grab (mouse click-hold, or touch press-and-move on grip when shown) | Reorder row; no highlight and no menu |
 | Shift+click grab or row content (field area) | Extend range from selection anchor, or from the row with the active caret if selection was cleared by editing; blurs the active field |
+| Click empty space below block content, in a stretched column, or below the last page block (**overclick**) | Focus the nearest row (`focus.set`, caret at end — no block selection or menu) |
 | Shift+↑ / Shift+↓ (focused block) | Same range extension as Shift+click, stepping one focusable row at a time |
 | Option+↑ / Option+↓ (focused block) | Move the row before/after the adjacent focusable row (`row.moveAdjacent` → `row.move`) |
 | Cmd/Ctrl+click grab | Toggle block in selection (unchanged) |
@@ -119,11 +120,11 @@ On fine pointers (mouse/trackpad), grab handles in the gutter expose block actio
 | Escape | Clear block selection |
 | Click outside grab / menu | Clear block selection; block menu closes immediately |
 
-**Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL also get **Change view** — checkboxes for **Show title** and **Show URL** (plain captions below the preview; default off). Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children.
+**Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL get top-level **Replace**, **Caption** (switch — editable caption below the preview), **Open in browser**, and **Copy link**, then Duplicate/Delete. Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children.
 
 Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Touch reuses the same action handlers via [`useRowGutterHandlers`](../../src/components/canvas/use-row-gutter-handlers.ts) inside [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx). Base UI / Vaul handle dismiss; opening block actions calls `closeMenu()` on the slash provider so only one overlay is active at a time.
 
-Text fields keep native copy/paste while focused. Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. The block-actions menu closes immediately (no exit animation) when dismissed.
+Text fields keep native copy/paste while focused. Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. Overclick (empty space below block content, stretched column dead space, page bottom) is handled by [`useCanvasOverclick`](../../src/hooks/use-canvas-overclick.ts) with [`resolveOverclickRowFromPointer`](../../src/lib/canvas/resolve-overclick-row.ts). The block-actions menu closes immediately (no exit animation) when dismissed.
 
 ## Drag and drop
 
@@ -181,17 +182,22 @@ Editable canvases keep a normal empty `text` row available through `normalizeEdi
 
 When a structural edit needs a new trailing blank, the session's `ensureTrailingBlank` inserts it inside the same block transaction as the edit, so `blockOrder` includes the blank row like any other row. See [pages](./pages.md#empty-canvas).
 
+## Render pipeline (flash-free)
+
+[`PageCanvas`](../../src/components/canvas/page-canvas.tsx) chooses what to render so a dirty refresh never shows the static server frame: SSR + the first client render emit `PageCanvasServer` (matches the SSR HTML); a `useLayoutEffect` (pre-paint) swaps dirty pages to [`PageCanvasLocalView`](../../src/components/canvas/page-canvas-local-view.tsx) (synchronous localStorage read in the **main bundle**, not the editor chunk); then the lazily-imported [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) replaces it with identical markup. All three reuse the shared `CanvasBlocksReadOnly` / editor body layout, so the swaps cause no layout shift. See [local-first-persistence — Flash-free render swap](./local-first-persistence.md#ssr-dirty-cookie).
+
 ## Page footer
 
-`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height inside the inset card. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) breadcrumb is a fixed bar above the scroll region; on mobile it is passed as `headerSlot` and rendered **inside** the scroll region so it scrolls away with the content (nothing pinned to the top). The scroll region uses symmetric `px-4` on mobile (no gutter column) and `px-12 py-12` on desktop. The author toolbar (`PageCanvasFooter`) is **not** an in-flow footer — it is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset):
+`PageCanvas` owns the scroll region: the page title (`titleSlot`) and block list scroll full-height inside the inset card. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) breadcrumb is a fixed bar above the scroll region; on narrow viewports it is passed as `headerSlot` and rendered **inside** the scroll region so it scrolls away with the content (nothing pinned to the top). The scroll region also tightens its padding on narrow viewports (`pl-8 pr-4 pb-4`, narrower than the desktop `px-12 py-12`) and the gutter grip shrinks to match (`w-8` vs `w-12`) so blocks get more usable width. The author toolbar ([`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx)) is rendered at **workspace level** ([`page-workspace.tsx`](../../src/components/pages/page-workspace.tsx)), decoupled from the lazily-loaded editor chunk so it is always present — not an in-flow footer. On desktop it sits in a strip below the inset card on the `bg-sidebar` surface; on narrow viewports that host is hidden and the same actions surface via [`PageCanvasActionsDrawer`](../../src/components/canvas/page-canvas-actions-drawer.tsx) from a trigger in the scrolling `PageHeader`. All actions are global (no editor state):
 
 | Button | When | Action |
 |--------|------|--------|
-| **Save** | `import.meta.env.DEV` | Writes `content/pages/{slug-path}.json` via `savePage` with the resolved local title/slug/parentId, then deletes the local page document |
-| **Reset** | Local page document exists | Confirms, then `resetToServer` — discards localStorage overrides |
-| **Revert** / **Keep** | Server baseline drifted (`isStale`) | `StaleBanner` reverts to the server blocks or keeps local edits |
+| **Refresh site content** | An overridden page's shipped content changed ([`useSiteContentUpdates`](../../src/hooks/use-site-content-updates.ts)) | Confirms, then `refreshSiteContent` resets only content-stale overridden pages |
+| **Save all** | `import.meta.env.DEV` | Confirms, then `saveAllLocalPages` writes every locally-edited page to `content/pages/**.json` and clears local |
+| **Reset page** | Local page document exists | Confirms, then `resetPageToRemote(pageId)` — discards this page's localStorage overrides |
+| **Reset all** | Local page document exists | Confirms, then `page.resetAllToRemote` — clears all local state, navigates home |
 
-See [author-dev-mode](./author-dev-mode.md) for the save workflow.
+After any of these clears local state for the open page, the workspace bumps a canvas remount key so it re-reads fresh data without a flash. See [author-dev-mode](./author-dev-mode.md) for the save workflow.
 
 ## Page routes
 

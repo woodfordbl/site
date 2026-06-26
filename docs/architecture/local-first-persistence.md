@@ -70,6 +70,8 @@ localStorage is unavailable during SSR, so a lightweight cookie (`site-local-dir
 
 Route loaders read the cookie on the server (`getDirtyPageIds` server fn via the isomorphic `loadDirtyPageIds`). Dirty pages still SSR: [`PageCanvas`](../../src/components/canvas/page-canvas.tsx) and [`PageTitleEditor`](../../src/components/pages/page-title-editor.tsx) render the server baseline during SSR even when `pageHasLocalDraft`, and the local draft swaps in after hydration — layout stays stable (no blank content area) and crawlers always see real content.
 
+**Flash-free render swap:** the local read-only view lives in the **main bundle**, not the lazily-imported editor chunk, so a dirty refresh paints local content on the first client frame. [`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) exports a shared `CanvasBlocksReadOnly` renderer; `PageCanvasServer` feeds it shipped blocks and [`PageCanvasLocalView`](../../src/components/canvas/page-canvas-local-view.tsx) feeds it the synchronous localStorage bootstrap ([`readBootstrapPageBlocks`](../../src/db/queries/read-bootstrap-page-blocks.ts)). On the client, `PageCanvas` renders the server view for the SSR-matching first render, then a `useLayoutEffect` (which flushes before the browser paints) swaps dirty pages to the local view — the static server frame is never shown. The editor chunk loads afterward and replaces the read-only view with identical markup (no layout shift). The editor chunk is also idle-prefetched ([`PrefetchPageCanvasEditorEffect`](../../src/components/canvas/prefetch-page-canvas-editor-effect.tsx)) so editing is ready quickly without blocking paint.
+
 The cookie's remaining server-side job is 404 semantics: an unknown slug on `/$` throws a server-side `notFound()` unless the request carries dirty/preview cookies suggesting a matching local page ([`$.tsx`](../../src/routes/$.tsx)).
 
 Implementation: `src/lib/local-draft/dirty-pages-cookie.ts`.
@@ -113,25 +115,23 @@ Guard this behavior with `src/db/queries/block-collection-ops.test.ts`; it verif
 
 [`resolvePageCatalog`](../../src/lib/pages/resolve-page-state.ts) (`resolvePageState`, `PageOrigin`) is the shared resolver: `server`, `server-overridden`, `user`, `tombstoned`, `orphaned`. [`useMergedPageListItems`](../../src/hooks/use-page-list.ts) builds the sidebar from it via [`mergePageList`](../../src/lib/pages/merge-page-list.ts).
 
-**Deploy freshness:** [`getPagesCatalogRevision`](../../src/lib/content/page-store.server.ts) hashes shipped ids/slugs/titles. The root loader exposes `pagesCatalogRevision`; [`SyncPagesCatalogRevisionEffect`](../../src/components/pages/sync-pages-catalog-revision-effect.tsx) invalidates the React Query page list when the revision changes (new shipped pages appear without wiping local overlays).
+**Deploy freshness — new/removed pages:** [`getPagesCatalogRevision`](../../src/lib/content/page-store.server.ts) hashes shipped ids/slugs/titles. The root loader exposes `pagesCatalogRevision`; [`SyncPagesCatalogRevisionEffect`](../../src/components/pages/sync-pages-catalog-revision-effect.tsx) invalidates the React Query page list when the revision changes (new shipped pages appear without wiping local overlays).
 
-**Reset:**
+**Deploy freshness — changed body content:** the catalog revision intentionally ignores block content, so a separate per-page **`contentHash`** ([`hashPageBlocks`](../../src/lib/content/block-hash.ts)) is added to each [`PageSummary`](../../src/lib/content/list-pages.ts) by `listPages`. [`findStaleOverriddenPageIds`](../../src/lib/pages/resolve-page-state.ts) (via [`isOverriddenSummaryContentStale`](../../src/lib/pages/resolve-page-state.ts)) flags an overridden shipped page stale when its `serverBaselineHash` no longer matches the shipped `contentHash` — no full-page fetch required. This is **content-only** by design (metadata-only hash drift is left to the per-open `computePageStaleState`) so a global pull never nags users over a slug/order hash. [`useSiteContentUpdates`](../../src/hooks/use-site-content-updates.ts) exposes the stale set to the footer's **Refresh site content** button.
+
+**Reset / refresh:**
 
 | Action | Command / helper | Effect |
 |--------|------------------|--------|
-| Reset one shipped page | `page.resetToRemote` / [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) | Deletes local metadata + block shard; restores shipped baseline on next read |
-| Reset everything | `page.resetAllToRemote` / [`resetAllToRemote`](../../src/lib/pages/reset-all-to-remote.ts) | Clears all local pages, block shards, hint cookies; navigates home |
-| Stale after deploy | Footer **Use site version** | Full reset (metadata + blocks) via `revertToServer` → `resetPageToRemote` |
-| Keep local despite stale | Footer **Keep my edits** | Updates `serverBaselineHash` and `serverMetadataBaseline` only |
+| Reset one shipped page | `page.resetToRemote` / [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) (footer **Reset page**, sidebar) | Deletes local metadata + block shard; restores shipped baseline on next read |
+| Reset everything | `page.resetAllToRemote` / [`resetAllToRemote`](../../src/lib/pages/reset-all-to-remote.ts) (footer **Reset all**) | Clears all local pages, block shards, hint cookies; navigates home |
+| Pull new shipped content | Footer **Refresh site content** / [`refreshSiteContent`](../../src/lib/pages/refresh-site-content.ts) | Runs `resetPageToRemote` for each content-stale overridden page only; unrelated local edits and user pages are kept |
 
-Orphan overlays (local row for a removed shipped id) are detected by [`findOrphanLocalPages`](../../src/lib/pages/resolve-page-state.ts); [`OrphanLocalPagesEffect`](../../src/components/pages/orphan-local-pages-effect.tsx) prompts to discard.
+The workspace bumps a canvas remount key (`onAfterReset`) after these actions so the open page re-reads fresh data without a flash. Orphan overlays (local row for a removed shipped id) are detected by [`findOrphanLocalPages`](../../src/lib/pages/resolve-page-state.ts); [`OrphanLocalPagesEffect`](../../src/components/pages/orphan-local-pages-effect.tsx) prompts to discard.
 
 ## Server baseline hash
 
-When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale.
-
-- **Use site version** → full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) (metadata + blocks)
-- **Keep my edits** → update both baseline hashes only
+When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale ([`computePageStaleState`](../../src/lib/pages/resolve-page-state.ts), used for per-open detection). The global footer pull is content-only (`contentHash` vs `serverBaselineHash`); resolving a stale page is a full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) that drops the local overlay (metadata + blocks) so the next read restores the shipped baseline.
 
 ## Author dev mode
 
@@ -139,13 +139,14 @@ In `import.meta.env.DEV`, author can save working copy directly to JSON — see 
 
 ## App boot effects (`AppProviders`)
 
-[`AppProviders`](../../src/db/provider.tsx) mounts three client-only effects before `TooltipProvider` (none writes to TanStack collections). It does **not** wrap a `QueryClientProvider` — the router's ssr-query integration already provides the query client its loaders populate; wrapping again would shadow it with an empty client on the server and break SSR query reads:
+[`AppProviders`](../../src/db/provider.tsx) mounts client-only effects before `TooltipProvider` (none writes to TanStack collections). It does **not** wrap a `QueryClientProvider` — the router's ssr-query integration already provides the query client its loaders populate; wrapping again would shadow it with an empty client on the server and break SSR query reads:
 
 | Effect | When | Purpose |
 |--------|------|---------|
 | [`MigrateUserPageRoutesEffect`](../../src/components/pages/migrate-user-page-routes-effect.tsx) | First catalog snapshot | User page slug repair for shadowed/duplicate paths ([Migration](#migration)) |
 | [`SyncPageListLocalPreviewEffect`](../../src/components/pages/sync-page-list-local-preview-effect.tsx) | Mount + every `localPagesCollection` change | Mirrors local page sidebar metadata into the `site-page-list-local` cookie ([SSR hint cookies](#ssr-hint-cookies)) |
 | [`WarmPageIconPickerCacheEffect`](../../src/components/pages/warm-page-icon-picker-cache-effect.tsx) | `scheduleIdleCallback` on every route | Best-effort [`warmPageIconPickerChunks`](../../src/lib/pages/preload-page-icon-picker.ts): code-split emoji + icon panel chunks only (catalog JSON loads on picker intent) |
+| [`PrefetchPageCanvasEditorEffect`](../../src/components/canvas/prefetch-page-canvas-editor-effect.tsx) | `scheduleIdleCallback` | Idle-prefetch the canvas editor chunk so editing is ready without blocking first paint |
 
 Importing `local-collections.ts` at the top of the provider also kicks off `startLocalCollectionsSync` (migrations, dirty-cookie reconcile, collection sync, idle orphan-asset sweep).
 

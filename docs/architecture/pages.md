@@ -66,6 +66,8 @@ User-created pages that would shadow a shipped slug at create/rename time receiv
 
 `useLocalPages` treats an empty collection snapshot as ambiguous: Vite HMR can reload the collection module empty before sync repopulates, but deleting the last local page also empties it. It re-reads `site-local-pages` from localStorage to disambiguate — real deletions persist there, so an empty store means genuinely no local pages (no ghost sidebar rows after deleting the last page).
 
+**Instant navigation:** the `/` and `/$` loaders route shipped content through React Query (`context.queryClient.ensureQueryData(pageBySlugQueryOptions(slug))`, [`page-query.ts`](../../src/lib/content/page-query.ts), `staleTime: Infinity`) instead of calling `loadPage` directly. With `defaultPreload: "intent"` ([`router.tsx`](../../src/router.tsx)) hover preloads the loader and the cache is reused on click, so navigation is instant and revisits never re-fetch.
+
 Shipped page content is **bundled at build time** via [`page-store.server.ts`](../../src/lib/content/page-store.server.ts) (`import.meta.glob` over `content/pages/**/*.json`) — `loadPage`/`listPages` never read the filesystem at request time, which keeps deployed serverless functions reliable (the glob stays HMR-aware for author dev saves). `listPages` projects `icon` into each `PageSummary`. The root loader prefetches Tabler glyphs for passive display via [`tablerIconNamesForSSR`](../../src/lib/pages/tabler-icon-names-from-pages.ts) and [`getSidebarTablerGlyphs`](../../src/lib/pages/get-sidebar-tabler-glyphs.ts). The full glyph catalog used on the server is bundled from `src/generated/tabler-icons.json` ([`read-tabler-glyphs.server.ts`](../../src/lib/pages/read-tabler-glyphs.server.ts); written by `scripts/sync-tabler-icons-public.mjs`), not read from `public/` at runtime.
 
 ## Create flow
@@ -158,13 +160,15 @@ Canvas block order for a page is stored on the page metadata as `blockOrder`. Lo
 
 ## Workspace layout
 
-The page surface is `bg-sidebar`: [`SiteShell`](../../src/components/layout/site-shell.tsx) paints the whole window `bg-sidebar`/`text-sidebar-foreground`, and the sidebar panel ([`PageSidebar`](../../src/components/pages/page-sidebar.tsx)) shares that color so it sits flush on the surface (no separate column). When collapsed, the hover peek overlay ([`PageSidebarHoverReveal`](../../src/components/pages/page-sidebar-hover-reveal.tsx)) uses main surface tokens (`bg-background`, accent/border) so it matches the inset card rather than the gutter. [`PageWorkspace`](../../src/components/pages/page-workspace.tsx) renders the main content as a floating **inset card** — `bg-background` with `md:m-2 md:rounded-xl md:border md:border-sidebar-border md:shadow-sm` — so the sidebar surface shows as a gutter around it (and as a gap between the sidebar and the card when expanded). The inset is edge-to-edge on mobile (`md:` prefixes only). The card holds a `flex-1` scroll body (`overflow-auto`, `px-12 py-12` on desktop, `px-4` on mobile — no canvas gutter column on touch) that contains `PageTitleEditor` + `PageCanvas`. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) is a fixed bar above that scroll body; on mobile it is handed to `PageCanvas` as `headerSlot` and rendered inside the scroll body so the whole page (header included) scrolls — nothing stays pinned to the top.
+The page surface is `bg-sidebar`: [`SiteShell`](../../src/components/layout/site-shell.tsx) paints the whole window `bg-sidebar`/`text-sidebar-foreground`, and the sidebar panel ([`PageSidebar`](../../src/components/pages/page-sidebar.tsx)) shares that color so it sits flush on the surface (no separate column). On narrow viewports (`useIsNarrowViewport`, `(max-width: 767px)`) the shell switches to `bg-background`/`text-foreground` so content is full-bleed with no visible sidebar gutter. When collapsed, the hover peek overlay ([`PageSidebarHoverReveal`](../../src/components/pages/page-sidebar-hover-reveal.tsx)) uses main surface tokens (`bg-background`, accent/border) so it matches the inset card rather than the gutter. [`PageWorkspace`](../../src/components/pages/page-workspace.tsx) renders the main content as a floating **inset card** — `bg-background` with `border border-border md:rounded-xl` and outer `md:pt-2 md:pr-2` padding so the sidebar surface shows as a gutter around it. On narrow viewports the card border is removed (`max-md:border-0`) and the bottom author-toolbar host is hidden. The card holds a `flex-1` scroll body (`overflow-auto`, `px-12 py-12` on desktop, tighter `pl-8 pr-4 pb-4` on narrow viewports) that contains `PageTitleEditor` + `PageCanvas`. On desktop the [`PageHeader`](../../src/components/pages/page-header.tsx) is a fixed bar above that scroll body; on narrow viewports it is handed to `PageCanvas` as `headerSlot` and rendered inside the scroll body so the whole page (header included) scrolls — nothing stays pinned to the top.
 
 [`PageHeader`](../../src/components/pages/page-header.tsx) is a slim bar inside the inset card only (it never spans the sidebar; on mobile it scrolls with the canvas rather than staying fixed):
 
 | Slot | Behavior |
 |------|----------|
 | Sidebar toggle (left) | Desktop: an expand button (`IconLayoutSidebar`, `usePageSidebarChrome().pinSidebar`) shows **only when collapsed** — when expanded the collapse control stays in the sidebar. Narrow viewport: [`SidebarTrigger`](../../src/components/ui/sidebar.tsx) opens the Sheet (`useIsNarrowViewport`, `(max-width: 767px)` — Tailwind `md:` parity) |
+| Page actions (left, narrow viewport) | When dev mode, local changes, or stale state is active, [`PageCanvasActionsDrawer`](../../src/components/canvas/page-canvas-actions-drawer.tsx) portals an `IconTool` trigger into a mount slot between the sidebar toggle and breadcrumb; opens a bottom [`Drawer`](../../src/components/ui/drawer.tsx) with Save / Reset / stale actions (same logic as [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx)) |
+| Page menu (right) | [`PageHeaderMenu`](../../src/components/pages/page-header-menu.tsx) (single ⋯ trigger): copy link, duplicate, delete, move, font/small-text settings, activity panel, and conditional dev/sync actions |
 | Breadcrumb (center) | Ancestor crumbs ([`PageBreadcrumbAncestorCrumb`](../../src/components/pages/page-breadcrumb-ancestor-crumb.tsx)): hover opens a [`DropdownMenu`](../../src/components/ui/dropdown-menu.tsx) sibling menu (`openOnHover` on trigger, `nativeButton={false}` + `render={<Link />}` so click still navigates) — siblings at that level via [`getSiblingPages`](../../src/lib/pages/breadcrumb-scope.ts), rows with children use [`DropdownMenuSub`](../../src/components/ui/dropdown-menu.tsx) / [`DropdownMenuSubTrigger`](../../src/components/ui/dropdown-menu.tsx) (hover opens nested submenu) for direct children (max 5 + `"N more"`); active branch highlighted via [`isPageOnActiveBranch`](../../src/lib/pages/breadcrumb-scope.ts) and `highlighted` on menu items. Current crumb ([`PageBreadcrumbCurrentCrumb`](../../src/components/pages/page-breadcrumb-current-crumb.tsx)): click opens a [`Popover`](../../src/components/ui/popover.tsx) with [`PageIconPicker`](../../src/components/pages/page-icon-picker.tsx) + title input (persists like canvas [`PageTitleEditor`](../../src/components/pages/page-title-editor.tsx); lazy-seeds via `titleSeed` from workspace). Live title/icon via `useLocalPageById`; page list from `useMergedPageListItems` |
 | Favorite star (right) | `IconStar` / `IconStarFilled` ghost toggle; favorited page ids persist in the `site-page-favorites` cookie ([`page-favorites-cookie.ts`](../../src/lib/pages/page-favorites-cookie.ts)), read after mount to avoid hydration mismatch. Local-only, no schema change |
 
@@ -187,6 +191,37 @@ Parent rows with children show a chevron on the row (`CollapsibleTrigger`) that 
 | Delete | Confirms, then `page.delete`; disabled for home (`/`) and when it would leave zero pages |
 
 Deleting the active page navigates to the parent page (or home) via `resolveDeleteRedirectTarget` → `resolvePageNavTarget`.
+
+## Page header menu
+
+[`PageHeader`](../../src/components/pages/page-header.tsx) includes a horizontal **⋯** menu ([`PageHeaderMenu`](../../src/components/pages/page-header-menu.tsx)) on the right:
+
+| Section | Actions |
+|---------|---------|
+| Search | Filters menu rows via [`ActionMenuSearchSection`](../../src/components/canvas/action-menu-search.tsx) |
+| Settings | **Font** (Default / Serif / Mono) and **Small text** toggle — persisted on [`localPageSchema`](../../src/lib/schemas/local-page.ts) (`font`, `smallText`) and shipped [`pageSchema`](../../src/lib/schemas/page.ts); applied to the canvas + title column via [`pageContentTypographyProps`](../../src/lib/pages/page-content-typography.ts) |
+| Page actions | **Copy link** ([`buildPageLinkUrl`](../../src/lib/pages/copy-page-link.ts)), **Duplicate page**, **Move to** (searchable parent picker → `page.reposition`), **Delete** (confirm dialog) — shared [`usePageActions`](../../src/hooks/use-page-actions.ts) |
+| Page stats | Footer rows: total blocks, total words, created at, last edited at ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)) |
+| Mobile dev/sync | When local changes, remote updates, or dev mode apply, **Reset page**, **Reset all**, **Refresh site content**, and **Save all to source** appear in the same menu (replacing the former portaled canvas drawer trigger) |
+
+Desktop dev/sync actions remain in [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx).
+
+### Page settings
+
+Optional fields on page documents:
+
+| Field | Values | Default |
+|-------|--------|---------|
+| `font` | `default` \| `serif` \| `mono` | Geist sans (omit field) |
+| `smallText` | `boolean` | `false` (omit field) |
+
+Writes go through [`persistPageSettings`](../../src/lib/pages/persist-page-settings.ts) (lazy-seeds shipped pages like title edits). Author **Save all** includes settings in exported JSON.
+
+### Page stats
+
+Inline footer at the bottom of the header menu ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)): **Total blocks**, **Total words**, **Created at**, **Last edited at** — from [`buildPageActivitySummary`](../../src/lib/pages/page-activity-summary.ts) (block count, word count, `LocalPage.createdAt`, max of page/block `updatedAt`).
+
+IndexedDB event log ([`page-activity-store`](../../src/db/activity/page-activity-store.ts)) still records edits in the background for future use; `block.updated` coalesced per block within 30s. Cleared on **Reset page**.
 
 ## Slug rules
 

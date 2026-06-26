@@ -31,6 +31,7 @@ import {
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import { persistPageReposition } from "@/lib/pages/persist-page-reposition.ts";
+import { recordPageCreatedActivity } from "@/lib/pages/record-page-activity.ts";
 import { planPageReposition } from "@/lib/pages/reposition-page.ts";
 import { resetAllToRemote } from "@/lib/pages/reset-all-to-remote.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
@@ -265,6 +266,10 @@ function applyPagePersistEffect(
       updatedAt: now,
     });
     seedPageBlocks(effect.pageId, blocksToSeed);
+    recordPageCreatedActivity(
+      effect.pageId,
+      Boolean(effect.initialBlocks && effect.initialBlocks.length > 0)
+    );
     return;
   }
 

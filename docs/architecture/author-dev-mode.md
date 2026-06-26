@@ -4,8 +4,12 @@
 
 1. Run `pnpm dev`
 2. Edit any page in the canvas (title, blocks, or both)
-3. **Save** in the floating author toolbar → writes `content/pages/{slug-path}.json` (nested paths supported) using the live title, slug, `parentId`, and optional `icon` from `localPagesCollection`. Asset-backed **media** blocks export blobs to `public/media/` first and rewrite props to site-relative URLs.
+3. **Save all** in the author toolbar → writes every locally-edited page to `content/pages/{slug-path}.json` (nested paths supported) using the live title, slug, `parentId`, and optional `icon` from `localPagesCollection`. Asset-backed **media** blocks export blobs to `public/media/` first and rewrite props to site-relative URLs.
 4. `git commit` + push → Vercel deploy
+
+## Save all
+
+[`saveAllLocalPages`](../../src/lib/content/save-all-pages.ts) is the single dev author action (the footer no longer offers a per-page Save). It enumerates `localPagesCollection.toArray`, skips locally-deleted (tombstoned) rows, and for each remaining page rebuilds rows from the stored block shard ([`readBootstrapPageBlocks`](../../src/db/queries/read-bootstrap-page-blocks.ts) → `buildBlockTree`), then reuses the per-page pipeline (`exportPageDocument` → `preparePageDocumentForAuthorSave` → `saveMediaAssets` → `savePage`). After each page it clears local metadata + block shard and `markPageClean`; one `sweepOrphanAssets` runs at the end. The footer reports a saved/failed summary; failures are collected per page without aborting the batch.
 
 ## Safety
 
@@ -28,4 +32,4 @@ Shipped pages are bundled at build/dev time via `import.meta.glob` in [`page-sto
 - Do not expose `savePage` on production without auth
 - Local-only metadata fields (`createdAt`, `updatedAt`) are not exported; shipped JSON uses `pageSchema` only
 
-Sidebar page actions (duplicate, rename, delete) only touch local collections. The author toolbar ([`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx)) is a `fixed` cluster of `size="xs"` buttons in the **bottom-left** of the `bg-sidebar` surface (outside the inset card), surfacing **Save** (dev), **Reset** (local changes), and **Revert** / **Keep** ([`StaleBanner`](../../src/components/canvas/stale-banner.tsx)) when the server baseline drifts. The inset body scrolls full-height under [`PageHeader`](../../src/components/pages/page-header.tsx); the toolbar floats over the surface rather than occupying an in-flow footer.
+Sidebar page actions (duplicate, rename, delete) only touch local collections. The author toolbar ([`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx)) is rendered at **workspace level** ([`page-workspace.tsx`](../../src/components/pages/page-workspace.tsx)), decoupled from the lazily-loaded editor chunk, so it is always present. It surfaces **Refresh site content** (when shipped content the user overrode has changed), **Save all** (dev), and **Reset page** / **Reset all** (local changes) via [`usePageCanvasFooterActions`](../../src/hooks/use-page-canvas-footer-actions.ts) — all global, none requiring editor state. On desktop it is a cluster of `size="xs"` buttons in a strip below the inset card on the `bg-sidebar` surface. On mobile the strip is hidden; the same actions open from an `IconDots` trigger in the scrolling [`PageHeader`](../../src/components/pages/page-header.tsx) via [`PageCanvasActionsDrawer`](../../src/components/canvas/page-canvas-actions-drawer.tsx) (bottom [`Drawer`](../../src/components/ui/drawer.tsx)). Reset/refresh/save-all clear local state for the open page, so the workspace bumps a remount key on the canvas (`onAfterReset`) to re-read shipped data without a flash. The inset body scrolls full-height under `PageHeader`; the toolbar does not occupy in-flow footer space.

@@ -6,7 +6,7 @@ Block UI dispatches these via `useBlockFieldActions` / `BlockRenderer` (canvas c
 
 | Command | Trigger |
 |---------|---------|
-| `row.update` | Field onChange; embed **Change view** toggles (`showTitle` / `showUrl`) |
+| `row.update` | Field onChange; embed caption edits and **Caption** switch (`showCaption`) |
 | `row.insert` | Gutter + — position `{ parentId, anchorRowId, edge }` or `{ parentId, atScopeStart }`; optional `pageId` + `pageLinkVariant` build a `pageLink` (sidebar page dropped into the canvas) |
 | `row.split` | Enter in text block at caret (text after caret → new block of same type); at end of row → empty `text` block after; at caret 0 on non-empty top-level row → empty row before (same type), focus stays on original row; on empty top-level row → empty `text` row after; **list child at caret 0** lifts out as top-level `text` (empty or not; splits list when needed) |
 | `row.delete` | Structural resolver; gutter menu **Delete** |
@@ -68,7 +68,7 @@ Structural row commands must persist the full next document order, not only the 
 
 | Command | Meaning |
 |---------|---------|
-| `focus.set` | Focus row (`placement`: `start`/`end`, or explicit `offset` character index) |
+| `focus.set` | Focus row (`placement`: `start`/`end`, or explicit `offset` character index). Optional `embedAction`: `replace` opens the embed URL picker; `caption` focuses the caption field. |
 | `row.focusAdjacent` | Up/down navigation at caret boundary (skips container shells; [`focusable-rows.ts`](../../src/lib/canvas/focusable-rows.ts)) |
 | `row.moveAdjacent` | Option+↑/↓ — reducer finds adjacent focusable row, then dispatches `row.move` before/after it |
 
@@ -140,4 +140,4 @@ Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** i
 
 Boot routing ([`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts)) and passive-tab slug sync ([`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts)) are not `PageEffect` entries — see [pages — Route migration](../architecture/pages.md#route-migration).
 
-Canvas-only page helpers (`page.revertToServer`, `page.acknowledgeServerBaseline`) stay on **`CanvasEffect`** / **`CanvasCommand`**, not `PageEffect`. Do not confuse canvas block `row.move` with `page.reposition`. Both surfaces use the [drag-and-drop toolkit](../architecture/drag-and-drop.md): sidebar whole-row drag with [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) and MIME `application/x-page-id`; canvas grip drag with MIME `application/x-canvas-row-id` and [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts). Page routing and boot migration: [pages](../architecture/pages.md).
+Canvas-only page helpers (`page.revertToServer`, `page.acknowledgeServerBaseline`) stay on **`CanvasEffect`** / **`CanvasCommand`**, not `PageEffect`. Staleness is now resolved globally from the workspace footer (**Refresh site content** → [`refreshSiteContent`](../../src/lib/pages/refresh-site-content.ts) → `page.resetToRemote`), so these in-editor revert/acknowledge helpers are not dispatched by the footer — see [author-dev-mode](../architecture/author-dev-mode.md). The read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx), [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) construct a no-op `CanvasEditorActions` so blocks render before the editor chunk loads without dispatching commands. Do not confuse canvas block `row.move` with `page.reposition`. Both surfaces use the [drag-and-drop toolkit](../architecture/drag-and-drop.md): sidebar whole-row drag with [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) and MIME `application/x-page-id`; canvas grip drag with MIME `application/x-canvas-row-id` and [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts). Page routing and boot migration: [pages](../architecture/pages.md).

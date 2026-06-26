@@ -34,7 +34,13 @@
         "src/lib/canvas/resolve-table-drop-target.ts",
         "src/components/blocks/types/table/**",
         "src/lib/canvas/resolve-drop-target.ts",
+        "src/lib/canvas/resolve-overclick-row.ts",
+        "src/lib/canvas/resolve-column-row-at-y.ts",
         "src/components/canvas/canvas-slash-context.tsx",
+        "src/components/canvas/page-canvas.tsx",
+        "src/components/canvas/page-canvas-server.tsx",
+        "src/components/canvas/page-canvas-local-view.tsx",
+        "src/components/canvas/prefetch-page-canvas-editor-effect.tsx",
         "src/components/dnd/**",
         "src/lib/dnd/**"
       ]
@@ -93,6 +99,7 @@
         "src/lib/pages/reposition-page.ts",
         "src/lib/pages/persist-page-reposition.ts",
         "src/lib/pages/persist-page-metadata.ts",
+        "src/lib/pages/refresh-site-content.ts",
         "src/lib/pages/append-page-link-on-parent.ts",
         "src/lib/pages/resolve-user-page-by-slug.ts",
         "src/lib/pages/preload-page-icon-picker.ts",
@@ -159,12 +166,27 @@
       "globs": [
         "src/routes/**",
         "src/lib/schemas/page.ts",
+        "src/lib/schemas/page-settings.ts",
         "src/lib/content/page-store.server.ts",
         "src/lib/content/page-head.ts",
         "src/hooks/use-local-pages.ts",
-        "src/hooks/use-slug-page-resolution.ts"
+        "src/hooks/use-slug-page-resolution.ts",
+        "src/components/pages/page-header*.tsx",
+        "src/components/pages/page-activity-panel.tsx",
+        "src/hooks/use-page-actions.ts",
+        "src/hooks/use-page-settings.ts",
+        "src/lib/pages/persist-page-settings.ts",
+        "src/lib/pages/copy-page-link.ts",
+        "src/lib/pages/page-move-targets.ts",
+        "src/lib/pages/record-page-activity.ts",
+        "src/db/activity/**"
       ],
-      "docs": ["docs/architecture/pages.md"]
+      "docs": ["docs/architecture/pages.md"],
+      "majorGlobs": [
+        "src/components/pages/page-header-menu.tsx",
+        "src/lib/schemas/page-settings.ts",
+        "src/db/activity/page-activity-store.ts"
+      ]
     },
     {
       "globs": [
@@ -185,7 +207,9 @@
       "majorGlobs": [
         "src/db/provider.tsx",
         "src/db/assets/**",
+        "src/db/queries/read-bootstrap-page-blocks.ts",
         "src/lib/content/save-media-assets.ts",
+        "src/lib/content/save-all-pages.ts",
         "src/lib/content/prepare-page-document-for-author-save.ts"
       ]
     },
@@ -199,7 +223,11 @@
     {
       "globs": [
         "src/components/canvas/page-canvas-footer.tsx",
-        "src/lib/content/save-page.ts"
+        "src/components/canvas/page-canvas-actions-drawer.tsx",
+        "src/hooks/use-page-canvas-footer-actions.ts",
+        "src/lib/content/save-page.ts",
+        "src/lib/content/save-all-pages.ts",
+        "src/lib/pages/refresh-site-content.ts"
       ],
       "docs": ["docs/architecture/author-dev-mode.md"]
     },
