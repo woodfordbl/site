@@ -21,6 +21,7 @@ import { type ReactNode, useState } from "react";
 
 import { useBlockGutterMenu } from "@/components/canvas/block-gutter-menu/block-gutter-menu-context.tsx";
 import { DrawerTitle } from "@/components/ui/drawer.tsx";
+import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface DrawerRowProps {
@@ -40,13 +41,17 @@ function DrawerRow({
   sublabel,
   trailing,
 }: DrawerRowProps) {
+  const haptic = useHaptics();
   return (
     <button
       className={cn(
         "flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-[15px] transition-colors active:bg-accent",
         destructive ? "text-destructive" : "text-foreground"
       )}
-      onClick={onClick}
+      onClick={() => {
+        haptic("selection");
+        onClick();
+      }}
       type="button"
     >
       {icon ? (
