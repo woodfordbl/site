@@ -1,5 +1,7 @@
 # Local-first persistence
 
+> Scope: `src/lib/content/` also holds stateless SSR/build-time helpers that are **not** part of the persistence layer — e.g. metadata generation ([`page-head.ts`](../../src/lib/content/page-head.ts)) and the build-time origin constant ([`site-origin.ts`](../../src/lib/content/site-origin.ts)). Those are covered by [pages — Routing & SEO](./pages.md#routing--seo), not here.
+
 ## Two storage paths
 
 | Path | Collection / file | Survives deploy |
