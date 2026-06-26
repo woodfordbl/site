@@ -5,6 +5,8 @@ import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils.ts";
 
+type DrawerVariant = "auto" | "menu";
+
 function Drawer({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
@@ -49,23 +51,41 @@ function DrawerContent({
   className,
   children,
   showHandle = true,
+  variant = "auto",
+  hasTitle = true,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content> & {
   showHandle?: boolean;
+  /**
+   * "auto" hugs its content (default, current behavior). "menu" makes the
+   * drawer take up most of the screen — used by menus/popovers adapted to
+   * touch so action lists and pickers get a tall, scrollable surface.
+   */
+  variant?: DrawerVariant;
+  /**
+   * When false, render a visually hidden `DrawerTitle` so vaul's accessibility
+   * requirement is satisfied for drawers whose content has no explicit title.
+   */
+  hasTitle?: boolean;
 }) {
   return (
     <DrawerPortal data-slot="drawer-portal">
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          "group/drawer-content fixed z-50 flex h-auto flex-col bg-popover bg-clip-padding text-popover-foreground",
-          "inset-x-0 bottom-0 mt-24 max-h-[85svh] rounded-t-2xl border-t",
+          "group/drawer-content fixed z-50 flex flex-col bg-popover bg-clip-padding text-popover-foreground",
+          "inset-x-0 bottom-0 rounded-t-2xl border-t",
+          variant === "menu"
+            ? "mt-12 h-[88svh] max-h-[88svh]"
+            : "mt-24 h-auto max-h-[85svh]",
           "pb-[env(safe-area-inset-bottom)]",
           className
         )}
         data-slot="drawer-content"
+        data-variant={variant}
         {...props}
       >
+        {hasTitle ? null : <DrawerTitle className="sr-only">Menu</DrawerTitle>}
         {showHandle ? (
           <div
             aria-hidden

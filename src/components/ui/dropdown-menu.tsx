@@ -3,6 +3,27 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import type * as React from "react";
+import type { MouseEvent, ReactElement, ReactNode } from "react";
+import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
+import {
+  asClassName,
+  DrawerCheckTrailing,
+  DrawerMenuRow,
+  DrawerMenuSectionLabel,
+  DrawerMenuSeparator,
+  DrawerMenuTrigger,
+  MenuDrawerRoot,
+  MenuDrawerScreen,
+  MenuDrawerSubProvider,
+  MenuPresentationProvider,
+  MenuRadioGroupProvider,
+  useMenuDrawerSub,
+  useMenuPresentation,
+  useMenuRadioGroup,
+  useMenuRoot,
+  useResolvedMenuPresentation,
+  withoutWidthClasses,
+} from "@/components/ui/menu-presentation.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import { cn } from "@/lib/utils.ts";
 
@@ -16,8 +37,28 @@ function createDropdownMenuHandle<
   return MenuPrimitive.createHandle<Payload>();
 }
 
-function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
-  return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+function DropdownMenu({ children, ...props }: MenuPrimitive.Root.Props) {
+  const presentation = useResolvedMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <MenuDrawerRoot
+        defaultOpen={props.defaultOpen}
+        onOpenChange={
+          props.onOpenChange as ((open: boolean) => void) | undefined
+        }
+        open={props.open}
+      >
+        {children as ReactNode}
+      </MenuDrawerRoot>
+    );
+  }
+
+  return (
+    <MenuPrimitive.Root data-slot="dropdown-menu" {...props}>
+      {children}
+    </MenuPrimitive.Root>
+  );
 }
 
 function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
@@ -26,14 +67,35 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
 
 function DropdownMenuTrigger({
   className,
+  children,
+  onClick,
+  render,
   ...props
-}: MenuPrimitive.Trigger.Props) {
+}: MenuPrimitive.Trigger.Props & { render?: ReactElement }) {
+  const root = useMenuRoot();
+
+  if (root) {
+    return (
+      <DrawerMenuTrigger
+        className={asClassName(className)}
+        onClick={onClick as (event: MouseEvent<HTMLElement>) => void}
+        render={render}
+      >
+        {children as ReactNode}
+      </DrawerMenuTrigger>
+    );
+  }
+
   return (
     <MenuPrimitive.Trigger
       className={className}
       data-slot="dropdown-menu-trigger"
+      onClick={onClick}
+      render={render}
       {...props}
-    />
+    >
+      {children}
+    </MenuPrimitive.Trigger>
   );
 }
 
@@ -44,12 +106,31 @@ function DropdownMenuContent({
   side = "bottom",
   sideOffset = 4,
   className,
+  children,
   ...props
 }: MenuPrimitive.Popup.Props &
   Pick<
     MenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   >) {
+  const root = useMenuRoot();
+
+  if (root) {
+    return (
+      <Drawer onOpenChange={root.setOpen} open={root.open}>
+        <DrawerContent
+          className={withoutWidthClasses(asClassName(className))}
+          hasTitle={false}
+          variant="menu"
+        >
+          <MenuPresentationProvider close={() => root.setOpen(false)}>
+            {children}
+          </MenuPresentationProvider>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
@@ -67,23 +148,38 @@ function DropdownMenuContent({
           )}
           data-slot="dropdown-menu-content"
           {...props}
-        />
+        >
+          {children}
+        </MenuPrimitive.Popup>
       </MenuPrimitive.Positioner>
     </MenuPrimitive.Portal>
   );
 }
 
-function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
-  return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
+function DropdownMenuGroup({ children, ...props }: MenuPrimitive.Group.Props) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <>{children}</>;
+  }
+  return (
+    <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props}>
+      {children}
+    </MenuPrimitive.Group>
+  );
 }
 
 function DropdownMenuLabel({
   className,
   inset,
+  children,
   ...props
 }: MenuPrimitive.GroupLabel.Props & {
   inset?: boolean;
 }) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <DrawerMenuSectionLabel>{children}</DrawerMenuSectionLabel>;
+  }
   return (
     <MenuPrimitive.GroupLabel
       className={cn(
@@ -93,7 +189,9 @@ function DropdownMenuLabel({
       data-inset={inset}
       data-slot="dropdown-menu-label"
       {...props}
-    />
+    >
+      {children}
+    </MenuPrimitive.GroupLabel>
   );
 }
 
@@ -102,29 +200,76 @@ function DropdownMenuItem({
   highlighted,
   inset,
   variant = "default",
+  children,
+  closeOnClick,
+  disabled,
+  onClick,
+  render,
   ...props
 }: MenuPrimitive.Item.Props & {
   highlighted?: boolean;
   inset?: boolean;
+  render?: ReactElement;
   variant?: "default" | "destructive";
 }) {
+  const { presentation, close } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <DrawerMenuRow
+        destructive={variant === "destructive"}
+        disabled={disabled}
+        onClick={(event) => {
+          (onClick as ((event: MouseEvent<HTMLElement>) => void) | undefined)?.(
+            event
+          );
+          if (closeOnClick !== false) {
+            close();
+          }
+        }}
+        render={render}
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <MenuPrimitive.Item
       className={cn(
         "group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent not-data-[variant=destructive]:focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-[variant=destructive]:data-highlighted:text-destructive data-disabled:pointer-events-none data-highlighted:bg-accent data-inset:pl-7 not-data-[variant=destructive]:data-highlighted:text-accent-foreground data-disabled:opacity-50 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:hover:text-destructive [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-[variant=destructive]:data-highlighted:[&_svg]:text-destructive data-[variant=destructive]:focus:[&_svg]:text-destructive data-[variant=destructive]:hover:[&_svg]:text-destructive",
         className
       )}
+      closeOnClick={closeOnClick}
       data-highlighted={highlighted ? "" : undefined}
       data-inset={inset}
       data-slot="dropdown-menu-item"
       data-variant={variant}
+      disabled={disabled}
+      onClick={onClick}
+      render={render}
       {...props}
-    />
+    >
+      {children}
+    </MenuPrimitive.Item>
   );
 }
 
-function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
-  return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />;
+function DropdownMenuSub({
+  children,
+  ...props
+}: MenuPrimitive.SubmenuRoot.Props) {
+  const { presentation } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return <MenuDrawerSubProvider>{children}</MenuDrawerSubProvider>;
+  }
+
+  return (
+    <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props}>
+      {children}
+    </MenuPrimitive.SubmenuRoot>
+  );
 }
 
 function DropdownMenuSubTrigger({
@@ -137,6 +282,25 @@ function DropdownMenuSubTrigger({
   highlighted?: boolean;
   inset?: boolean;
 }) {
+  const { presentation } = useMenuPresentation();
+  const sub = useMenuDrawerSub();
+
+  if (presentation === "drawer") {
+    if (sub) {
+      sub.titleRef.current = children;
+    }
+    return (
+      <DrawerMenuRow
+        onClick={() => sub?.setOpen(true)}
+        trailing={
+          <IconChevronRight className="size-5 shrink-0 text-muted-foreground" />
+        }
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <MenuPrimitive.SubmenuTrigger
       className={cn(
@@ -161,8 +325,24 @@ function DropdownMenuSubContent({
   side = "right",
   sideOffset = 0,
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuContent>) {
+  const { presentation } = useMenuPresentation();
+  const sub = useMenuDrawerSub();
+
+  if (presentation === "drawer") {
+    return (
+      <MenuDrawerScreen
+        onBack={() => sub?.setOpen(false)}
+        open={sub?.open ?? false}
+        title={sub?.titleRef.current}
+      >
+        {children}
+      </MenuDrawerScreen>
+    );
+  }
+
   return (
     <DropdownMenuContent
       align={align}
@@ -175,7 +355,9 @@ function DropdownMenuSubContent({
       side={side}
       sideOffset={sideOffset}
       {...props}
-    />
+    >
+      {children}
+    </DropdownMenuContent>
   );
 }
 
@@ -192,6 +374,28 @@ function DropdownMenuSwitchItem({
   children: React.ReactNode;
   onCheckedChange: (checked: boolean) => void;
 }) {
+  const { presentation } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <DrawerMenuRow
+        disabled={disabled}
+        onClick={() => onCheckedChange(!checked)}
+        trailing={
+          <Switch
+            checked={checked}
+            className="pointer-events-none"
+            disabled={disabled}
+            size="sm"
+            tabIndex={-1}
+          />
+        }
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <MenuPrimitive.Item
       aria-checked={checked}
@@ -232,6 +436,19 @@ function DropdownMenuCheckboxItem({
 }: MenuPrimitive.CheckboxItem.Props & {
   inset?: boolean;
 }) {
+  const { presentation } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <DrawerMenuRow
+        onClick={() => props.onCheckedChange?.(!checked, undefined as never)}
+        trailing={<DrawerCheckTrailing checked={Boolean(checked)} />}
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <MenuPrimitive.CheckboxItem
       checked={checked}
@@ -256,12 +473,36 @@ function DropdownMenuCheckboxItem({
   );
 }
 
-function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
+function DropdownMenuRadioGroup({
+  children,
+  onValueChange,
+  value,
+  ...props
+}: MenuPrimitive.RadioGroup.Props) {
+  const { presentation } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <MenuRadioGroupProvider
+        setValue={(next) =>
+          (onValueChange as ((value: string) => void) | undefined)?.(next)
+        }
+        value={typeof value === "string" ? value : undefined}
+      >
+        {children}
+      </MenuRadioGroupProvider>
+    );
+  }
+
   return (
     <MenuPrimitive.RadioGroup
       data-slot="dropdown-menu-radio-group"
+      onValueChange={onValueChange}
+      value={value}
       {...props}
-    />
+    >
+      {children}
+    </MenuPrimitive.RadioGroup>
   );
 }
 
@@ -269,10 +510,31 @@ function DropdownMenuRadioItem({
   className,
   children,
   inset,
+  value,
   ...props
 }: MenuPrimitive.RadioItem.Props & {
   inset?: boolean;
 }) {
+  const { presentation, close } = useMenuPresentation();
+  const group = useMenuRadioGroup();
+
+  if (presentation === "drawer") {
+    const checked = group?.value === value;
+    return (
+      <DrawerMenuRow
+        onClick={() => {
+          if (typeof value === "string") {
+            group?.setValue(value);
+          }
+          close();
+        }}
+        trailing={<DrawerCheckTrailing checked={checked} />}
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <MenuPrimitive.RadioItem
       className={cn(
@@ -281,6 +543,7 @@ function DropdownMenuRadioItem({
       )}
       data-inset={inset}
       data-slot="dropdown-menu-radio-item"
+      value={value}
       {...props}
     >
       <span
@@ -300,6 +563,10 @@ function DropdownMenuSeparator({
   className,
   ...props
 }: MenuPrimitive.Separator.Props) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <DrawerMenuSeparator />;
+  }
   return (
     <MenuPrimitive.Separator
       className={cn("-mx-1 my-1 h-px bg-border", className)}
@@ -313,6 +580,10 @@ function DropdownMenuShortcut({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return null;
+  }
   return (
     <span
       className={cn(
