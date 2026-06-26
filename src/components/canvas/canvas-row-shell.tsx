@@ -5,11 +5,13 @@ import {
   useRef,
 } from "react";
 
+import { useBlockActionsMenu } from "@/components/canvas/block-actions-menu.tsx";
 import {
   useCanvasEditorContext,
   useCanvasSelection,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
+import { useBlockTouchGesture } from "@/hooks/use-block-touch-gesture.ts";
 import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
@@ -57,6 +59,12 @@ interface CanvasRowShellProps {
   contentClassName?: string;
   /** Top-level block spacing on the content column (and gutter wrapper) when a gutter is shown. */
   contentSpacingClassName?: string;
+  /**
+   * Enable the mobile touch gesture (long-press opens the actions drawer,
+   * hold-then-drag reorders) on this row's content. Set on coarse pointers in
+   * edit mode, where the gutter is removed.
+   */
+  enableTouchGesture?: boolean;
   gutter?: ReactNode;
   /** Vertically centers gutter controls with short, non-text rows (e.g. divider). */
   gutterAlignCenter?: boolean;
@@ -74,15 +82,21 @@ export function CanvasRowShell({
   gutterAlignCenter = false,
   reserveGutterSpace = false,
   contentSpacingClassName,
+  enableTouchGesture = false,
   children,
   className,
   contentClassName,
 }: CanvasRowShellProps) {
   const { toggleRowSelection } = useCanvasEditorContext();
   const { isRowSelected } = useCanvasSelection();
+  const { setOpenRowId } = useBlockActionsMenu();
   const isSelected = isRowSelected(row.rowId);
   const rowLayoutRef = useRef<HTMLDivElement>(null);
   const gutterOpenTimeout = useTimeout();
+  const touchGesture = useBlockTouchGesture({
+    rowId: row.rowId,
+    onOpenDrawer: setOpenRowId,
+  });
 
   const dropEdge = useDropTarget((target: DropTarget | null) => {
     if (target?.rowId !== row.rowId) {
@@ -200,11 +214,14 @@ export function CanvasRowShell({
           className={cn(
             "min-h-0 min-w-0 flex-1 rounded-lg transition-colors",
             contentSpacingClassName,
-            isSelected && "bg-selection",
+            (isSelected || (enableTouchGesture && touchGesture.isPressing)) &&
+              "bg-selection",
+            enableTouchGesture && touchGesture.isDragging && "opacity-60",
             contentClassName
           )}
           data-canvas-row-content
           onPointerDownCapture={handleContentPointerDown}
+          {...(enableTouchGesture ? touchGesture.props : null)}
         >
           {children}
         </div>
