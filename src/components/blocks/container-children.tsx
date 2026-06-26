@@ -3,6 +3,7 @@ import { BlockRenderer } from "@/components/blocks/block-renderer.tsx";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasRowShell } from "@/components/canvas/canvas-row-shell.tsx";
 import { RowGutter } from "@/components/canvas/row-gutter.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 
@@ -28,7 +29,9 @@ export function ContainerChildren({
   row,
 }: ContainerChildrenProps) {
   const { clearFocus } = useCanvasEditorContext();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const parentType = row.effectiveBlock.type;
+  const editable = mode === "edit";
 
   return (
     <>
@@ -39,7 +42,15 @@ export function ContainerChildren({
           children: (
             <CanvasRowShell
               contentClassName={contentClassName}
-              gutter={mode === "edit" ? <RowGutter row={child} /> : null}
+              // Coarse pointers (mobile/touch) drop the grip and reorder via a
+              // long-press gesture on the row body; fine pointers (incl. narrow
+              // desktop windows) keep the hover-revealed gutter grip.
+              enableTouchGesture={editable && isCoarsePrimaryPointer}
+              gutter={
+                editable && !isCoarsePrimaryPointer ? (
+                  <RowGutter row={child} />
+                ) : null
+              }
               row={child}
             >
               {renderBeforeContent?.(child, index)}
