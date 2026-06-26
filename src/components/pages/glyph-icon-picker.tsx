@@ -58,14 +58,20 @@ function GlyphIconPickerPopoverContent({
 }) {
   return (
     <Tabs className="w-full gap-0" defaultValue="emoji">
-      <div className="px-2 pt-2 pb-2">
-        <TabsList className="flex h-9 w-fit rounded-none p-0">
+      {/* Underline tabs whose active indicator intersects a full-width divider,
+          matching the link/upload embed tabs. */}
+      <div className="relative w-full px-2 pt-2">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 border-border border-b"
+        />
+        <TabsList className="relative z-[1]" variant="line">
           <TabsTrigger value="emoji">Emoji</TabsTrigger>
           <TabsTrigger value="icons">Icons</TabsTrigger>
         </TabsList>
       </div>
       <TabsContent
-        className="m-0 flex min-h-0 flex-col px-2 pt-0 pb-2"
+        className="m-0 flex min-h-0 flex-col px-2 pt-2 pb-2"
         value="emoji"
       >
         {open && EmojiPanel ? (
@@ -75,7 +81,7 @@ function GlyphIconPickerPopoverContent({
         )}
       </TabsContent>
       <TabsContent
-        className="m-0 flex min-h-0 flex-col px-2 pt-0 pb-2"
+        className="m-0 flex min-h-0 flex-col px-2 pt-2 pb-2"
         value="icons"
       >
         {open && IconPanel ? (
