@@ -145,12 +145,16 @@ export function DrawerMenuTrigger({
     };
     const handleRenderClick = (event: MouseEvent<HTMLElement>) => {
       // Preserve the render element's own click behavior (e.g. a drag handle's
-      // preventDefault) before opening the drawer.
+      // preventDefault) before opening the drawer. If the render element itself
+      // suppresses the click, don't open.
       renderProps.onClick?.(event);
-      onClick?.(event);
       if (event.defaultPrevented) {
         return;
       }
+      // The trigger's own onClick may preventDefault/stopPropagation purely to
+      // stop the surrounding row from navigating (mirrors popover mode, where
+      // Base UI opens regardless). Run it, then open the drawer anyway.
+      onClick?.(event);
       event.preventDefault();
       root?.setOpen(true);
     };
@@ -165,10 +169,10 @@ export function DrawerMenuTrigger({
   }
 
   const handleClick = (event: MouseEvent<HTMLElement>) => {
+    // The trigger's onClick may preventDefault/stopPropagation to stop the
+    // surrounding row from navigating; open the drawer regardless (parity with
+    // popover mode).
     onClick?.(event);
-    if (event.defaultPrevented) {
-      return;
-    }
     event.preventDefault();
     root?.setOpen(true);
   };
