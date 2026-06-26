@@ -22,6 +22,7 @@ import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx"
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
+import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
@@ -419,6 +420,7 @@ function PageCanvasEditorBody({
                       </CanvasDropZone>
                     </div>
                     <CanvasMenuRoot />
+                    <MobileBlockActionsDrawer />
                   </div>
                 </CanvasRowDndBridge>
               </DndSurface>
