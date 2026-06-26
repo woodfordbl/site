@@ -13,7 +13,7 @@ import {
   DrawerMenuSeparator,
   DrawerMenuTrigger,
   MenuDrawerRoot,
-  MenuDrawerScreen,
+  MenuDrawerSubDrawer,
   MenuDrawerSubProvider,
   MenuPresentationProvider,
   MenuRadioGroupProvider,
@@ -333,13 +333,13 @@ function DropdownMenuSubContent({
 
   if (presentation === "drawer") {
     return (
-      <MenuDrawerScreen
-        onBack={() => sub?.setOpen(false)}
+      <MenuDrawerSubDrawer
+        onOpenChange={(next) => sub?.setOpen(next)}
         open={sub?.open ?? false}
         title={sub?.titleRef.current}
       >
         {children}
-      </MenuDrawerScreen>
+      </MenuDrawerSubDrawer>
     );
   }
 
