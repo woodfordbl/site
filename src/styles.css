@@ -2,12 +2,16 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/source-serif-4";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
+  --font-serif: "Source Serif 4 Variable", serif;
+  --font-mono: "Geist Mono Variable", monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,9 +54,15 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --color-selection: var(--selection);
+  --color-selection-primary: var(--selection-primary);
+  --native-scrollbar-size: 6px;
+  --native-scrollbar-size-hover: 10px;
+  --native-scrollbar-thumb: var(--border);
 }
 
 :root {
+  --ease-out-strong: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --background: oklch(0.98 0.005 106);
   --foreground: oklch(0.3 0.005 106);
   --card: oklch(0.98 0.005 106);
@@ -69,70 +79,128 @@
   --tertiary-foreground: var(--background);
   --accent: var(--muted);
   --accent-foreground: var(--foreground);
-  --destructive: oklch(0.65 0.22 27);
+  --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.9 0.005 106);
   --input: var(--border);
-  --ring: var(--border);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --ring: var(--foreground);
   --radius: 0.45rem;
   --sidebar: oklch(0.95 0.005 106);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.91 0.005 106);
+  --sidebar-accent-strong: oklch(0.88 0.005 106);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
   --selection: var(--muted);
+  --selection-primary: oklch(0.9 0.1 34);
   --selection-foreground: var(--foreground);
-  --native-scrollbar-size: 6px;
-  --native-scrollbar-size-hover: 10px;
-  --native-scrollbar-thumb: var(--border);
+  --chart-1: oklch(0.5963 0.2191 263.82);
+  --chart-2: oklch(0.8489 0.1353 76.8);
+  --chart-3: oklch(0.6744 0.1426 151.9);
+  --chart-4: var(--primary);
+  --chart-5: var(--foreground);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.47 0.157 37.304);
-  --primary-foreground: oklch(0.98 0.016 73.684);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --tertiary: oklch(0.269 0 0);
-  --tertiary-foreground: oklch(0.985 0 0);
+  --background: oklch(0.16 0.01 85);
+  --foreground: oklch(0.93 0.01 95);
+  --card: oklch(0.2 0.012 85);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.2 0.012 85);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.62 0.2 34);
+  --primary-foreground: oklch(0.98 0.005 106);
+  --secondary: oklch(0.28 0.012 85);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.24 0.012 85);
+  --muted-foreground: oklch(0.65 0.015 85);
+  --tertiary: oklch(0.32 0.015 85);
+  --tertiary-foreground: var(--foreground);
   --accent: var(--muted);
-  --accent-foreground: var(--muted-foreground);
+  --accent-foreground: var(--foreground);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.705 0.213 47.604);
-  --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --selection: oklch(0.25 0.01 106.79);
-  --selection-foreground: oklch(0.98 0.005 106);
+  --border: oklch(0.93 0.01 95 / 12%);
+  --input: oklch(0.93 0.01 95 / 18%);
+  --ring: oklch(0.65 0.015 85);
+  --sidebar: oklch(0.19 0.012 85);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.26 0.014 85);
+  --sidebar-accent-strong: oklch(0.3 0.016 85);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --selection: oklch(0.28 0.012 85);
+  --selection-primary: oklch(0.55 0.16 34);
+  --selection-foreground: var(--foreground);
+  --chart-1: oklch(0.5963 0.2191 263.82);
+  --chart-2: oklch(0.8489 0.1353 76.8);
+  --chart-3: oklch(0.6744 0.1426 151.9);
+  --chart-4: var(--primary);
+  --chart-5: var(--foreground);
 }
 
 @layer utilities {
+  /* Mono ramps: +lightness per step, +chroma subtly (saturated, not vivid). */
+  [data-chart-palette="blue"] {
+    --chart-1: oklch(0.5963 0.2191 263.82);
+    --chart-2: oklch(0.68 0.231 263.82);
+    --chart-3: oklch(0.76 0.243 263.82);
+    --chart-4: oklch(0.84 0.255 263.82);
+    --chart-5: oklch(0.92 0.267 263.82);
+  }
+
+  [data-chart-palette="gold"] {
+    --chart-1: oklch(0.8489 0.1353 76.8);
+    --chart-2: oklch(0.88 0.147 76.8);
+    --chart-3: oklch(0.91 0.159 76.8);
+    --chart-4: oklch(0.94 0.171 76.8);
+    --chart-5: oklch(0.97 0.183 76.8);
+  }
+
+  [data-chart-palette="green"] {
+    --chart-1: oklch(0.6744 0.1426 151.9);
+    --chart-2: oklch(0.76 0.155 151.9);
+    --chart-3: oklch(0.84 0.167 151.9);
+    --chart-4: oklch(0.92 0.179 151.9);
+    --chart-5: oklch(0.97 0.191 151.9);
+  }
+
+  [data-chart-palette="orange"] {
+    --chart-1: oklch(0.65 0.22 34);
+    --chart-2: oklch(0.735 0.232 34);
+    --chart-3: oklch(0.82 0.244 34);
+    --chart-4: oklch(0.905 0.256 34);
+    --chart-5: oklch(0.97 0.268 34);
+  }
+
+  .dark [data-chart-palette="orange"] {
+    --chart-1: oklch(0.62 0.2 34);
+    --chart-2: oklch(0.7 0.212 34);
+    --chart-3: oklch(0.78 0.224 34);
+    --chart-4: oklch(0.86 0.236 34);
+    --chart-5: oklch(0.94 0.248 34);
+  }
+
+  [data-chart-palette="grey"] {
+    --chart-1: oklch(0.25 0.005 106);
+    --chart-2: oklch(0.38 0.006 106);
+    --chart-3: oklch(0.51 0.007 106);
+    --chart-4: oklch(0.64 0.008 106);
+    --chart-5: oklch(0.77 0.009 106);
+  }
+
+  .dark [data-chart-palette="grey"] {
+    --chart-1: oklch(0.32 0.015 85);
+    --chart-2: oklch(0.44 0.015 85);
+    --chart-3: oklch(0.56 0.016 85);
+    --chart-4: oklch(0.68 0.016 85);
+    --chart-5: oklch(0.8 0.017 85);
+  }
+
   /* Collapsed hover peek: match main inset card tokens, not site-shell sidebar gutter. */
   [data-page-sidebar-hover-panel] {
     --sidebar: var(--background);
@@ -378,4 +446,274 @@
       transition: none;
     }
   }
+}
+
+/*
+ * Sonner toasts — unlayered so runtime Sonner CSS cannot beat layout rules.
+ * Requires `unstyled` on Toaster (data-styled="false").
+ *
+ * Grid: row 1 = icon | text (+ absolute close); row 2 = action(s) under text.
+ * No ::after flex line-break — Sonner owns ::before/::after for swipe/dismiss/stack.
+ */
+[data-sonner-toaster] {
+  --toast-close-button-start: unset;
+  --toast-close-button-end: unset;
+  --toast-close-button-transform: none;
+  --toast-button-margin-start: 0;
+  --toast-button-margin-end: 0;
+  --cn-toast-inset: 0.625rem;
+  --cn-toast-action-gap: 0.375rem;
+  --cn-toast-line-height: calc(0.875rem * 1.5);
+  --cn-toast-type-icon-size: 1rem;
+  --cn-toast-close-size: 1.75rem;
+  --cn-toast-close-gap: 0.75rem;
+  font-family: inherit;
+}
+
+[data-sonner-toast].cn-toast {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  row-gap: var(--cn-toast-action-gap);
+  column-gap: 0.75rem;
+  align-items: start;
+  width: var(--width);
+  padding: var(--cn-toast-inset);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--popover-foreground);
+  outline: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+  background: var(--popover);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 8%),
+    0 2px 4px -2px rgb(0 0 0 / 6%);
+}
+
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Cancel + action side by side on row 2 (no type icon). */
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])):has(
+  > [data-cancel][data-button]
+) {
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+}
+
+/* Cancel + action side by side on row 2 (with type icon). */
+[data-sonner-toast].cn-toast:has(> [data-icon]):has(
+  > [data-cancel][data-button]
+) {
+  grid-template-columns: 1rem max-content max-content minmax(0, 1fr);
+}
+
+[data-sonner-toast].cn-toast > [data-icon],
+[data-sonner-toast].cn-toast .cn-toast-icon {
+  position: relative;
+  display: flex;
+  grid-row: 1;
+  grid-column: 1;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin-top: calc(
+    (var(--cn-toast-line-height) - var(--cn-toast-type-icon-size)) /
+    2
+  );
+  color: var(--muted-foreground);
+}
+
+[data-sonner-toast].cn-toast .cn-toast-loader,
+[data-sonner-toast].cn-toast .sonner-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  transform: none;
+}
+
+[data-sonner-toast].cn-toast .cn-toast-loader[data-visible="false"],
+[data-sonner-toast].cn-toast .sonner-loader[data-visible="false"] {
+  display: none;
+  opacity: 0;
+  transform: none;
+}
+
+/* Promise toasts keep the loader node after resolve — hide it so the type icon fits. */
+[data-sonner-toast].cn-toast[data-promise="true"]:not([data-type="loading"])
+  .cn-toast-loader,
+[data-sonner-toast].cn-toast[data-promise="true"]:not([data-type="loading"])
+  .sonner-loader {
+  display: none;
+}
+
+/* Sonner fades promise icons in from opacity 0; skip that for unstyled toasts. */
+[data-sonner-toast].cn-toast[data-promise="true"]:not([data-type="loading"])
+  > [data-icon]
+  > svg {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
+[data-sonner-toast].cn-toast > [data-content],
+[data-sonner-toast].cn-toast .cn-toast-content {
+  display: flex;
+  flex-direction: column;
+  grid-row: 1;
+  grid-column: 2;
+  gap: 0.125rem;
+  min-width: 0;
+  padding-right: calc(var(--cn-toast-close-size) + var(--cn-toast-close-gap));
+}
+
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])) > [data-content],
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])) .cn-toast-content {
+  grid-column: 1;
+}
+
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])):has(
+    > [data-cancel][data-button]
+  )
+  > [data-content],
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])):has(
+    > [data-cancel][data-button]
+  )
+  .cn-toast-content {
+  grid-column: 1 / -1;
+}
+
+[data-sonner-toast].cn-toast:has(> [data-icon]):has(
+    > [data-cancel][data-button]
+  )
+  > [data-content],
+[data-sonner-toast].cn-toast:has(> [data-icon]):has(
+    > [data-cancel][data-button]
+  )
+  .cn-toast-content {
+  grid-column: 2 / -1;
+}
+
+[data-sonner-toast].cn-toast .cn-toast-title {
+  font-weight: 400;
+  line-height: 1.5;
+  color: inherit;
+}
+
+[data-sonner-toast].cn-toast .cn-toast-description {
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+[data-sonner-toast].cn-toast > [data-close-button],
+[data-sonner-toast].cn-toast .cn-toast-close {
+  position: absolute;
+  top: calc(
+    var(--cn-toast-inset) +
+    (var(--cn-toast-line-height) - var(--cn-toast-close-size)) /
+    2
+  );
+  right: var(--cn-toast-inset);
+  left: auto;
+  z-index: 1;
+  margin: 0;
+  transform: none;
+}
+
+[data-sonner-toast].cn-toast > [data-button] {
+  grid-row: 2;
+  justify-self: start;
+  width: auto;
+  margin: 0;
+}
+
+[data-sonner-toast].cn-toast:has(> [data-icon]) > [data-cancel][data-button] {
+  grid-column: 2;
+}
+
+[data-sonner-toast].cn-toast:has(> [data-icon])
+  > [data-cancel][data-button]
+  ~ [data-action][data-button] {
+  grid-column: 3;
+}
+
+[data-sonner-toast].cn-toast:has(> [data-icon]):not(:has([data-cancel]))
+  > [data-action][data-button] {
+  grid-column: 2;
+}
+
+[data-sonner-toast].cn-toast:not(:has(> [data-icon]))
+  > [data-cancel][data-button] {
+  grid-column: 1;
+}
+
+[data-sonner-toast].cn-toast:not(:has(> [data-icon]))
+  > [data-cancel][data-button]
+  ~ [data-action][data-button] {
+  grid-column: 2;
+}
+
+[data-sonner-toast].cn-toast:not(:has(> [data-icon])):not(:has([data-cancel]))
+  > [data-action][data-button] {
+  grid-column: 1;
+}
+
+/* Collapsed stack — Sonner clips height but unstyled toasts skip the default opacity:0 on children. */
+[data-sonner-toast].cn-toast[data-expanded="false"][data-front="false"] {
+  overflow: hidden;
+}
+
+[data-sonner-toast].cn-toast[data-expanded="false"][data-front="false"]
+  > [data-button] {
+  display: none;
+}
+
+[data-sonner-toast].cn-toast[data-expanded="false"][data-front="false"]
+  > [data-content],
+[data-sonner-toast].cn-toast[data-expanded="false"][data-front="false"]
+  .cn-toast-content {
+  overflow: hidden;
+}
+
+[data-sonner-toast].cn-toast[data-expanded="false"][data-front="false"]
+  .cn-toast-description {
+  display: none;
+}
+
+[data-sonner-toast].cn-toast[data-expanded="false"][data-front="false"]
+  .cn-toast-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep layout stable while Sonner runs the exit animation. */
+[data-sonner-toast].cn-toast[data-removed="true"] {
+  min-height: var(--initial-height);
+  overflow: hidden;
+}
+
+[data-sonner-toast].cn-toast[data-removed="true"] > *:not([data-close-button]) {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toast].cn-toast > [data-close-button] {
+    transition: none;
+  }
+}
+
+[data-page-font="serif"] {
+  font-family: var(--font-serif);
+}
+
+[data-page-font="mono"] {
+  font-family: var(--font-mono);
 }
