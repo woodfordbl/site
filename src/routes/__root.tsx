@@ -9,6 +9,7 @@ import {
   DeviceLayoutProvider,
   SyncDeviceLayoutCookieEffect,
 } from "@/components/layout/device-layout-provider.tsx";
+import { HapticsProvider } from "@/components/layout/haptics-provider.tsx";
 import { AppProviders } from "@/db/provider.tsx";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
@@ -119,8 +120,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <DeviceLayoutProvider initialHints={deviceLayoutHints}>
-          <AppProviders>{children}</AppProviders>
-          <SyncDeviceLayoutCookieEffect />
+          <HapticsProvider>
+            <AppProviders>{children}</AppProviders>
+            <SyncDeviceLayoutCookieEffect />
+          </HapticsProvider>
         </DeviceLayoutProvider>
         {AppDevtools ? <AppDevtools /> : null}
         <Scripts />

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { usePointerRowDrag } from "@/components/dnd/use-dnd.ts";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useHaptics } from "@/hooks/haptics.ts";
 
 /** Hold this long (no significant move) before the block "arms" for drawer/drag. */
 const LONG_PRESS_MS = 450;
@@ -55,6 +56,7 @@ export function useBlockTouchGesture({
 }: UseBlockTouchGestureOptions): BlockTouchGesture {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const rowDrag = usePointerRowDrag(rowId);
+  const haptic = useHaptics();
 
   const phaseRef = useRef<Phase>("idle");
   const originRef = useRef<{ x: number; y: number; pointerId: number } | null>(
@@ -158,7 +160,8 @@ export function useBlockTouchGesture({
           return;
         }
         phaseRef.current = "armed";
-        navigator.vibrate?.(10);
+        // Confirm the long-press registered: the actions menu is now ready.
+        haptic("press");
         try {
           element.setPointerCapture(origin.pointerId);
         } catch {
@@ -168,7 +171,7 @@ export function useBlockTouchGesture({
         setIsPressing(true);
       }, LONG_PRESS_MS);
     },
-    [reset, suppressNativeSelection]
+    [haptic, reset, suppressNativeSelection]
   );
 
   const handlePointerMove = useCallback(
@@ -195,6 +198,8 @@ export function useBlockTouchGesture({
         if (distance >= DRAG_THRESHOLD_PX) {
           phaseRef.current = "dragging";
           setIsDragging(true);
+          // Firmer tick as the block lifts off into a reorder drag.
+          haptic("pickUp");
           rowDrag.beginPointerDrag({ x: event.clientX, y: event.clientY });
         }
         event.preventDefault();
@@ -206,7 +211,7 @@ export function useBlockTouchGesture({
         rowDrag.movePointer({ x: event.clientX, y: event.clientY });
       }
     },
-    [reset, rowDrag]
+    [haptic, reset, rowDrag]
   );
 
   const handlePointerUp = useCallback(
@@ -217,6 +222,8 @@ export function useBlockTouchGesture({
       }
       const phase = phaseRef.current;
       if (phase === "dragging") {
+        // Settle as the block drops into its new slot.
+        haptic("drop");
         rowDrag.commitPointerDrop();
       } else if (phase === "armed") {
         // Held still then lifted → open the actions drawer.
@@ -225,7 +232,7 @@ export function useBlockTouchGesture({
       // `pressing` (no arm yet) falls through as a plain tap — native caret/click.
       reset();
     },
-    [onOpenDrawer, reset, rowDrag, rowId]
+    [haptic, onOpenDrawer, reset, rowDrag, rowId]
   );
 
   const handlePointerCancel = useCallback(
