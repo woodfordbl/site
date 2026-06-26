@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveSiteOrigin } from "./resolve-origin.mjs";
 
 /**
  * Generates public/sitemap.xml (and a robots.txt referencing it) for shipped
@@ -10,17 +11,6 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pagesDir = join(root, "content", "pages");
-const TRAILING_SLASH_RE = /\/$/;
-
-function resolveOrigin() {
-  if (process.env.SITE_ORIGIN) {
-    return process.env.SITE_ORIGIN.replace(TRAILING_SLASH_RE, "");
-  }
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  return null;
-}
 
 async function collectPageFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -36,7 +26,7 @@ async function collectPageFiles(directory) {
   return files;
 }
 
-const origin = resolveOrigin();
+const origin = resolveSiteOrigin();
 if (!origin) {
   console.log(
     "generate-sitemap: no SITE_ORIGIN/VERCEL_PROJECT_PRODUCTION_URL — skipping"
