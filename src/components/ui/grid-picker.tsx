@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { TooltipContent, TooltipProvider } from "@/components/ui/tooltip.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 type RowVirtualizer = ReturnType<
@@ -198,6 +199,9 @@ interface GridCellProps<T> {
   label: string;
   onSelect: (item: T) => void;
   renderItem: (item: T) => ReactNode;
+  /** Wrap the cell in a hover tooltip. Disabled on touch, where the tooltip
+   *  trigger's press handling swallows the tap and blocks selection. */
+  showTooltip: boolean;
 }
 
 /**
@@ -213,23 +217,28 @@ function GridCellComponent<T>({
   label,
   onSelect,
   renderItem,
+  showTooltip,
 }: GridCellProps<T>) {
+  const cell = (
+    <Autocomplete.Item
+      aria-label={label}
+      className={cellClassName}
+      index={index}
+      onClick={() => onSelect(item)}
+      value={item}
+    >
+      {renderItem(item)}
+    </Autocomplete.Item>
+  );
+
+  // On coarse pointers the tooltip trigger intercepts the tap (no hover to
+  // surface it anyway), so render the bare item to keep selection working.
+  if (!showTooltip) {
+    return cell;
+  }
+
   return (
-    <TooltipPrimitive.Trigger
-      handle={handle}
-      payload={label}
-      render={
-        <Autocomplete.Item
-          aria-label={label}
-          className={cellClassName}
-          index={index}
-          onClick={() => onSelect(item)}
-          value={item}
-        >
-          {renderItem(item)}
-        </Autocomplete.Item>
-      }
-    />
+    <TooltipPrimitive.Trigger handle={handle} payload={label} render={cell} />
   );
 }
 
@@ -247,6 +256,7 @@ function VirtualGrid<T>({
 }: VirtualGridProps<T>) {
   const filteredItems = Autocomplete.useFilteredItems<T>();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const showTooltip = !useIsCoarsePrimaryPointer();
   const rowCount = Math.ceil(filteredItems.length / columns);
   const tooltipHandle = useMemo(
     () => TooltipPrimitive.createHandle<string>(),
@@ -322,6 +332,7 @@ function VirtualGrid<T>({
                     label={getItemLabel(item)}
                     onSelect={onSelect}
                     renderItem={renderItem}
+                    showTooltip={showTooltip}
                   />
                 ))}
               </Autocomplete.Row>
