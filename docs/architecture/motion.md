@@ -76,7 +76,7 @@ show. This axis is **hover capability**, not viewport width and not
 On coarse primary pointers the gutter is not mounted (`showEditGutter` in
 [`block-tree-node.tsx`](../../src/components/canvas/block-tree-node.tsx)); block
 actions open from long-press on row content via
-[`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx).
+[`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx).
 Fine pointers keep the JS pointer-driven reveal in
 [`canvas-row-shell.tsx`](../../src/components/canvas/canvas-row-shell.tsx) (300ms
 delay, not this CSS primitive).

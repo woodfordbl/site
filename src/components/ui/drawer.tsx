@@ -1,10 +1,8 @@
 "use client";
 
-import { IconX } from "@tabler/icons-react";
 import type * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
-import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 
 function Drawer({
@@ -38,7 +36,7 @@ function DrawerOverlay({
   return (
     <DrawerPrimitive.Overlay
       className={cn(
-        "fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
+        "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/30 data-[state=closed]:animate-out data-[state=open]:animate-in supports-backdrop-filter:backdrop-blur-xs",
         className
       )}
       data-slot="drawer-overlay"
@@ -50,39 +48,31 @@ function DrawerOverlay({
 function DrawerContent({
   className,
   children,
-  showCloseButton = true,
+  showHandle = true,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content> & {
-  showCloseButton?: boolean;
+  showHandle?: boolean;
 }) {
   return (
-    <DrawerPortal>
+    <DrawerPortal data-slot="drawer-portal">
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[85vh] flex-col rounded-t-xl border-t bg-popover text-popover-foreground shadow-lg outline-none",
+          "group/drawer-content fixed z-50 flex h-auto flex-col bg-popover bg-clip-padding text-popover-foreground",
+          "inset-x-0 bottom-0 mt-24 max-h-[85svh] rounded-t-2xl border-t",
+          "pb-[env(safe-area-inset-bottom)]",
           className
         )}
         data-slot="drawer-content"
         {...props}
       >
-        <div
-          aria-hidden
-          className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30"
-        />
-        {children}
-        {showCloseButton ? (
-          <DrawerClose asChild>
-            <Button
-              className="absolute top-3 right-3"
-              size="icon-sm"
-              variant="ghost"
-            >
-              <IconX aria-hidden />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DrawerClose>
+        {showHandle ? (
+          <div
+            aria-hidden
+            className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30"
+          />
         ) : null}
+        {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
   );
@@ -91,7 +81,10 @@ function DrawerContent({
 function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex flex-col gap-0.5 p-4 pt-2", className)}
+      className={cn(
+        "flex flex-col gap-0.5 p-4 text-center md:text-left",
+        className
+      )}
       data-slot="drawer-header"
       {...props}
     />

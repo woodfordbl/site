@@ -151,7 +151,7 @@ export function resolveColumnContentDrop(
   draggingRowId: string
 ): DropTarget | null {
   const columnRow = findRowById(rows, columnRowId);
-  if (!columnRow || columnRow.effectiveBlock.type !== "column") {
+  if (columnRow?.effectiveBlock.type !== "column") {
     return null;
   }
   if (isColumnDropBlocked(rows, columnRowId, draggingRowId)) {
@@ -198,7 +198,7 @@ function resolveEmptyColumnDrop(
   draggingRowId: string
 ): DropTarget | null {
   const columnRow = findRowById(rows, columnRowId);
-  if (!columnRow || columnRow.effectiveBlock.type !== "column") {
+  if (columnRow?.effectiveBlock.type !== "column") {
     return null;
   }
   if (columnRow.children.length > 0) {

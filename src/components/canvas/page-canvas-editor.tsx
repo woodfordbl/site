@@ -7,7 +7,6 @@ import {
   TableRowDragPreview,
   type TableRowDragPreviewState,
 } from "@/components/blocks/types/table/table-row-drag-preview.tsx";
-import { BlockActionsDrawer } from "@/components/canvas/block-actions-drawer.tsx";
 import {
   BlockActionsMenuProvider,
   useCloseBlockActionsMenuBeforeAction,
@@ -23,6 +22,7 @@ import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx"
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
+import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
@@ -402,7 +402,7 @@ function PageCanvasEditorBody({
                 <CanvasRowDndBridge>
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
-                      className="relative flex min-h-0 flex-1 flex-col overflow-auto px-4 pb-12 md:px-12 md:py-12"
+                      className="relative flex min-h-0 flex-1 flex-col overflow-auto pr-4 pb-12 pl-8 md:px-12 md:py-12"
                       data-scroll-restoration-id="page-canvas-scroll"
                     >
                       {headerSlot}
@@ -420,7 +420,7 @@ function PageCanvasEditorBody({
                       </CanvasDropZone>
                     </div>
                     <CanvasMenuRoot />
-                    <BlockActionsDrawer />
+                    <MobileBlockActionsDrawer />
                   </div>
                 </CanvasRowDndBridge>
               </DndSurface>

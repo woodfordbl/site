@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { type ComponentType, memo } from "react";
 
 import { BlockRenderer } from "@/components/blocks/block-renderer.tsx";
 import {
@@ -19,14 +19,6 @@ import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
 
-function getCanvasRowChrome(mode: BlockMode, isCoarsePrimaryPointer: boolean) {
-  const edit = mode === "edit";
-  return {
-    longPressMenu: edit && isCoarsePrimaryPointer,
-    showEditGutter: edit && !isCoarsePrimaryPointer,
-  };
-}
-
 /** Matches page title `PageIconPicker` trigger (`size-9` / 36px). */
 const topLevelPageTitleAlignClassName = "pl-9";
 
@@ -37,59 +29,80 @@ interface BlockTreeNodeProps {
   row: CanvasRow;
 }
 
-function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
-  const { clearFocus, insertAfter, insertAtScopeStart, insertBefore } =
+/** Gutter / gesture flags shared by container and leaf rows. */
+interface RowChromeProps {
+  enableTouchGesture: boolean;
+  showGutter: boolean;
+}
+
+function ContainerRowNode({
+  Container,
+  enableTouchGesture,
+  mode,
+  row,
+  showGutter,
+}: RowChromeProps & {
+  Container: ComponentType<{ mode: BlockMode; row: CanvasRow }>;
+  mode: BlockMode;
+  row: CanvasRow;
+}) {
+  const { insertAfter, insertAtScopeStart, insertBefore } =
     useCanvasEditorContext();
-  const focus = useCanvasFocus();
-  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
-  const isFocusTarget = focus?.rowId === row.rowId;
-  const { longPressMenu, showEditGutter } = getCanvasRowChrome(
-    mode,
-    isCoarsePrimaryPointer
+  const isTable = row.effectiveBlock.type === "table";
+  const isTopLevel = !row.effectiveBlock.parentId;
+  const alignWithPageTitle = isTopLevel && !isTable;
+
+  return (
+    <CanvasRowShell
+      contentClassName={
+        alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
+      }
+      enableTouchGesture={enableTouchGesture}
+      gutter={
+        showGutter && !isTable ? (
+          <RowGutter
+            onInsert={(edge) => {
+              handleContainerGutterInsert(row, edge, {
+                insertAfter,
+                insertAtScopeStart,
+                insertBefore,
+              });
+            }}
+            row={row}
+          />
+        ) : null
+      }
+      reserveGutterSpace={showGutter && isTable}
+      row={row}
+    >
+      <Container mode={mode} row={row} />
+    </CanvasRowShell>
   );
+}
 
-  const spec = getBlockSpec(row.effectiveBlock.type);
-
-  if (isContainerSpec(spec)) {
-    const Container = resolveContainerComponent(spec);
-    const isTable = row.effectiveBlock.type === "table";
-    const isTopLevel = !row.effectiveBlock.parentId;
-    const alignWithPageTitle = isTopLevel && !isTable;
-
-    return (
-      <CanvasRowShell
-        contentClassName={
-          alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
-        }
-        gutter={
-          showEditGutter && !isTable ? (
-            <RowGutter
-              onInsert={(edge) => {
-                handleContainerGutterInsert(row, edge, {
-                  insertAfter,
-                  insertAtScopeStart,
-                  insertBefore,
-                });
-              }}
-              row={row}
-            />
-          ) : null
-        }
-        longPressMenu={longPressMenu}
-        reserveGutterSpace={showEditGutter && isTable}
-        row={row}
-      >
-        <Container mode={mode} row={row} />
-      </CanvasRowShell>
-    );
-  }
+function LeafRowNode({
+  enableTouchGesture,
+  mode,
+  parentType,
+  row,
+  showGutter,
+}: RowChromeProps & {
+  mode: BlockMode;
+  parentType?: BlockType;
+  row: CanvasRow;
+}) {
+  const { clearFocus } = useCanvasEditorContext();
+  const focus = useCanvasFocus();
+  const isFocusTarget = focus?.rowId === row.rowId;
 
   const block = row.effectiveBlock;
   const isDivider = block.type === "divider";
   const isContainerChild = Boolean(block.parentId);
   const alignWithPageTitle = !isContainerChild;
+  const ownsShellSpacing = mode === "edit" && !isContainerChild;
+
   let contentSpacingClassName: string | undefined;
-  if (showEditGutter && !isContainerChild) {
+  if (ownsShellSpacing) {
     contentSpacingClassName =
       block.type === "divider"
         ? "min-h-10 items-center"
@@ -105,9 +118,9 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
         alignWithPageTitle ? topLevelPageTitleAlignClassName : undefined
       }
       contentSpacingClassName={contentSpacingClassName}
-      gutter={showEditGutter ? <RowGutter row={row} /> : null}
+      enableTouchGesture={enableTouchGesture}
+      gutter={showGutter ? <RowGutter row={row} /> : null}
       gutterAlignCenter={isDivider}
-      longPressMenu={longPressMenu}
       row={row}
     >
       <BlockRenderer
@@ -115,12 +128,41 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
         autoFocusOffset={isFocusTarget ? focus?.offset : undefined}
         autoFocusPlacement={isFocusTarget ? focus?.placement : undefined}
         mode={mode}
-        omitShellSpacing={showEditGutter && !isContainerChild}
+        omitShellSpacing={ownsShellSpacing}
         onFocusHandled={clearFocus}
         parentType={parentType}
         row={row}
       />
     </CanvasRowShell>
+  );
+}
+
+function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
+
+  // On coarse pointers the gutter is removed; block actions and reordering move
+  // to a long-press drawer / touch drag on the block body instead.
+  const editable = mode === "edit";
+  const chrome: RowChromeProps = {
+    enableTouchGesture: editable && isCoarsePrimaryPointer,
+    showGutter: editable && !isCoarsePrimaryPointer,
+  };
+
+  const spec = getBlockSpec(row.effectiveBlock.type);
+
+  if (isContainerSpec(spec)) {
+    return (
+      <ContainerRowNode
+        Container={resolveContainerComponent(spec)}
+        mode={mode}
+        row={row}
+        {...chrome}
+      />
+    );
+  }
+
+  return (
+    <LeafRowNode mode={mode} parentType={parentType} row={row} {...chrome} />
   );
 }
 

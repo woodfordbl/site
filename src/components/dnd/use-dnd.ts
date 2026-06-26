@@ -6,6 +6,7 @@ import type {
 import {
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -411,6 +412,32 @@ export function useDragSource(options: UseDragSourceOptions): {
     showGrabbing: isDragging || (holdReady && isMoving),
     shouldSuppressClick,
   };
+}
+
+interface PointerRowDrag {
+  beginPointerDrag: (pointer: { x: number; y: number }) => void;
+  cancelDrag: () => void;
+  commitPointerDrop: () => void;
+  movePointer: (pointer: { x: number; y: number }) => void;
+}
+
+/**
+ * Pointer-driven (touch) row drag bound to a single row id. Lets a content-level
+ * gesture (see {@link useBlockTouchGesture}) drive the same reorder engine the
+ * grip uses, without reaching into the raw {@link DndContext}.
+ */
+export function usePointerRowDrag(id: string): PointerRowDrag {
+  const ctx = useDndContext();
+
+  return useMemo<PointerRowDrag>(
+    () => ({
+      beginPointerDrag: (pointer) => ctx?.beginPointerDrag(id, pointer),
+      movePointer: (pointer) => ctx?.movePointer(pointer),
+      commitPointerDrop: () => ctx?.commitPointerDrop(),
+      cancelDrag: () => ctx?.cancelDrag(),
+    }),
+    [ctx, id]
+  );
 }
 
 interface DropZoneHandlers {

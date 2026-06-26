@@ -101,7 +101,7 @@ Constants: [`device-layout.constants.ts`](../../src/lib/device/device-layout.con
 
 ## Block selection
 
-On fine pointers (mouse/trackpad), grab handles in the gutter expose block actions and multi-select. On coarse pointers (touch), the gutter is hidden — **long-press** row content (~400ms) opens the same actions in a bottom [`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx) (Vaul). Long-press suppresses iOS text selection via [`useLongPress`](../../src/hooks/use-long-press.ts) and blurs the field before the drawer opens.
+On fine pointers (mouse/trackpad), grab handles in the gutter expose block actions and multi-select. On coarse pointers (touch), the gutter is hidden — **long-press** row content (~450ms) opens the same actions in a bottom [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx) (Vaul). The gesture is handled by [`useBlockTouchGesture`](../../src/hooks/use-block-touch-gesture.ts), which suppresses iOS text selection while armed.
 
 | Input | Action |
 |-------|--------|
@@ -121,7 +121,7 @@ On fine pointers (mouse/trackpad), grab handles in the gutter expose block actio
 
 **Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL also get **Change view** — checkboxes for **Show title** and **Show URL** (plain captions below the preview; default off). Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children.
 
-Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Touch reuses the same menu body inside [`BlockActionsDrawer`](../../src/components/canvas/block-actions-drawer.tsx). Base UI / Vaul handle dismiss; opening block actions calls `closeMenu()` on the slash provider so only one overlay is active at a time.
+Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Touch reuses the same action handlers via [`useRowGutterHandlers`](../../src/components/canvas/use-row-gutter-handlers.ts) inside [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx). Base UI / Vaul handle dismiss; opening block actions calls `closeMenu()` on the slash provider so only one overlay is active at a time.
 
 Text fields keep native copy/paste while focused. Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. The block-actions menu closes immediately (no exit animation) when dismissed.
 

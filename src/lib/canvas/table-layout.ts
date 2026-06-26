@@ -167,7 +167,7 @@ function findTableContext(
 
   if (ctx.row.effectiveBlock.type === "tableRow") {
     const tableParent = ctx.parent;
-    if (!tableParent || tableParent.effectiveBlock.type !== "table") {
+    if (tableParent?.effectiveBlock.type !== "table") {
       return null;
     }
     return {
@@ -178,12 +178,12 @@ function findTableContext(
 
   if (ctx.row.effectiveBlock.type === "tableCell") {
     const rowParent = ctx.parent;
-    if (!rowParent || rowParent.effectiveBlock.type !== "tableRow") {
+    if (rowParent?.effectiveBlock.type !== "tableRow") {
       return null;
     }
     const tableRowCtx = findRowContext(rows, rowParent.rowId);
     const tableParent = tableRowCtx?.parent;
-    if (!tableParent || tableParent.effectiveBlock.type !== "table") {
+    if (tableParent?.effectiveBlock.type !== "table") {
       return null;
     }
     return {
@@ -406,7 +406,7 @@ export function planTableAddRow(
   options: { focus?: boolean } = {}
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, anchorRowId);
-  if (!ctx || ctx.row.effectiveBlock.type !== "tableRow") {
+  if (ctx?.row.effectiveBlock.type !== "tableRow") {
     return [];
   }
 
@@ -594,7 +594,7 @@ export function planTableRemoveRow(
   tableRowId: string
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, tableRowId);
-  if (!ctx || ctx.row.effectiveBlock.type !== "tableRow") {
+  if (ctx?.row.effectiveBlock.type !== "tableRow") {
     return [];
   }
 
@@ -781,7 +781,7 @@ export function planTableToggleHeaderRow(
   enabled: boolean
 ): CanvasEffect[] {
   const tableRow = findRowById(rows, tableId);
-  if (!tableRow || tableRow.effectiveBlock.type !== "table") {
+  if (tableRow?.effectiveBlock.type !== "table") {
     return [];
   }
 
@@ -808,7 +808,7 @@ export function planTableToggleHeaderColumn(
   enabled: boolean
 ): CanvasEffect[] {
   const tableRow = findRowById(rows, tableId);
-  if (!tableRow || tableRow.effectiveBlock.type !== "table") {
+  if (tableRow?.effectiveBlock.type !== "table") {
     return [];
   }
 
@@ -835,7 +835,7 @@ export function planTableFitToWidth(
   targetWidthPx: number
 ): CanvasEffect[] {
   const tableRow = findRowById(rows, tableId);
-  if (!tableRow || tableRow.effectiveBlock.type !== "table") {
+  if (tableRow?.effectiveBlock.type !== "table") {
     return [];
   }
 
@@ -854,7 +854,7 @@ export function planTableUpdateColumnWidths(
   columnWidths: number[]
 ): CanvasEffect[] {
   const tableRow = findRowById(rows, tableId);
-  if (!tableRow || tableRow.effectiveBlock.type !== "table") {
+  if (tableRow?.effectiveBlock.type !== "table") {
     return [];
   }
 
@@ -891,7 +891,7 @@ export function planTableFocusAdjacentCell(
   direction: "next" | "previous" | "down" | "up"
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, cellRowId);
-  if (!ctx || ctx.row.effectiveBlock.type !== "tableCell") {
+  if (ctx?.row.effectiveBlock.type !== "tableCell") {
     return [];
   }
 
