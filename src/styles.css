@@ -358,6 +358,15 @@
     [data-canvas-row-content] {
       -webkit-touch-callout: none;
     }
+
+    /* Disable text selection on blocks that aren't being edited so a long-press
+       arms the block (drawer/reorder) instead of starting a native iOS
+       selection. A quick tap focuses the field, and `:focus-within` re-enables
+       selection within the block being edited. */
+    [data-canvas-row-content]:not(:focus-within) {
+      -webkit-user-select: none;
+      user-select: none;
+    }
   }
 }
 
