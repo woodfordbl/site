@@ -9,15 +9,26 @@ import {
   IconDots,
   IconDownload,
   IconItalic,
+  IconPhoto,
   IconPlus,
   IconSearch,
   IconSettings,
   IconTrash,
   IconUnderline,
   IconUser,
+  IconWorld,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  // biome-ignore lint/suspicious/noDeprecatedImports: recharts still ships Cell for pie/bar fills
+  Cell,
+  Line,
+  LineChart,
+  XAxis,
+} from "recharts";
 import { toast } from "sonner";
 import { editorFieldClassName } from "@/components/editor/editable-surface.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -92,6 +103,8 @@ import {
   ItemTitle,
 } from "@/components/ui/item.tsx";
 import { Kbd, KbdGroup } from "@/components/ui/kbd.tsx";
+import { LinkUploadTabs } from "@/components/ui/link-upload-tabs.tsx";
+import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
 import {
   Popover,
   PopoverContent,
@@ -103,6 +116,8 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { SourceLinkPanel } from "@/components/ui/source-link-panel.tsx";
+import { SourceUploadPanel } from "@/components/ui/source-upload-panel.tsx";
 import { Switch } from "@/components/ui/switch.tsx";
 import {
   Table,
@@ -130,6 +145,12 @@ import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
+import {
+  CHART_PALETTE_TOKENS,
+  CHART_PALETTES,
+  type ChartPaletteId,
+  chartPaletteIds,
+} from "@/lib/charts/chart-palettes.ts";
 import { pageTitleUnderlineClassName } from "@/lib/pages/page-link-display.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -170,16 +191,6 @@ const COLOR_GROUPS: ColorGroup[] = [
     tokens: [{ name: "border" }, { name: "input" }, { name: "ring" }],
   },
   {
-    label: "Charts",
-    tokens: [
-      { name: "chart-1" },
-      { name: "chart-2" },
-      { name: "chart-3" },
-      { name: "chart-4" },
-      { name: "chart-5" },
-    ],
-  },
-  {
     label: "Sidebar",
     tokens: [
       { name: "sidebar", foreground: "sidebar-foreground" },
@@ -191,7 +202,10 @@ const COLOR_GROUPS: ColorGroup[] = [
   },
   {
     label: "Selection",
-    tokens: [{ name: "selection", foreground: "selection-foreground" }],
+    tokens: [
+      { name: "selection", foreground: "selection-foreground" },
+      { name: "selection-primary", foreground: "foreground" },
+    ],
   },
 ];
 
@@ -262,7 +276,12 @@ function Section({
   );
 }
 
-function ColorsSection({ values }: { values: Record<string, string> }) {
+function ColorsSection({
+  values,
+}: {
+  isDark: boolean;
+  values: Record<string, string>;
+}) {
   return (
     <Section
       description="Every semantic token in the OKLCH palette, resolved for the active theme."
@@ -870,80 +889,170 @@ const trafficTrendConfig = {
   },
 } satisfies ChartConfig;
 
-function ChartsSection() {
+const PALETTE_PREVIEW_DATA = [
+  { slot: "1", value: 5 },
+  { slot: "2", value: 4 },
+  { slot: "3", value: 3 },
+  { slot: "4", value: 2 },
+  { slot: "5", value: 1 },
+] as const;
+
+const palettePreviewConfig = {
+  value: { label: "Series", color: "var(--chart-1)" },
+} satisfies ChartConfig;
+
+function ChartPaletteSwatchRow({ paletteId }: { paletteId: ChartPaletteId }) {
+  return (
+    <div className="flex shrink-0 gap-1.5" data-chart-palette={paletteId}>
+      {CHART_PALETTE_TOKENS.map((token) => (
+        <div
+          className="size-4 rounded-sm ring-1 ring-foreground/10"
+          key={token}
+          style={{ backgroundColor: `var(--${token})` }}
+          title={`--${token}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ChartPalettePreviewChart({
+  paletteId,
+}: {
+  paletteId: ChartPaletteId;
+}) {
+  return (
+    <ChartContainer
+      className="aspect-auto h-16 w-full min-w-0 flex-1"
+      config={palettePreviewConfig}
+      palette={paletteId}
+    >
+      <BarChart accessibilityLayer data={[...PALETTE_PREVIEW_DATA]}>
+        <Bar dataKey="value" radius={3}>
+          {PALETTE_PREVIEW_DATA.map((entry, index) => (
+            <Cell fill={`var(--chart-${index + 1})`} key={entry.slot} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ChartContainer>
+  );
+}
+
+function ChartPaletteRow({ paletteId }: { paletteId: ChartPaletteId }) {
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-lg border border-border/60 px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
+      data-chart-palette={paletteId}
+    >
+      <div className="flex min-w-28 items-center gap-3 sm:shrink-0">
+        <span className="font-medium text-foreground text-sm">
+          {CHART_PALETTES[paletteId].label}
+        </span>
+        <ChartPaletteSwatchRow paletteId={paletteId} />
+      </div>
+      <ChartPalettePreviewChart paletteId={paletteId} />
+    </div>
+  );
+}
+
+function ChartPalettesGallerySection() {
   return (
     <Section
-      description="Recharts wrapped in ChartContainer with semantic chart-1 through chart-5 tokens."
-      title="Charts"
+      description="Mono palettes: chart-1 is the base — each step gets lighter (L↑) with a subtle chroma bump, not neon."
+      title="Chart palettes"
     >
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Page views</CardTitle>
-            <CardDescription>
-              Desktop vs mobile traffic by month
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              className="aspect-auto h-[240px] w-full"
-              config={pageViewsConfig}
-            >
-              <BarChart accessibilityLayer data={PAGE_VIEWS}>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  axisLine={false}
-                  dataKey="month"
-                  tickLine={false}
-                  tickMargin={8}
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="desktop" fill="var(--color-desktop)" radius={4} />
-                <Bar dataKey="mobile" fill="var(--color-mobile)" radius={4} />
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Traffic trend</CardTitle>
-            <CardDescription>Visitors and signups over time</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              className="aspect-auto h-[240px] w-full"
-              config={trafficTrendConfig}
-            >
-              <LineChart accessibilityLayer data={TRAFFIC_TREND}>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  axisLine={false}
-                  dataKey="month"
-                  tickLine={false}
-                  tickMargin={8}
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line
-                  dataKey="visitors"
-                  dot={false}
-                  stroke="var(--color-visitors)"
-                  strokeWidth={2}
-                  type="monotone"
-                />
-                <Line
-                  dataKey="signups"
-                  dot={false}
-                  stroke="var(--color-signups)"
-                  strokeWidth={2}
-                  type="monotone"
-                />
-              </LineChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col gap-3">
+        {chartPaletteIds().map((paletteId) => (
+          <ChartPaletteRow key={paletteId} paletteId={paletteId} />
+        ))}
       </div>
     </Section>
+  );
+}
+
+function ChartsSection() {
+  return (
+    <>
+      <ChartPalettesGallerySection />
+      <Section
+        description="Recharts wrapped in ChartContainer using the default colorful palette."
+        title="Chart examples"
+      >
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Page views</CardTitle>
+              <CardDescription>
+                Desktop vs mobile traffic by month
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer
+                className="aspect-auto h-[240px] w-full"
+                config={pageViewsConfig}
+                palette="colorful"
+              >
+                <BarChart accessibilityLayer data={PAGE_VIEWS}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    axisLine={false}
+                    dataKey="month"
+                    tickLine={false}
+                    tickMargin={8}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar
+                    dataKey="desktop"
+                    fill="var(--color-desktop)"
+                    radius={4}
+                  />
+                  <Bar dataKey="mobile" fill="var(--color-mobile)" radius={4} />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Traffic trend</CardTitle>
+              <CardDescription>Visitors and signups over time</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer
+                className="aspect-auto h-[240px] w-full"
+                config={trafficTrendConfig}
+                palette="colorful"
+              >
+                <LineChart accessibilityLayer data={TRAFFIC_TREND}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    axisLine={false}
+                    dataKey="month"
+                    tickLine={false}
+                    tickMargin={8}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line
+                    dataKey="visitors"
+                    dot={false}
+                    stroke="var(--color-visitors)"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                  <Line
+                    dataKey="signups"
+                    dot={false}
+                    stroke="var(--color-signups)"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                </LineChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+        </div>
+      </Section>
+    </>
   );
 }
 
@@ -1066,13 +1175,179 @@ function OverlaysSection() {
             <Kbd>⌘E</Kbd>
           </TooltipContent>
         </Tooltip>
+      </div>
+    </Section>
+  );
+}
 
-        <Button
-          onClick={() => toast.success("Saved successfully")}
-          variant="outline"
-        >
-          Show toast
-        </Button>
+function demoToastAction(): void {
+  // Showcase-only toast action — no side effects.
+}
+
+function ToastsSection() {
+  const showPromiseSuccess = () => {
+    toast.promise(
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("page data"), 1500);
+      }),
+      {
+        loading: "Syncing changes…",
+        success: (data) => `Loaded ${data}`,
+        error: "Sync failed",
+      }
+    );
+  };
+
+  const showPromiseError = () => {
+    toast.promise(
+      new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error("network")), 1500);
+      }),
+      {
+        loading: "Saving…",
+        success: "Saved",
+        error: "Could not save — try again",
+      }
+    );
+  };
+
+  return (
+    <Section
+      description="Popover-aligned surface — icon top-left, close top-right, actions below aligned with text."
+      title="Toasts"
+    >
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <TabVariantColumn label="Types">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => toast.message("Event has been created")}
+              variant="outline"
+            >
+              Default
+            </Button>
+            <Button
+              onClick={() => toast.success("Saved successfully")}
+              variant="outline"
+            >
+              Success
+            </Button>
+            <Button
+              onClick={() =>
+                toast.info("New version available — refresh to update")
+              }
+              variant="outline"
+            >
+              Info
+            </Button>
+            <Button
+              onClick={() =>
+                toast.warning("You have unsaved changes on this page")
+              }
+              variant="outline"
+            >
+              Warning
+            </Button>
+            <Button
+              onClick={() => toast.error("Something went wrong")}
+              variant="outline"
+            >
+              Error
+            </Button>
+            <Button
+              onClick={() => toast.loading("Uploading file…")}
+              variant="outline"
+            >
+              Loading
+            </Button>
+          </div>
+        </TabVariantColumn>
+
+        <TabVariantColumn label="Content">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() =>
+                toast.info("Opening http://localhost:3000/ in Cursor Browser", {
+                  cancel: {
+                    label: "Don't show again",
+                    onClick: demoToastAction,
+                  },
+                  action: {
+                    label: "Don't open",
+                    onClick: demoToastAction,
+                  },
+                })
+              }
+              variant="outline"
+            >
+              Reference layout
+            </Button>
+            <Button
+              onClick={() =>
+                toast.success("Profile updated", {
+                  description: "Your changes are visible to collaborators.",
+                })
+              }
+              variant="outline"
+            >
+              Description
+            </Button>
+            <Button
+              onClick={() =>
+                toast.message("File exported", {
+                  action: {
+                    label: "Open",
+                    onClick: demoToastAction,
+                  },
+                })
+              }
+              variant="outline"
+            >
+              Action
+            </Button>
+            <Button
+              onClick={() =>
+                toast.message("Delete this page?", {
+                  cancel: {
+                    label: "Keep page",
+                    onClick: demoToastAction,
+                  },
+                  action: {
+                    label: "Delete",
+                    onClick: demoToastAction,
+                  },
+                })
+              }
+              variant="outline"
+            >
+              Action + cancel
+            </Button>
+            <Button
+              onClick={() =>
+                toast.error('Local copy of "Draft" is no longer on the site', {
+                  action: {
+                    label: "Discard",
+                    onClick: demoToastAction,
+                  },
+                  duration: Number.POSITIVE_INFINITY,
+                })
+              }
+              variant="outline"
+            >
+              Persistent + action
+            </Button>
+          </div>
+        </TabVariantColumn>
+
+        <TabVariantColumn label="Async">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={showPromiseSuccess} variant="outline">
+              Promise success
+            </Button>
+            <Button onClick={showPromiseError} variant="outline">
+              Promise error
+            </Button>
+          </div>
+        </TabVariantColumn>
       </div>
     </Section>
   );
@@ -1402,6 +1677,73 @@ function SeparatorsSection() {
   );
 }
 
+function PlaceholderTriggerSection() {
+  return (
+    <Section
+      description="Muted canvas empty-state triggers and source-picker popovers for media and embed blocks."
+      title="Placeholder trigger"
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <TabVariantColumn label="Triggers">
+          <div className="flex flex-col gap-2">
+            <PlaceholderTrigger icon={<IconWorld />}>
+              Embed files and supported websites
+            </PlaceholderTrigger>
+            <PlaceholderTrigger icon={<IconPhoto />}>
+              Add an image
+            </PlaceholderTrigger>
+          </div>
+        </TabVariantColumn>
+
+        <TabVariantColumn label="Source picker popovers">
+          <div className="flex flex-col gap-3">
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <PlaceholderTrigger icon={<IconWorld />}>
+                    Embed files and supported websites
+                  </PlaceholderTrigger>
+                }
+              />
+              <PopoverContent className="w-80">
+                <SourceLinkPanel
+                  onSubmit={() => undefined}
+                  placeholder="Paste in https://…"
+                  submitLabel="Embed link"
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <PlaceholderTrigger icon={<IconPhoto />}>
+                    Add an image, gif, or video
+                  </PlaceholderTrigger>
+                }
+              />
+              <PopoverContent className="w-80">
+                <LinkUploadTabs
+                  linkPanel={
+                    <SourceLinkPanel
+                      onSubmit={() => undefined}
+                      placeholder="https://example.com/image.png"
+                      submitLabel="Insert link"
+                    />
+                  }
+                  uploadPanel={
+                    <SourceUploadPanel onFileSelect={() => undefined} />
+                  }
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </TabVariantColumn>
+      </div>
+    </Section>
+  );
+}
+
 function EmptySection() {
   return (
     <Section
@@ -1493,7 +1835,7 @@ export function ComponentShowcase() {
           </label>
         </header>
 
-        <ColorsSection values={tokenValues} />
+        <ColorsSection isDark={isDark} values={tokenValues} />
         <Separator />
         <TypographySection />
         <Separator />
@@ -1509,6 +1851,8 @@ export function ComponentShowcase() {
         <Separator />
         <OverlaysSection />
         <Separator />
+        <ToastsSection />
+        <Separator />
         <TabsSection />
         <Separator />
         <CardsSection />
@@ -1518,6 +1862,8 @@ export function ComponentShowcase() {
         <KbdSection />
         <Separator />
         <SeparatorsSection />
+        <Separator />
+        <PlaceholderTriggerSection />
         <Separator />
         <EmptySection />
       </div>

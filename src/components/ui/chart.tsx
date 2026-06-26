@@ -1,7 +1,8 @@
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
-
+import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
+import { defaultChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import { cn } from "@/lib/utils.ts";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -42,10 +43,12 @@ function ChartContainer({
   className,
   children,
   config,
+  palette = defaultChartPaletteId,
   initialDimension = INITIAL_DIMENSION,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig;
+  palette?: ChartPaletteId;
   children: React.ComponentProps<
     typeof RechartsPrimitive.ResponsiveContainer
   >["children"];
@@ -65,6 +68,7 @@ function ChartContainer({
           className
         )}
         data-chart={chartId}
+        data-chart-palette={palette}
         data-slot="chart"
         {...props}
       >

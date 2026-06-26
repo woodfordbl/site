@@ -43,9 +43,9 @@ function TabsIndicator({ className, ...props }: TabsPrimitive.Indicator.Props) {
       className={cn(
         "absolute z-0 transition-[left,width,top,height] duration-200 ease-[var(--ease-out-strong)] motion-reduce:transition-none",
         "top-[var(--active-tab-top)] left-[var(--active-tab-left)] h-[var(--active-tab-height)] w-[var(--active-tab-width)]",
-        "group-data-[variant=indicator]/tabs-list:rounded-md group-data-[variant=indicator]/tabs-list:bg-muted dark:group-data-[variant=indicator]/tabs-list:bg-muted/50",
+        "group-data-[variant=indicator]/tabs-list:rounded-md group-data-[variant=indicator]/tabs-list:bg-muted dark:group-data-[variant=indicator]/tabs-list:bg-secondary",
         "group-data-[variant=default]/tabs-list:rounded-md group-data-[variant=default]/tabs-list:bg-background group-data-[variant=default]/tabs-list:shadow-sm dark:group-data-[variant=default]/tabs-list:border dark:group-data-[variant=default]/tabs-list:border-input dark:group-data-[variant=default]/tabs-list:bg-input/30",
-        "group-data-[variant=line]/tabs-list:top-[calc(var(--active-tab-top)+var(--active-tab-height)-0.125rem)] group-data-[variant=line]/tabs-list:h-0.5 group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:bg-primary",
+        "group-data-[variant=line]/tabs-list:top-auto group-data-[variant=line]/tabs-list:bottom-0 group-data-[variant=line]/tabs-list:z-[1] group-data-[variant=line]/tabs-list:h-0.5 group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:bg-primary",
         className
       )}
       data-slot="tabs-indicator"
