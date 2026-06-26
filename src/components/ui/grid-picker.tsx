@@ -28,6 +28,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { useMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { TooltipContent, TooltipProvider } from "@/components/ui/tooltip.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
@@ -97,6 +98,9 @@ export function GridPicker<T>({
 }: GridPickerProps<T>) {
   const [query, setQuery] = useState("");
   const virtualizerRef = useRef<RowVirtualizer | null>(null);
+  // In drawer presentation (touch) the picker gets a tall surface, so grow to
+  // fill it instead of capping the viewport at GRID_VIEWPORT_MAX_HEIGHT_PX.
+  const fillHeight = useMenuPresentation().presentation === "drawer";
 
   return (
     <TooltipProvider
@@ -126,7 +130,13 @@ export function GridPicker<T>({
         value={query}
         virtualized
       >
-        <div className={cn("flex w-full min-w-0 flex-col", className)}>
+        <div
+          className={cn(
+            "flex w-full min-w-0 flex-col",
+            fillHeight && "min-h-0 flex-1",
+            className
+          )}
+        >
           <InputGroup className="mb-2 shrink-0">
             <InputGroupAddon align="inline-start">
               <InputGroupText>
@@ -140,7 +150,8 @@ export function GridPicker<T>({
           </InputGroup>
           <Autocomplete.List
             className={cn(
-              "relative w-full shrink-0",
+              "relative w-full",
+              fillHeight ? "flex min-h-0 flex-1 flex-col" : "shrink-0",
               GRID_VIEWPORT_MIN_HEIGHT_CLASS
             )}
           >
@@ -161,6 +172,7 @@ export function GridPicker<T>({
             </Autocomplete.Empty>
             <VirtualGrid
               columns={columns}
+              fillHeight={fillHeight}
               getItemLabel={getItemLabel}
               getKey={getKey}
               onSelect={onSelect}
@@ -178,6 +190,8 @@ export function GridPicker<T>({
 
 interface VirtualGridProps<T> {
   columns: number;
+  /** Grow the scroll viewport to fill its parent instead of capping at GRID_VIEWPORT_MAX_HEIGHT_PX. */
+  fillHeight: boolean;
   getItemLabel: (item: T) => string;
   getKey: (item: T) => string;
   onSelect: (item: T) => void;
@@ -246,6 +260,7 @@ const GridCell = memo(GridCellComponent) as typeof GridCellComponent;
 
 function VirtualGrid<T>({
   columns,
+  fillHeight,
   rowHeight,
   overscan,
   getKey,
@@ -286,7 +301,9 @@ function VirtualGrid<T>({
     return null;
   }
 
-  const viewportHeight = resolveGridViewportHeight(virtualizer.getTotalSize());
+  const viewportHeight = fillHeight
+    ? undefined
+    : resolveGridViewportHeight(virtualizer.getTotalSize());
 
   return (
     <>
@@ -296,9 +313,9 @@ function VirtualGrid<T>({
         )}
       </TooltipPrimitive.Root>
       <ScrollArea
-        className="w-full"
+        className={cn("w-full", fillHeight && "min-h-0 flex-1")}
         fadeEdges
-        style={{ height: viewportHeight }}
+        style={fillHeight ? undefined : { height: viewportHeight }}
         viewportClassName="overscroll-contain px-px"
         viewportRef={handleScrollRef}
       >

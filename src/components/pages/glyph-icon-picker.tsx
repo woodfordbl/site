@@ -14,6 +14,7 @@ import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import type { PageIconPickerEmojiPanelProps } from "@/components/pages/page-icon-picker-emoji-panel.tsx";
 import type { PageIconPickerIconPanelProps } from "@/components/pages/page-icon-picker-icon-panel.tsx";
 import { Button, type buttonVariants } from "@/components/ui/button.tsx";
+import { useMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import {
   Popover,
   PopoverContent,
@@ -33,14 +34,22 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 /** Placeholder chrome (search + scroll box) shown while a lazy panel chunk resolves. */
-function GlyphIconPickerPanelShell() {
+function GlyphIconPickerPanelShell({ fillHeight }: { fillHeight: boolean }) {
   return (
-    <div className="flex w-full min-w-0 flex-col">
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-col",
+        fillHeight && "min-h-0 flex-1"
+      )}
+    >
       <div
         aria-hidden
         className="mb-2 h-8 shrink-0 rounded-lg border border-input"
       />
-      <div aria-hidden className="h-[320px] w-full" />
+      <div
+        aria-hidden
+        className={cn("w-full", fillHeight ? "min-h-0 flex-1" : "h-[320px]")}
+      />
     </div>
   );
 }
@@ -56,8 +65,15 @@ function GlyphIconPickerPopoverContent({
   onSelect: (nextIcon: string) => void;
   open: boolean;
 }) {
+  // In drawer presentation (touch) the popover becomes a tall bottom sheet, so
+  // let the tabs fill it and hand that height down to the grid panels.
+  const fillHeight = useMenuPresentation().presentation === "drawer";
+
   return (
-    <Tabs className="w-full gap-0" defaultValue="emoji">
+    <Tabs
+      className={cn("w-full gap-0", fillHeight && "min-h-0 flex-1")}
+      defaultValue="emoji"
+    >
       {/* Underline tabs whose active indicator intersects a full-width divider,
           matching the link/upload embed tabs. */}
       <div className="relative w-full px-2 pt-2">
@@ -77,7 +93,7 @@ function GlyphIconPickerPopoverContent({
         {open && EmojiPanel ? (
           <EmojiPanel onSelect={onSelect} />
         ) : (
-          <GlyphIconPickerPanelShell />
+          <GlyphIconPickerPanelShell fillHeight={fillHeight} />
         )}
       </TabsContent>
       <TabsContent
@@ -87,7 +103,7 @@ function GlyphIconPickerPopoverContent({
         {open && IconPanel ? (
           <IconPanel onSelect={onSelect} />
         ) : (
-          <GlyphIconPickerPanelShell />
+          <GlyphIconPickerPanelShell fillHeight={fillHeight} />
         )}
       </TabsContent>
     </Tabs>
