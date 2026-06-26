@@ -726,3 +726,18 @@
 [data-page-font="mono"] {
   font-family: var(--font-mono);
 }
+
+/*
+ * `code` block — Shiki dual-theme tokens. Each token <span> carries a baked
+ * light `color` plus a `--shiki-dark` variable (see lib/code/highlighter.ts);
+ * under `.dark` we swap to the dark variable. Plaintext spans have no variable
+ * and fall back to the inherited foreground.
+ */
+.code-shiki {
+  font-family: var(--font-mono);
+  tab-size: 2;
+}
+
+.dark .code-shiki span {
+  color: var(--shiki-dark, inherit);
+}

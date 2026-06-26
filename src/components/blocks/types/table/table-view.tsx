@@ -55,6 +55,7 @@ import {
 } from "@/lib/canvas/table-layout.ts";
 import { collectTableColumnDropRects } from "@/lib/dnd/collect-table-column-rects.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
+import { usePageContentLayout } from "@/lib/pages/page-content-layout-context.tsx";
 import { cn } from "@/lib/utils.ts";
 
 const TABLE_COLUMN_ATTRIBUTE = "data-table-column-drag-id";
@@ -256,8 +257,40 @@ function TableColumnDnD({
   );
 }
 
+/** Panel-edge bleed classes for tables when the page uses full panel width. */
+function tableLayoutBleedClassNames(options: {
+  mode: BlockContainerProps["mode"];
+  useFullPanelWidth: boolean;
+}): {
+  innerFlexClassName: string;
+  outerClassName: string;
+  scrollPaddingClassName: string;
+} {
+  const { mode, useFullPanelWidth } = options;
+
+  if (!useFullPanelWidth) {
+    return {
+      outerClassName: "w-full",
+      scrollPaddingClassName: "",
+      innerFlexClassName:
+        mode === "edit" ? "items-start gap-0" : "flex-col gap-0.5",
+    };
+  }
+
+  return {
+    outerClassName:
+      mode === "edit"
+        ? "-mx-12 w-[calc(100%+6rem)]"
+        : "-mr-12 w-[calc(100%+3rem)]",
+    scrollPaddingClassName: mode === "edit" ? "px-12" : "pl-12",
+    innerFlexClassName:
+      mode === "edit" ? "-mx-12 items-start gap-0" : "-ml-12 flex-col gap-0.5",
+  };
+}
+
 export function TableView({ row, mode }: BlockContainerProps) {
   const grid = deriveTableGrid(row);
+  const { useFullPanelWidth } = usePageContentLayout();
   const focus = useCanvasFocus();
   const { clearFocus } = useCanvasEditorContext();
   const { startResize, liveWidths } = useTableColumnResize({
@@ -367,14 +400,13 @@ export function TableView({ row, mode }: BlockContainerProps) {
   const columnHandleRevealClasses = getTableColumnHandleRevealClasses(
     grid.columnCount
   );
+  const tableBleed = tableLayoutBleedClassNames({ mode, useFullPanelWidth });
 
   return (
     <TableColumnDnD
       className={cn(
         "group/table-layout min-w-0 overflow-visible",
-        mode === "edit"
-          ? "-mx-12 w-[calc(100%+6rem)]"
-          : "-mr-12 w-[calc(100%+3rem)]",
+        tableBleed.outerClassName,
         columnHandleRevealClasses
       )}
       data-table-id={grid.tableId}
@@ -387,17 +419,10 @@ export function TableView({ row, mode }: BlockContainerProps) {
           <div
             className={cn(
               "flex w-max min-w-full flex-col gap-0.5",
-              mode === "edit" ? "px-12" : "pl-12"
+              tableBleed.scrollPaddingClassName
             )}
           >
-            <div
-              className={cn(
-                "flex w-max",
-                mode === "edit"
-                  ? "-mx-12 items-start gap-0"
-                  : "-ml-12 flex-col gap-0.5"
-              )}
-            >
+            <div className={cn("flex w-max", tableBleed.innerFlexClassName)}>
               {mode === "edit" ? (
                 <TableBlockGutter revealed={gutterRevealed} row={row} />
               ) : null}

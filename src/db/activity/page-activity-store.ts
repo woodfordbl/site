@@ -1,4 +1,4 @@
-import { createStore, get, set } from "idb-keyval";
+import { createStore, get, keys, set } from "idb-keyval";
 
 import {
   PAGE_ACTIVITY_EVENT_LIMIT,
@@ -51,6 +51,34 @@ export async function appendPageActivityEvent(
   ].slice(0, PAGE_ACTIVITY_EVENT_LIMIT);
 
   await set(activityKey(pageId), next, activityStore);
+}
+
+export const SITE_ACTIVITY_EVENT_CAP = 2000;
+
+/** Merges activity events across all pages, newest first, capped at `limit`. */
+export async function readAllPageActivityEvents(
+  limit = SITE_ACTIVITY_EVENT_CAP
+): Promise<PageActivityEvent[]> {
+  if (typeof indexedDB === "undefined") {
+    return [];
+  }
+
+  const pageIds = await keys<string>(activityStore);
+  const merged: PageActivityEvent[] = [];
+
+  for (const pageId of pageIds) {
+    const events =
+      (await get<PageActivityEvent[]>(activityKey(pageId), activityStore)) ??
+      [];
+    merged.push(...events);
+  }
+
+  return merged
+    .sort(
+      (left, right) =>
+        new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
+    )
+    .slice(0, limit);
 }
 
 export async function clearPageActivity(pageId: string): Promise<void> {

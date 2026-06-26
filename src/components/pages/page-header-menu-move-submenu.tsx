@@ -1,6 +1,6 @@
 "use client";
 
-import { IconSearch } from "@tabler/icons-react";
+import { IconFolderSymlink, IconSearch } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
 import {
   DropdownMenuItem,
@@ -52,6 +52,7 @@ export function PageHeaderMenuMoveSubmenu({
       }}
     >
       <DropdownMenuSubTrigger disabled={!enabled}>
+        <IconFolderSymlink />
         Move to
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="min-w-56">

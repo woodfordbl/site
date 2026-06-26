@@ -82,7 +82,7 @@ Press and release the grab handle (without dragging) highlights the row and open
 
 | Menu item | Dispatches / hook |
 |-----------|-------------------|
-| Turn into | `slash.convert` or `container.wrap` (inline-text blocks only) |
+| Turn into | `slash.convert` or `container.wrap`; eligible source types are gated by `canTurnIntoBlock` (text, heading, quote, callout, code) |
 | Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids) |
 | Delete | `row.delete` |
 
@@ -103,7 +103,7 @@ Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Paste cloning: `c
 
 | Command | Meaning |
 |---------|---------|
-| `slash.convert` | Convert block type (Heading 1–4, Text, Bullet list, Numbered list, Checklist, Quote, Page link, Media, Embed, Divider). Container children lift out unless the container allows the target. Heading selections pass `headingLevel` (1–4). List selections use `container.wrap` with `listVariant`. Checklist selections use `container.wrap` with `containerType: checklist`. Page link selections pass `pageId` and optional `pageLinkVariant`: `linked` (**Link To Page**) or `child` (**New Page**). |
+| `slash.convert` | Convert block type (Heading 1–4, Text, Bullet list, Numbered list, Checklist, Quote, Code, Page link, Media, Embed, Divider). Container children lift out unless the container allows the target. Heading selections pass `headingLevel` (1–4). List selections use `container.wrap` with `listVariant`. Checklist selections use `container.wrap` with `containerType: checklist`. Page link selections pass `pageId` and optional `pageLinkVariant`: `linked` (**Link To Page**) or `child` (**New Page**). |
 
 ## Author (dev only)
 

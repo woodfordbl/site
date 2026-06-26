@@ -199,12 +199,11 @@ Deleting the active page navigates to the parent page (or home) via `resolveDele
 | Section | Actions |
 |---------|---------|
 | Search | Filters menu rows via [`ActionMenuSearchSection`](../../src/components/canvas/action-menu-search.tsx) |
-| Settings | **Font** (Default / Serif / Mono) and **Small text** toggle — persisted on [`localPageSchema`](../../src/lib/schemas/local-page.ts) (`font`, `smallText`) and shipped [`pageSchema`](../../src/lib/schemas/page.ts); applied to the canvas + title column via [`pageContentTypographyProps`](../../src/lib/pages/page-content-typography.ts) |
+| Settings | **Font** (Default / Serif / Mono), **Small text** toggle, and **Full width** toggle (desktop only) — persisted on [`localPageSchema`](../../src/lib/schemas/local-page.ts) (`font`, `smallText`, `fullWidth`) and shipped [`pageSchema`](../../src/lib/schemas/page.ts); typography via [`pageContentTypographyProps`](../../src/lib/pages/page-content-typography.ts); layout via [`pageContentColumnClassName`](../../src/lib/pages/page-content-layout.ts) |
 | Page actions | **Copy link** ([`buildPageLinkUrl`](../../src/lib/pages/copy-page-link.ts)), **Duplicate page**, **Move to** (searchable parent picker → `page.reposition`), **Delete** (confirm dialog) — shared [`usePageActions`](../../src/hooks/use-page-actions.ts) |
 | Page stats | Footer rows: total blocks, total words, created at, last edited at ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)) |
-| Mobile dev/sync | When local changes, remote updates, or dev mode apply, **Reset page**, **Reset all**, **Refresh site content**, and **Save all to source** appear in the same menu (replacing the former portaled canvas drawer trigger) |
 
-Desktop dev/sync actions remain in [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx).
+Dev/sync actions (**Save all**, **Reset page**, **Reset all**, **Refresh site content**) live in the site settings **Development** section ([`DevelopmentPanel`](../../src/components/settings/panels/development-panel.tsx)), opened from the bottom-right cog ([`SiteSettingsTrigger`](../../src/components/settings/site-settings-trigger.tsx)) on [`PageWorkspaceBody`](../../src/components/pages/page-workspace.tsx). See [site-settings](./site-settings.md).
 
 ### Page settings
 
@@ -214,6 +213,9 @@ Optional fields on page documents:
 |-------|--------|---------|
 | `font` | `default` \| `serif` \| `mono` | Geist sans (omit field) |
 | `smallText` | `boolean` | `false` (omit field) |
+| `fullWidth` | `boolean` | `false` (omit field) — desktop only; mobile always full-bleed |
+
+When `fullWidth` is off on desktop, the canvas title + blocks render in a centered **708px** column inside the scroll inset (`px-12`). Toggle on in the page header **⋯** menu (hidden on narrow viewports).
 
 Writes go through [`persistPageSettings`](../../src/lib/pages/persist-page-settings.ts) (lazy-seeds shipped pages like title edits). Author **Save all** includes settings in exported JSON.
 
@@ -221,7 +223,7 @@ Writes go through [`persistPageSettings`](../../src/lib/pages/persist-page-setti
 
 Inline footer at the bottom of the header menu ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)): **Total blocks**, **Total words**, **Created at**, **Last edited at** — from [`buildPageActivitySummary`](../../src/lib/pages/page-activity-summary.ts) (block count, word count, `LocalPage.createdAt`, max of page/block `updatedAt`).
 
-IndexedDB event log ([`page-activity-store`](../../src/db/activity/page-activity-store.ts)) still records edits in the background for future use; `block.updated` coalesced per block within 30s. Cleared on **Reset page**.
+IndexedDB event log ([`page-activity-store`](../../src/db/activity/page-activity-store.ts)) records edits for the settings **Analytics** charts; `block.updated` coalesced per block within 30s. Cleared on **Reset page**.
 
 ## Slug rules
 
