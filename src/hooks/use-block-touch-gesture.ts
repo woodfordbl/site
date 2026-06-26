@@ -140,14 +140,9 @@ export function useBlockTouchGesture({
       ) {
         return;
       }
-      // When this block already holds the caret, a long press should select text
-      // natively rather than arm the drawer/reorder gesture. A long press on a
-      // *different* block still arms, since its content does not hold focus.
-      if (event.currentTarget.contains(document.activeElement)) {
-        return;
-      }
-
       reset();
+      // Whether this block already holds the caret (i.e. is being edited).
+      const isFocused = event.currentTarget.contains(document.activeElement);
       elementRef.current = event.currentTarget;
       originRef.current = {
         x: event.clientX,
@@ -155,6 +150,18 @@ export function useBlockTouchGesture({
         pointerId: event.pointerId,
       };
       phaseRef.current = "pressing";
+
+      // Suppress the native iOS long-press text selection / magnifier from the
+      // very start of the press, so a hold never highlights a word. A quick tap
+      // still lands a caret; a scroll or release restores selection via reset().
+      suppressNativeSelection(event.currentTarget);
+
+      // While this block is being edited, a long press should neither select text
+      // nor open the drawer/reorder — only a long press on a *different* block
+      // arms the gesture. Skip the arm timer when already focused.
+      if (isFocused) {
+        return;
+      }
 
       timerRef.current = setTimeout(() => {
         if (phaseRef.current !== "pressing") {
@@ -173,7 +180,6 @@ export function useBlockTouchGesture({
         } catch {
           // Pointer may already be released; arming still proceeds.
         }
-        suppressNativeSelection(element);
         setIsPressing(true);
       }, LONG_PRESS_MS);
     },
