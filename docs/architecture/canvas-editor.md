@@ -84,6 +84,10 @@ Edge cases: iPad gets desktop shell + touch canvas; narrow desktop windows SSR a
 
 Constants: [`device-layout.constants.ts`](../../src/lib/device/device-layout.constants.ts). SSR loader: [`loadDeviceLayoutHints`](../../src/lib/device/load-device-layout-hints.ts) in [`__root.tsx`](../../src/routes/__root.tsx) `beforeLoad`. See also [local-first-persistence — SSR hint cookies](./local-first-persistence.md#ssr-hint-cookies).
 
+## Mobile keyboard toolbar
+
+On coarse primary pointers, [`MobileEditorToolbar`](../../src/components/canvas/mobile-editor-toolbar.tsx) pins a command bar (Add block, Turn into, indent, move, dismiss) above the on-screen keyboard while a block field is focused. Positioning is engine-split by [`useKeyboardToolbarAnchor`](../../src/hooks/use-visual-viewport-keyboard.ts): Chromium uses a CSS `bottom`-anchor (the layout viewport resizes for the keyboard), iOS Safari drives a composited `transform` from `visualViewport`. Page scroll can't pan the viewport (`site-shell` is `h-svh; overflow-hidden`; the canvas scroller has `overscroll-contain`), which is what keeps the bar jitter-free. Full rationale and browser-support matrix: [keyboard-toolbar](./keyboard-toolbar.md).
+
 | Label | Block type |
 |-------|------------|
 | Heading 1–4 | `heading` (`props.level`: 1–4) |
