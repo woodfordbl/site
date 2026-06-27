@@ -33,6 +33,7 @@ export type PageHeaderImage = z.infer<typeof pageHeaderImageSchema>;
 
 export const pageSettingsSchema = z.object({
   font: pageFontSchema.optional(),
+  fullWidth: z.boolean().optional(),
   smallText: z.boolean().optional(),
   headerImage: pageHeaderImageSchema.optional(),
 });
@@ -49,4 +50,8 @@ export function resolvePageFont(font: PageFont | undefined): PageFont {
 
 export function resolvePageSmallText(smallText: boolean | undefined): boolean {
   return smallText ?? false;
+}
+
+export function resolvePageFullWidth(fullWidth: boolean | undefined): boolean {
+  return fullWidth ?? false;
 }

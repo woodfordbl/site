@@ -101,6 +101,16 @@ export function recordHeaderImageSettingActivity(
   );
 }
 
+export function recordFullWidthSettingActivity(
+  pageId: string,
+  enabled: boolean
+): void {
+  recordPageSettingsActivity(
+    pageId,
+    enabled ? "Turned on full width" : "Turned off full width"
+  );
+}
+
 export function recordBlockInsertedActivity(
   pageId: string,
   block: Block

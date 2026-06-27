@@ -66,6 +66,11 @@ import {
   PAGE_DRAG_MIME_TYPE,
 } from "@/lib/pages/page-canvas-drop.ts";
 import {
+  pageContentColumnClassName,
+  resolveUseFullPanelCanvasWidth,
+} from "@/lib/pages/page-content-layout.ts";
+import { PageContentLayoutProvider } from "@/lib/pages/page-content-layout-context.tsx";
+import {
   pageCanvasMobileScrollClassName,
   pageCanvasTouchScrollClassName,
 } from "@/lib/pages/page-title-layout.ts";
@@ -74,8 +79,10 @@ import { cn } from "@/lib/utils.ts";
 interface PageCanvasEditorProps {
   /** Rendered at the very top of the scroll region (full-bleed page cover image). */
   coverSlot?: ReactNode;
+  fullWidth: boolean;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
+  isNarrowViewport: boolean;
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
@@ -106,17 +113,25 @@ function CanvasOverclickListener({
 function PageCanvasEditorBody({
   coverSlot,
   editor,
+  fullWidth,
   headerSlot,
+  isNarrowViewport,
   serverPage,
   titleSlot,
 }: {
   coverSlot?: ReactNode;
   editor: CanvasEditorState;
+  fullWidth: boolean;
   headerSlot?: ReactNode;
+  isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
+  const useFullPanelWidth = resolveUseFullPanelCanvasWidth({
+    fullWidth,
+    isNarrowViewport,
+  });
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const runAfterBlockActionsMenuClose = useCloseBlockActionsMenuBeforeAction();
   const { pages } = useMergedPageListItems();
@@ -409,30 +424,51 @@ function PageCanvasEditorBody({
                     }}
                   </DragOverlay>
                   <CanvasRowDndBridge>
-                    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                      <div
-                        className={cn(
-                          "relative flex min-h-0 flex-1 flex-col max-md:overflow-x-clip",
-                          isCoarsePrimaryPointer
-                            ? pageCanvasTouchScrollClassName
-                            : pageCanvasMobileScrollClassName
-                        )}
-                        data-scroll-restoration-id="page-canvas-scroll"
-                        ref={scrollRootRef}
-                      >
-                        {coverSlot}
-                        {headerSlot}
-                        {titleSlot}
-                        <CanvasDropZone onDropPage={handleDropPageIntoCanvas}>
-                          <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                            <CanvasRowList mode="edit" rows={editor.rows} />
+                    <PageContentLayoutProvider
+                      useFullPanelWidth={useFullPanelWidth}
+                    >
+                      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div
+                          className={cn(
+                            // `overscroll-contain`: keep inner-scroll rubber-band
+                            // from chaining to the page and panning the visual
+                            // viewport, which is what makes the keyboard toolbar
+                            // jitter on iOS (see useKeyboardToolbarAnchor +
+                            // docs/architecture/keyboard-toolbar.md).
+                            "relative flex min-h-0 flex-1 flex-col overscroll-contain max-md:overflow-x-clip",
+                            isCoarsePrimaryPointer
+                              ? pageCanvasTouchScrollClassName
+                              : pageCanvasMobileScrollClassName
+                          )}
+                          data-scroll-restoration-id="page-canvas-scroll"
+                          ref={scrollRootRef}
+                          {...(useFullPanelWidth
+                            ? { "data-page-full-width": "" }
+                            : {})}
+                        >
+                          {coverSlot}
+                          <div
+                            className={pageContentColumnClassName({
+                              fullWidth,
+                              isNarrowViewport,
+                            })}
+                          >
+                            {headerSlot}
+                            {titleSlot}
+                            <CanvasDropZone
+                              onDropPage={handleDropPageIntoCanvas}
+                            >
+                              <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                                <CanvasRowList mode="edit" rows={editor.rows} />
+                              </div>
+                            </CanvasDropZone>
                           </div>
-                        </CanvasDropZone>
+                        </div>
+                        <CanvasMenuRoot />
+                        <MobileBlockActionsDrawer />
+                        <MobileEditorToolbar />
                       </div>
-                      <CanvasMenuRoot />
-                      <MobileBlockActionsDrawer />
-                      <MobileEditorToolbar />
-                    </div>
+                    </PageContentLayoutProvider>
                   </CanvasRowDndBridge>
                 </DndSurface>
               </CanvasSlashProvider>
@@ -521,7 +557,9 @@ function CanvasDropZone({
 
 export function PageCanvasEditor({
   coverSlot,
+  fullWidth,
   headerSlot,
+  isNarrowViewport,
   pageHasLocalDraft,
   serverPage,
   titleSlot,
@@ -534,7 +572,9 @@ export function PageCanvasEditor({
         <PageCanvasEditorBody
           coverSlot={coverSlot}
           editor={editor}
+          fullWidth={fullWidth}
           headerSlot={headerSlot}
+          isNarrowViewport={isNarrowViewport}
           serverPage={serverPage}
           titleSlot={titleSlot}
         />

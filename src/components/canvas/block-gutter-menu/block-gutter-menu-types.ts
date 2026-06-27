@@ -7,6 +7,7 @@ export interface BlockGutterMenuContextValue {
   actionItems: ActionMenuEntry[];
   blockTypeLabel: string | undefined;
   canTurnInto: boolean;
+  effectiveBlockId: string | undefined;
   embedBlock: Extract<Block, { type: "embed" }> | null;
   handleAddColumn: () => void;
   handleAddRow: () => void;

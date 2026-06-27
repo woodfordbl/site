@@ -1,4 +1,5 @@
 import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
+import { DEFAULT_CODE_LANGUAGE } from "@/lib/code/code-languages.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 /**
@@ -29,6 +30,7 @@ export const CONTAINER_BLOCK_TYPES = [
   "tab",
   "table",
   "tableRow",
+  "toggleHeading",
 ] as const satisfies readonly BlockType[];
 
 export type ContainerBlockType = (typeof CONTAINER_BLOCK_TYPES)[number];
@@ -70,6 +72,14 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
     isEmpty: textIsEmpty,
     hasPrimaryText: true,
   },
+  toggleHeading: {
+    // Container with a primary heading title; children are separate rows. The
+    // title-text emptiness here drives structural keys — row-level emptiness
+    // accounting for children lives in `is-block-empty.ts` (`isRowEmpty`).
+    defaultProps: () => ({ level: 1, text: "" }),
+    isEmpty: textIsEmpty,
+    hasPrimaryText: true,
+  },
   text: {
     defaultProps: () => ({ text: "" }),
     isEmpty: textIsEmpty,
@@ -86,6 +96,11 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
   },
   callout: {
     defaultProps: () => ({ text: "", icon: DEFAULT_CALLOUT_ICON }),
+    isEmpty: textIsEmpty,
+    hasPrimaryText: true,
+  },
+  code: {
+    defaultProps: () => ({ text: "", language: DEFAULT_CODE_LANGUAGE }),
     isEmpty: textIsEmpty,
     hasPrimaryText: true,
   },

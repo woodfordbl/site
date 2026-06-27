@@ -1,7 +1,8 @@
 "use client";
 
-import { IconSearch } from "@tabler/icons-react";
+import { IconFolderSymlink, IconSearch } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import {
   DropdownMenuItem,
   DropdownMenuSub,
@@ -52,6 +53,7 @@ export function PageHeaderMenuMoveSubmenu({
       }}
     >
       <DropdownMenuSubTrigger disabled={!enabled}>
+        <IconFolderSymlink />
         Move to
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="min-w-56">
@@ -89,7 +91,14 @@ export function PageHeaderMenuMoveSubmenu({
                 onMoveTo(item.parentId);
               }}
             >
-              <item.icon />
+              {item.id === "move-top-level" ? (
+                <item.icon />
+              ) : (
+                <PageIconDisplay
+                  className="size-4 [&_[role=img]]:text-sm [&_svg]:size-4"
+                  icon={item.pageIcon}
+                />
+              )}
               {item.label}
             </DropdownMenuItem>
           ))

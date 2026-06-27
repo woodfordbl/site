@@ -129,6 +129,7 @@ export interface SlashMenuItem {
   tabCount?: number;
   tableColumns?: number;
   tableRows?: number;
+  toggleHeadingLevel?: 1 | 2 | 3 | 4;
 }
 
 export function isLeafSpec(spec: {

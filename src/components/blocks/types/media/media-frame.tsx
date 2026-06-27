@@ -64,7 +64,7 @@ export function MediaFrame({
   return (
     <figure className={cn("w-full", className)}>
       <div
-        className="group/media relative mx-auto touch-none"
+        className="group/media relative mx-auto"
         data-media-frame
         data-reveal-group=""
         ref={frameRef}

@@ -115,3 +115,9 @@ export function buildPageLinks(page: Page): PageLinkTag[] {
 export function buildNoIndexMeta(): PageMetaTag[] {
   return [{ name: "robots", content: "noindex" }];
 }
+
+/** Meta for global not-found handling. */
+export function buildNotFoundMeta(): PageMetaTag[] {
+  const title = `Page not found · ${SITE_NAME}`;
+  return [{ title }, { name: "robots", content: "noindex" }];
+}

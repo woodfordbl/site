@@ -9,13 +9,17 @@ import {
   type PageFont,
   type PageHeaderImage,
   resolvePageFont,
+  resolvePageFullWidth,
   resolvePageSmallText,
 } from "@/lib/schemas/page-settings.ts";
 
 interface UsePageSettingsOptions {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText" | "headerImage"> | null;
+  serverPage?: Pick<
+    Page,
+    "font" | "fullWidth" | "smallText" | "headerImage"
+  > | null;
 }
 
 /**
@@ -42,6 +46,13 @@ export function usePageSettings({
     }
     return resolvePageSmallText(serverPage?.smallText);
   }, [localPage?.smallText, serverPage?.smallText]);
+
+  const fullWidth = useMemo(() => {
+    if (localPage?.fullWidth !== undefined) {
+      return resolvePageFullWidth(localPage.fullWidth);
+    }
+    return resolvePageFullWidth(serverPage?.fullWidth);
+  }, [localPage?.fullWidth, serverPage?.fullWidth]);
 
   // A local document always wins once it exists, so an explicit local removal
   // (headerImage cleared) correctly hides a server-shipped cover.
@@ -76,6 +87,18 @@ export function usePageSettings({
     [pageId, pages, seed]
   );
 
+  const setFullWidth = useCallback(
+    (nextFullWidth: boolean) => {
+      persistPageSettings({
+        pageId,
+        fullWidth: nextFullWidth,
+        pages,
+        seed,
+      });
+    },
+    [pageId, pages, seed]
+  );
+
   const setHeaderImage = useCallback(
     (nextHeaderImage: PageHeaderImage | null) => {
       persistPageSettings({
@@ -90,8 +113,10 @@ export function usePageSettings({
 
   return {
     font,
+    fullWidth,
     headerImage,
     setFont,
+    setFullWidth,
     setHeaderImage,
     setSmallText,
     smallText,

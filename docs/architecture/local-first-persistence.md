@@ -10,6 +10,7 @@
 | Local page metadata | `localPagesCollection` (`site-local-pages`) | No (localStorage) |
 | Local blocks | `localBlocksCollection` (`site-local-blocks:<pageId>` shards) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
+| Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
 
 ## Local media assets (IndexedDB, not TanStack collections)
 
@@ -20,9 +21,26 @@ Uploaded images/gifs/videos for **`media`** blocks are stored outside `localBloc
 - **Display:** [`useAssetObjectUrl`](../../src/hooks/use-asset-object-url.ts) resolves hash → `URL.createObjectURL` with ref-counted cache.
 - **GC:** Block delete does **not** remove blobs. [`sweepOrphanAssets`](../../src/db/assets/asset-gc.ts) deletes IndexedDB keys not referenced by any local `media` block **or** by a local page's [cover image](./pages.md#page-cover) (`collectCoverAssetIds` scans `site-local-pages` for `headerImage.source === "asset"`, so an uploaded cover is never reclaimed). It runs on idle at boot (scheduled by `startLocalCollectionsSync` in [`local-collections.ts`](../../src/db/collections/local-collections.ts)) and after dev **Save to source**. Assets stored this session are protected from the sweep (`wasAssetPutThisSession` in [`asset-store.ts`](../../src/db/assets/asset-store.ts)) so a just-uploaded blob is never reclaimed before its block (or cover) commits.
 - **Author save:** DEV footer runs [`preparePageDocumentForAuthorSave`](../../src/lib/content/prepare-page-document-for-author-save.ts) + [`saveMediaAssets`](../../src/lib/content/save-media-assets.ts), writes referenced blobs to `public/media/<hash>.<ext>`, rewrites props to `source: "url"` paths, then `savePage` ([author-dev-mode](./author-dev-mode.md)).
-- **Cover images:** a page's [cover](./pages.md#page-cover) reuses this same store for uploads (`headerImage.source === "asset"`); Unsplash covers are CDN-hotlinked (`source: "url"`, never stored). The GC sweep above protects cover assets via `collectCoverAssetIds`.
+- **Cover images:** a page's [cover](./pages.md#page-cover) reuses this same store for uploads (`headerImage.source === "asset"`); Unsplash covers are CDN-hotlinked (`source: "url"`, rendered sized via `unsplashCdnUrl`, never stored). The GC sweep above protects cover assets via `collectCoverAssetIds`.
 
 URL-backed media (`source: "url"`) ships in page JSON without IndexedDB.
+
+## Page snapshots (version history)
+
+Locally-edited pages keep a tiered checkpoint history in IndexedDB (`createStore("site-page-snapshots", "snapshots")`, [`page-snapshot-store.ts`](../../src/db/snapshots/page-snapshot-store.ts)). The layout is deliberately **split** so capturing or pruning one checkpoint never rewrites the others' block payloads:
+
+| Key | Value | Read when |
+|-----|-------|-----------|
+| `${pageId}:index` | `PageSnapshotIndex` — descriptor list (id, bucket, timestamp, content/metadata hash, counts, title) | timeline render, capture decision, thinning |
+| `${pageId}:snap:${id}` | `PageSnapshotContent` — blocks + order + title + icon + settings | restore (one read), capture (one write) |
+
+- **Capture** ([`capture-page-snapshot.ts`](../../src/lib/pages/capture-page-snapshot.ts)): a ~10s debounce (`schedulePageSnapshotCapture`) fired from the block-commit success path (`commitAndMarkDirty`) and from metadata/settings/reposition persists. `capturePageSnapshotNow` reads the page synchronously (`readBlockShardForPage` + `readLocalStorageCollection`), hashes the blocks (`hashPageBlocks`) and metadata (`hashPageMetadata`), and [`resolveSnapshotCaptureAction`](../../src/lib/pages/resolve-snapshot-capture-action.ts) decides skip / update-in-bucket / create. Each 10-minute wall-clock bucket (`bucketIdForTimestamp`) collapses to one checkpoint; unchanged content is skipped.
+- **Retention** ([`thin-page-snapshots.ts`](../../src/lib/pages/thin-page-snapshots.ts)): coarsens over time — last 1h every 10-min bucket, 1–24h hourly, 24h–30d daily, 30d+ weekly, hard cap 40/page (most-recent always kept). Runs on every capture and on an idle boot purge ([`snapshot-purge.ts`](../../src/db/snapshots/snapshot-purge.ts), registered in `startLocalCollectionsSync`).
+- **Restore** ([`restore-page-snapshot.ts`](../../src/lib/pages/restore-page-snapshot.ts)): re-applies the checkpoint's blocks via `applyPageBlockDiff` inside one `PageBlockTransaction` (ordering invariant) and restores title/icon/settings on `localPagesCollection`, then **rewinds the timeline** — every checkpoint newer than the restored one is purged (the restored point and older are kept). Surfaced by the [version-history picker](./pages.md#version-history) ([`PageVersionHistorySubmenu`](../../src/components/pages/page-version-history-submenu.tsx)); selecting a version takes over the page with a read-only preview ([`PageVersionPreview`](../../src/components/pages/page-version-preview.tsx) — `CanvasBlocksReadOnly mode="view"`, payload via [`usePageSnapshotContent`](../../src/db/queries/use-page-snapshot-content.ts)) before restoring.
+- **Media safety:** checkpoints store only block props (the `assetId` reference), never blob bytes — restoring re-points at the existing `site-assets` blob. `sweepOrphanAssets` ([`asset-gc.ts`](../../src/db/assets/asset-gc.ts)) therefore unions snapshot-referenced asset ids into its live set so a blob held only by a checkpoint is not reclaimed.
+- **Lifecycle:** `clearPageSnapshots` runs on **Reset page**, hard delete, **Reset all**, and author **Save to source**. All writes fail soft (best-effort; quota errors route to `reportPersistenceError` and never block an edit).
+
+This replaces an earlier write-only per-edit event log (capped at 100, never surfaced); the checkpoint timeline is now the single page-history surface.
 
 ## Local page document (metadata)
 
@@ -37,7 +55,7 @@ One metadata record per `page.id` in `localPagesCollection`:
 - `createdAt` — ISO timestamp set once at insert (lazy-seed uses first local edit time; never updated)
 - `updatedAt`
 
-Block content lives in `localBlocksCollection` (one row per block, keyed by `block.id`, with `pageId` and `updatedAt`).
+Block content lives in `localBlocksCollection` (one row per block, keyed by `block.id`, with `pageId`, `createdAt` — set once at insert, preserved across updates — and `updatedAt`). Legacy rows missing `createdAt` are backfilled from `updatedAt` at boot by `backfillBlockCreatedAt` ([`migrate-local-storage.ts`](../../src/db/collections/migrate-local-storage.ts)). The block actions menu surfaces these as "Added / Last edited" ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx) via [`useLocalBlockTimestamps`](../../src/db/queries/use-local-block-timestamps.ts)).
 
 ## Local block rows
 
@@ -120,21 +138,21 @@ Guard this behavior with `src/db/queries/block-collection-ops.test.ts`; it verif
 
 **Deploy freshness — new/removed pages:** [`getPagesCatalogRevision`](../../src/lib/content/page-store.server.ts) hashes shipped ids/slugs/titles. The root loader exposes `pagesCatalogRevision`; [`SyncPagesCatalogRevisionEffect`](../../src/components/pages/sync-pages-catalog-revision-effect.tsx) invalidates the React Query page list when the revision changes (new shipped pages appear without wiping local overlays).
 
-**Deploy freshness — changed body content:** the catalog revision intentionally ignores block content, so a separate per-page **`contentHash`** ([`hashPageBlocks`](../../src/lib/content/block-hash.ts)) is added to each [`PageSummary`](../../src/lib/content/list-pages.ts) by `listPages`. [`findStaleOverriddenPageIds`](../../src/lib/pages/resolve-page-state.ts) (via [`isOverriddenSummaryContentStale`](../../src/lib/pages/resolve-page-state.ts)) flags an overridden shipped page stale when its `serverBaselineHash` no longer matches the shipped `contentHash` — no full-page fetch required. This is **content-only** by design (metadata-only hash drift is left to the per-open `computePageStaleState`) so a global pull never nags users over a slug/order hash. [`useSiteContentUpdates`](../../src/hooks/use-site-content-updates.ts) exposes the stale set to the footer's **Refresh site content** button.
+**Deploy freshness — changed body content:** the catalog revision intentionally ignores block content, so a separate per-page **`contentHash`** ([`hashPageBlocks`](../../src/lib/content/block-hash.ts)) is added to each [`PageSummary`](../../src/lib/content/list-pages.ts) by `listPages`. [`findStaleOverriddenPageIds`](../../src/lib/pages/resolve-page-state.ts) (via [`isOverriddenSummaryContentStale`](../../src/lib/pages/resolve-page-state.ts)) flags an overridden shipped page stale when its `serverBaselineHash` no longer matches the shipped `contentHash` — no full-page fetch required. This is **content-only** by design (metadata-only hash drift is left to the per-open `computePageStaleState`) so a global pull never nags users over a slug/order hash. [`useSiteContentUpdates`](../../src/hooks/use-site-content-updates.ts) exposes the stale set to the settings **Refresh site content** action ([site-settings](./site-settings.md)).
 
 **Reset / refresh:**
 
 | Action | Command / helper | Effect |
 |--------|------------------|--------|
-| Reset one shipped page | `page.resetToRemote` / [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) (footer **Reset page**, sidebar) | Deletes local metadata + block shard; restores shipped baseline on next read |
-| Reset everything | `page.resetAllToRemote` / [`resetAllToRemote`](../../src/lib/pages/reset-all-to-remote.ts) (footer **Reset all**) | Clears all local pages, block shards, hint cookies; navigates home |
-| Pull new shipped content | Footer **Refresh site content** / [`refreshSiteContent`](../../src/lib/pages/refresh-site-content.ts) | Runs `resetPageToRemote` for each content-stale overridden page only; unrelated local edits and user pages are kept |
+| Reset one shipped page | `page.resetToRemote` / [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) (settings **Development** → **Reset page**) | Deletes local metadata + block shard; restores shipped baseline on next read |
+| Reset everything | `page.resetAllToRemote` / [`resetAllToRemote`](../../src/lib/pages/reset-all-to-remote.ts) (settings **Development** → **Reset all**) | Clears all local pages, block shards, hint cookies; navigates home |
+| Pull new shipped content | Settings **Refresh site content** / [`refreshSiteContent`](../../src/lib/pages/refresh-site-content.ts) | Runs `resetPageToRemote` for each content-stale overridden page only; unrelated local edits and user pages are kept |
 
 The workspace bumps a canvas remount key (`onAfterReset`) after these actions so the open page re-reads fresh data without a flash. Orphan overlays (local row for a removed shipped id) are detected by [`findOrphanLocalPages`](../../src/lib/pages/resolve-page-state.ts); [`OrphanLocalPagesEffect`](../../src/components/pages/orphan-local-pages-effect.tsx) prompts to discard.
 
 ## Server baseline hash
 
-When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale ([`computePageStaleState`](../../src/lib/pages/resolve-page-state.ts), used for per-open detection). The global footer pull is content-only (`contentHash` vs `serverBaselineHash`); resolving a stale page is a full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) that drops the local overlay (metadata + blocks) so the next read restores the shipped baseline.
+When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale ([`computePageStaleState`](../../src/lib/pages/resolve-page-state.ts), used for per-open detection). The global settings pull is content-only (`contentHash` vs `serverBaselineHash`); resolving a stale page is a full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) that drops the local overlay (metadata + blocks) so the next read restores the shipped baseline.
 
 ## Author dev mode
 

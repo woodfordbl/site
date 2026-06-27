@@ -117,6 +117,27 @@
     },
     {
       "globs": [
+        "src/components/settings/**",
+        "src/lib/appearance/**",
+        "src/lib/settings/**",
+        "src/lib/schemas/site-appearance.ts",
+        "src/lib/pages/page-activity-analytics.ts",
+        "src/hooks/use-site-activity-analytics.ts",
+        "src/components/layout/theme-provider.tsx",
+        "src/db/activity/page-activity-store.ts"
+      ],
+      "docs": [
+        "docs/architecture/site-settings.md",
+        "docs/architecture/pages.md"
+      ],
+      "majorGlobs": [
+        "src/components/settings/**",
+        "src/components/layout/theme-provider.tsx",
+        "src/lib/appearance/**"
+      ]
+    },
+    {
+      "globs": [
         "src/hooks/use-canvas*.ts",
         "src/hooks/use-page*.ts",
         "src/hooks/use-slash*.ts",
@@ -176,16 +197,24 @@
         "src/hooks/use-page-actions.ts",
         "src/hooks/use-page-settings.ts",
         "src/lib/pages/persist-page-settings.ts",
+        "src/lib/pages/page-content-layout.ts",
+        "src/lib/pages/page-content-layout-context.tsx",
         "src/lib/pages/copy-page-link.ts",
         "src/lib/pages/page-move-targets.ts",
-        "src/lib/pages/record-page-activity.ts",
-        "src/db/activity/**"
+        "src/components/pages/page-version-history-submenu.tsx",
+        "src/components/pages/page-version-preview.tsx",
+        "src/db/queries/use-page-snapshots.ts",
+        "src/db/queries/use-page-snapshot-content.ts",
+        "src/lib/pages/capture-page-snapshot.ts",
+        "src/lib/pages/restore-page-snapshot.ts",
+        "src/lib/pages/thin-page-snapshots.ts",
+        "src/db/snapshots/**"
       ],
       "docs": ["docs/architecture/pages.md"],
       "majorGlobs": [
         "src/components/pages/page-header-menu.tsx",
         "src/lib/schemas/page-settings.ts",
-        "src/db/activity/page-activity-store.ts"
+        "src/db/snapshots/page-snapshot-store.ts"
       ]
     },
     {
@@ -230,6 +259,13 @@
         "src/lib/pages/refresh-site-content.ts"
       ],
       "docs": ["docs/architecture/author-dev-mode.md"]
+    },
+    {
+      "globs": [
+        "src/hooks/use-visual-viewport-keyboard.ts",
+        "src/components/canvas/mobile-editor-toolbar.tsx"
+      ],
+      "docs": ["docs/architecture/keyboard-toolbar.md"]
     },
     {
       "globs": ["src/styles.css"],

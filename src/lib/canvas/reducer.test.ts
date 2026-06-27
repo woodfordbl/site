@@ -904,4 +904,50 @@ describe("canvasReducer", () => {
       expect(insert.position.parentId).toBe("trailing-blank");
     }
   });
+
+  it("toggleHeading.create persists a toggle and absorbs following siblings", () => {
+    const blocks: Block[] = [
+      { id: "h", type: "heading", props: { level: 1, text: "Section" } },
+      { id: "t1", type: "text", props: { text: "one" } },
+      { id: "h2", type: "heading", props: { level: 1, text: "Next" } },
+    ];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      { type: "toggleHeading.create", rowId: "h", level: 1, absorb: true }
+    );
+
+    const persist = result.effects.find((e) => e.type === "persist");
+    expect(persist?.type).toBe("persist");
+    if (persist?.type === "persist") {
+      expect(persist.block.type).toBe("toggleHeading");
+      expect(persist.block.id).toBe("h");
+    }
+    const moves = result.effects.filter((e) => e.type === "move");
+    expect(moves.map((e) => (e.type === "move" ? e.rowId : ""))).toEqual([
+      "t1",
+    ]);
+  });
+
+  it("row.convert from a toggle heading lifts children out as siblings", () => {
+    const blocks: Block[] = [
+      { id: "tg", type: "toggleHeading", props: { level: 2, text: "T" } },
+      { id: "c1", type: "text", props: { text: "child" }, parentId: "tg" },
+    ];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      { type: "row.convert", rowId: "tg", to: "heading" }
+    );
+
+    const move = result.effects.find((e) => e.type === "move");
+    expect(move?.type).toBe("move");
+    if (move?.type === "move") {
+      expect(move.rowId).toBe("c1");
+    }
+    const persist = result.effects.find((e) => e.type === "persist");
+    if (persist?.type === "persist") {
+      expect(persist.block.type).toBe("heading");
+    }
+  });
 });

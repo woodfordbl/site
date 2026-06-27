@@ -4,6 +4,7 @@ import {
   calloutPropsSchema,
   checklistItemPropsSchema,
   checklistPropsSchema,
+  codePropsSchema,
   columnPropsSchema,
   columnsPropsSchema,
   dividerPropsSchema,
@@ -19,14 +20,17 @@ import {
   tabPropsSchema,
   tabsPropsSchema,
   textPropsSchema,
+  toggleHeadingPropsSchema,
 } from "./block-props.ts";
 
 export const blockTypeSchema = z.enum([
   "heading",
+  "toggleHeading",
   "text",
   "list",
   "quote",
   "callout",
+  "code",
   "checklist",
   "checklistItem",
   "pageLink",
@@ -57,6 +61,10 @@ export const blockSchema = z.discriminatedUnion("type", [
     props: headingPropsSchema,
   }),
   blockBaseSchema.extend({
+    type: z.literal("toggleHeading"),
+    props: toggleHeadingPropsSchema,
+  }),
+  blockBaseSchema.extend({
     type: z.literal("text"),
     props: textPropsSchema,
   }),
@@ -71,6 +79,10 @@ export const blockSchema = z.discriminatedUnion("type", [
   blockBaseSchema.extend({
     type: z.literal("callout"),
     props: calloutPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("code"),
+    props: codePropsSchema,
   }),
   blockBaseSchema.extend({
     type: z.literal("checklist"),

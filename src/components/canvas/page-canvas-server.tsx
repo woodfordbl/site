@@ -12,11 +12,27 @@ import { ReadOnlyHeadingCollapseProvider } from "@/components/canvas/heading-col
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
+import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
+import {
+  pageContentColumnClassName,
+  resolveUseFullPanelCanvasWidth,
+} from "@/lib/pages/page-content-layout.ts";
+import { PageContentLayoutProvider } from "@/lib/pages/page-content-layout-context.tsx";
+import { pageCanvasMobileScrollClassName } from "@/lib/pages/page-title-layout.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import { cn } from "@/lib/utils.ts";
 
 interface CanvasBlocksReadOnlyProps {
   blocks: Block[];
   coverSlot?: ReactNode;
+  fullWidth?: boolean;
+  isNarrowViewport?: boolean;
+  /**
+   * `"edit"` (default) mirrors the live editor markup so the SSR/bootstrap view
+   * swaps without layout shift. `"view"` renders each block's read-only `View`
+   * component (no `contentEditable`, no gutters) — used for the history preview.
+   */
+  mode?: BlockMode;
   pageId: string;
   titleSlot?: ReactNode;
 }
@@ -63,6 +79,9 @@ function createNoopCanvasEditorActions(
 export function CanvasBlocksReadOnly({
   blocks,
   coverSlot,
+  fullWidth = false,
+  isNarrowViewport = false,
+  mode = "edit",
   pageId,
   titleSlot,
 }: CanvasBlocksReadOnlyProps) {
@@ -74,24 +93,41 @@ export function CanvasBlocksReadOnly({
     () => createNoopCanvasEditorActions(rows, pageId),
     [rows, pageId]
   );
+  const useFullPanelWidth = resolveUseFullPanelCanvasWidth({
+    fullWidth,
+    isNarrowViewport,
+  });
 
   return (
     <CanvasEditorContext.Provider value={actions}>
       <CanvasMenuProvider>
         <BlockActionsMenuProvider>
           <ReadOnlyHeadingCollapseProvider>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div
-                className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
-                data-scroll-restoration-id="page-canvas-scroll"
-              >
-                {coverSlot}
-                {titleSlot}
-                <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                  <CanvasRowList mode="edit" rows={rows} />
+            <PageContentLayoutProvider useFullPanelWidth={useFullPanelWidth}>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                  className={cn(
+                    "relative flex min-h-0 flex-1 flex-col overflow-auto",
+                    pageCanvasMobileScrollClassName
+                  )}
+                  data-scroll-restoration-id="page-canvas-scroll"
+                  {...(useFullPanelWidth ? { "data-page-full-width": "" } : {})}
+                >
+                  {coverSlot}
+                  <div
+                    className={pageContentColumnClassName({
+                      fullWidth,
+                      isNarrowViewport,
+                    })}
+                  >
+                    {titleSlot}
+                    <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                      <CanvasRowList mode={mode} rows={rows} />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </PageContentLayoutProvider>
           </ReadOnlyHeadingCollapseProvider>
         </BlockActionsMenuProvider>
       </CanvasMenuProvider>
@@ -101,12 +137,16 @@ export function CanvasBlocksReadOnly({
 
 interface PageCanvasServerProps {
   coverSlot?: ReactNode;
+  fullWidth: boolean;
+  isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }
 
 export function PageCanvasServer({
   coverSlot,
+  fullWidth,
+  isNarrowViewport,
   serverPage,
   titleSlot,
 }: PageCanvasServerProps) {
@@ -114,6 +154,8 @@ export function PageCanvasServer({
     <CanvasBlocksReadOnly
       blocks={serverPage.blocks}
       coverSlot={coverSlot}
+      fullWidth={fullWidth}
+      isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}
     />

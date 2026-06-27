@@ -5,10 +5,14 @@ export function turnIntoValueFromBlock(block: Block): string | undefined {
   if (block.type === "heading") {
     return `heading-${block.props.level}`;
   }
+  if (block.type === "toggleHeading") {
+    return `toggleHeading-${block.props.level}`;
+  }
   if (
     block.type === "text" ||
     block.type === "quote" ||
-    block.type === "callout"
+    block.type === "callout" ||
+    block.type === "code"
   ) {
     return block.type;
   }
@@ -30,7 +34,9 @@ export function canTurnIntoBlock(row: CanvasRow): boolean {
   return (
     type === "text" ||
     type === "heading" ||
+    type === "toggleHeading" ||
     type === "quote" ||
-    type === "callout"
+    type === "callout" ||
+    type === "code"
   );
 }

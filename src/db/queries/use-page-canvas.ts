@@ -98,50 +98,6 @@ export function usePageCanvas(
       ? collectionBlocks
       : serverPage.blocks;
 
-  // #region agent log
-  if (typeof window !== "undefined") {
-    const usedSource =
-      sourceBlocks === collectionBlocks ? "collection" : "server";
-    const sig = `${usedSource}/${collectionBlocks.length}/${bootstrapBlocks.length}/${serverPage.blocks.length}/${isReady}/${pageHasLocalDraft}/${hasLocalBlockSource}`;
-    const w = window as unknown as Record<string, string | undefined>;
-    const key = `__pcSig_${pageId}`;
-    if (w[key] !== sig) {
-      w[key] = sig;
-      fetch(
-        "http://127.0.0.1:7470/ingest/098618e1-bf18-4afe-b4fc-70958180656a",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "a3ab7e",
-          },
-          body: JSON.stringify({
-            sessionId: "a3ab7e",
-            hypothesisId: "H_PC1",
-            location: "use-page-canvas.ts:usePageCanvas",
-            message: "source block selection",
-            data: {
-              pageId,
-              usedSource,
-              collectionBlocks: collectionBlocks.length,
-              bootstrapBlocks: bootstrapBlocks.length,
-              serverBlocks: serverPage.blocks.length,
-              isReady,
-              pageHasLocalDraft,
-              hasLocalBlockSource,
-              hasSeededBlocks,
-              hasLocalPage: localPage != null,
-            },
-            timestamp: Date.now(),
-          }),
-        }
-      ).catch(() => {
-        /* debug */
-      });
-    }
-  }
-  // #endregion
-
   const generatedBlankBlockRef = useRef<{
     block: Extract<Block, { type: "text" }>;
     pageId: string;

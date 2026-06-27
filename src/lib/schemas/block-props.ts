@@ -3,11 +3,17 @@ import { z } from "zod";
 export const headingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
-  /**
-   * When true, the blocks under this heading (following siblings up to the next
-   * heading of equal-or-higher level) are hidden. Absent means expanded; kept
-   * optional so unchanged headings keep their row identity across tree rebuilds.
-   */
+});
+
+/**
+ * `toggleHeading` block props: a heading title that owns its content as real
+ * children. `collapsed` hides only those children (not following siblings).
+ * Absent means expanded; kept optional so unchanged toggles keep their row
+ * identity across tree rebuilds.
+ */
+export const toggleHeadingPropsSchema = z.object({
+  level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  text: z.string(),
   collapsed: z.boolean().optional(),
 });
 
@@ -101,6 +107,15 @@ export const tableCellPropsSchema = z.object({
   text: z.string(),
 });
 
+/** `code` block props: source text plus a Shiki language id (defaults to plaintext). */
+export const codePropsSchema = z.object({
+  // Named `text` (not `code`) so it reuses the hasPrimaryText machinery in
+  // create-block.ts (getTextFromBlock / withBlockText) and Turn-into carry-over.
+  text: z.string(),
+  /** Shiki language id (e.g. `ts`, `python`); omitted means plaintext. */
+  language: z.string().optional(),
+});
+
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
 export const embedPropsSchema = z.object({
   url: z.string(),
@@ -112,10 +127,12 @@ export const embedPropsSchema = z.object({
 });
 
 export type HeadingProps = z.infer<typeof headingPropsSchema>;
+export type ToggleHeadingProps = z.infer<typeof toggleHeadingPropsSchema>;
 export type TextProps = z.infer<typeof textPropsSchema>;
 export type ListProps = z.infer<typeof listPropsSchema>;
 export type QuoteProps = z.infer<typeof quotePropsSchema>;
 export type CalloutProps = z.infer<typeof calloutPropsSchema>;
+export type CodeProps = z.infer<typeof codePropsSchema>;
 export type ChecklistProps = z.infer<typeof checklistPropsSchema>;
 export type ChecklistItemProps = z.infer<typeof checklistItemPropsSchema>;
 export type PageLinkProps = z.infer<typeof pageLinkPropsSchema>;

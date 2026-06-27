@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  IconArrowsMaximize,
   IconCopy,
   IconDeviceFloppy,
   IconDots,
@@ -18,6 +19,7 @@ import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -50,7 +52,10 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText" | "headerImage"> | null;
+  serverPage?: Pick<
+    Page,
+    "font" | "fullWidth" | "smallText" | "headerImage"
+  > | null;
 }
 
 export function PageHeaderMenu({
@@ -64,11 +69,12 @@ export function PageHeaderMenu({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const cover = usePageCover();
   const headerImage = cover?.headerImage;
-  const { font, setFont, setSmallText, smallText } = usePageSettings({
-    pageId,
-    seed,
-    serverPage,
-  });
+  const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
+    usePageSettings({
+      pageId,
+      seed,
+      serverPage,
+    });
   const { canDelete, copyLink, deletePage, duplicate, moveTo, pages } =
     usePageActions(pageId);
   const footerActions = usePageCanvasFooterActions({ onAfterReset, pageId });
@@ -215,6 +221,15 @@ export function PageHeaderMenu({
               <IconTextSize />
               Small text
             </DropdownMenuSwitchItem>
+            {isNarrowViewport ? null : (
+              <DropdownMenuSwitchItem
+                checked={fullWidth}
+                onCheckedChange={setFullWidth}
+              >
+                <IconArrowsMaximize />
+                Full width
+              </DropdownMenuSwitchItem>
+            )}
             <DropdownMenuItem
               onClick={() => {
                 runAfterClose(() => {
@@ -245,6 +260,7 @@ export function PageHeaderMenu({
                 <IconCopy />
                 Duplicate page
               </DropdownMenuItem>
+              <PageVersionHistorySubmenu pageId={pageId} />
               <PageHeaderMenuMoveSubmenu
                 onMoveTo={(parentId) => {
                   runAfterClose(() => {
@@ -267,7 +283,6 @@ export function PageHeaderMenu({
             </DropdownMenuGroup>
             {isNarrowViewport && footerActions.visible ? (
               <>
-                <DropdownMenuSeparator />
                 {footerActions.hasUpdates ? (
                   <DropdownMenuItem
                     onClick={() => {

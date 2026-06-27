@@ -19,6 +19,8 @@ Priority order in `resolveStructuralAction` ([`resolve-structural-action.ts`](..
 
 Container merge and lift policy use [`block-container-config.ts`](../../src/lib/canvas/block-container-config.ts) and [`block-interactions.ts`](../../src/lib/canvas/block-interactions.ts) (list and checklist: empty Enter lifts out; empty Delete with a previous sibling deletes in place; first or sole empty item Delete lifts out; same-type child stays inside; disallowed conversions lift out).
 
+The **toggle heading** title is not a child row, so its Enter/Backspace are handled locally in [`toggle-heading-view.tsx`](../../src/components/blocks/types/toggle-heading/toggle-heading-view.tsx): Enter inserts a first child at scope start and focuses it; Backspace at the title start converts the toggle back to a plain `heading` (lifting its children out as following siblings). Its child rows follow the generic-container policy (`onEmptyChildDelete: lift-out`).
+
 Page sidebar duplicate/rename/delete do not go through this resolver; they use page commands and `persistPageMetadata` instead. Sidebar and canvas **drag reorder** use the [drag-and-drop toolkit](../architecture/drag-and-drop.md) (`resolve-drop-target`, `page.reposition`) — not `resolveStructuralAction`.
 
 Structural commands that change document order persist `blockOrder` and bump page `updatedAt` in the same transaction as block rows; `createdAt` is unchanged.

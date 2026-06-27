@@ -17,16 +17,19 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { MobileBlockTypePicker } from "@/components/canvas/mobile-block-type-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import { useVisualViewportKeyboard } from "@/hooks/use-visual-viewport-keyboard.ts";
+import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import { getActiveCanvasRowId } from "@/lib/canvas/block-selection.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
+import { cn } from "@/lib/utils.ts";
 
 type PickerMode = "add" | "turnInto";
 
@@ -44,15 +47,15 @@ function ToolbarButton({
   return (
     <Button
       aria-label={label}
-      className="shrink-0 text-muted-foreground"
+      className="text-muted-foreground"
       onClick={onPress}
       onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
         // Keep the editor field focused (don't dismiss the keyboard).
         event.preventDefault();
       }}
-      size="icon-sm"
+      size="icon"
       type="button"
-      variant="ghost"
+      variant="outline"
     >
       {children}
     </Button>
@@ -61,25 +64,45 @@ function ToolbarButton({
 
 /**
  * Mobile (coarse pointer) command bar pinned above the on-screen keyboard while a
- * canvas block field is focused. Buttons add a block, convert the current block,
- * indent/outdent, move it up/down, and dismiss the keyboard — all driven by the
- * shared canvas command set. Mounted once at the editor root.
+ * canvas block field is focused. Solid outlined button-groups, portaled to
+ * `document.body` so `position: fixed` is viewport-relative. Visibility is driven
+ * by focus (not a keyboard-height threshold, which collapses during scroll and
+ * would flicker the bar out). Mounted once at the editor root.
+ *
+ * Positioning is owned per-platform by {@link useKeyboardToolbarAnchor}: on
+ * Chromium it flips this element to a `bottom`-anchor and lets CSS resize handle
+ * it; on iOS Safari it drives a composited `transform` from the visual viewport.
+ * The `top-0` base class below is the iOS anchor; the hook overrides it on
+ * Chromium. See [keyboard-toolbar](../../../docs/architecture/keyboard-toolbar.md).
  */
 export function MobileEditorToolbar() {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
-  const keyboard = useVisualViewportKeyboard();
   const { dispatch, getRows, insertAfter } = useCanvasEditorContext();
 
+  const anchorRef = useRef<HTMLDivElement>(null);
   // Row of the focused field (null when focus is on the title or off-canvas).
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
   // Captured when a picker opens, since opening it blurs the field.
   const pickerTargetRef = useRef<string | null>(null);
 
+  const visible =
+    isCoarsePrimaryPointer && focusedRowId !== null && pickerMode === null;
+  useKeyboardToolbarAnchor(anchorRef, visible);
+
   useEffect(() => {
     const onFocusIn = () => setFocusedRowId(getActiveCanvasRowId());
+    // Scrolling does not blur the field, so the bar stays put through scroll;
+    // only a real blur (keyboard dismissed / focus left the canvas) hides it.
+    const onFocusOut = () => {
+      requestAnimationFrame(() => setFocusedRowId(getActiveCanvasRowId()));
+    };
     document.addEventListener("focusin", onFocusIn);
-    return () => document.removeEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   }, []);
 
   const resolveTargetRowId = useCallback(
@@ -121,6 +144,12 @@ export function MobileEditorToolbar() {
         return;
       }
       pickerTargetRef.current = rowId;
+      // Blur the field so the on-screen keyboard hides behind the picker sheet
+      // (the row is already captured above, so the edit still targets it).
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
       setPickerMode(mode);
     },
     [resolveTargetRowId]
@@ -139,7 +168,7 @@ export function MobileEditorToolbar() {
       if (mode === "turnInto") {
         const row = findRowById(getRows(), rowId);
         if (row) {
-          applyBlockConversion(row, item, dispatch);
+          applyBlockConversion(row, item, dispatch, { absorb: true });
           dispatch({ type: "focus.set", rowId, placement: "start" });
         }
         return;
@@ -163,51 +192,70 @@ export function MobileEditorToolbar() {
     [dispatch, getRows, insertAfter, pickerMode]
   );
 
-  if (!isCoarsePrimaryPointer) {
+  if (!isCoarsePrimaryPointer || typeof document === "undefined") {
     return null;
   }
 
-  const showBar =
-    keyboard.isOpen && focusedRowId !== null && pickerMode === null;
-
   return (
     <>
-      {showBar ? (
+      {createPortal(
         <div
-          className="fixed inset-x-0 z-40 border-border border-t bg-popover/95 supports-backdrop-filter:bg-popover/80 supports-backdrop-filter:backdrop-blur"
+          aria-hidden={!visible}
+          className={cn(
+            // `will-change-transform` + `backface-hidden` keep the bar on its own
+            // compositor layer so the per-frame transform (see
+            // useKeyboardToolbarAnchor) never triggers layout/paint while tracking
+            // the keyboard. Only opacity transitions; the transform is never
+            // transitioned, so tracking is instant.
+            "backface-hidden fixed inset-x-0 top-0 z-50 flex items-center gap-2 px-3 transition-opacity duration-150 will-change-transform",
+            visible ? "opacity-100" : "pointer-events-none opacity-0"
+          )}
+          ref={anchorRef}
           role="toolbar"
-          style={{ bottom: keyboard.height }}
         >
-          <div className="flex items-center gap-1 overflow-x-auto px-2 py-1.5">
-            <ToolbarButton label="Add block" onPress={() => openPicker("add")}>
-              <IconPlus aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton
-              label="Turn into"
-              onPress={() => openPicker("turnInto")}
-            >
-              <IconExchange aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
-              <IconIndentDecrease aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton label="Indent" onPress={() => handleIndent(1)}>
-              <IconIndentIncrease aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
-              <IconArrowUp aria-hidden />
-            </ToolbarButton>
-            <ToolbarButton label="Move down" onPress={() => handleMove("down")}>
-              <IconArrowDown aria-hidden />
-            </ToolbarButton>
-            <div className="ml-auto flex shrink-0 items-center">
-              <ToolbarButton label="Close keyboard" onPress={handleDismiss}>
-                <IconKeyboardOff aria-hidden />
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+            <ButtonGroup className="shrink-0">
+              <ToolbarButton
+                label="Add block"
+                onPress={() => openPicker("add")}
+              >
+                <IconPlus aria-hidden />
               </ToolbarButton>
-            </div>
+              <ToolbarButton
+                label="Turn into"
+                onPress={() => openPicker("turnInto")}
+              >
+                <IconExchange aria-hidden />
+              </ToolbarButton>
+            </ButtonGroup>
+            <ButtonGroup className="shrink-0">
+              <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
+                <IconIndentDecrease aria-hidden />
+              </ToolbarButton>
+              <ToolbarButton label="Indent" onPress={() => handleIndent(1)}>
+                <IconIndentIncrease aria-hidden />
+              </ToolbarButton>
+            </ButtonGroup>
+            <ButtonGroup className="shrink-0">
+              <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
+                <IconArrowUp aria-hidden />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Move down"
+                onPress={() => handleMove("down")}
+              >
+                <IconArrowDown aria-hidden />
+              </ToolbarButton>
+            </ButtonGroup>
           </div>
-        </div>
-      ) : null}
+          <ButtonGroup className="shrink-0">
+            <ToolbarButton label="Close keyboard" onPress={handleDismiss}>
+              <IconKeyboardOff aria-hidden />
+            </ToolbarButton>
+          </ButtonGroup>
+        </div>,
+        document.body
+      )}
       <MobileBlockTypePicker
         onOpenChange={(open) => {
           if (!open) {

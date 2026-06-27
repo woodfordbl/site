@@ -1,6 +1,8 @@
 import {
   IconBlockquote,
   IconCheckbox,
+  IconChevronRight,
+  IconCode,
   IconH1,
   IconH2,
   IconH3,
@@ -22,6 +24,8 @@ import { CalloutEdit } from "@/components/blocks/types/callout/callout-edit.tsx"
 import { CalloutView } from "@/components/blocks/types/callout/callout-view.tsx";
 import { ChecklistItemEdit } from "@/components/blocks/types/checklist/checklist-item-edit.tsx";
 import { ChecklistItemView } from "@/components/blocks/types/checklist/checklist-item-view.tsx";
+import { CodeEdit } from "@/components/blocks/types/code/code-edit.tsx";
+import { CodeView } from "@/components/blocks/types/code/code-view.tsx";
 import { DividerEdit } from "@/components/blocks/types/divider/divider-edit.tsx";
 import { DividerView } from "@/components/blocks/types/divider/divider-view.tsx";
 import { EmbedEdit } from "@/components/blocks/types/embed/embed-edit.tsx";
@@ -115,6 +119,57 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     View: HeadingView,
     Edit: HeadingEdit,
   },
+  toggleHeading: {
+    type: "toggleHeading",
+    label: "Toggle heading",
+    slashAliases: ["toggle heading", "toggle"],
+    icon: IconChevronRight,
+    createDefault: () => createEmptyBlock("toggleHeading"),
+    behavior: {
+      editStrategy: "container",
+      capabilities: { ...CONTAINER_CAPABILITIES, slashMenu: true },
+    },
+    slashItems: [
+      {
+        key: "toggleHeading-1",
+        id: "toggleHeading",
+        toggleHeadingLevel: 1,
+        label: "Toggle heading 1",
+        aliases: ["toggle h1", "toggle heading 1"],
+        icon: IconH1,
+        keywords: ["toggle heading 1", "toggle h1", "toggle", "collapsible"],
+      },
+      {
+        key: "toggleHeading-2",
+        id: "toggleHeading",
+        toggleHeadingLevel: 2,
+        label: "Toggle heading 2",
+        aliases: ["toggle h2", "toggle heading 2"],
+        icon: IconH2,
+        keywords: ["toggle heading 2", "toggle h2", "toggle", "collapsible"],
+      },
+      {
+        key: "toggleHeading-3",
+        id: "toggleHeading",
+        toggleHeadingLevel: 3,
+        label: "Toggle heading 3",
+        aliases: ["toggle h3", "toggle heading 3"],
+        icon: IconH3,
+        keywords: ["toggle heading 3", "toggle h3", "toggle", "collapsible"],
+      },
+      {
+        key: "toggleHeading-4",
+        id: "toggleHeading",
+        toggleHeadingLevel: 4,
+        label: "Toggle heading 4",
+        aliases: ["toggle h4", "toggle heading 4"],
+        icon: IconH4,
+        keywords: ["toggle heading 4", "toggle h4", "toggle", "collapsible"],
+      },
+    ],
+    Container: () => resolveRegisteredContainer("toggleHeading"),
+    container: BLOCK_CONTAINER_CONFIG.toggleHeading,
+  },
   text: {
     type: "text",
     label: "Text",
@@ -153,6 +208,19 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     },
     View: CalloutView,
     Edit: CalloutEdit,
+  },
+  code: {
+    type: "code",
+    label: "Code",
+    slashAliases: ["code", "snippet"],
+    icon: IconCode,
+    createDefault: () => createEmptyBlock("code"),
+    behavior: {
+      editStrategy: "inline-custom",
+      capabilities: INLINE_CUSTOM_CAPABILITIES,
+    },
+    View: CodeView,
+    Edit: CodeEdit,
   },
   checklistItem: {
     type: "checklistItem",

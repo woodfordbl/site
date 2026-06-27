@@ -6,6 +6,11 @@ import {
 import { getBrowserStorage } from "@/db/collections/browser-storage.ts";
 import { BLOCK_SHARD_PREFIX } from "@/db/collections/page-sharded-block-storage.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
+import {
+  listSnapshotPageIds,
+  readSnapshotContent,
+  readSnapshotIndex,
+} from "@/db/snapshots/page-snapshot-store.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
@@ -77,11 +82,36 @@ export function collectReferencedAssetIds(
   return referenced;
 }
 
-/** Deletes IndexedDB blobs not referenced by any local media block. */
+/**
+ * Media asset ids referenced by stored version-history snapshots. A blob that a
+ * snapshot still points at must survive the sweep even when no live block uses
+ * it, so restoring that checkpoint keeps its media.
+ */
+async function collectSnapshotAssetIds(): Promise<Set<string>> {
+  const referenced = new Set<string>();
+  for (const pageId of await listSnapshotPageIds()) {
+    const index = await readSnapshotIndex(pageId);
+    for (const descriptor of index.descriptors) {
+      const content = await readSnapshotContent(pageId, descriptor.id);
+      if (!content) {
+        continue;
+      }
+      for (const assetId of collectAssetIdsFromBlocks(content.blocks)) {
+        referenced.add(assetId);
+      }
+    }
+  }
+  return referenced;
+}
+
+/** Deletes IndexedDB blobs not referenced by any local media block or snapshot. */
 export async function sweepOrphanAssets(
   storage: Storage = getBrowserStorage()
 ): Promise<number> {
   const referenced = collectReferencedAssetIds(storage);
+  for (const assetId of await collectSnapshotAssetIds()) {
+    referenced.add(assetId);
+  }
   const storedKeys = await listAssetKeys();
   let removed = 0;
 

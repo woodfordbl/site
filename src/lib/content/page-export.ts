@@ -12,6 +12,7 @@ export function exportPageDocument(
   rows: CanvasRow[],
   meta: {
     font?: PageFont;
+    fullWidth?: boolean;
     icon?: string;
     id: string;
     parentId: string | null;
@@ -30,6 +31,7 @@ export function exportPageDocument(
       ? {}
       : { font: meta.font }),
     ...(meta.smallText ? { smallText: true } : {}),
+    ...(meta.fullWidth ? { fullWidth: true } : {}),
     blocks: exportPageBlocks(rows),
   };
 }

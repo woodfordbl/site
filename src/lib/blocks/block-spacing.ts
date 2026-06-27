@@ -88,7 +88,7 @@ export function getBlockShellSpacingClass(
   blockType: Block["type"],
   headingLevel?: HeadingProps["level"]
 ): string {
-  if (blockType === "heading") {
+  if (blockType === "heading" || blockType === "toggleHeading") {
     return headingLevel ? headingTopSpacingClassNames[headingLevel] : "pt-3";
   }
 

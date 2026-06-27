@@ -9,9 +9,9 @@ Native HTML5 drag-and-drop shared by the **canvas block editor** and the **sideb
 | Core (pure) | [`src/lib/dnd/`](../../src/lib/dnd/) | MIME channel, rect snapshots, vertical bands, external drag store |
 | Headless React | [`src/components/dnd/`](../../src/components/dnd/) | `DndSurface`, prop-getter hooks, optional `DragOverlay` |
 | Canvas domain | [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) | Block/column/list drop targets → `row.move` / `row.moveToPosition` |
-| Sidebar domain | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) | Page tree bands (sibling vs nest) → `page.reposition` |
+| Sidebar domain | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) | Page tree bands (sibling vs nest) → `page.reposition` (the header ⋯ menu's **Move to** picker, [`page-move-targets.ts`](../../src/lib/pages/page-move-targets.ts), dispatches the same command) |
 
-The passive slots the canvas scroll region renders above the row list — the optional [page cover](./pages.md#page-cover) (`coverSlot`) and the mobile header (`headerSlot`) — sit outside the `DndSurface` and are never drop targets; canvas drag math only sees `[data-canvas-row]` elements. The cover does run its own self-contained vertical **reposition drag** (document `pointermove`/`pointerup` + rAF, panning `focalY`), reusing the same low-level pattern as [`useMediaResize`](../../src/components/blocks/types/media/use-media-resize.ts) rather than the `DndSurface` channel.
+The passive slots the canvas scroll region renders above the row list — the optional [page cover](./pages.md#page-cover) (`coverSlot`) and the mobile header (`headerSlot`) — sit outside the `DndSurface` and are never drop targets; canvas drag math only sees `[data-canvas-row]` elements. The cover (rendered full-bleed above the content column) does run its own self-contained vertical **reposition drag** (document `pointermove`/`pointerup` + rAF, panning `focalY`), reusing the same low-level pattern as [`useMediaResize`](../../src/components/blocks/types/media/use-media-resize.ts) rather than the `DndSurface` channel.
 
 ```mermaid
 flowchart TD
@@ -63,7 +63,7 @@ flowchart TD
 
 [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) wraps the canvas in an outer [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (canvas row channel) and a [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) that re-exposes that context to descendants. Nested table column [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) instances shadow the nearest `DndContext`; table row structure handles set `useCanvasRowSurface: true` on `useDragSource` so row drags still write `application/x-canvas-row-id` and commit through the canvas resolver.
 
-The DnD surface is part of the editor chunk only. The pre-editor read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) / [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) render blocks without any `DndSurface`, so reorder DnD activates once `PageCanvasEditor` swaps in — see [canvas-editor — Render pipeline](./canvas-editor.md#render-pipeline-flash-free).
+The DnD surface is part of the editor chunk only. The pre-editor read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) / [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) render blocks without any `DndSurface`, so reorder DnD activates once `PageCanvasEditor` swaps in — see [canvas-editor — Render pipeline](./canvas-editor.md#render-pipeline-flash-free). The [version-history preview](./pages.md#version-history) (`CanvasBlocksReadOnly mode="view"`) likewise has no DnD.
 
 ### Touch (pointer) drags
 
@@ -86,7 +86,8 @@ Native HTML5 DnD never starts on touch, so on coarse primary pointers (`(pointer
 Drop indicators:
 
 - Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight.
-- Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), [`TabView`](../../src/components/blocks/types/tabs/tab-view.tsx) (tab content shares the column-child drop model), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-selection-primary` horizontal/vertical lines).
+- Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), [`TabView`](../../src/components/blocks/types/tabs/tab-view.tsx) (tab content shares the column-child drop model), [`ToggleHeadingView`](../../src/components/blocks/types/toggle-heading/toggle-heading-view.tsx) (its `data-toggle-content` region shows the `atScopeStart` line), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-selection-primary` horizontal/vertical lines).
+- **Toggle heading drops:** a toggle heading's children render inline, so the generic `resolveVerticalRowDrop` already resolves drops between them. `resolveToggleHeadingDrop` in [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) adds the empty-toggle case (drop becomes the first child, `atScopeStart`). A **collapsed** toggle hides its children, so it is treated as an ordinary before/after target — no nesting, no auto-expand.
 
 ### Table layout
 
@@ -124,6 +125,8 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 - [Canvas commands](../reference/canvas-commands.md)
 - [Page commands — `page.reposition`](../reference/page-commands.md#page-reposition)
 
+Reposition and canvas structural drops persist through the same paths that schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history).
+
 ## Scope
 
-This document covers the shared DnD toolkit only. Other modules under `src/components/pages/` (for example the icon picker) are documented in [pages](./pages.md) and do not use this DnD layer.
+This document covers the shared DnD toolkit only. Other modules under `src/components/pages/` (for example the icon picker) are documented in [pages](./pages.md) and do not use this DnD layer. Other coarse-pointer canvas surfaces that are **not** DnD — the long-press [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx) and the above-keyboard [`MobileEditorToolbar`](../../src/components/canvas/mobile-editor-toolbar.tsx) — are covered in [canvas-editor](./canvas-editor.md) and [keyboard-toolbar](./keyboard-toolbar.md).

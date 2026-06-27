@@ -89,6 +89,19 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     insertSiblingOnEnter: false,
     acceptEmptyMergeFromAfter: false,
   },
+  toggleHeading: {
+    // Generic-scope container (like `column`/`tab`) holding the heading's
+    // content as children. Emptying-and-deleting the first child lifts it out
+    // after the toggle rather than orphaning it.
+    allowedChildTypes: "*",
+    defaultChildType: "text",
+    onDisallowedChildConversion: "prevent",
+    onEmptyChildDelete: "lift-out",
+    onEmptyChildEnter: "insert-sibling",
+    onCaretStartChildEnter: "insert-sibling",
+    insertSiblingOnEnter: true,
+    acceptEmptyMergeFromAfter: true,
+  },
 };
 
 export function getContainerDefinition(

@@ -9,12 +9,12 @@ import {
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
-import { computeHiddenRowIds } from "@/lib/blocks/heading-collapse.ts";
 
 /**
- * Shared collapse state for collapsible headings. Two providers implement the
- * same interface so the editor and the read-only view toggle headings the same
- * way:
+ * Shared collapse state for toggle headings. A toggle heading owns its content
+ * as real children, so "collapsed" simply means the container does not render
+ * those children — there is no sibling-range filtering. Two providers implement
+ * the same interface so the editor and the read-only view toggle the same way:
  * - {@link EditorHeadingCollapseProvider} persists `collapsed` through the
  *   canvas reducer, so it reads purely from block props (no local state to go
  *   stale on undo).
@@ -28,7 +28,7 @@ interface HeadingCollapseValue {
 
 function persistedCollapsed(row: CanvasRow): boolean {
   const block = row.effectiveBlock;
-  return block.type === "heading" && block.props.collapsed === true;
+  return block.type === "toggleHeading" && block.props.collapsed === true;
 }
 
 const HeadingCollapseContext = createContext<HeadingCollapseValue>({
@@ -51,7 +51,7 @@ export function EditorHeadingCollapseProvider({
   const toggle = useCallback(
     (row: CanvasRow) => {
       const block = row.effectiveBlock;
-      if (block.type !== "heading") {
+      if (block.type !== "toggleHeading") {
         return;
       }
       dispatch({
@@ -112,21 +112,4 @@ export function ReadOnlyHeadingCollapseProvider({
       {children}
     </HeadingCollapseContext.Provider>
   );
-}
-
-/**
- * Filter one sibling scope down to the rows that should be mounted, hiding the
- * content under collapsed headings. Applied at every scope-mapping site (page
- * body and column children) so a hidden row is simply never rendered.
- */
-export function useVisibleScopeRows(rows: CanvasRow[]): CanvasRow[] {
-  const { isCollapsed } = useHeadingCollapse();
-
-  return useMemo(() => {
-    const hidden = computeHiddenRowIds(rows, isCollapsed);
-    if (hidden.size === 0) {
-      return rows;
-    }
-    return rows.filter((row) => !hidden.has(row.rowId));
-  }, [rows, isCollapsed]);
 }

@@ -58,6 +58,7 @@ export function BlockGutterMenuProvider({
   const { closeBlockActionsMenu, openRowId } = useBlockActionsMenu();
 
   const row = rows.find((entry) => entry.rowId === rowId);
+  const effectiveBlockId = row?.effectiveBlock.id;
   const canTurnInto = row ? canTurnIntoBlock(row) : false;
   const turnIntoValue = row
     ? turnIntoValueFromBlock(row.effectiveBlock)
@@ -260,6 +261,7 @@ export function BlockGutterMenuProvider({
       actionItems,
       blockTypeLabel,
       canTurnInto,
+      effectiveBlockId,
       embedBlock,
       handleAddColumn,
       handleAddRow,
@@ -286,6 +288,7 @@ export function BlockGutterMenuProvider({
       actionItems,
       blockTypeLabel,
       canTurnInto,
+      effectiveBlockId,
       embedBlock,
       handleAddColumn,
       handleAddRow,
