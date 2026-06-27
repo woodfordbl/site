@@ -204,7 +204,7 @@ function PageListRowLink({
           <CollapsibleTrigger
             aria-expanded={isExpanded}
             aria-label={isExpanded ? `Collapse ${title}` : `Expand ${title}`}
-            className="swap-reveal pointer-events-none absolute inset-0 flex items-center justify-center rounded-sm text-sidebar-foreground outline-hidden ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-hover/page-row:pointer-events-auto group-focus-visible/page-row:pointer-events-auto"
+            className="swap-reveal pointer-events-none absolute inset-0 flex items-center justify-center rounded-sm text-sidebar-foreground outline-hidden ring-sidebar-ring hover-none:pointer-events-auto hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-hover/page-row:pointer-events-auto group-focus-visible/page-row:pointer-events-auto"
             onClick={(event) => {
               event.stopPropagation();
             }}
