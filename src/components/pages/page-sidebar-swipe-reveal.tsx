@@ -264,7 +264,7 @@ export function PageSidebarSwipeReveal({
   const isRevealed = translateX > 0;
 
   return (
-    <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+    <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-sidebar">
       {/* Sidebar layer — fixed behind the content, revealed as content slides. */}
       <div
         aria-hidden={!openMobile}
@@ -286,7 +286,7 @@ export function PageSidebarSwipeReveal({
           "relative z-10 h-full w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none",
           isDragging && "transition-none",
           isRevealed &&
-            "overflow-hidden rounded-xl shadow-lg ring-1 ring-border"
+            "overflow-hidden rounded-3xl shadow-lg ring-1 ring-border"
         )}
         style={{ transform: `translateX(${translateX}px)` }}
       >
@@ -297,7 +297,7 @@ export function PageSidebarSwipeReveal({
         {openMobile ? (
           <div
             aria-hidden
-            className="absolute inset-0 z-10 bg-black/20"
+            className="absolute inset-0 z-10 bg-white/30"
             style={{ touchAction: "none" }}
             {...gestureHandlers}
           />
@@ -309,7 +309,10 @@ export function PageSidebarSwipeReveal({
         <div
           aria-hidden
           className="absolute inset-y-0 left-0 z-20 w-3"
-          style={{ touchAction: "pan-y" }}
+          // touch-action: none claims the left-edge horizontal swipe so iOS
+          // Safari's back-navigation gesture doesn't fire from this strip
+          // (Android/Chrome is already covered by `overscroll-behavior: none`).
+          style={{ touchAction: "none" }}
           {...gestureHandlers}
         />
       )}
