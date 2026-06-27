@@ -57,12 +57,17 @@ function PageHeaderBreadcrumb({
   pages: ReturnType<typeof useMergedPageListItems>["pages"];
   titleSeed?: PageMetadataSeed;
 }) {
+  const isNarrowViewport = useIsNarrowViewport();
   const currentSummary = pages.find((page) => page.id === pageId);
 
-  const ancestors = getAncestorPageIds(pageId, pages)
-    .map((id) => pages.find((page) => page.id === id))
-    .filter((page): page is NonNullable<typeof page> => Boolean(page))
-    .reverse();
+  // On mobile the breadcrumb collapses to just the current page; ancestor crumbs
+  // (and their drawer menus) are only shown on wider viewports.
+  const ancestors = isNarrowViewport
+    ? []
+    : getAncestorPageIds(pageId, pages)
+        .map((id) => pages.find((page) => page.id === id))
+        .filter((page): page is NonNullable<typeof page> => Boolean(page))
+        .reverse();
 
   if (!currentSummary) {
     return null;
