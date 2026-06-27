@@ -69,6 +69,14 @@ export type CanvasCommand =
       count: number;
       text?: string;
     }
+  | {
+      type: "toggleHeading.create";
+      rowId: string;
+      level: 1 | 2 | 3 | 4;
+      text?: string;
+      /** When true, absorb following same-scope siblings as children. */
+      absorb?: boolean;
+    }
   | { type: "tabs.addTab"; tabsRowId: string }
   | { type: "tabs.removeTab"; tabRowId: string }
   | { type: "tabs.moveTab"; tabRowId: string; direction: "prev" | "next" }

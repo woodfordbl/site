@@ -13,7 +13,9 @@
 | Kind | Types | Spec shape |
 |------|-------|------------|
 | Leaf | `heading`, `text`, `quote`, `callout`, `code`, `checklistItem`, `pageLink`, `divider`, `media`, `embed`, `tableCell` | `View` + `Edit` |
-| Container | `list`, `checklist`, `columns`, `column`, `tabs`, `tab`, `table`, `tableRow` | `Container` + `container` behavior (`column` and `tab` are generic-scope containers) |
+| Container | `list`, `checklist`, `columns`, `column`, `tabs`, `tab`, `table`, `tableRow`, `toggleHeading` | `Container` + `container` behavior (`column`, `tab`, and `toggleHeading` are generic-scope containers) |
+
+`toggleHeading` is the one container that also carries primary text (`props.level`, `props.text`, optional `props.collapsed`). Because `ContainerBlockSpec` has no leaf `Edit`/`View`, its editable title lives inside the `Container` component ([`toggle-heading-view.tsx`](../../src/components/blocks/types/toggle-heading/toggle-heading-view.tsx)) — it dispatches `row.update` for the title and reads/writes `props.collapsed` through the heading-collapse context. Collapsing hides only its own children. Plain `heading` stays a leaf and is never collapsible.
 
 `CONTAINER_BLOCK_TYPES`, `ContainerBlockType` / `LeafBlockType`, the `isContainerBlockType` / `isLeafBlockType` guards, and `BlockFor` / `PropsFor` live in [`src/lib/blocks/block-defs.ts`](../../src/lib/blocks/block-defs.ts); spec shapes in [`src/lib/canvas/block-spec.types.ts`](../../src/lib/canvas/block-spec.types.ts).
 

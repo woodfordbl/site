@@ -79,4 +79,4 @@ Workspace chrome ([`PageSidebarChromeProvider`](../../src/components/pages/page-
 | Narrow viewport | [`SidebarTrigger`](../../src/components/ui/sidebar.tsx) in [`PageHeader`](../../src/components/pages/page-header.tsx) opens a Sheet (`useIsNarrowViewport`, `(max-width: 767px)`). On narrow viewports [`PageWorkspace`](../../src/components/pages/page-workspace.tsx) renders the header inside the canvas scroll region (as `headerSlot`) so it scrolls away instead of staying pinned — see [pages](../architecture/pages.md). Page settings, CRUD, and activity live in [`PageHeaderMenu`](../../src/components/pages/page-header-menu.tsx) (single ⋯ trigger). Dev/sync actions live in site settings (`/settings`) — see [site-settings](../architecture/site-settings.md) |
 | Shortcut | **Cmd/Ctrl+B** toggles pinned/collapsed |
 
-See [pages — Page list](../architecture/pages.md#page-list).
+See [pages — Page list](../architecture/pages.md#page-list). The header-menu activity summary (block / word counts — word count includes `toggleHeading` titles) is documented in [pages](../architecture/pages.md).

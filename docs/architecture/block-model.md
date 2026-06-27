@@ -3,6 +3,8 @@
 ## Principles
 
 - Every block has `id`, `type`, optional `parentId`, optional `indent` (0–4)
+- **Heading** blocks are leaves (`props.level: 1 | 2 | 3 | 4`, `props.text`) — never collapsible
+- **Toggle heading** blocks are generic-scope containers (`allowedChildTypes: *`) that also carry primary text (`props.level`, `props.text`, optional `props.collapsed`); children are normal canvas rows. Collapsing hides **only its own children** (the container does not render them) — there is no sibling-range filtering. The editable title lives inside the container component (container specs have no leaf `Edit`), mirroring `TabsView`.
 - **List** blocks are containers only (`props.variant: bullet | ordered`)
 - **Checklist** blocks are containers only (empty props)
 - **Columns** blocks are containers only (empty props); children are **column** blocks only
@@ -36,6 +38,9 @@ page (canvas)
 │   ├── text (parentId: list)
 │   └── text (parentId: list, indent: 1)
 ├── heading (parentId: null, props.level: 1 | 2 | 3 | 4)
+├── toggleHeading (parentId: null, props.level, props.text, optional props.collapsed)
+│   ├── text / heading / … (parentId: toggleHeading)
+│   └── list (parentId: toggleHeading) …
 ├── quote (parentId: null, props.text)
 ├── callout (parentId: null, props.text, optional props.icon — emoji or `tabler:IconName`)
 ├── code (parentId: null, props.text, optional props.language — Shiki language id)
@@ -81,6 +86,8 @@ Each container defines:
 Container children are validated against policy on read via `coerceContainerChildBlocks`; list children are coerced to `text` and checklist children to `checklistItem` when needed.
 
 **Lift-out / conversion:** When a container child becomes a top-level row, mutate the existing block (`persist` + `move`) rather than delete and recreate it with the same id. Focus after lift-out is deferred until the row renders outside the container ([`apply-pending-focus.ts`](../../src/lib/canvas/apply-pending-focus.ts)). See [canvas-editor](./canvas-editor.md#block-identity-on-structural-edits).
+
+**Toggle heading conversion** ([`toggle-heading-layout.ts`](../../src/lib/canvas/toggle-heading-layout.ts)): _Turn into_ a toggle heading (gutter / mobile toolbar, `absorb: true`) re-parents the following same-scope siblings — up to the next heading/toggleHeading of equal-or-higher level — into the new toggle as children. A plain slash insert passes `absorb: false`, producing an empty toggle. Converting a toggle heading back to a leaf lifts its children out as following siblings (in order) before persisting the leaf. Re-leveling an existing toggle keeps its children and `collapsed` state and absorbs nothing.
 
 ## User block ordering
 
