@@ -2,7 +2,6 @@ import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
-import { defaultChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import { cn } from "@/lib/utils.ts";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -43,11 +42,15 @@ function ChartContainer({
   className,
   children,
   config,
-  palette = defaultChartPaletteId,
+  palette,
   initialDimension = INITIAL_DIMENSION,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig;
+  /**
+   * Local palette override. When omitted, the chart inherits the workspace
+   * default set on `<html data-chart-palette>` (Settings → Appearance).
+   */
   palette?: ChartPaletteId;
   children: React.ComponentProps<
     typeof RechartsPrimitive.ResponsiveContainer

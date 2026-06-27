@@ -137,6 +137,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html
       className={isDark ? "dark" : undefined}
+      data-chart-palette={siteAppearance.appearance.chartPalette}
       data-page-text-scale={siteAppearance.appearance.textScale}
       lang="en"
     >

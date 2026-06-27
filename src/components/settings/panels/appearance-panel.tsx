@@ -8,6 +8,11 @@ import {
 } from "@/components/settings/settings-item-card.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
+import {
+  CHART_PALETTE_IDS,
+  CHART_PALETTES,
+  type ChartPaletteId,
+} from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type { ThemePreference } from "@/lib/schemas/site-appearance.ts";
 import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
@@ -24,12 +29,48 @@ const TEXT_SIZE_OPTIONS: Array<{ label: string; value: PageTextScale }> = [
   { value: "large", label: "Large" },
 ];
 
+const CHART_PALETTE_OPTIONS: Array<{ label: string; value: ChartPaletteId }> =
+  CHART_PALETTE_IDS.map((id) => ({
+    value: id,
+    label: CHART_PALETTES[id].label,
+  }));
+
 interface AppearancePanelProps {
   search: SettingsSearch;
 }
 
+const PALETTE_SWATCH_TOKENS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
+
+/** Live preview of a palette's five chart colors. */
+function PaletteSwatch({ palette }: { palette: ChartPaletteId }) {
+  return (
+    <div className="flex items-center gap-1" data-chart-palette={palette}>
+      {PALETTE_SWATCH_TOKENS.map((token) => (
+        <span
+          className="size-3.5 rounded-full ring-1 ring-foreground/10"
+          key={token}
+          style={{ backgroundColor: token }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function AppearancePanel({ search }: AppearancePanelProps) {
-  const { setTextScale, setTheme, textScale, theme } = useSiteAppearance();
+  const {
+    chartPalette,
+    setChartPalette,
+    setTextScale,
+    setTheme,
+    textScale,
+    theme,
+  } = useSiteAppearance();
   const section = getSettingsSection("appearance");
 
   return (
@@ -60,6 +101,20 @@ export function AppearancePanel({ search }: AppearancePanelProps) {
           }
           description="Default text size for pages. Individual pages can override this."
           title="Text size"
+        />
+        <SettingsItemField
+          action={
+            <div className="flex items-center gap-3">
+              <PaletteSwatch palette={chartPalette} />
+              <SettingsItemSelect
+                onValueChange={setChartPalette}
+                options={CHART_PALETTE_OPTIONS}
+                value={chartPalette}
+              />
+            </div>
+          }
+          description="Default color palette for analytics charts across the workspace."
+          title="Chart palette"
         />
       </SettingsItemCard>
     </SettingsPanelShell>
