@@ -3,11 +3,17 @@ import { z } from "zod";
 export const headingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
-  /**
-   * When true, the blocks under this heading (following siblings up to the next
-   * heading of equal-or-higher level) are hidden. Absent means expanded; kept
-   * optional so unchanged headings keep their row identity across tree rebuilds.
-   */
+});
+
+/**
+ * `toggleHeading` block props: a heading title that owns its content as real
+ * children. `collapsed` hides only those children (not following siblings).
+ * Absent means expanded; kept optional so unchanged toggles keep their row
+ * identity across tree rebuilds.
+ */
+export const toggleHeadingPropsSchema = z.object({
+  level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  text: z.string(),
   collapsed: z.boolean().optional(),
 });
 
@@ -121,6 +127,7 @@ export const embedPropsSchema = z.object({
 });
 
 export type HeadingProps = z.infer<typeof headingPropsSchema>;
+export type ToggleHeadingProps = z.infer<typeof toggleHeadingPropsSchema>;
 export type TextProps = z.infer<typeof textPropsSchema>;
 export type ListProps = z.infer<typeof listPropsSchema>;
 export type QuoteProps = z.infer<typeof quotePropsSchema>;

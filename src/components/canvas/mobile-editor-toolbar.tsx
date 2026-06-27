@@ -168,7 +168,7 @@ export function MobileEditorToolbar() {
       if (mode === "turnInto") {
         const row = findRowById(getRows(), rowId);
         if (row) {
-          applyBlockConversion(row, item, dispatch);
+          applyBlockConversion(row, item, dispatch, { absorb: true });
           dispatch({ type: "focus.set", rowId, placement: "start" });
         }
         return;

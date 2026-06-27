@@ -78,8 +78,12 @@ export function convertBlockType(
     };
   }
 
-  if (type === "heading") {
-    const next = createEmptyBlock("heading");
+  if (type === "heading" || type === "toggleHeading") {
+    const next = createEmptyBlock(type);
+    const sourceLevel =
+      block.type === "heading" || block.type === "toggleHeading"
+        ? block.props.level
+        : 1;
     return {
       ...next,
       id: block.id,
@@ -88,9 +92,7 @@ export function convertBlockType(
       props: {
         ...next.props,
         text: options?.text ?? getTextFromBlock(block),
-        level:
-          options?.headingLevel ??
-          (block.type === "heading" ? block.props.level : 1),
+        level: options?.headingLevel ?? sourceLevel,
       },
     };
   }

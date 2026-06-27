@@ -13,6 +13,8 @@ function countWordsInBlock(block: Block): number {
       return countWordsInText(block.props.text);
     case "heading":
       return countWordsInText(block.props.text);
+    case "toggleHeading":
+      return countWordsInText(block.props.text);
     case "quote":
       return countWordsInText(block.props.text);
     case "tableCell":
