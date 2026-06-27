@@ -22,6 +22,7 @@ import {
   pagesById,
 } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import { deletePageLinkReferences } from "@/lib/pages/delete-page-link-references.ts";
 import { mergePageList } from "@/lib/pages/merge-page-list.ts";
 import {
   canDeletePage,
@@ -354,6 +355,18 @@ export function usePageDispatch(pages: PageSummary[] = []) {
   const applyEffects = useCallback(
     (effects: PageEffect[], dispatchPages: PageSummary[]) => {
       const now = new Date().toISOString();
+
+      const deleteTargets = new Set<string>();
+      for (const effect of effects) {
+        if (effect.type === "page.delete") {
+          deleteTargets.add(effect.pageId);
+        }
+      }
+      if (deleteTargets.size > 0) {
+        deletePageLinkReferences(deleteTargets, dispatchPages).catch(
+          () => undefined
+        );
+      }
 
       for (const effect of effects) {
         switch (effect.type) {

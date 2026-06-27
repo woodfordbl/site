@@ -1,14 +1,17 @@
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
+import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
 
 function Switch({
   className,
+  onCheckedChange,
   size = "default",
   ...props
 }: SwitchPrimitive.Root.Props & {
   size?: "sm" | "default";
 }) {
+  const haptic = useHaptics();
   return (
     <SwitchPrimitive.Root
       className={cn(
@@ -17,6 +20,14 @@ function Switch({
       )}
       data-size={size}
       data-slot="switch"
+      onCheckedChange={(checked, eventDetails) => {
+        // A toggle is a discrete value change — light tick on coarse pointers
+        // (no-op on desktop via the provider). Fire before delegating so the
+        // feedback is immediate. Mirrors `checkbox.tsx`; see
+        // docs/architecture/haptics.md.
+        haptic("selection");
+        onCheckedChange?.(checked, eventDetails);
+      }}
       {...props}
     >
       <SwitchPrimitive.Thumb

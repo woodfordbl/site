@@ -14,17 +14,28 @@ export const pageTitleBlockAlignClassName = "max-md:pl-0 md:pl-9";
 /** Page icon picker alignment with stacked (mobile) vs inline (sm+) title. */
 export const pageTitleIconPickerClassName = "mt-0 sm:mt-0.5";
 
-/** Mobile canvas scroll inset — fits one `icon-xs` gutter in the padding lane. */
+/**
+ * Mobile canvas scroll inset — fits one `icon-xs` gutter in the padding lane.
+ *
+ * `pb-[50vh]`: the on-screen keyboard covers the bottom of the viewport, so a
+ * trailing block has nothing below it to scroll against and can sit pinned
+ * behind the keyboard where it can't be tapped/edited. A half-viewport of
+ * bottom scroll room lets any block be scrolled up clear of the keyboard. The
+ * `md:pb-12` override restores the tight desktop inset (no keyboard there).
+ */
 export const pageCanvasMobileScrollClassName =
-  "overflow-auto pr-4 pb-4 pl-7 md:px-12 md:py-12 md:pb-12";
+  "overflow-auto pr-4 pb-[50vh] pl-7 md:px-12 md:py-12 md:pb-12";
 
 /**
  * Touch (coarse pointer) canvas scroll inset. The drag gutter is not rendered on
  * coarse pointers, so the reserved gutter lane is dropped and the content left
  * edge lines up with the mobile header's sidebar button (`px-3`) instead.
+ *
+ * Carries the same `pb-[50vh]` keyboard scroll room as
+ * {@link pageCanvasMobileScrollClassName}.
  */
 export const pageCanvasTouchScrollClassName =
-  "overflow-auto pr-4 pb-4 pl-3 md:px-12 md:py-12 md:pb-12";
+  "overflow-auto pr-4 pb-[50vh] pl-3 md:px-12 md:py-12 md:pb-12";
 
 /** Mobile header slot inset — negative margins cancel the scroll padding so the
  *  header sits flush to the panel edge (gutter-lane variant). */

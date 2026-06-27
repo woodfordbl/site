@@ -1,13 +1,27 @@
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 
+import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
 
-function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
+function RadioGroup({
+  className,
+  onValueChange,
+  ...props
+}: RadioGroupPrimitive.Props) {
+  const haptic = useHaptics();
   return (
     <RadioGroupPrimitive
       className={cn("grid w-full gap-2", className)}
       data-slot="radio-group"
+      onValueChange={(value, eventDetails) => {
+        // Picking a radio is a discrete value change — light tick on coarse
+        // pointers (no-op on desktop via the provider). Wired at the group level,
+        // not per item, so a selection ticks exactly once. Mirrors `checkbox.tsx`;
+        // see docs/architecture/haptics.md.
+        haptic("selection");
+        onValueChange?.(value, eventDetails);
+      }}
       {...props}
     />
   );

@@ -270,6 +270,14 @@
     {
       "globs": ["src/styles.css"],
       "docs": ["docs/architecture/motion.md"]
+    },
+    {
+      "globs": [
+        "src/hooks/haptics.ts",
+        "src/components/layout/haptics-provider.tsx"
+      ],
+      "docs": ["docs/architecture/haptics.md"],
+      "majorGlobs": ["src/components/layout/haptics-provider.tsx"]
     }
   ]
 }
