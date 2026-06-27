@@ -22,7 +22,6 @@ import { createPortal } from "react-dom";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { MobileBlockTypePicker } from "@/components/canvas/mobile-block-type-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
@@ -32,6 +31,10 @@ import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import { cn } from "@/lib/utils.ts";
 
 type PickerMode = "add" | "turnInto";
+
+/** Solid (non-glass) rounded group: outline + shadow, opaque background. */
+const toolbarGroupClassName =
+  "flex shrink-0 items-center gap-0.5 rounded-full bg-popover p-1 ring-1 ring-foreground/10 shadow-[0_6px_16px_-4px_rgba(0,0,0,0.18)]";
 
 /** Button that runs its action without stealing focus from the editor field, so
  *  the on-screen keyboard stays open (same pattern as the slash-menu rows). */
@@ -63,33 +66,40 @@ function ToolbarButton({
 
 /**
  * Mobile (coarse pointer) command bar pinned above the on-screen keyboard while a
- * canvas block field is focused. Rendered as frosted pill button-groups, portaled
- * to `document.body` so `position: fixed` is viewport-relative, and anchored to the
- * keyboard top imperatively (see {@link useKeyboardToolbarAnchor}). Buttons add a
- * block, convert the current block, indent/outdent, move it up/down, and dismiss
- * the keyboard — all via the shared canvas command set. Mounted once at the editor
- * root.
+ * canvas block field is focused. Solid outlined button-groups, portaled to
+ * `document.body` so `position: fixed` is viewport-relative, anchored to the
+ * keyboard top imperatively (see {@link useKeyboardToolbarAnchor}). Visibility is
+ * driven by focus (not a keyboard-height threshold, which collapses during scroll
+ * and would flicker the bar out). Mounted once at the editor root.
  */
 export function MobileEditorToolbar() {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { dispatch, getRows, insertAfter } = useCanvasEditorContext();
 
   const anchorRef = useRef<HTMLDivElement>(null);
-  const { isOpen } = useKeyboardToolbarAnchor(
-    anchorRef,
-    isCoarsePrimaryPointer
-  );
-
   // Row of the focused field (null when focus is on the title or off-canvas).
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
   // Captured when a picker opens, since opening it blurs the field.
   const pickerTargetRef = useRef<string | null>(null);
 
+  const visible =
+    isCoarsePrimaryPointer && focusedRowId !== null && pickerMode === null;
+  useKeyboardToolbarAnchor(anchorRef, visible);
+
   useEffect(() => {
     const onFocusIn = () => setFocusedRowId(getActiveCanvasRowId());
+    // Scrolling does not blur the field, so the bar stays put through scroll;
+    // only a real blur (keyboard dismissed / focus left the canvas) hides it.
+    const onFocusOut = () => {
+      requestAnimationFrame(() => setFocusedRowId(getActiveCanvasRowId()));
+    };
     document.addEventListener("focusin", onFocusIn);
-    return () => document.removeEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   }, []);
 
   const resolveTargetRowId = useCallback(
@@ -177,8 +187,6 @@ export function MobileEditorToolbar() {
     return null;
   }
 
-  const visible = isOpen && focusedRowId !== null && pickerMode === null;
-
   return (
     <>
       {createPortal(
@@ -192,7 +200,7 @@ export function MobileEditorToolbar() {
           role="toolbar"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-            <ButtonGroup variant="overlay">
+            <div className={toolbarGroupClassName}>
               <ToolbarButton
                 label="Add block"
                 onPress={() => openPicker("add")}
@@ -205,16 +213,16 @@ export function MobileEditorToolbar() {
               >
                 <IconExchange aria-hidden />
               </ToolbarButton>
-            </ButtonGroup>
-            <ButtonGroup variant="overlay">
+            </div>
+            <div className={toolbarGroupClassName}>
               <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
                 <IconIndentDecrease aria-hidden />
               </ToolbarButton>
               <ToolbarButton label="Indent" onPress={() => handleIndent(1)}>
                 <IconIndentIncrease aria-hidden />
               </ToolbarButton>
-            </ButtonGroup>
-            <ButtonGroup variant="overlay">
+            </div>
+            <div className={toolbarGroupClassName}>
               <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
@@ -224,13 +232,13 @@ export function MobileEditorToolbar() {
               >
                 <IconArrowDown aria-hidden />
               </ToolbarButton>
-            </ButtonGroup>
+            </div>
           </div>
-          <ButtonGroup className="shrink-0" variant="overlay">
+          <div className={toolbarGroupClassName}>
             <ToolbarButton label="Close keyboard" onPress={handleDismiss}>
               <IconKeyboardOff aria-hidden />
             </ToolbarButton>
-          </ButtonGroup>
+          </div>
         </div>,
         document.body
       )}
