@@ -27,7 +27,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Backdrop
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
+        "fixed inset-0 isolate z-50 bg-black/20",
         "transition-opacity duration-200 ease-[var(--ease-out-strong)]",
         "data-[starting-style]:opacity-0",
         "data-[ending-style]:opacity-0 data-[ending-style]:duration-150",
