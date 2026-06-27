@@ -110,6 +110,10 @@ export function TableStructureHandle({
 
   const { getSourceProps, isDragging, showGrabbing } = useDragSource({
     id: dragId,
+    // Column grips reorder horizontally, row grips vertically; lock the touch
+    // drag to that axis so the orthogonal scroll (table ScrollArea / page) wins.
+    dragAxis: axis === "row" ? "y" : "x",
+    haptics: true,
     useCanvasRowSurface,
     onClickWithoutDrag: () => {
       handleMenuOpenChange(true);
@@ -165,6 +169,14 @@ export function TableStructureHandle({
                 "hover-reveal cursor-pointer active:cursor-grabbing",
                 "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 axis === "row" ? "h-5 w-3" : "h-3 w-5",
+                // Touch-only hit slop: a `::before` enlarges the tap target to
+                // ~44px without moving the visual grip or affecting layout. The
+                // slop is biased away from editable cells (column → up, row →
+                // left) so it doesn't steal taps meant for cell content.
+                "before:absolute before:content-['']",
+                axis === "row"
+                  ? "hover-none:before:-inset-y-3 hover-none:before:-right-1 hover-none:before:-left-4"
+                  : "hover-none:before:-inset-x-3 hover-none:before:-top-4 hover-none:before:-bottom-1",
                 revealGroupClassName,
                 "hover:opacity-100 focus-visible:opacity-100",
                 (menuOpen || showGrabbing) && "opacity-100",

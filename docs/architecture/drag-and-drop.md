@@ -48,7 +48,7 @@ flowchart TD
 
 | Hook | Use |
 |------|-----|
-| `useDragSource({ id, holdMs?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. On coarse pointers it swaps the native path for a pointer-event drag (see [Touch drags](#touch-pointer-drags)). `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
+| `useDragSource({ id, holdMs?, dragAxis?, haptics?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. On coarse pointers it swaps the native path for a pointer-event drag (see [Touch drags](#touch-pointer-drags)). `dragAxis: "x" \| "y"` direction-locks the touch-drag start so an orthogonal scroll wins (table grips); `haptics: true` opts the touch drag into pick-up/drop feedback. `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
 | `useDropZone()` | Spread `getDropZoneProps()` on the container (`nav`, canvas wrapper) |
 | `useDropTarget(selector)` | `useSyncExternalStore` slice of `dropTarget` — only rows whose selector result changes re-render |
 | `useDragState(selector)` | Same for `draggingId` / `pointer` (e.g. disable inputs while dragging) |

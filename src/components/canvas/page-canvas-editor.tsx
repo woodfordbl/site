@@ -406,7 +406,7 @@ function PageCanvasEditorBody({
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
                       className={cn(
-                        "relative flex min-h-0 flex-1 flex-col",
+                        "relative flex min-h-0 flex-1 flex-col max-md:overflow-x-clip",
                         isCoarsePrimaryPointer
                           ? pageCanvasTouchScrollClassName
                           : pageCanvasMobileScrollClassName
