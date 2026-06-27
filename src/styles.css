@@ -395,7 +395,10 @@
 
   body {
     overscroll-behavior: none;
-    @apply bg-background text-foreground;
+    /* Sidebar (not background) so the surface iOS Safari samples for its bar
+       tint — and the translucent bottom toolbar sits over — is the app's gray,
+       not white. The white page content paints over this within the shell. */
+    @apply bg-sidebar text-foreground;
   }
 
   html {
