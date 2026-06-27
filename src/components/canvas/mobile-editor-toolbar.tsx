@@ -22,6 +22,7 @@ import { createPortal } from "react-dom";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { MobileBlockTypePicker } from "@/components/canvas/mobile-block-type-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
@@ -31,10 +32,6 @@ import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import { cn } from "@/lib/utils.ts";
 
 type PickerMode = "add" | "turnInto";
-
-/** Solid (non-glass) rounded group: outline + shadow, opaque background. */
-const toolbarGroupClassName =
-  "flex shrink-0 items-center gap-0.5 rounded-full bg-popover p-1 ring-1 ring-foreground/10 shadow-[0_6px_16px_-4px_rgba(0,0,0,0.18)]";
 
 /** Button that runs its action without stealing focus from the editor field, so
  *  the on-screen keyboard stays open (same pattern as the slash-menu rows). */
@@ -57,7 +54,7 @@ function ToolbarButton({
       }}
       size="icon"
       type="button"
-      variant="ghost"
+      variant="outline"
     >
       {children}
     </Button>
@@ -200,7 +197,7 @@ export function MobileEditorToolbar() {
           role="toolbar"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-            <div className={toolbarGroupClassName}>
+            <ButtonGroup className="shrink-0 shadow-sm">
               <ToolbarButton
                 label="Add block"
                 onPress={() => openPicker("add")}
@@ -213,16 +210,16 @@ export function MobileEditorToolbar() {
               >
                 <IconExchange aria-hidden />
               </ToolbarButton>
-            </div>
-            <div className={toolbarGroupClassName}>
+            </ButtonGroup>
+            <ButtonGroup className="shrink-0 shadow-sm">
               <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
                 <IconIndentDecrease aria-hidden />
               </ToolbarButton>
               <ToolbarButton label="Indent" onPress={() => handleIndent(1)}>
                 <IconIndentIncrease aria-hidden />
               </ToolbarButton>
-            </div>
-            <div className={toolbarGroupClassName}>
+            </ButtonGroup>
+            <ButtonGroup className="shrink-0 shadow-sm">
               <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
@@ -232,13 +229,13 @@ export function MobileEditorToolbar() {
               >
                 <IconArrowDown aria-hidden />
               </ToolbarButton>
-            </div>
+            </ButtonGroup>
           </div>
-          <div className={toolbarGroupClassName}>
+          <ButtonGroup className="shrink-0 shadow-sm">
             <ToolbarButton label="Close keyboard" onPress={handleDismiss}>
               <IconKeyboardOff aria-hidden />
             </ToolbarButton>
-          </div>
+          </ButtonGroup>
         </div>,
         document.body
       )}
