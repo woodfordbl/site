@@ -124,6 +124,7 @@ export interface SlashMenuItem {
   keywords: string[];
   label: string;
   listVariant?: "bullet" | "ordered";
+  tabCount?: number;
   tableColumns?: number;
   tableRows?: number;
 }

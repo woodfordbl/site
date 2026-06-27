@@ -29,6 +29,8 @@ function countWordsInBlock(block: Block): number {
     case "checklist":
     case "columns":
     case "column":
+    case "tabs":
+    case "tab":
     case "divider":
     case "pageLink":
     case "table":
