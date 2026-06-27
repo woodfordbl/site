@@ -71,6 +71,7 @@ export type CanvasCommand =
     }
   | { type: "tabs.addTab"; tabsRowId: string }
   | { type: "tabs.removeTab"; tabRowId: string }
+  | { type: "tabs.moveTab"; tabRowId: string; direction: "prev" | "next" }
   | {
       type: "table.create";
       rowId: string;
