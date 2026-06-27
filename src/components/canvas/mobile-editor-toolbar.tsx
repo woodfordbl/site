@@ -47,6 +47,7 @@ function ToolbarButton({
   return (
     <Button
       aria-label={label}
+      className="text-muted-foreground"
       onClick={onPress}
       onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
         // Keep the editor field focused (don't dismiss the keyboard).
@@ -197,7 +198,7 @@ export function MobileEditorToolbar() {
           role="toolbar"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-            <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
+            <ButtonGroup className="shrink-0">
               <ToolbarButton
                 label="Add block"
                 onPress={() => openPicker("add")}
@@ -211,7 +212,7 @@ export function MobileEditorToolbar() {
                 <IconExchange aria-hidden />
               </ToolbarButton>
             </ButtonGroup>
-            <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
+            <ButtonGroup className="shrink-0">
               <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
                 <IconIndentDecrease aria-hidden />
               </ToolbarButton>
@@ -219,7 +220,7 @@ export function MobileEditorToolbar() {
                 <IconIndentIncrease aria-hidden />
               </ToolbarButton>
             </ButtonGroup>
-            <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
+            <ButtonGroup className="shrink-0">
               <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
@@ -231,7 +232,7 @@ export function MobileEditorToolbar() {
               </ToolbarButton>
             </ButtonGroup>
           </div>
-          <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
+          <ButtonGroup className="shrink-0">
             <ToolbarButton label="Close keyboard" onPress={handleDismiss}>
               <IconKeyboardOff aria-hidden />
             </ToolbarButton>
