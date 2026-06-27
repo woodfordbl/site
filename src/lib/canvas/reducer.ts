@@ -68,6 +68,7 @@ import {
 import {
   buildBlocksForTabsCreate,
   planTabsAddTab,
+  planTabsMoveTab,
   planTabsRemoveTab,
 } from "@/lib/canvas/tabs-layout.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
@@ -694,6 +695,17 @@ export function canvasReducer(
       return {
         state,
         effects: planTabsRemoveTab(state.rows, command.tabRowId),
+      };
+    }
+
+    case "tabs.moveTab": {
+      return {
+        state,
+        effects: planTabsMoveTab(
+          state.rows,
+          command.tabRowId,
+          command.direction
+        ),
       };
     }
 

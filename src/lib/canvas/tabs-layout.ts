@@ -14,6 +14,7 @@ import {
 } from "@/lib/blocks/page-block-mutations.ts";
 import {
   placementAfterRow,
+  resolveRowMovePlan,
   resolveRowPlacementPlan,
 } from "@/lib/blocks/row-placement.ts";
 import type { CanvasEffect } from "@/lib/canvas/effects.ts";
@@ -316,6 +317,39 @@ export function planTabsAddTab(
       focus: true,
     },
   ];
+}
+
+/** Reorder a tab one slot toward the start (`prev`) or end (`next`). */
+export function planTabsMoveTab(
+  rows: CanvasRow[],
+  tabRowId: string,
+  direction: "prev" | "next"
+): CanvasEffect[] {
+  const ctx = findRowContext(rows, tabRowId);
+  if (ctx?.row.effectiveBlock.type !== "tab") {
+    return [];
+  }
+
+  const tabsParent = ctx.parent;
+  if (tabsParent?.effectiveBlock.type !== "tabs") {
+    return [];
+  }
+
+  const siblings = tabsParent.children;
+  const index = siblings.findIndex((tabRow) => tabRow.rowId === tabRowId);
+  const targetIndex = direction === "prev" ? index - 1 : index + 1;
+  const target = siblings[targetIndex];
+  if (!target) {
+    return [];
+  }
+
+  const edge = direction === "prev" ? "before" : "after";
+  const movePlan = resolveRowMovePlan(rows, tabRowId, target.rowId, edge);
+  if (!movePlan) {
+    return [];
+  }
+
+  return [{ type: "move", rowId: tabRowId, position: movePlan.position }];
 }
 
 /** Remove a tab; unwrap when fewer than MIN_TABS_COUNT remain. */

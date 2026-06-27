@@ -1,20 +1,9 @@
-import { IconDots, IconPlus, IconTrash } from "@tabler/icons-react";
-import {
-  type KeyboardEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { IconPlus } from "@tabler/icons-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover.tsx";
 import {
   Tabs,
   TabsContent,
@@ -24,14 +13,26 @@ import {
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockContainerProps } from "@/lib/canvas/block-spec.types.ts";
 import { MAX_TABS_COUNT } from "@/lib/canvas/tabs-layout.ts";
-import { cn } from "@/lib/utils.ts";
 
+import { tabIcon, tabLabel } from "./tab-labels.ts";
 import { TabView } from "./tab-view.tsx";
+import { TabsManager } from "./tabs-manager.tsx";
 
-function tabLabel(tabRow: CanvasRow, index: number): string {
-  const block = tabRow.effectiveBlock;
-  const label = block.type === "tab" ? block.props.label.trim() : "";
-  return label.length > 0 ? label : `Tab ${index + 1}`;
+/** Tab trigger contents: an optional leading glyph followed by the label. */
+function TabTriggerLabel({
+  index,
+  tabRow,
+}: {
+  index: number;
+  tabRow: CanvasRow;
+}) {
+  const icon = tabIcon(tabRow);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {icon ? <PageIconDisplay className="size-3.5" icon={icon} /> : null}
+      {tabLabel(tabRow, index)}
+    </span>
+  );
 }
 
 function resolveDefaultTabId(row: CanvasRow, tabRows: CanvasRow[]): string {
@@ -60,7 +61,7 @@ function TabsReadView({ row }: { row: CanvasRow }) {
       <TabsList className="max-w-full overflow-x-auto">
         {tabRows.map((tabRow, index) => (
           <TabsTrigger key={tabRow.rowId} value={tabRow.rowId}>
-            {tabLabel(tabRow, index)}
+            <TabTriggerLabel index={index} tabRow={tabRow} />
           </TabsTrigger>
         ))}
       </TabsList>
@@ -134,35 +135,9 @@ function TabsEditView({ row }: { row: CanvasRow }) {
       <div className="flex items-center gap-1">
         <TabsList className="max-w-full overflow-x-auto">
           {tabRows.map((tabRow, index) => (
-            <div
-              className="group/tab relative flex items-center"
-              key={tabRow.rowId}
-            >
-              <TabsTrigger className="pr-6" value={tabRow.rowId}>
-                {tabLabel(tabRow, index)}
-              </TabsTrigger>
-              <TabMenu
-                canDelete={tabRows.length > 1}
-                label={tabLabel(tabRow, index)}
-                onDelete={() =>
-                  dispatch({ type: "tabs.removeTab", tabRowId: tabRow.rowId })
-                }
-                onRename={(nextLabel) => {
-                  const block = tabRow.effectiveBlock;
-                  if (block.type !== "tab") {
-                    return;
-                  }
-                  dispatch({
-                    type: "row.update",
-                    rowId: tabRow.rowId,
-                    block: {
-                      ...block,
-                      props: { ...block.props, label: nextLabel },
-                    },
-                  });
-                }}
-              />
-            </div>
+            <TabsTrigger key={tabRow.rowId} value={tabRow.rowId}>
+              <TabTriggerLabel index={index} tabRow={tabRow} />
+            </TabsTrigger>
           ))}
         </TabsList>
         {tabRows.length < MAX_TABS_COUNT ? (
@@ -177,6 +152,7 @@ function TabsEditView({ row }: { row: CanvasRow }) {
             <IconPlus className="size-3.5" />
           </Button>
         ) : null}
+        <TabsManager row={row} />
       </div>
       {tabRows.map((tabRow) => (
         <TabsContent key={tabRow.rowId} value={tabRow.rowId}>
@@ -184,89 +160,5 @@ function TabsEditView({ row }: { row: CanvasRow }) {
         </TabsContent>
       ))}
     </Tabs>
-  );
-}
-
-interface TabMenuProps {
-  canDelete: boolean;
-  label: string;
-  onDelete: () => void;
-  onRename: (label: string) => void;
-}
-
-function TabMenu({ canDelete, label, onDelete, onRename }: TabMenuProps) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(label);
-
-  useEffect(() => {
-    if (open) {
-      setDraft(label);
-    }
-  }, [open, label]);
-
-  const commit = useCallback(() => {
-    const next = draft.trim();
-    if (next.length > 0 && next !== label) {
-      onRename(next);
-    }
-    setOpen(false);
-  }, [draft, label, onRename]);
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        commit();
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        setOpen(false);
-      }
-    },
-    [commit]
-  );
-
-  return (
-    <Popover onOpenChange={setOpen} open={open}>
-      <PopoverTrigger
-        render={
-          <Button
-            aria-label="Tab options"
-            className={cn(
-              "absolute top-1/2 right-0.5 z-20 size-4 -translate-y-1/2 text-muted-foreground opacity-0",
-              "group-hover/tab:opacity-100 aria-expanded:opacity-100 data-[state=open]:opacity-100"
-            )}
-            size="icon-xs"
-            type="button"
-            variant="ghost"
-          >
-            <IconDots className="size-3.5" />
-          </Button>
-        }
-      />
-      <PopoverContent align="start" className="w-56">
-        <Input
-          aria-label="Tab name"
-          autoFocus
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Tab name"
-          value={draft}
-        />
-        <Button
-          className="justify-start"
-          disabled={!canDelete}
-          onClick={() => {
-            setOpen(false);
-            onDelete();
-          }}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <IconTrash className="size-3.5" />
-          Delete tab
-        </Button>
-      </PopoverContent>
-    </Popover>
   );
 }

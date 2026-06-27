@@ -51,9 +51,11 @@ export const tabsPropsSchema = z.object({
   defaultTabId: z.string().optional(),
 });
 
-/** `tab` block props: the tab's display name. */
+/** `tab` block props: the tab's display name and optional leading glyph. */
 export const tabPropsSchema = z.object({
   label: z.string().default(""),
+  /** Emoji or `tabler:IconName` — same encoding as page/callout icons. */
+  icon: z.string().optional(),
 });
 
 export const mediaKindSchema = z.enum(["image", "video"]);
