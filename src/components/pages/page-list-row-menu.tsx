@@ -72,7 +72,7 @@ export function PageListRowDropdown({
       />
       <DropdownMenuContent
         align="start"
-        className="w-56 min-w-56"
+        className="w-56 min-w-56 [--accent-foreground:var(--sidebar-accent-foreground)] [--accent:var(--sidebar-accent)]"
         side="bottom"
       >
         <DropdownMenuGroup>
