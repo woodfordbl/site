@@ -56,10 +56,13 @@ so it falls through to Strategy B. That still works (Firefox implements
 Chase the keyboard on the main thread without dropping a frame:
 
 - **One `requestAnimationFrame` loop owns positioning.** Each frame it reads the
-  visual viewport (`offsetTop + height - barHeight - gap`) and writes a
-  composited `transform: translate3d` **only when the value changes** — one write
-  per frame, no scroll/resize listeners racing it. Polling every frame is also
-  what tracks event-less iOS momentum scroll.
+  visual viewport (`offsetTop + height - barHeight - gap`) as the **target** and
+  writes a composited `transform: translate3d` **only when the value changes** —
+  one write per frame, no scroll/resize listeners racing it. Polling every frame
+  is also what tracks event-less iOS momentum scroll.
+- **Spring follow ("bungie"), not 1:1 tracking.** Perfect main-thread sync with
+  the compositor keyboard is impossible, so the bar doesn't try — it chases the
+  target with a lightly underdamped spring (see [Follow motion](#follow-motion-spring)).
 - **No layout reads in the hot path.** Bar height comes from a `ResizeObserver`
   (`borderBoxSize`), never `offsetHeight`, so a scrolling frame never forces a
   synchronous reflow.
@@ -89,6 +92,41 @@ content, so the bar is effectively static while the keyboard is up and the rAF
 loop has almost nothing to chase. This CSS is the highest-leverage part of the
 fix — the rAF micro-optimizations above only matter for the keyboard show/hide
 transition and any residual viewport motion.
+
+## Follow motion (spring)
+
+Strategy B deliberately does **not** track the keyboard frame-perfectly — it
+can't, so it leans into the imprecision instead of fighting it. The rendered
+position chases the viewport target through a lightly underdamped spring
+(semi-implicit Euler, integrated in the rAF loop). Two wins from one mechanism:
+
+- **It feels natural.** Scroll-follow becomes elastic give + settle ("bungie")
+  rather than a rigid stick, and the bar enters from just above its rest spot for
+  a subtle **snap-down** on keyboard show.
+- **It hides the lag.** A spring is a low-pass filter: the per-frame
+  main-thread-vs-compositor error that used to read as jitter gets smoothed into
+  the motion instead of showing as shimmer.
+
+Behavioural rules baked into the loop:
+
+| Situation | Behaviour |
+| --- | --- |
+| Small continuous delta (scroll-follow) | Spring toward target — elastic catch-up + tiny overshoot. |
+| Large jump > `SPRING_TELEPORT_PX` (keyboard show/hide, rotation) | Teleport — never swoop the bar across the screen. |
+| Within `SPRING_REST_PX` and slow | Snap to target and idle (no sub-pixel crawl). |
+| `prefers-reduced-motion: reduce` | Rigid 1:1 tracking, no spring, no entrance. |
+
+Tuning lives in the `SPRING_*` constants at the top of
+[`use-visual-viewport-keyboard.ts`](../../src/hooks/use-visual-viewport-keyboard.ts):
+`STIFFNESS`/`DAMPING` set the feel (ζ ≈ 0.73 → snappy with a hint of overshoot),
+`TELEPORT_PX` the jump cutoff, `ENTRANCE_PX` the snap-down distance, and `MAX_DT`
+clamps the frame delta so a stalled tab can't kick the spring on resume. The
+integrator is stable for these values at the clamped `dt`; raise stiffness far
+and it would need sub-stepping.
+
+> Strategy A (Chromium) stays on the native CSS resize — it's already smooth on
+> the compositor, and taking it over with a JS spring would trade that away. The
+> spring is the iOS-path follow model only.
 
 ## Visibility (both strategies)
 

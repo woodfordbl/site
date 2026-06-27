@@ -4,6 +4,23 @@ import { type RefObject, useEffect } from "react";
 const KEYBOARD_GAP_PX = 8;
 
 /**
+ * Spring-follow ("bungie") tuning for the iOS visual-viewport path. Instead of
+ * snapping the bar to the keyboard 1:1 every frame, it chases the target with a
+ * lightly underdamped spring: scroll-follow reads as natural elastic give +
+ * settle rather than rigid tracking, which *also* masks the main-thread vs
+ * compositor frame lag that made the bar look jittery. Large target jumps
+ * (keyboard show/hide, rotation) teleport so the bar never swoops across the
+ * screen. Disabled under `prefers-reduced-motion` (falls back to rigid tracking).
+ */
+const SPRING_STIFFNESS = 230; // higher = snappier catch-up
+const SPRING_DAMPING = 22; // ζ ≈ 0.73 → small overshoot = the "snap"
+const SPRING_TELEPORT_PX = 120; // target jumps larger than this skip the spring
+const SPRING_REST_PX = 0.5; // within this of target (and slow) → settle + idle
+const SPRING_REST_VELOCITY = 4; // px/s rest threshold
+const SPRING_MAX_DT = 1 / 30; // clamp frame delta so a stall can't kick the spring
+const SPRING_ENTRANCE_PX = 10; // start this far above rest → "snap down" on show
+
+/**
  * True on engines where the **layout viewport resizes** for the on-screen
  * keyboard, so the bar can be pinned with plain CSS (no per-frame JS).
  *
@@ -45,15 +62,23 @@ function layoutViewportResizesForKeyboard(): boolean {
  * dropping a frame:
  *
  * - **A single `requestAnimationFrame` loop owns positioning.** It reads the
- *   visual viewport (`offsetTop + height - barHeight - gap`) and writes a
- *   composited `transform: translate3d` only when the value changes — exactly
+ *   visual viewport (`offsetTop + height - barHeight - gap`) as the *target* and
+ *   writes a composited `transform: translate3d` only when the value changes —
  *   one write per frame, no event listeners racing it. Polling every frame is
  *   what keeps it tracking through event-less iOS momentum scroll.
+ * - **Spring follow ("bungie"), not 1:1 tracking.** Perfect main-thread sync
+ *   with the compositor-driven keyboard is impossible, so instead of fighting
+ *   for it the bar chases the target with a lightly underdamped spring
+ *   (semi-implicit Euler; `SPRING_*` constants). Scroll-follow reads as natural
+ *   elastic give + settle, and the smoothing *absorbs* the per-frame lag that
+ *   used to read as jitter. Large jumps (keyboard show/hide, rotation) teleport
+ *   so the bar never swoops; on show it enters from just above its rest position
+ *   for a subtle "snap down". Honors `prefers-reduced-motion` (rigid tracking).
  * - **No layout reads in the hot path.** Bar height comes from a
  *   `ResizeObserver` (`borderBoxSize`), never `offsetHeight`, so a scrolling
  *   frame never forces a synchronous reflow.
- * - **Whole-pixel transforms.** `y` is rounded — subpixel translates
- *   re-rasterize the promoted layer each frame and shimmer against the keyboard.
+ * - **Whole-pixel transforms.** The rendered `y` is rounded — subpixel
+ *   translates re-rasterize the promoted layer each frame and shimmer.
  * - **iOS 26 `offsetTop` guard.** A WebKit regression
  *   ({@link https://bugs.webkit.org/show_bug.cgi?id=297779}) can leave
  *   `offsetTop` stale after a keyboard cycle; we clamp it to `>= 0`.
@@ -109,6 +134,12 @@ export function useKeyboardToolbarAnchor(
     let raf = 0;
     let barHeight = el.offsetHeight;
     let lastY = Number.NaN;
+    let pos = Number.NaN; // rendered y (spring follows target toward it)
+    let vel = 0; // px/s
+    let prevT = Number.NaN; // rAF timestamp of the previous frame
+
+    const reduceMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
     // Track the bar's height off the main-thread layout path so the per-frame
     // loop never has to read offsetHeight (which would force a reflow mid-scroll).
@@ -120,29 +151,60 @@ export function useKeyboardToolbarAnchor(
     });
     observer.observe(el);
 
-    const position = () => {
+    // Rest target: the keyboard top, minus the gap. Clamp guards the iOS 26
+    // stale-offsetTop regression (WebKit #297779).
+    const targetY = () =>
+      Math.max(0, vv.offsetTop) + vv.height - barHeight - KEYBOARD_GAP_PX;
+
+    const write = (y: number) => {
       const node = ref.current;
       if (!node) {
         return;
       }
-      // Clamp guards the iOS 26 stale-offsetTop regression (WebKit #297779).
-      const offsetTop = Math.max(0, vv.offsetTop);
       // Round to whole pixels: a subpixel translate re-rasterizes the layer
       // every frame and shimmers against the compositor-driven keyboard.
-      const y = Math.round(offsetTop + vv.height - barHeight - KEYBOARD_GAP_PX);
-      if (y !== lastY) {
-        node.style.transform = `translate3d(0, ${y}px, 0)`;
-        lastY = y;
+      const rounded = Math.round(y);
+      if (rounded !== lastY) {
+        node.style.transform = `translate3d(0, ${rounded}px, 0)`;
+        lastY = rounded;
       }
     };
-    const loop = () => {
-      position();
-      raf = requestAnimationFrame(loop);
+
+    const frame = (t: number) => {
+      const target = targetY();
+      const dt = Number.isNaN(prevT)
+        ? 0
+        : Math.min(SPRING_MAX_DT, (t - prevT) / 1000);
+      prevT = t;
+
+      if (reduceMotion || Math.abs(target - pos) > SPRING_TELEPORT_PX) {
+        // Reduced motion, or a big jump (keyboard show/hide, rotation): no swoop.
+        pos = target;
+        vel = 0;
+      } else if (dt > 0) {
+        // Semi-implicit (symplectic) Euler — stable for these params at the
+        // clamped dt. Light underdamping gives the elastic catch-up + settle.
+        const accel = -SPRING_STIFFNESS * (pos - target) - SPRING_DAMPING * vel;
+        vel += accel * dt;
+        pos += vel * dt;
+        if (
+          Math.abs(target - pos) < SPRING_REST_PX &&
+          Math.abs(vel) < SPRING_REST_VELOCITY
+        ) {
+          pos = target;
+          vel = 0;
+        }
+      }
+
+      write(pos);
+      raf = requestAnimationFrame(frame);
     };
 
-    // Place it before the first paint of this enable, then keep tracking.
-    position();
-    raf = requestAnimationFrame(loop);
+    // Enter from just above the rest position so the bar snaps *down* into place
+    // (skipped under reduced motion). Write synchronously before the first paint.
+    pos = reduceMotion ? targetY() : targetY() - SPRING_ENTRANCE_PX;
+    write(pos);
+    raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
