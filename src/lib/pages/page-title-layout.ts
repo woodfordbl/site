@@ -53,15 +53,20 @@ export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STIC
 /**
  * Full-bleed cover ("header image") wrapper. Negative margins cancel the scroll
  * region padding — the mobile gutter lane (`pl-7`) and desktop `px-12`/`py-12` —
- * so the cover spans edge to edge and butts against the scroll-region top.
- * Mobile has no top padding to cancel, so only the desktop top inset is pulled.
+ * AND the width is grown by that same horizontal padding (`w-[calc(100%+…)]`)
+ * so the cover actually spans edge to edge (negative margins alone don't widen a
+ * `w-full` element when the scrollbar is an overlay). Mobile has no top padding
+ * to cancel, so only the desktop top inset is pulled.
+ *
+ * Fine-pointer mobile gutter: `pl-7` (1.75rem) + `pr-4` (1rem) = 2.75rem;
+ * desktop `px-12` = 6rem.
  */
 export const pageCoverMobileClassName =
-  "-mr-4 -ml-7 mb-3 md:-mx-12 md:-mt-12 md:mb-6";
+  "-mr-4 -ml-7 mb-3 w-[calc(100%+2.75rem)] md:-mx-12 md:-mt-12 md:mb-6 md:w-[calc(100%+6rem)]";
 
-/** Touch cover inset — matches {@link pageCanvasTouchScrollClassName}. */
+/** Touch cover inset — `pl-3` (0.75rem) + `pr-4` (1rem) = 1.75rem; desktop 6rem. */
 export const pageCoverTouchClassName =
-  "-mr-4 -ml-3 mb-3 md:-mx-12 md:-mt-12 md:mb-6";
+  "-mr-4 -ml-3 mb-3 w-[calc(100%+1.75rem)] md:-mx-12 md:-mt-12 md:mb-6 md:w-[calc(100%+6rem)]";
 
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";

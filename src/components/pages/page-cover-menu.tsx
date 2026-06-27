@@ -1,6 +1,11 @@
 "use client";
 
-import { IconCamera, IconUpload, IconWorld } from "@tabler/icons-react";
+import {
+  IconCamera,
+  IconTrash,
+  IconUpload,
+  IconWorld,
+} from "@tabler/icons-react";
 import { useState } from "react";
 
 import { PageCoverUnsplashPanel } from "@/components/pages/page-cover-unsplash-panel.tsx";
@@ -21,14 +26,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs.tsx";
 import { putAsset } from "@/db/assets/asset-store.ts";
-import {
-  resolveMediaDisplayUrl,
-  useAssetObjectUrl,
-} from "@/hooks/use-asset-object-url.ts";
-import {
-  DEFAULT_HEADER_FOCAL_Y,
-  type PageHeaderImage,
-} from "@/lib/schemas/page-settings.ts";
+import type { PageHeaderImage } from "@/lib/schemas/page-settings.ts";
 import { parseValidatedUrlInput } from "@/lib/schemas/url-input.ts";
 
 interface PageCoverDialogProps {
@@ -38,73 +36,12 @@ interface PageCoverDialogProps {
   open: boolean;
 }
 
-/** Live preview + vertical focal-point control for an existing cover. */
-function CoverReposition({
-  headerImage,
-  onChange,
-}: {
-  headerImage: PageHeaderImage;
-  onChange: (headerImage: PageHeaderImage | null) => void;
-}) {
-  const assetObjectUrl = useAssetObjectUrl(
-    headerImage.source === "asset" ? headerImage.src : undefined
-  );
-  const displayUrl = resolveMediaDisplayUrl(
-    headerImage.source,
-    headerImage.src,
-    assetObjectUrl
-  );
-  const focalY = headerImage.focalY ?? DEFAULT_HEADER_FOCAL_Y;
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="relative h-28 w-full overflow-hidden rounded-lg bg-muted">
-        {displayUrl ? (
-          <img
-            alt={headerImage.alt ?? ""}
-            className="h-full w-full object-cover"
-            height={160}
-            src={displayUrl}
-            style={{ objectPosition: `50% ${focalY}%` }}
-            width={640}
-          />
-        ) : null}
-      </div>
-      <label className="flex items-center gap-2 text-muted-foreground text-xs">
-        Reposition
-        <input
-          aria-label="Vertical focal point"
-          className="h-1.5 flex-1 cursor-ns-resize accent-primary"
-          max={100}
-          min={0}
-          onChange={(rangeEvent) => {
-            onChange({
-              ...headerImage,
-              focalY: Number(rangeEvent.target.value),
-            });
-          }}
-          type="range"
-          value={focalY}
-        />
-      </label>
-      <Button
-        className="self-start"
-        onClick={() => onChange(null)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        Remove cover
-      </Button>
-    </div>
-  );
-}
-
 /**
- * Cover picker dialog: choose a page cover from an upload, a URL, or Unsplash
- * search; reposition or remove an existing one. Uploads become content-addressed
- * IndexedDB assets (`putAsset`); URLs and Unsplash photos are stored as
- * hotlinks (`source: "url"`) — Unsplash images are never re-hosted.
+ * Cover picker dialog: choose a page cover from Unsplash search, a URL, or an
+ * upload, and remove an existing one. Uploads become content-addressed IndexedDB
+ * assets (`putAsset`); URLs and Unsplash photos are stored as hotlinks
+ * (`source: "url"`) — Unsplash images are never re-hosted. Repositioning lives on
+ * the cover itself (drag), not here.
  */
 export function PageCoverDialog({
   headerImage,
@@ -156,17 +93,16 @@ export function PageCoverDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{headerImage ? "Page cover" : "Add cover"}</DialogTitle>
+          <DialogTitle>
+            {headerImage ? "Change cover" : "Add cover"}
+          </DialogTitle>
           <DialogDescription>
-            Upload an image, paste a link, or search Unsplash.
+            Search Unsplash, paste a link, or upload an image. Drag the cover to
+            reposition it.
           </DialogDescription>
         </DialogHeader>
-
-        {headerImage ? (
-          <CoverReposition headerImage={headerImage} onChange={apply} />
-        ) : null}
 
         <Tabs className="gap-0" defaultValue="unsplash">
           <div className="relative w-full">
@@ -190,7 +126,7 @@ export function PageCoverDialog({
             </TabsList>
           </div>
           <TabsContent className="mt-3" value="unsplash">
-            <PageCoverUnsplashPanel onSelect={apply} />
+            <PageCoverUnsplashPanel active={open} onSelect={apply} />
           </TabsContent>
           <TabsContent className="mt-3" value="link">
             <SourceLinkPanel
@@ -211,6 +147,20 @@ export function PageCoverDialog({
             />
           </TabsContent>
         </Tabs>
+
+        {headerImage ? (
+          <div className="flex justify-end border-border border-t pt-3">
+            <Button
+              onClick={() => apply(null)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <IconTrash />
+              Remove cover
+            </Button>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );

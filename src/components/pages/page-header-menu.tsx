@@ -15,7 +15,7 @@ import { useMemo, useState } from "react";
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
-import { PageCoverDialog } from "@/components/pages/page-cover-menu.tsx";
+import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -62,15 +62,9 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [coverOpen, setCoverOpen] = useState(false);
-  const {
-    font,
-    headerImage,
-    setFont,
-    setHeaderImage,
-    setSmallText,
-    smallText,
-  } = usePageSettings({
+  const cover = usePageCover();
+  const headerImage = cover?.headerImage;
+  const { font, setFont, setSmallText, smallText } = usePageSettings({
     pageId,
     seed,
     serverPage,
@@ -87,7 +81,7 @@ export function PageHeaderMenu({
         icon: <IconPhoto />,
         keywords: ["cover", "header", "image", "photo", "banner", "unsplash"],
         onSelect: () => {
-          setCoverOpen(true);
+          cover?.openPicker();
         },
       },
       {
@@ -166,7 +160,14 @@ export function PageHeaderMenu({
     }
 
     return entries;
-  }, [copyLink, duplicate, footerActions, headerImage, isNarrowViewport]);
+  }, [
+    copyLink,
+    cover,
+    duplicate,
+    footerActions,
+    headerImage,
+    isNarrowViewport,
+  ]);
 
   const handleDelete = () => {
     deletePage();
@@ -217,7 +218,7 @@ export function PageHeaderMenu({
             <DropdownMenuItem
               onClick={() => {
                 runAfterClose(() => {
-                  setCoverOpen(true);
+                  cover?.openPicker();
                 });
               }}
             >
@@ -350,13 +351,6 @@ export function PageHeaderMenu({
             footerActions.setConfirmAction(null);
           }
         }}
-      />
-
-      <PageCoverDialog
-        headerImage={headerImage}
-        onChange={setHeaderImage}
-        onOpenChange={setCoverOpen}
-        open={coverOpen}
       />
     </>
   );

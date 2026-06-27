@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { PageCover } from "@/components/pages/page-cover.tsx";
+import { PageCoverProvider } from "@/components/pages/page-cover-context.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -156,7 +157,7 @@ function PageWorkspaceBody({
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const { font, headerImage, smallText } = usePageSettings({
+  const { font, headerImage, setHeaderImage, smallText } = usePageSettings({
     pageId: page.id,
     seed: titleSeed,
     serverPage,
@@ -195,6 +196,7 @@ function PageWorkspaceBody({
                   : pageCoverMobileClassName
               }
               headerImage={headerImage}
+              key={headerImage.src}
             />
           ) : null
         }
@@ -228,22 +230,27 @@ function PageWorkspaceBody({
   );
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-      <div
-        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"
-        data-page-main-panel=""
-      >
-        {showSidebarRail ? <PageSidebarRail /> : null}
-        {/* Desktop: header is fixed above the scroll region. Mobile: it lives
-            inside the scroll region (as headerSlot) so it scrolls away. */}
-        {isNarrowViewport ? null : header}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {canvasContent}
+    <PageCoverProvider
+      headerImage={headerImage}
+      setHeaderImage={setHeaderImage}
+    >
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"
+          data-page-main-panel=""
+        >
+          {showSidebarRail ? <PageSidebarRail /> : null}
+          {/* Desktop: header is fixed above the scroll region. Mobile: it lives
+              inside the scroll region (as headerSlot) so it scrolls away. */}
+          {isNarrowViewport ? null : header}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {canvasContent}
+          </div>
+        </div>
+        <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 max-md:hidden md:px-0">
+          <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
         </div>
       </div>
-      <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 max-md:hidden md:px-0">
-        <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
-      </div>
-    </div>
+    </PageCoverProvider>
   );
 }

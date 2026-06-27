@@ -24,6 +24,34 @@ export function withUnsplashUtm(url: string): string {
   }
 }
 
+/** Unsplash's image CDN host — the only host we rewrite sizing params onto. */
+const UNSPLASH_IMAGE_HOST = "images.unsplash.com";
+
+/**
+ * Builds a CDN-sized URL from an Unsplash `raw` URL (or any
+ * `images.unsplash.com` URL), letting Unsplash's Imgix CDN resize/encode on the
+ * fly instead of shipping the full-resolution photo. Non-Unsplash URLs (pasted
+ * links, asset blobs) are returned untouched so they still render.
+ */
+export function unsplashCdnUrl(
+  src: string,
+  { width, quality = 80 }: { width: number; quality?: number }
+): string {
+  try {
+    const parsed = new URL(src);
+    if (parsed.hostname !== UNSPLASH_IMAGE_HOST) {
+      return src;
+    }
+    parsed.searchParams.set("w", String(Math.round(width)));
+    parsed.searchParams.set("q", String(quality));
+    parsed.searchParams.set("auto", "format");
+    parsed.searchParams.set("fit", "crop");
+    return parsed.toString();
+  } catch {
+    return src;
+  }
+}
+
 /** Photographer attribution carried on every Unsplash cover. */
 export interface UnsplashCredit {
   /** Photographer profile URL (UTM appended at render time). */
@@ -39,8 +67,11 @@ export interface UnsplashSearchResult {
   /** Endpoint to ping when the photo is selected (Unsplash download trigger). */
   downloadLocation: string;
   id: string;
-  /** Regular-size hotlink stored as the cover `src` (never re-hosted). */
-  regularUrl: string;
+  /**
+   * The `raw` Imgix base URL — stored as the cover `src` and resized on demand
+   * via {@link unsplashCdnUrl} (CDN-served, never re-hosted).
+   */
+  rawUrl: string;
   /** Small thumbnail for the picker grid. */
   thumbUrl: string;
 }

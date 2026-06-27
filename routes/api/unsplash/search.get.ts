@@ -8,7 +8,8 @@ import type {
 
 /**
  * `GET /api/unsplash/search?q=…&page=1` — server-side proxy for Unsplash photo
- * search.
+ * search. With no `q`, returns the popular editorial feed so the picker can show
+ * default images before the user types.
  *
  * The Unsplash Access Key lives only in `UNSPLASH_ACCESS_KEY` (server env) and
  * is never exposed to the browser — the client only ever calls this route. Only
@@ -18,7 +19,6 @@ import type {
  */
 
 const PER_PAGE = 24;
-const ENDPOINT = "https://api.unsplash.com/search/photos";
 
 function firstString(value: unknown): string {
   if (Array.isArray(value)) {
@@ -32,8 +32,26 @@ interface RawUnsplashPhoto {
   description: string | null;
   id: string;
   links: { download_location: string };
-  urls: { regular: string; small: string };
+  urls: { raw: string; small: string };
   user: { name: string; username: string; links: { html: string } };
+}
+
+const SEARCH_ENDPOINT = "https://api.unsplash.com/search/photos";
+const FEED_ENDPOINT = "https://api.unsplash.com/photos";
+
+function toResult(photo: RawUnsplashPhoto): UnsplashSearchResult {
+  return {
+    id: photo.id,
+    thumbUrl: photo.urls.small,
+    rawUrl: photo.urls.raw,
+    alt: photo.alt_description ?? photo.description ?? "",
+    credit: {
+      name: photo.user.name,
+      username: photo.user.username,
+      link: photo.user.links.html,
+    },
+    downloadLocation: photo.links.download_location,
+  };
 }
 
 export default defineHandler(
@@ -48,19 +66,21 @@ export default defineHandler(
 
     const query = getQuery(event);
     const term = firstString(query.q).trim();
-    if (!term) {
-      return { results: [], totalPages: 0 };
-    }
     const pageNumber = Math.max(
       1,
       Number.parseInt(firstString(query.page), 10) || 1
     );
 
-    const url = new URL(ENDPOINT);
-    url.searchParams.set("query", term);
+    // Empty query → popular editorial feed (default images); otherwise search.
+    const url = term ? new URL(SEARCH_ENDPOINT) : new URL(FEED_ENDPOINT);
     url.searchParams.set("page", String(pageNumber));
     url.searchParams.set("per_page", String(PER_PAGE));
-    url.searchParams.set("content_filter", "high");
+    if (term) {
+      url.searchParams.set("query", term);
+      url.searchParams.set("content_filter", "high");
+    } else {
+      url.searchParams.set("order_by", "popular");
+    }
 
     const response = await fetch(url, {
       headers: {
@@ -74,25 +94,16 @@ export default defineHandler(
       return { error: `Unsplash request failed (${response.status}).` };
     }
 
-    const payload = (await response.json()) as {
-      results: RawUnsplashPhoto[];
-      total_pages: number;
-    };
+    const payload = (await response.json()) as
+      | { results: RawUnsplashPhoto[]; total_pages: number }
+      | RawUnsplashPhoto[];
 
-    const results: UnsplashSearchResult[] = payload.results.map((photo) => ({
-      id: photo.id,
-      thumbUrl: photo.urls.small,
-      regularUrl: photo.urls.regular,
-      alt: photo.alt_description ?? photo.description ?? "",
-      credit: {
-        name: photo.user.name,
-        username: photo.user.username,
-        link: photo.user.links.html,
-      },
-      downloadLocation: photo.links.download_location,
-    }));
+    // The search endpoint wraps results; the feed endpoint returns a bare array.
+    const photos = Array.isArray(payload) ? payload : payload.results;
+    const totalPages = Array.isArray(payload) ? 1 : payload.total_pages;
+    const results: UnsplashSearchResult[] = photos.map(toResult);
 
     setResponseHeader(event, "Cache-Control", "public, max-age=300");
-    return { results, totalPages: payload.total_pages };
+    return { results, totalPages };
   }
 );
