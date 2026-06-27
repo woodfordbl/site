@@ -218,7 +218,10 @@ function PageWorkspaceBody({
 
   const canvasContent = (
     <div
-      className={cn("min-h-0 min-w-0 flex-1", typographyClassName)}
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col",
+        typographyClassName
+      )}
       {...typographyDataProps}
     >
       <PageCanvas

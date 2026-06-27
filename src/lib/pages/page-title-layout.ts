@@ -52,9 +52,18 @@ export const pageCanvasTouchHeaderSlotClassName = "-mr-4 mb-4 -ml-3 md:hidden";
  * Falls back to a near-opaque background where `backdrop-filter` is
  * unsupported. Cover-less pages keep {@link pageCanvasMobileHeaderSlotClassName}
  * (the header scrolls away as before).
+ *
+ * `pt-[env(safe-area-inset-top)]`: with `viewport-fit=cover` (set in __root) the
+ * scroll region extends to the physical top of the webview, so once the bar is
+ * pinned at `top-0` it can sit *behind* the system chrome (the iOS notch / a
+ * collapsed Safari address bar, a standalone PWA status bar, or a landscape
+ * notch). The safe-area top inset grows the frosted background up into that
+ * region and pads the breadcrumb row down so it stays clear of the chrome and
+ * the glass reads as continuous with it. In ordinary Safari browsing the inset
+ * is `0`, so this is a no-op there — the bar simply tucks under the address bar.
  */
 const STICKY_HEADER_FROST =
-  "sticky top-0 z-20 bg-background/85 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65";
+  "sticky top-0 z-20 bg-background/85 pt-[env(safe-area-inset-top)] backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65";
 
 export const pageCanvasMobileHeaderSlotStickyClassName = `-mr-4 -ml-7 mb-4 ${STICKY_HEADER_FROST} md:hidden`;
 
