@@ -1,7 +1,7 @@
 # Mobile keyboard toolbar
 
 The command bar that pins directly above the on-screen keyboard while a canvas
-block field is focused (Add block, Turn into, indent, move, dismiss). It is a
+block field is focused (Add block, Turn into, indent, move, delete, dismiss). It is a
 coarse-pointer-only surface, mounted once at the editor root and portaled to
 `document.body`.
 
