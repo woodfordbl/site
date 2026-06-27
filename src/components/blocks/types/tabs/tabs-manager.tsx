@@ -1,25 +1,30 @@
 import {
-  IconChevronDown,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronUp,
+  IconArrowDown,
+  IconArrowUp,
   IconPlus,
   IconSettings,
   IconTrash,
 } from "@tabler/icons-react";
-import { type KeyboardEvent, useCallback, useEffect, useState } from "react";
+import { type KeyboardEvent, useEffect, useState } from "react";
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover.tsx";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import type { CanvasCommand } from "@/lib/canvas/commands.ts";
 import { MAX_TABS_COUNT } from "@/lib/canvas/tabs-layout.ts";
 
 import { tabIcon, tabLabel } from "./tab-labels.ts";
@@ -32,66 +37,10 @@ interface TabsManagerProps {
 export function TabsManager({ row }: TabsManagerProps) {
   const { dispatch } = useCanvasEditorContext();
   const tabRows = row.children;
-  const [open, setOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  // Reset to the list whenever the panel reopens or the selected tab disappears.
-  useEffect(() => {
-    if (!open) {
-      setSelectedId(null);
-    }
-  }, [open]);
-
-  const selectedRow = selectedId
-    ? tabRows.find((tabRow) => tabRow.rowId === selectedId)
-    : undefined;
-  const selectedIndex = selectedRow
-    ? tabRows.findIndex((tabRow) => tabRow.rowId === selectedRow.rowId)
-    : -1;
-
-  useEffect(() => {
-    if (selectedId && !selectedRow) {
-      setSelectedId(null);
-    }
-  }, [selectedId, selectedRow]);
-
-  const updateTabProps = useCallback(
-    (tabRow: CanvasRow, patch: { icon?: string; label?: string }) => {
-      const block = tabRow.effectiveBlock;
-      if (block.type !== "tab") {
-        return;
-      }
-      dispatch({
-        type: "row.update",
-        rowId: tabRow.rowId,
-        block: { ...block, props: { ...block.props, ...patch } },
-      });
-    },
-    [dispatch]
-  );
-
-  const moveTab = useCallback(
-    (tabRowId: string, direction: "prev" | "next") => {
-      dispatch({ type: "tabs.moveTab", tabRowId, direction });
-    },
-    [dispatch]
-  );
-
-  const addTab = useCallback(() => {
-    dispatch({ type: "tabs.addTab", tabsRowId: row.rowId });
-  }, [dispatch, row.rowId]);
-
-  const deleteTab = useCallback(
-    (tabRowId: string) => {
-      dispatch({ type: "tabs.removeTab", tabRowId });
-      setSelectedId(null);
-    },
-    [dispatch]
-  );
 
   return (
-    <Popover onOpenChange={setOpen} open={open}>
-      <PopoverTrigger
+    <DropdownMenu>
+      <DropdownMenuTrigger
         render={
           <Button
             aria-label="Manage tabs"
@@ -104,193 +53,157 @@ export function TabsManager({ row }: TabsManagerProps) {
           </Button>
         }
       />
-      <PopoverContent align="end" className="w-64">
-        {selectedRow ? (
-          <TabDetail
+      <DropdownMenuContent align="end" className="min-w-56">
+        <DropdownMenuLabel>Manage tabs</DropdownMenuLabel>
+        {tabRows.map((tabRow, index) => (
+          <TabSubmenu
             canDelete={tabRows.length > 1}
-            icon={tabIcon(selectedRow)}
-            key={selectedRow.rowId}
-            label={tabLabel(selectedRow, selectedIndex)}
-            onBack={() => setSelectedId(null)}
-            onDelete={() => deleteTab(selectedRow.rowId)}
-            onIconSelect={(icon) => updateTabProps(selectedRow, { icon })}
-            onRename={(label) => updateTabProps(selectedRow, { label })}
+            dispatch={dispatch}
+            index={index}
+            isFirst={index === 0}
+            isLast={index === tabRows.length - 1}
+            key={tabRow.rowId}
+            tabRow={tabRow}
           />
-        ) : (
-          <TabList
-            onAdd={addTab}
-            onMove={moveTab}
-            onSelect={setSelectedId}
-            tabRows={tabRows}
-          />
-        )}
-      </PopoverContent>
-    </Popover>
+        ))}
+        {tabRows.length < MAX_TABS_COUNT ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              closeOnClick={false}
+              onClick={() =>
+                dispatch({ type: "tabs.addTab", tabsRowId: row.rowId })
+              }
+            >
+              <IconPlus />
+              Add tab
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
-interface TabListProps {
-  onAdd: () => void;
-  onMove: (tabRowId: string, direction: "prev" | "next") => void;
-  onSelect: (tabRowId: string) => void;
-  tabRows: CanvasRow[];
-}
-
-function TabList({ onAdd, onMove, onSelect, tabRows }: TabListProps) {
-  return (
-    <>
-      <div className="px-1 font-medium text-muted-foreground text-xs">
-        Manage tabs
-      </div>
-      <div className="flex flex-col gap-0.5">
-        {tabRows.map((tabRow, index) => {
-          const icon = tabIcon(tabRow);
-          return (
-            <div className="flex items-center gap-0.5" key={tabRow.rowId}>
-              <Button
-                className="min-w-0 flex-1 justify-start gap-1.5"
-                onClick={() => onSelect(tabRow.rowId)}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {icon ? (
-                  <PageIconDisplay className="size-3.5" icon={icon} />
-                ) : null}
-                <span className="truncate">{tabLabel(tabRow, index)}</span>
-              </Button>
-              <Button
-                aria-label="Move tab earlier"
-                className="size-7 shrink-0 text-muted-foreground"
-                disabled={index === 0}
-                onClick={() => onMove(tabRow.rowId, "prev")}
-                size="icon-xs"
-                type="button"
-                variant="ghost"
-              >
-                <IconChevronUp className="size-3.5" />
-              </Button>
-              <Button
-                aria-label="Move tab later"
-                className="size-7 shrink-0 text-muted-foreground"
-                disabled={index === tabRows.length - 1}
-                onClick={() => onMove(tabRow.rowId, "next")}
-                size="icon-xs"
-                type="button"
-                variant="ghost"
-              >
-                <IconChevronDown className="size-3.5" />
-              </Button>
-              <Button
-                aria-label="Edit tab"
-                className="size-7 shrink-0 text-muted-foreground"
-                onClick={() => onSelect(tabRow.rowId)}
-                size="icon-xs"
-                type="button"
-                variant="ghost"
-              >
-                <IconChevronRight className="size-3.5" />
-              </Button>
-            </div>
-          );
-        })}
-      </div>
-      {tabRows.length < MAX_TABS_COUNT ? (
-        <Button
-          className="justify-start"
-          onClick={onAdd}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <IconPlus className="size-3.5" />
-          Add tab
-        </Button>
-      ) : null}
-    </>
-  );
-}
-
-interface TabDetailProps {
+interface TabSubmenuProps {
   canDelete: boolean;
-  icon?: string;
-  label: string;
-  onBack: () => void;
-  onDelete: () => void;
-  onIconSelect: (icon: string) => void;
-  onRename: (label: string) => void;
+  dispatch: (command: CanvasCommand) => void;
+  index: number;
+  isFirst: boolean;
+  isLast: boolean;
+  tabRow: CanvasRow;
 }
 
-function TabDetail({
+function TabSubmenu({
   canDelete,
-  icon,
-  label,
-  onBack,
-  onDelete,
-  onIconSelect,
-  onRename,
-}: TabDetailProps) {
+  dispatch,
+  index,
+  isFirst,
+  isLast,
+  tabRow,
+}: TabSubmenuProps) {
+  const label = tabLabel(tabRow, index);
+  const icon = tabIcon(tabRow);
   const [draft, setDraft] = useState(label);
 
-  const commit = useCallback(() => {
+  // Re-sync when the committed label changes (rename, reorder, reopen).
+  useEffect(() => {
+    setDraft(label);
+  }, [label]);
+
+  const updateTabProps = (patch: { icon?: string; label?: string }) => {
+    const block = tabRow.effectiveBlock;
+    if (block.type !== "tab") {
+      return;
+    }
+    dispatch({
+      type: "row.update",
+      rowId: tabRow.rowId,
+      block: { ...block, props: { ...block.props, ...patch } },
+    });
+  };
+
+  const commitName = () => {
     const next = draft.trim();
     if (next.length > 0 && next !== label) {
-      onRename(next);
+      updateTabProps({ label: next });
     }
-  }, [draft, label, onRename]);
+  };
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        commit();
-      }
-    },
-    [commit]
-  );
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Keep menu typeahead from stealing keystrokes while editing the name.
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitName();
+    }
+  };
 
   return (
-    <>
-      <div className="flex items-center gap-1">
-        <Button
-          aria-label="Back to tab list"
-          className="size-6 shrink-0 text-muted-foreground"
-          onClick={onBack}
-          size="icon-xs"
-          type="button"
-          variant="ghost"
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        {icon ? <PageIconDisplay icon={icon} /> : null}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-60">
+        <div className="flex items-center gap-2 p-1 pb-2">
+          <GlyphIconPicker
+            ariaLabel="Change tab icon"
+            icon={icon}
+            onSelect={(nextIcon) => updateTabProps({ icon: nextIcon })}
+            triggerButtonSize="icon-sm"
+          />
+          <Input
+            aria-label="Tab name"
+            autoComplete="off"
+            onBlur={commitName}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Tab name"
+            value={draft}
+          />
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          closeOnClick={false}
+          disabled={isFirst}
+          onClick={() =>
+            dispatch({
+              type: "tabs.moveTab",
+              tabRowId: tabRow.rowId,
+              direction: "prev",
+            })
+          }
         >
-          <IconChevronLeft className="size-3.5" />
-        </Button>
-        <span className="truncate font-medium text-sm">{label}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <GlyphIconPicker
-          ariaLabel="Change tab icon"
-          icon={icon}
-          onSelect={onIconSelect}
-          triggerButtonSize="icon-sm"
-        />
-        <Input
-          aria-label="Tab name"
-          onBlur={commit}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Tab name"
-          value={draft}
-        />
-      </div>
-      <Button
-        className="justify-start"
-        disabled={!canDelete}
-        onClick={onDelete}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        <IconTrash className="size-3.5" />
-        Delete tab
-      </Button>
-    </>
+          <IconArrowUp />
+          Move up
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          closeOnClick={false}
+          disabled={isLast}
+          onClick={() =>
+            dispatch({
+              type: "tabs.moveTab",
+              tabRowId: tabRow.rowId,
+              direction: "next",
+            })
+          }
+        >
+          <IconArrowDown />
+          Move down
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={!canDelete}
+          onClick={() =>
+            dispatch({ type: "tabs.removeTab", tabRowId: tabRow.rowId })
+          }
+          variant="destructive"
+        >
+          <IconTrash />
+          Delete tab
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
