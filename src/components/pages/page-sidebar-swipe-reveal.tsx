@@ -54,7 +54,6 @@ export function PageSidebarSwipeReveal({
   const lastRef = useRef<{ x: number; t: number } | null>(null);
   const axisRef = useRef<Axis>("undecided");
   const didDragRef = useRef(false);
-  const crossedRef = useRef(false);
   const captureElRef = useRef<HTMLElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
 
@@ -97,6 +96,17 @@ export function PageSidebarSwipeReveal({
     }
   }, [openMobile]);
 
+  // Haptic tick whenever the sidebar commits to open or closed — covers the
+  // swipe settle, the hamburger, Escape, and backdrop tap alike. Skips the
+  // initial mount by seeding the ref with the current state.
+  const prevOpenRef = useRef(openMobile);
+  useEffect(() => {
+    if (prevOpenRef.current !== openMobile) {
+      prevOpenRef.current = openMobile;
+      haptic("selection");
+    }
+  }, [openMobile, haptic]);
+
   const releaseCapture = useCallback((pointerId: number) => {
     if (captureElRef.current?.hasPointerCapture(pointerId)) {
       captureElRef.current.releasePointerCapture(pointerId);
@@ -135,8 +145,6 @@ export function PageSidebarSwipeReveal({
       lastRef.current = { x: event.clientX, t: event.timeStamp };
       axisRef.current = "undecided";
       didDragRef.current = false;
-      // If already open the gesture starts "past" the snap line.
-      crossedRef.current = openMobile;
       captureElRef.current = event.currentTarget;
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -145,7 +153,7 @@ export function PageSidebarSwipeReveal({
         // works without it, and releaseCapture guards on hasPointerCapture.
       }
     },
-    [openMobile]
+    []
   );
 
   const handlePointerMove = useCallback(
@@ -179,15 +187,9 @@ export function PageSidebarSwipeReveal({
       const offset = Math.min(Math.max(base + dx, 0), sidebarWidth);
       setDragOffset(offset);
 
-      const crossed = offset >= sidebarWidth / 2;
-      if (crossed !== crossedRef.current) {
-        crossedRef.current = crossed;
-        haptic("selection");
-      }
-
       lastRef.current = { x: event.clientX, t: event.timeStamp };
     },
-    [endGesture, haptic, lockAxis, openMobile, releaseCapture, sidebarWidth]
+    [endGesture, lockAxis, openMobile, releaseCapture, sidebarWidth]
   );
 
   const handlePointerUp = useCallback(
