@@ -237,6 +237,7 @@ export function PageHeaderMenu({
                 pageId={pageId}
                 pages={pages}
               />
+              {isNarrowViewport ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={!canDelete}
                 onClick={() => {

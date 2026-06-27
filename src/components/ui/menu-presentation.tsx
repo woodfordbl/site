@@ -287,7 +287,7 @@ const rowClassName = (destructive?: boolean) =>
   cn(
     "group/drawer-row flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm no-underline outline-none transition-colors active:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-5 [&_svg]:shrink-0",
     destructive
-      ? "text-destructive [&_svg]:text-destructive"
+      ? "text-foreground hover:text-destructive active:text-destructive [&_svg]:text-muted-foreground hover:[&_svg]:text-destructive active:[&_svg]:text-destructive"
       : "text-foreground [&_svg]:text-muted-foreground"
   );
 
