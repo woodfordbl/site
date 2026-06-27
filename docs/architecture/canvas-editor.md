@@ -96,6 +96,7 @@ On coarse primary pointers, [`MobileEditorToolbar`](../../src/components/canvas/
 | Numbered list | `list` (`props.variant: ordered`) |
 | Quote | `quote` |
 | Callout | `callout` |
+| Code | `code` (monospace editor with live Shiki highlighting; inline language picker) |
 | Checklist | `checklist` |
 | 2 / 3 / 4 columns | `columns` (`columns.create` with `count`) |
 | Tabs | `tabs` (`tabs.create`, default 2; native [Base UI tabs](../../src/components/ui/tabs.tsx)) |
@@ -126,7 +127,7 @@ On fine pointers (mouse/trackpad), grab handles in the gutter expose block actio
 | Escape | Clear block selection |
 | Click outside grab / menu | Clear block selection; block menu closes immediately |
 
-**Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL get top-level **Replace**, **Caption** (switch — editable caption below the preview), **Open in browser**, and **Copy link**, then Duplicate/Delete. Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is available for inline-text blocks only (`text`, `heading`, `quote`, `callout`). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children. A footer ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx)) shows the row's **Added** / **Last edited** times from its `LocalBlock` `createdAt` / `updatedAt` ([`useLocalBlockTimestamps`](../../src/db/queries/use-local-block-timestamps.ts)).
+**Block menu:** Turn into dispatches `slash.convert` or `container.wrap` (Heading 1–4, Text, Quote, Callout, Bullet list, Numbered list, Checklist, Divider). **Embed** blocks with a URL get top-level **Replace**, **Caption** (switch — editable caption below the preview), **Open in browser**, and **Copy link**, then Duplicate/Delete. Duplicate clones the row via `rows.paste`. Copy is keyboard-only (Cmd/Ctrl+C). Delete dispatches `row.delete`. Turn into is gated by `canTurnIntoBlock` (`text`, `heading`, `quote`, `callout`, `code` — `code` is `inline-custom` but carries primary text, so conversions preserve content). List and checklist containers: a plain grab click selects all child rows; Cmd/Ctrl+click toggles all children. A footer ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx)) shows the row's **Added** / **Last edited** times from its `LocalBlock` `createdAt` / `updatedAt` ([`useLocalBlockTimestamps`](../../src/db/queries/use-local-block-timestamps.ts)).
 
 Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Touch reuses the same action handlers via [`useRowGutterHandlers`](../../src/components/canvas/use-row-gutter-handlers.ts) inside [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx). Base UI / Vaul handle dismiss; opening block actions calls `closeMenu()` on the slash provider so only one overlay is active at a time.
 
