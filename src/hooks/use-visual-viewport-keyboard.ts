@@ -21,17 +21,32 @@ const SPRING_MAX_DT = 1 / 30; // clamp frame delta so a stall can't kick the spr
 const SPRING_ENTRANCE_PX = 10; // start this far above rest → "snap down" on show
 
 /**
- * Velocity-lead tuning. The raw spring trails the target during steady scroll
- * (lag ∝ velocity), which reads as mushy on slow scrolls. So we estimate the
- * target's velocity with an exponential moving average (the "easing", time
- * constant {@link FOLLOW_VELOCITY_TAU}) and aim the spring slightly *ahead* of
- * the target by `velocity * lead` — sized to cancel the steady-state lag, so
- * even slow scrolls track tightly. When motion stops or reverses, the EMA
- * velocity eases back through zero, the lead collapses, and the underdamped
- * spring overshoots the rest point and settles: the "snap back" overcompensation.
+ * Target smoothing. Chasing the *raw* per-frame viewport target (even with the
+ * velocity lead below cancelling the spring's own lag) makes slow scrolls read
+ * as frame-perfect tracking — the bar pins to every micro-step of the target and
+ * any single-frame main-thread hitch shows. We don't want frame-perfect on slow
+ * scrolls; we want a smooth glide. So the spring chases a *low-passed* target —
+ * an EMA that averages the target over a few frames ({@link FOLLOW_SMOOTHING_TAU})
+ * — which trades a couple of frames of lag for motion that averages out the
+ * per-frame error. Big jumps (show/hide/rotate) bypass this via the teleport
+ * path, so the keyboard transition stays instant.
+ */
+const FOLLOW_SMOOTHING_TAU = 0.06; // s — EMA window that averages the target (~a few frames)
+
+/**
+ * Velocity-lead tuning. The raw spring trails the smoothed target during steady
+ * scroll (lag ∝ velocity), which reads as mushy. So we estimate the target's
+ * velocity with an exponential moving average (the "easing", time constant
+ * {@link FOLLOW_VELOCITY_TAU}) and aim the spring slightly *ahead* of the
+ * smoothed target by `velocity * lead` — sized to cancel the spring's
+ * steady-state lag so the bar sits *on* the smoothed target. The smoothing (not
+ * a tight raw-target chase) is what keeps slow scrolls calm; the lead just keeps
+ * the spring from adding its own extra lag on top. When motion stops or reverses,
+ * the EMA velocity eases back through zero, the lead collapses, and the
+ * underdamped spring overshoots the rest point and settles: the "snap back".
  */
 const FOLLOW_VELOCITY_TAU = 0.05; // s — EMA window for target velocity (~3 frames)
-const FOLLOW_LEAD_SECONDS = 0.08; // ≈ damping/stiffness → cancels steady-state lag
+const FOLLOW_LEAD_SECONDS = 0.08; // ≈ damping/stiffness → cancels the spring's lag
 const FOLLOW_LEAD_MAX_PX = 24; // clamp how far ahead the bar may run
 
 /**
@@ -51,6 +66,32 @@ const FOLLOW_LEAD_MAX_PX = 24; // clamp how far ahead the bar may run
  */
 function layoutViewportResizesForKeyboard(): boolean {
   return typeof navigator !== "undefined" && "virtualKeyboard" in navigator;
+}
+
+/**
+ * One frame-rate-independent EMA step toward `sample` (alpha derived from `dt`/`tau`
+ * so it behaves the same at any frame rate). Seeds from `sample` when `prev` is
+ * `NaN` so the first frame doesn't lurch from zero.
+ */
+function emaStep(
+  prev: number,
+  sample: number,
+  dt: number,
+  tau: number
+): number {
+  if (Number.isNaN(prev)) {
+    return sample;
+  }
+  return prev + (sample - prev) * (1 - Math.exp(-dt / tau));
+}
+
+/** True once the spring, its target, and the target's velocity are all at rest. */
+function followAtRest(posGap: number, vel: number, targetVel: number): boolean {
+  return (
+    posGap < SPRING_REST_PX &&
+    Math.abs(vel) < SPRING_REST_VELOCITY &&
+    Math.abs(targetVel) < SPRING_REST_VELOCITY
+  );
 }
 
 /**
@@ -153,6 +194,7 @@ export function useKeyboardToolbarAnchor(
     let prevT = Number.NaN; // rAF timestamp of the previous frame
     let targetPrev = Number.NaN; // previous frame's raw target (for velocity)
     let targetVel = 0; // px/s — EMA-smoothed velocity of the target itself
+    let smoothedTarget = Number.NaN; // EMA-smoothed target the spring actually chases
 
     const reduceMotion =
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -200,40 +242,49 @@ export function useKeyboardToolbarAnchor(
         vel = 0;
         targetVel = 0;
         targetPrev = target;
+        smoothedTarget = target;
       } else if (dt > 0) {
-        // Smooth the target's own velocity with an EMA (frame-rate-independent
-        // alpha from dt). This keeps collecting as the scroll slows, so the lead
-        // decays gradually instead of snapping to zero.
+        // Smooth the target's own velocity with an EMA. This keeps collecting as
+        // the scroll slows, so the lead decays gradually instead of snapping to
+        // zero.
         if (!Number.isNaN(targetPrev)) {
           const instVelocity = (target - targetPrev) / dt;
-          const alpha = 1 - Math.exp(-dt / FOLLOW_VELOCITY_TAU);
-          targetVel += (instVelocity - targetVel) * alpha;
+          targetVel = emaStep(targetVel, instVelocity, dt, FOLLOW_VELOCITY_TAU);
         }
         targetPrev = target;
 
+        // Low-pass the target itself over a few frames so the spring chases an
+        // averaged path, not the raw per-frame value — slow scrolls glide
+        // instead of tracking frame-perfectly (and a single-frame hitch is
+        // averaged away rather than shown).
+        smoothedTarget = emaStep(
+          smoothedTarget,
+          target,
+          dt,
+          FOLLOW_SMOOTHING_TAU
+        );
+
         // Aim slightly ahead in the direction of travel (bounded) so steady
-        // scroll tracks without lag; on stop/reverse the lead collapses and the
-        // underdamped spring overshoots the true rest point — the "snap back".
+        // scroll sits on the smoothed target without spring lag; on stop/reverse
+        // the lead collapses and the underdamped spring overshoots the true rest
+        // point — the "snap back".
         const lead = Math.max(
           -FOLLOW_LEAD_MAX_PX,
           Math.min(FOLLOW_LEAD_MAX_PX, targetVel * FOLLOW_LEAD_SECONDS)
         );
-        const aim = target + lead;
+        const aim = smoothedTarget + lead;
 
         // Semi-implicit (symplectic) Euler — stable for these params at the
         // clamped dt.
         const accel = -SPRING_STIFFNESS * (pos - aim) - SPRING_DAMPING * vel;
         vel += accel * dt;
         pos += vel * dt;
-        if (
-          Math.abs(target - pos) < SPRING_REST_PX &&
-          Math.abs(vel) < SPRING_REST_VELOCITY &&
-          Math.abs(targetVel) < SPRING_REST_VELOCITY
-        ) {
+        if (followAtRest(Math.abs(target - pos), vel, targetVel)) {
           // Settle only when the target itself is at rest, not mid-scroll.
           pos = target;
           vel = 0;
           targetVel = 0;
+          smoothedTarget = target;
         }
       }
 
@@ -244,6 +295,7 @@ export function useKeyboardToolbarAnchor(
     // Enter from just above the rest position so the bar snaps *down* into place
     // (skipped under reduced motion). Write synchronously before the first paint.
     targetPrev = targetY();
+    smoothedTarget = targetPrev;
     pos = reduceMotion ? targetPrev : targetPrev - SPRING_ENTRANCE_PX;
     write(pos);
     raf = requestAnimationFrame(frame);

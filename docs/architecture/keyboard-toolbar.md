@@ -1,7 +1,7 @@
 # Mobile keyboard toolbar
 
 The command bar that pins directly above the on-screen keyboard while a canvas
-block field is focused (Add block, Turn into, indent, move, dismiss). It is a
+block field is focused (Add block, Turn into, indent, move, delete, dismiss). It is a
 coarse-pointer-only surface, mounted once at the editor root and portaled to
 `document.body`.
 
@@ -107,10 +107,27 @@ position chases the viewport target through a lightly underdamped spring
   main-thread-vs-compositor error that used to read as jitter gets smoothed into
   the motion instead of showing as shimmer.
 
-### Velocity lead (handles slow scrolls)
+### Target smoothing (calms slow scrolls)
 
-A bare spring trails the target during steady scroll — lag ∝ velocity — which
-reads as mushy, especially on slow scrolls. So the loop also tracks the
+We deliberately **don't** chase the raw per-frame target on slow scrolls. Even
+with the velocity lead below cancelling the spring's own lag, pinning the bar to
+every micro-step of the target reads as frame-perfect tracking — rigid, and any
+single-frame main-thread hitch shows. Slow scrolls should *glide*, so the spring
+chases a **low-passed target**: an EMA that averages the target over a few frames.
+
+- **Average, don't track.** Each frame the target is folded into an EMA
+  (`smoothedTarget += (target − smoothedTarget) × (1 − e^(−dt/τ))`,
+  τ = `FOLLOW_SMOOTHING_TAU` ≈ a few frames). The spring chases `smoothedTarget`,
+  not the raw value. This trades ~a couple of frames of lag for motion that
+  averages out per-frame error — exactly the smoothness we want on slow scrolls.
+- **Keyboard transitions stay instant.** Big jumps (show/hide, rotation) take the
+  teleport path, which resets `smoothedTarget` to the target — the averaging only
+  ever applies to in-scroll motion, never the show/hide.
+
+### Velocity lead (keeps the spring on the smoothed target)
+
+A bare spring trails its target during steady scroll — lag ∝ velocity — which
+would re-introduce mush on top of the smoothing. So the loop also tracks the
 **target's own velocity** and aims the spring slightly ahead:
 
 1. **Track + ease the velocity.** Each frame it takes the instantaneous target
@@ -118,10 +135,12 @@ reads as mushy, especially on slow scrolls. So the loop also tracks the
    average (frame-rate-independent `alpha = 1 − e^(−dt/τ)`, τ = `FOLLOW_VELOCITY_TAU`).
    The EMA keeps collecting as the scroll slows, so velocity decays smoothly
    rather than snapping to zero.
-2. **Lead by it.** The spring aims at `target + clamp(velocity × FOLLOW_LEAD_SECONDS)`.
-   `FOLLOW_LEAD_SECONDS ≈ damping/stiffness`, which is the spring's steady-state
-   lag — so the lead cancels it and even slow scrolls track tightly. The lead is
-   clamped to `FOLLOW_LEAD_MAX_PX` so a fast fling can't fling the bar ahead.
+2. **Lead by it.** The spring aims at `smoothedTarget + clamp(velocity × FOLLOW_LEAD_SECONDS)`.
+   `FOLLOW_LEAD_SECONDS ≈ damping/stiffness`, the spring's steady-state lag — so
+   the lead cancels it and the bar sits *on* the smoothed target rather than
+   trailing it. The smoothing (not a tight raw-target chase) is what calms slow
+   scrolls; the lead only stops the spring adding its own extra lag. Clamped to
+   `FOLLOW_LEAD_MAX_PX` so a fast fling can't fling the bar ahead.
 3. **Snap back on stop / reverse.** When scrolling stops or flips direction, the
    eased velocity coasts back through zero, the lead collapses to the true rest
    point, and the bar — still carrying spring momentum toward where it was
@@ -132,19 +151,20 @@ Behavioural rules baked into the loop:
 
 | Situation | Behaviour |
 | --- | --- |
-| Steady scroll (incl. slow) | Spring aims at a velocity-led target → tracks tightly, minimal lag. |
+| Steady scroll (incl. slow) | Spring chases a velocity-led **smoothed** target → glides, averaging a few frames instead of tracking each one. |
 | Stop or reverse direction | Lead collapses; underdamped spring overshoots rest then settles (snap-back). |
-| Large jump > `SPRING_TELEPORT_PX` (keyboard show/hide, rotation) | Teleport; drop tracked velocity so it can't carry into the next scroll. |
+| Large jump > `SPRING_TELEPORT_PX` (keyboard show/hide, rotation) | Teleport; reset smoothing + drop tracked velocity so neither carries into the next scroll. |
 | Within `SPRING_REST_PX`, slow, target at rest | Snap to target and idle (no sub-pixel crawl). |
-| `prefers-reduced-motion: reduce` | Rigid 1:1 tracking, no spring, no lead, no entrance. |
+| `prefers-reduced-motion: reduce` | Rigid 1:1 tracking, no spring, no smoothing, no lead, no entrance. |
 
 Tuning lives in the constants at the top of
 [`use-visual-viewport-keyboard.ts`](../../src/hooks/use-visual-viewport-keyboard.ts):
 `SPRING_STIFFNESS`/`SPRING_DAMPING` set the feel (ζ ≈ 0.73 → snappy with a hint
-of overshoot); `FOLLOW_VELOCITY_TAU`/`FOLLOW_LEAD_SECONDS`/`FOLLOW_LEAD_MAX_PX`
-set the velocity lead; `SPRING_TELEPORT_PX` the jump cutoff; `SPRING_ENTRANCE_PX`
-the snap-down distance; `SPRING_MAX_DT` clamps the frame delta so a stalled tab
-can't kick the spring on resume. The integrator is stable for these values at the
+of overshoot); `FOLLOW_SMOOTHING_TAU` sets how many frames of target motion are
+averaged; `FOLLOW_VELOCITY_TAU`/`FOLLOW_LEAD_SECONDS`/`FOLLOW_LEAD_MAX_PX` set the
+velocity lead; `SPRING_TELEPORT_PX` the jump cutoff; `SPRING_ENTRANCE_PX` the
+snap-down distance; `SPRING_MAX_DT` clamps the frame delta so a stalled tab can't
+kick the spring on resume. The integrator is stable for these values at the
 clamped `dt`; raise stiffness far and it would need sub-stepping.
 
 > Strategy A (Chromium) stays on the native CSS resize — it's already smooth on
@@ -160,6 +180,18 @@ open. The bar shows when a canvas row field is focused on a coarse primary
 pointer and no block picker is open; opacity (not transform) transitions, so
 tracking stays instant. See `MobileEditorToolbar` and the device axes in
 [canvas-editor — Device signals](./canvas-editor.md#device-signals).
+
+## Haptics
+
+Every bar action (`ToolbarButton`) fires a light `selection` tick via
+[`useHaptics`](../../src/hooks/haptics.ts) before delegating to its handler, so a
+tap registers physically the moment it lands. The trigger is fired on `click`
+(not the focus-preserving `mousedown`, which is `preventDefault`-ed) and is a
+no-op off coarse pointers, matching the slash-menu and checkbox pattern. This is
+a bounded exception to the minimalist haptics policy — a coarse-only surface above
+the keyboard, not a precedent for ticking ordinary buttons. See
+[Haptics](./haptics.md) for the semantic moment vocabulary and the when-to-use
+rules.
 
 ## Browser support reference
 
