@@ -10,6 +10,7 @@ import {
   buildTabBlock,
   planTabsAddTab,
   planTabsCreate,
+  planTabsMoveTab,
   planTabsRemoveTab,
 } from "@/lib/canvas/tabs-layout.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -177,6 +178,62 @@ describe("planTabsRemoveTab", () => {
     expect(
       effects.some((e) => e.type === "delete" && e.rowId === "tab-a")
     ).toBe(true);
+  });
+});
+
+describe("planTabsMoveTab", () => {
+  function buildThreeTabBlocks(): Block[] {
+    const tabs = createEmptyBlock("tabs");
+    tabs.id = "tabs";
+    const blocks: Block[] = [tabs];
+    for (const [index, id] of ["tab-a", "tab-b", "tab-c"].entries()) {
+      const tab = buildTabBlock("tabs", `Tab ${index + 1}`);
+      tab.id = id;
+      blocks.push(tab, textBlock(`text-${id}`, id, ""));
+    }
+    return blocks;
+  }
+
+  it("moves a middle tab before its previous sibling", () => {
+    const rows = buildBlockTree(buildThreeTabBlocks());
+    const effects = planTabsMoveTab(rows, "tab-b", "prev");
+
+    expect(effects).toHaveLength(1);
+    const move = effects[0];
+    expect(move?.type).toBe("move");
+    if (move?.type !== "move") {
+      return;
+    }
+    expect(move.rowId).toBe("tab-b");
+    expect(move.position).toMatchObject({
+      anchorRowId: "tab-a",
+      edge: "before",
+      parentId: "tabs",
+    });
+  });
+
+  it("moves a middle tab after its next sibling", () => {
+    const rows = buildBlockTree(buildThreeTabBlocks());
+    const effects = planTabsMoveTab(rows, "tab-b", "next");
+
+    const move = effects[0];
+    expect(move?.type).toBe("move");
+    if (move?.type !== "move") {
+      return;
+    }
+    expect(move.position).toMatchObject({
+      anchorRowId: "tab-c",
+      edge: "after",
+      parentId: "tabs",
+    });
+  });
+
+  it("is a no-op at the ends and for non-tab rows", () => {
+    const rows = buildBlockTree(buildThreeTabBlocks());
+    expect(planTabsMoveTab(rows, "tab-a", "prev")).toEqual([]);
+    expect(planTabsMoveTab(rows, "tab-c", "next")).toEqual([]);
+    expect(planTabsMoveTab(rows, "text-tab-a", "prev")).toEqual([]);
+    expect(planTabsMoveTab(rows, "missing", "next")).toEqual([]);
   });
 });
 
