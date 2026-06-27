@@ -144,7 +144,8 @@ function PageWorkspaceBody({
   const typographyProps = pageContentTypographyProps({ font, smallText });
   const { className: typographyClassName, ...typographyDataProps } =
     typographyProps;
-
+  // Bumped after a reset/refresh/save-all clears local state for the open page
+  // so the canvas remounts and re-reads fresh (shipped) data.
   const [canvasNonce, setCanvasNonce] = useState(0);
   const bumpCanvasNonce = useCallback(() => {
     setCanvasNonce((nonce) => nonce + 1);
@@ -235,10 +236,8 @@ function PageWorkspaceBody({
             </>
           )}
         </div>
-        <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 max-md:hidden md:px-0">
+        <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end gap-1 px-2 max-md:hidden md:px-0">
           <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
-        </div>
-        <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end">
           <SiteSettingsTrigger pageId={page.id} />
         </div>
       </div>

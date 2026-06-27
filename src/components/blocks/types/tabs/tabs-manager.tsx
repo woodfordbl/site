@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -44,28 +45,30 @@ export function TabsManager({ row }: TabsManagerProps) {
         render={
           <Button
             aria-label="Manage tabs"
-            className="size-6 shrink-0 text-muted-foreground"
-            size="icon-xs"
+            className="hover-reveal shrink-0 text-muted-foreground focus-visible:opacity-100 aria-expanded:opacity-100"
+            size="icon-sm"
             type="button"
             variant="ghost"
           >
-            <IconSettings className="size-3.5" />
+            <IconSettings className="size-4" />
           </Button>
         }
       />
       <DropdownMenuContent align="end" className="min-w-56">
-        <DropdownMenuLabel>Manage tabs</DropdownMenuLabel>
-        {tabRows.map((tabRow, index) => (
-          <TabSubmenu
-            canDelete={tabRows.length > 1}
-            dispatch={dispatch}
-            index={index}
-            isFirst={index === 0}
-            isLast={index === tabRows.length - 1}
-            key={tabRow.rowId}
-            tabRow={tabRow}
-          />
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Manage tabs</DropdownMenuLabel>
+          {tabRows.map((tabRow, index) => (
+            <TabSubmenu
+              canDelete={tabRows.length > 1}
+              dispatch={dispatch}
+              index={index}
+              isFirst={index === 0}
+              isLast={index === tabRows.length - 1}
+              key={tabRow.rowId}
+              tabRow={tabRow}
+            />
+          ))}
+        </DropdownMenuGroup>
         {tabRows.length < MAX_TABS_COUNT ? (
           <>
             <DropdownMenuSeparator />

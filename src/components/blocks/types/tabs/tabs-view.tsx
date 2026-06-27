@@ -132,7 +132,7 @@ function TabsEditView({ row }: { row: CanvasRow }) {
       onValueChange={handleValueChange}
       value={activeId}
     >
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" data-reveal-group>
         <TabsList className="max-w-full overflow-x-auto">
           {tabRows.map((tabRow, index) => (
             <TabsTrigger key={tabRow.rowId} value={tabRow.rowId}>
@@ -143,13 +143,13 @@ function TabsEditView({ row }: { row: CanvasRow }) {
         {tabRows.length < MAX_TABS_COUNT ? (
           <Button
             aria-label="Add tab"
-            className="size-6 shrink-0 text-muted-foreground"
+            className="hover-reveal shrink-0 text-muted-foreground focus-visible:opacity-100"
             onClick={addTab}
-            size="icon-xs"
+            size="icon-sm"
             type="button"
             variant="ghost"
           >
-            <IconPlus className="size-3.5" />
+            <IconPlus className="size-4" />
           </Button>
         ) : null}
         <TabsManager row={row} />

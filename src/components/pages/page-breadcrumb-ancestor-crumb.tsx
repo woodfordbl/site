@@ -8,7 +8,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -83,9 +82,12 @@ function PageBreadcrumbChildrenSubmenu({
           />
         ))}
         {hiddenCount > 0 ? (
-          <DropdownMenuLabel className="px-2 py-1.5 font-normal text-muted-foreground text-xs">
+          <div
+            className="px-2 py-1.5 font-normal text-muted-foreground text-xs"
+            role="presentation"
+          >
             {hiddenCount} more
-          </DropdownMenuLabel>
+          </div>
         ) : null}
       </DropdownMenuSubContent>
     </DropdownMenuSub>

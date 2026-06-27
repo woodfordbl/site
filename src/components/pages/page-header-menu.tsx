@@ -59,9 +59,9 @@ export function PageHeaderMenu({
   seed,
   serverPage,
 }: PageHeaderMenuProps) {
+  const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const isNarrowViewport = useIsNarrowViewport();
   const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
     usePageSettings({
       pageId,

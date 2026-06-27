@@ -71,38 +71,28 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   head: ({ matches }) => {
     const isNotFound = matches.some((match) => match.status === "notFound");
 
+    const baseMeta = [
+      {
+        charSet: "utf-8",
+      },
+      {
+        name: "viewport",
+        content:
+          "width=device-width, initial-scale=1, interactive-widget=resizes-content",
+      },
+      {
+        name: "theme-color",
+        content: "#0a0a0a",
+      },
+    ];
+
     return {
       meta: isNotFound
-        ? [
-            {
-              charSet: "utf-8",
-            },
-            {
-              name: "viewport",
-              content:
-                "width=device-width, initial-scale=1, interactive-widget=resizes-content",
-            },
-            {
-              name: "theme-color",
-              content: "#0a0a0a",
-            },
-            ...buildNotFoundMeta(),
-          ]
+        ? [...baseMeta, ...buildNotFoundMeta()]
         : [
-            {
-              charSet: "utf-8",
-            },
-            {
-              name: "viewport",
-              content:
-                "width=device-width, initial-scale=1, interactive-widget=resizes-content",
-            },
+            ...baseMeta,
             {
               title: "Blake Woodford",
-            },
-            {
-              name: "theme-color",
-              content: "#0a0a0a",
             },
           ],
       links: [
