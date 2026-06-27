@@ -311,6 +311,20 @@ export function PageSidebarSwipeReveal({
   const isRevealed = translateX > 0;
   const overlayProgress = Math.min(translateX / sidebarWidth, 1);
 
+  // Drive the page background (the surface iOS Safari samples for its top/bottom
+  // bar tint) toward the sidebar color as the sidebar is revealed, so the bars
+  // fade to sidebar-gray with the swipe instead of being permanently gray. The
+  // dragging flag drops the CSS transition so the tint tracks the finger 1:1.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--sidebar-reveal", String(overlayProgress));
+    root.toggleAttribute("data-swipe-dragging", isDragging);
+    return () => {
+      root.style.removeProperty("--sidebar-reveal");
+      root.removeAttribute("data-swipe-dragging");
+    };
+  }, [overlayProgress, isDragging]);
+
   return (
     <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-sidebar">
       {/* Sidebar layer — fixed behind the content, revealed as content slides. */}
@@ -357,11 +371,12 @@ export function PageSidebarSwipeReveal({
         />
       </div>
 
-      {/* Keep the top safe-area sidebar-gray while revealing, so it doesn't show
-          the content's background there (e.g. a cover page's sticky header,
-          which fills the safe-area white). Height is the safe-area inset, which
-          grows non-zero exactly when scrolled (the Safari address bar
-          collapses), matching when the white would otherwise appear. */}
+      {/* Fade sidebar-gray over the top/bottom safe areas as the sidebar is
+          revealed, so they don't show the content's background there (e.g. a
+          cover page's sticky header fills the top safe-area white). Heights are
+          the safe-area insets — non-zero only with notch / home indicator (and
+          the top grows when Safari's address bar collapses on scroll); opacity
+          tracks the swipe so they switch in with the gesture. */}
       <div
         aria-hidden
         className={cn(
@@ -370,6 +385,17 @@ export function PageSidebarSwipeReveal({
         )}
         style={{
           height: "env(safe-area-inset-top)",
+          opacity: overlayProgress,
+        }}
+      />
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+          isDragging && "transition-none"
+        )}
+        style={{
+          height: "env(safe-area-inset-bottom)",
           opacity: overlayProgress,
         }}
       />

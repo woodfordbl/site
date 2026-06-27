@@ -395,18 +395,28 @@
 
   body {
     overscroll-behavior: none;
-    /* Sidebar (not background) so the surface iOS Safari samples for its bar
-       tint — and the translucent bottom toolbar sits over — is the app's gray,
-       not white. The white page content paints over this within the shell. */
-    @apply bg-sidebar text-foreground;
+    /* The page background is the surface iOS Safari samples for its top/bottom
+       bar tint. Mix from content background → sidebar as the mobile sidebar is
+       revealed (`--sidebar-reveal`, driven by PageSidebarSwipeReveal) so the
+       bars fade to the sidebar color *with the swipe* rather than being
+       permanently gray. Defaults to the content background (var unset = 0). */
+    background-color: color-mix(
+      in oklab,
+      var(--background),
+      var(--sidebar) calc(var(--sidebar-reveal, 0) * 100%)
+    );
+    transition: background-color 200ms var(--ease-drawer);
+    @apply text-foreground;
+  }
+
+  /* While dragging, the bar tint tracks the finger 1:1 (no settle animation). */
+  html[data-swipe-dragging] body {
+    transition: none;
   }
 
   html {
     overscroll-behavior: none;
-    /* Canvas background iOS Safari paints behind its translucent top/bottom bars
-       and the auto-filled notch/home-indicator edges. Sidebar color so the app
-       reads edge-to-edge on mobile; body paints `bg-background` over its own box. */
-    @apply bg-sidebar font-sans;
+    @apply font-sans;
   }
 
   /*
