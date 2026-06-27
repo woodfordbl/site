@@ -21,6 +21,20 @@ const SPRING_MAX_DT = 1 / 30; // clamp frame delta so a stall can't kick the spr
 const SPRING_ENTRANCE_PX = 10; // start this far above rest → "snap down" on show
 
 /**
+ * Velocity-lead tuning. The raw spring trails the target during steady scroll
+ * (lag ∝ velocity), which reads as mushy on slow scrolls. So we estimate the
+ * target's velocity with an exponential moving average (the "easing", time
+ * constant {@link FOLLOW_VELOCITY_TAU}) and aim the spring slightly *ahead* of
+ * the target by `velocity * lead` — sized to cancel the steady-state lag, so
+ * even slow scrolls track tightly. When motion stops or reverses, the EMA
+ * velocity eases back through zero, the lead collapses, and the underdamped
+ * spring overshoots the rest point and settles: the "snap back" overcompensation.
+ */
+const FOLLOW_VELOCITY_TAU = 0.05; // s — EMA window for target velocity (~3 frames)
+const FOLLOW_LEAD_SECONDS = 0.08; // ≈ damping/stiffness → cancels steady-state lag
+const FOLLOW_LEAD_MAX_PX = 24; // clamp how far ahead the bar may run
+
+/**
  * True on engines where the **layout viewport resizes** for the on-screen
  * keyboard, so the bar can be pinned with plain CSS (no per-frame JS).
  *
@@ -134,9 +148,11 @@ export function useKeyboardToolbarAnchor(
     let raf = 0;
     let barHeight = el.offsetHeight;
     let lastY = Number.NaN;
-    let pos = Number.NaN; // rendered y (spring follows target toward it)
-    let vel = 0; // px/s
+    let pos = Number.NaN; // rendered y (spring follows the lead target toward it)
+    let vel = 0; // px/s — spring velocity of the rendered position
     let prevT = Number.NaN; // rAF timestamp of the previous frame
+    let targetPrev = Number.NaN; // previous frame's raw target (for velocity)
+    let targetVel = 0; // px/s — EMA-smoothed velocity of the target itself
 
     const reduceMotion =
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -178,21 +194,46 @@ export function useKeyboardToolbarAnchor(
       prevT = t;
 
       if (reduceMotion || Math.abs(target - pos) > SPRING_TELEPORT_PX) {
-        // Reduced motion, or a big jump (keyboard show/hide, rotation): no swoop.
+        // Reduced motion, or a big jump (keyboard show/hide, rotation): no swoop,
+        // and drop any tracked velocity so it can't carry into the next scroll.
         pos = target;
         vel = 0;
+        targetVel = 0;
+        targetPrev = target;
       } else if (dt > 0) {
+        // Smooth the target's own velocity with an EMA (frame-rate-independent
+        // alpha from dt). This keeps collecting as the scroll slows, so the lead
+        // decays gradually instead of snapping to zero.
+        if (!Number.isNaN(targetPrev)) {
+          const instVelocity = (target - targetPrev) / dt;
+          const alpha = 1 - Math.exp(-dt / FOLLOW_VELOCITY_TAU);
+          targetVel += (instVelocity - targetVel) * alpha;
+        }
+        targetPrev = target;
+
+        // Aim slightly ahead in the direction of travel (bounded) so steady
+        // scroll tracks without lag; on stop/reverse the lead collapses and the
+        // underdamped spring overshoots the true rest point — the "snap back".
+        const lead = Math.max(
+          -FOLLOW_LEAD_MAX_PX,
+          Math.min(FOLLOW_LEAD_MAX_PX, targetVel * FOLLOW_LEAD_SECONDS)
+        );
+        const aim = target + lead;
+
         // Semi-implicit (symplectic) Euler — stable for these params at the
-        // clamped dt. Light underdamping gives the elastic catch-up + settle.
-        const accel = -SPRING_STIFFNESS * (pos - target) - SPRING_DAMPING * vel;
+        // clamped dt.
+        const accel = -SPRING_STIFFNESS * (pos - aim) - SPRING_DAMPING * vel;
         vel += accel * dt;
         pos += vel * dt;
         if (
           Math.abs(target - pos) < SPRING_REST_PX &&
-          Math.abs(vel) < SPRING_REST_VELOCITY
+          Math.abs(vel) < SPRING_REST_VELOCITY &&
+          Math.abs(targetVel) < SPRING_REST_VELOCITY
         ) {
+          // Settle only when the target itself is at rest, not mid-scroll.
           pos = target;
           vel = 0;
+          targetVel = 0;
         }
       }
 
@@ -202,7 +243,8 @@ export function useKeyboardToolbarAnchor(
 
     // Enter from just above the rest position so the bar snaps *down* into place
     // (skipped under reduced motion). Write synchronously before the first paint.
-    pos = reduceMotion ? targetY() : targetY() - SPRING_ENTRANCE_PX;
+    targetPrev = targetY();
+    pos = reduceMotion ? targetPrev : targetPrev - SPRING_ENTRANCE_PX;
     write(pos);
     raf = requestAnimationFrame(frame);
     return () => {

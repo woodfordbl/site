@@ -107,22 +107,45 @@ position chases the viewport target through a lightly underdamped spring
   main-thread-vs-compositor error that used to read as jitter gets smoothed into
   the motion instead of showing as shimmer.
 
+### Velocity lead (handles slow scrolls)
+
+A bare spring trails the target during steady scroll — lag ∝ velocity — which
+reads as mushy, especially on slow scrolls. So the loop also tracks the
+**target's own velocity** and aims the spring slightly ahead:
+
+1. **Track + ease the velocity.** Each frame it takes the instantaneous target
+   velocity `(target − prevTarget) / dt` and folds it into an exponential moving
+   average (frame-rate-independent `alpha = 1 − e^(−dt/τ)`, τ = `FOLLOW_VELOCITY_TAU`).
+   The EMA keeps collecting as the scroll slows, so velocity decays smoothly
+   rather than snapping to zero.
+2. **Lead by it.** The spring aims at `target + clamp(velocity × FOLLOW_LEAD_SECONDS)`.
+   `FOLLOW_LEAD_SECONDS ≈ damping/stiffness`, which is the spring's steady-state
+   lag — so the lead cancels it and even slow scrolls track tightly. The lead is
+   clamped to `FOLLOW_LEAD_MAX_PX` so a fast fling can't fling the bar ahead.
+3. **Snap back on stop / reverse.** When scrolling stops or flips direction, the
+   eased velocity coasts back through zero, the lead collapses to the true rest
+   point, and the bar — still carrying spring momentum toward where it was
+   leading — overshoots and settles. That overshoot is the requested
+   overcompensation.
+
 Behavioural rules baked into the loop:
 
 | Situation | Behaviour |
 | --- | --- |
-| Small continuous delta (scroll-follow) | Spring toward target — elastic catch-up + tiny overshoot. |
-| Large jump > `SPRING_TELEPORT_PX` (keyboard show/hide, rotation) | Teleport — never swoop the bar across the screen. |
-| Within `SPRING_REST_PX` and slow | Snap to target and idle (no sub-pixel crawl). |
-| `prefers-reduced-motion: reduce` | Rigid 1:1 tracking, no spring, no entrance. |
+| Steady scroll (incl. slow) | Spring aims at a velocity-led target → tracks tightly, minimal lag. |
+| Stop or reverse direction | Lead collapses; underdamped spring overshoots rest then settles (snap-back). |
+| Large jump > `SPRING_TELEPORT_PX` (keyboard show/hide, rotation) | Teleport; drop tracked velocity so it can't carry into the next scroll. |
+| Within `SPRING_REST_PX`, slow, target at rest | Snap to target and idle (no sub-pixel crawl). |
+| `prefers-reduced-motion: reduce` | Rigid 1:1 tracking, no spring, no lead, no entrance. |
 
-Tuning lives in the `SPRING_*` constants at the top of
+Tuning lives in the constants at the top of
 [`use-visual-viewport-keyboard.ts`](../../src/hooks/use-visual-viewport-keyboard.ts):
-`STIFFNESS`/`DAMPING` set the feel (ζ ≈ 0.73 → snappy with a hint of overshoot),
-`TELEPORT_PX` the jump cutoff, `ENTRANCE_PX` the snap-down distance, and `MAX_DT`
-clamps the frame delta so a stalled tab can't kick the spring on resume. The
-integrator is stable for these values at the clamped `dt`; raise stiffness far
-and it would need sub-stepping.
+`SPRING_STIFFNESS`/`SPRING_DAMPING` set the feel (ζ ≈ 0.73 → snappy with a hint
+of overshoot); `FOLLOW_VELOCITY_TAU`/`FOLLOW_LEAD_SECONDS`/`FOLLOW_LEAD_MAX_PX`
+set the velocity lead; `SPRING_TELEPORT_PX` the jump cutoff; `SPRING_ENTRANCE_PX`
+the snap-down distance; `SPRING_MAX_DT` clamps the frame delta so a stalled tab
+can't kick the spring on resume. The integrator is stable for these values at the
+clamped `dt`; raise stiffness far and it would need sub-stepping.
 
 > Strategy A (Chromium) stays on the native CSS resize — it's already smooth on
 > the compositor, and taking it over with a JS spring would trade that away. The
