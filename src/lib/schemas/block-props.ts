@@ -101,15 +101,6 @@ export const tableCellPropsSchema = z.object({
   text: z.string(),
 });
 
-/** `code` block props: source text plus a Shiki language id (defaults to plaintext). */
-export const codePropsSchema = z.object({
-  // Named `text` (not `code`) so it reuses the hasPrimaryText machinery in
-  // create-block.ts (getTextFromBlock / withBlockText) and Turn-into carry-over.
-  text: z.string(),
-  /** Shiki language id (e.g. `ts`, `python`); omitted means plaintext. */
-  language: z.string().optional(),
-});
-
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
 export const embedPropsSchema = z.object({
   url: z.string(),
@@ -125,7 +116,6 @@ export type TextProps = z.infer<typeof textPropsSchema>;
 export type ListProps = z.infer<typeof listPropsSchema>;
 export type QuoteProps = z.infer<typeof quotePropsSchema>;
 export type CalloutProps = z.infer<typeof calloutPropsSchema>;
-export type CodeProps = z.infer<typeof codePropsSchema>;
 export type ChecklistProps = z.infer<typeof checklistPropsSchema>;
 export type ChecklistItemProps = z.infer<typeof checklistItemPropsSchema>;
 export type PageLinkProps = z.infer<typeof pageLinkPropsSchema>;

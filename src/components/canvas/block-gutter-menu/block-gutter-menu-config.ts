@@ -8,8 +8,7 @@ export function turnIntoValueFromBlock(block: Block): string | undefined {
   if (
     block.type === "text" ||
     block.type === "quote" ||
-    block.type === "callout" ||
-    block.type === "code"
+    block.type === "callout"
   ) {
     return block.type;
   }
@@ -32,7 +31,6 @@ export function canTurnIntoBlock(row: CanvasRow): boolean {
     type === "text" ||
     type === "heading" ||
     type === "quote" ||
-    type === "callout" ||
-    type === "code"
+    type === "callout"
   );
 }

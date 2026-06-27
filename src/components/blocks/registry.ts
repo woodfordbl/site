@@ -1,7 +1,6 @@
 import {
   IconBlockquote,
   IconCheckbox,
-  IconCode,
   IconH1,
   IconH2,
   IconH3,
@@ -23,8 +22,6 @@ import { CalloutEdit } from "@/components/blocks/types/callout/callout-edit.tsx"
 import { CalloutView } from "@/components/blocks/types/callout/callout-view.tsx";
 import { ChecklistItemEdit } from "@/components/blocks/types/checklist/checklist-item-edit.tsx";
 import { ChecklistItemView } from "@/components/blocks/types/checklist/checklist-item-view.tsx";
-import { CodeEdit } from "@/components/blocks/types/code/code-edit.tsx";
-import { CodeView } from "@/components/blocks/types/code/code-view.tsx";
 import { DividerEdit } from "@/components/blocks/types/divider/divider-edit.tsx";
 import { DividerView } from "@/components/blocks/types/divider/divider-view.tsx";
 import { EmbedEdit } from "@/components/blocks/types/embed/embed-edit.tsx";
@@ -156,19 +153,6 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     },
     View: CalloutView,
     Edit: CalloutEdit,
-  },
-  code: {
-    type: "code",
-    label: "Code",
-    slashAliases: ["code", "snippet"],
-    icon: IconCode,
-    createDefault: () => createEmptyBlock("code"),
-    behavior: {
-      editStrategy: "inline-custom",
-      capabilities: INLINE_CUSTOM_CAPABILITIES,
-    },
-    View: CodeView,
-    Edit: CodeEdit,
   },
   checklistItem: {
     type: "checklistItem",
