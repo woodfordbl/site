@@ -197,7 +197,7 @@ export function MobileEditorToolbar() {
           role="toolbar"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-            <ButtonGroup className="shrink-0 shadow-sm">
+            <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
               <ToolbarButton
                 label="Add block"
                 onPress={() => openPicker("add")}
@@ -211,7 +211,7 @@ export function MobileEditorToolbar() {
                 <IconExchange aria-hidden />
               </ToolbarButton>
             </ButtonGroup>
-            <ButtonGroup className="shrink-0 shadow-sm">
+            <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
               <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
                 <IconIndentDecrease aria-hidden />
               </ToolbarButton>
@@ -219,7 +219,7 @@ export function MobileEditorToolbar() {
                 <IconIndentIncrease aria-hidden />
               </ToolbarButton>
             </ButtonGroup>
-            <ButtonGroup className="shrink-0 shadow-sm">
+            <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
               <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
@@ -231,7 +231,7 @@ export function MobileEditorToolbar() {
               </ToolbarButton>
             </ButtonGroup>
           </div>
-          <ButtonGroup className="shrink-0 shadow-sm">
+          <ButtonGroup className="shrink-0 rounded-lg shadow-sm">
             <ToolbarButton label="Close keyboard" onPress={handleDismiss}>
               <IconKeyboardOff aria-hidden />
             </ToolbarButton>
