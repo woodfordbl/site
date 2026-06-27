@@ -16,6 +16,7 @@ import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageVersionHistoryPanel } from "@/components/pages/page-version-history-panel.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -42,7 +43,10 @@ import {
 } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
+import { formatRelativeTime } from "@/lib/pages/format-relative-time.ts";
+import type { PageSnapshotDescriptor } from "@/lib/pages/page-snapshot-types.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
+import { restorePageSnapshot } from "@/lib/pages/restore-page-snapshot.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
@@ -60,6 +64,8 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [restoreTarget, setRestoreTarget] =
+    useState<PageSnapshotDescriptor | null>(null);
   const { font, setFont, setSmallText, smallText } = usePageSettings({
     pageId,
     seed,
@@ -153,6 +159,23 @@ export function PageHeaderMenu({
     deletePage();
     setDeleteOpen(false);
     setOpen(false);
+  };
+
+  const requestRestore = (descriptor: PageSnapshotDescriptor) => {
+    setOpen(false);
+    setRestoreTarget(descriptor);
+  };
+
+  const handleRestore = () => {
+    if (!restoreTarget) {
+      return;
+    }
+    restorePageSnapshot(
+      pageId,
+      restoreTarget.id,
+      restoreTarget.timestamp
+    ).catch(() => undefined);
+    setRestoreTarget(null);
   };
 
   const runAfterClose = (action: () => void) => {
@@ -284,6 +307,12 @@ export function PageHeaderMenu({
             ) : null}
             <DropdownMenuSeparator />
             <PageActivityPanel pageId={pageId} />
+            <DropdownMenuSeparator />
+            <PageVersionHistoryPanel
+              onRequestRestore={requestRestore}
+              open={open}
+              pageId={pageId}
+            />
           </ActionMenuSearchSection>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -308,6 +337,38 @@ export function PageHeaderMenu({
             </Button>
             <Button onClick={handleDelete} type="button" variant="destructive">
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setRestoreTarget(null);
+          }
+        }}
+        open={restoreTarget !== null}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Restore this version?</DialogTitle>
+            <DialogDescription>
+              The page reverts to its state from{" "}
+              {restoreTarget ? formatRelativeTime(restoreTarget.timestamp) : ""}
+              . Your current version is saved first, so you can undo this.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => setRestoreTarget(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleRestore} type="button">
+              Restore
             </Button>
           </DialogFooter>
         </DialogContent>

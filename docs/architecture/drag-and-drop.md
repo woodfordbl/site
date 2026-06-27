@@ -120,6 +120,8 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 - [Canvas commands](../reference/canvas-commands.md)
 - [Page commands — `page.reposition`](../reference/page-commands.md#page-reposition)
 
+Reposition and canvas structural drops persist through the same paths that schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history).
+
 ## Scope
 
 This document covers the shared DnD toolkit only. Other modules under `src/components/pages/` (for example the icon picker) are documented in [pages](./pages.md) and do not use this DnD layer.

@@ -1,4 +1,7 @@
-import { blockShardStorageKey } from "@/db/collections/page-sharded-block-storage.ts";
+import {
+  BLOCK_SHARD_PREFIX,
+  blockShardStorageKey,
+} from "@/db/collections/page-sharded-block-storage.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import { toLocalBlock } from "@/lib/schemas/local-block.ts";
 import {
@@ -9,8 +12,14 @@ import {
 const LEGACY_PAGES_KEY = "site-local-pages";
 const MIGRATION_FLAG_KEY = "site-local-storage-v2";
 const CREATED_AT_BACKFILL_FLAG_KEY = "site-local-pages-created-at-backfill";
+const BLOCK_CREATED_AT_BACKFILL_FLAG_KEY =
+  "site-local-blocks-created-at-backfill";
 
-export { CREATED_AT_BACKFILL_FLAG_KEY, LEGACY_PAGES_KEY };
+export {
+  BLOCK_CREATED_AT_BACKFILL_FLAG_KEY,
+  CREATED_AT_BACKFILL_FLAG_KEY,
+  LEGACY_PAGES_KEY,
+};
 
 interface StoredItem<T> {
   data: T;
@@ -178,5 +187,67 @@ export function backfillPageCreatedAt(): void {
     localStorage.setItem(CREATED_AT_BACKFILL_FLAG_KEY, "done");
   } catch {
     localStorage.setItem(CREATED_AT_BACKFILL_FLAG_KEY, "done");
+  }
+}
+
+/** Backfills `createdAt` for one shard key; returns whether it changed. */
+function backfillShardCreatedAt(key: string): void {
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    return;
+  }
+
+  const shard = JSON.parse(raw) as Record<
+    string,
+    StoredItem<Record<string, unknown>>
+  >;
+  let changed = false;
+
+  for (const stored of Object.values(shard)) {
+    const data = stored.data;
+    if (!data || typeof data !== "object") {
+      continue;
+    }
+    if (
+      typeof data.createdAt === "string" ||
+      typeof data.updatedAt !== "string"
+    ) {
+      continue;
+    }
+    data.createdAt = data.updatedAt;
+    changed = true;
+  }
+
+  if (changed) {
+    localStorage.setItem(key, JSON.stringify(shard));
+  }
+}
+
+/** Sets `createdAt = updatedAt` on legacy block rows that predate the field. */
+export function backfillBlockCreatedAt(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (localStorage.getItem(BLOCK_CREATED_AT_BACKFILL_FLAG_KEY) === "done") {
+    return;
+  }
+
+  try {
+    const shardKeys: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(BLOCK_SHARD_PREFIX)) {
+        shardKeys.push(key);
+      }
+    }
+
+    for (const key of shardKeys) {
+      backfillShardCreatedAt(key);
+    }
+
+    localStorage.setItem(BLOCK_CREATED_AT_BACKFILL_FLAG_KEY, "done");
+  } catch {
+    localStorage.setItem(BLOCK_CREATED_AT_BACKFILL_FLAG_KEY, "done");
   }
 }

@@ -97,6 +97,8 @@ Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canva
 
 Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item. Both capture full subtrees — `subtreeBlocksFromSelectedRows` ([`block-selection.ts`](../../src/lib/canvas/block-selection.ts)) for selections, `flattenRows` for a single row.
 
+The gutter/mobile block menu also renders a non-command **Added / Last edited** footer ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx)) from the row's `LocalBlock` timestamps. Block commits also schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](../architecture/local-first-persistence.md#page-snapshots-version-history).
+
 Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Paste cloning: `cloneBlocksForPaste` in `src/lib/canvas/clipboard.ts`.
 
 ## Slash

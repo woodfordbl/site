@@ -10,6 +10,7 @@
 | Local page metadata | `localPagesCollection` (`site-local-pages`) | No (localStorage) |
 | Local blocks | `localBlocksCollection` (`site-local-blocks:<pageId>` shards) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
+| Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
 
 ## Local media assets (IndexedDB, not TanStack collections)
 
@@ -22,6 +23,23 @@ Uploaded images/gifs/videos for **`media`** blocks are stored outside `localBloc
 - **Author save:** DEV footer runs [`preparePageDocumentForAuthorSave`](../../src/lib/content/prepare-page-document-for-author-save.ts) + [`saveMediaAssets`](../../src/lib/content/save-media-assets.ts), writes referenced blobs to `public/media/<hash>.<ext>`, rewrites props to `source: "url"` paths, then `savePage` ([author-dev-mode](./author-dev-mode.md)).
 
 URL-backed media (`source: "url"`) ships in page JSON without IndexedDB.
+
+## Page snapshots (version history)
+
+Locally-edited pages keep a tiered checkpoint history in IndexedDB (`createStore("site-page-snapshots", "snapshots")`, [`page-snapshot-store.ts`](../../src/db/snapshots/page-snapshot-store.ts)). The layout is deliberately **split** so capturing or pruning one checkpoint never rewrites the others' block payloads:
+
+| Key | Value | Read when |
+|-----|-------|-----------|
+| `${pageId}:index` | `PageSnapshotIndex` — descriptor list (id, bucket, timestamp, content/metadata hash, counts, title) | timeline render, capture decision, thinning |
+| `${pageId}:snap:${id}` | `PageSnapshotContent` — blocks + order + title + icon + settings | restore (one read), capture (one write) |
+
+- **Capture** ([`capture-page-snapshot.ts`](../../src/lib/pages/capture-page-snapshot.ts)): a ~10s debounce (`schedulePageSnapshotCapture`) fired from the block-commit success path (`commitAndMarkDirty`) and from metadata/settings/reposition persists. `capturePageSnapshotNow` reads the page synchronously (`readBlockShardForPage` + `readLocalStorageCollection`), hashes the blocks (`hashPageBlocks`) and metadata (`hashPageMetadata`), and [`resolveSnapshotCaptureAction`](../../src/lib/pages/resolve-snapshot-capture-action.ts) decides skip / update-in-bucket / create. Each 10-minute wall-clock bucket (`bucketIdForTimestamp`) collapses to one checkpoint; unchanged content is skipped.
+- **Retention** ([`thin-page-snapshots.ts`](../../src/lib/pages/thin-page-snapshots.ts)): coarsens over time — last 1h every 10-min bucket, 1–24h hourly, 24h–30d daily, 30d+ weekly, hard cap 40/page (most-recent always kept). Runs on every capture and on an idle boot purge ([`snapshot-purge.ts`](../../src/db/snapshots/snapshot-purge.ts), registered in `startLocalCollectionsSync`).
+- **Restore** ([`restore-page-snapshot.ts`](../../src/lib/pages/restore-page-snapshot.ts)): captures the current state first (force, so the revert is undoable), then re-applies blocks via `applyPageBlockDiff` inside one `PageBlockTransaction` (ordering invariant) and restores title/icon/settings on `localPagesCollection`.
+- **Media safety:** checkpoints store only block props (the `assetId` reference), never blob bytes — restoring re-points at the existing `site-assets` blob. `sweepOrphanAssets` ([`asset-gc.ts`](../../src/db/assets/asset-gc.ts)) therefore unions snapshot-referenced asset ids into its live set so a blob held only by a checkpoint is not reclaimed.
+- **Lifecycle:** `clearPageSnapshots` runs on **Reset page**, hard delete, **Reset all**, and author **Save to source**. All writes fail soft (best-effort; quota errors route to `reportPersistenceError` and never block an edit).
+
+This replaces an earlier write-only per-edit event log (capped at 100, never surfaced); the checkpoint timeline is now the single page-history surface.
 
 ## Local page document (metadata)
 
@@ -36,7 +54,7 @@ One metadata record per `page.id` in `localPagesCollection`:
 - `createdAt` — ISO timestamp set once at insert (lazy-seed uses first local edit time; never updated)
 - `updatedAt`
 
-Block content lives in `localBlocksCollection` (one row per block, keyed by `block.id`, with `pageId` and `updatedAt`).
+Block content lives in `localBlocksCollection` (one row per block, keyed by `block.id`, with `pageId`, `createdAt` — set once at insert, preserved across updates — and `updatedAt`). Legacy rows missing `createdAt` are backfilled from `updatedAt` at boot by `backfillBlockCreatedAt` ([`migrate-local-storage.ts`](../../src/db/collections/migrate-local-storage.ts)). The block actions menu surfaces these as "Added / Last edited" ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx) via [`useLocalBlockTimestamps`](../../src/db/queries/use-local-block-timestamps.ts)).
 
 ## Local block rows
 

@@ -178,14 +178,18 @@
         "src/lib/pages/persist-page-settings.ts",
         "src/lib/pages/copy-page-link.ts",
         "src/lib/pages/page-move-targets.ts",
-        "src/lib/pages/record-page-activity.ts",
-        "src/db/activity/**"
+        "src/components/pages/page-version-history-panel.tsx",
+        "src/db/queries/use-page-snapshots.ts",
+        "src/lib/pages/capture-page-snapshot.ts",
+        "src/lib/pages/restore-page-snapshot.ts",
+        "src/lib/pages/thin-page-snapshots.ts",
+        "src/db/snapshots/**"
       ],
       "docs": ["docs/architecture/pages.md"],
       "majorGlobs": [
         "src/components/pages/page-header-menu.tsx",
         "src/lib/schemas/page-settings.ts",
-        "src/db/activity/page-activity-store.ts"
+        "src/db/snapshots/page-snapshot-store.ts"
       ]
     },
     {

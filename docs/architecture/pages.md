@@ -201,7 +201,7 @@ Deleting the active page navigates to the parent page (or home) via `resolveDele
 | Search | Filters menu rows via [`ActionMenuSearchSection`](../../src/components/canvas/action-menu-search.tsx) |
 | Settings | **Font** (Default / Serif / Mono) and **Small text** toggle — persisted on [`localPageSchema`](../../src/lib/schemas/local-page.ts) (`font`, `smallText`) and shipped [`pageSchema`](../../src/lib/schemas/page.ts); applied to the canvas + title column via [`pageContentTypographyProps`](../../src/lib/pages/page-content-typography.ts) |
 | Page actions | **Copy link** ([`buildPageLinkUrl`](../../src/lib/pages/copy-page-link.ts)), **Duplicate page**, **Move to** (searchable parent picker → `page.reposition`), **Delete** (confirm dialog) — shared [`usePageActions`](../../src/hooks/use-page-actions.ts) |
-| Page stats | Footer rows: total blocks, total words, created at, last edited at ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)) |
+| Page stats | Footer rows: total blocks, total words, created at, last edited at ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)), plus **Version history** restore list ([`PageVersionHistoryPanel`](../../src/components/pages/page-version-history-panel.tsx)) |
 | Mobile dev/sync | When local changes, remote updates, or dev mode apply, **Reset page**, **Reset all**, **Refresh site content**, and **Save all to source** appear in the same menu (replacing the former portaled canvas drawer trigger) |
 
 Desktop dev/sync actions remain in [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx).
@@ -221,7 +221,9 @@ Writes go through [`persistPageSettings`](../../src/lib/pages/persist-page-setti
 
 Inline footer at the bottom of the header menu ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)): **Total blocks**, **Total words**, **Created at**, **Last edited at** — from [`buildPageActivitySummary`](../../src/lib/pages/page-activity-summary.ts) (block count, word count, `LocalPage.createdAt`, max of page/block `updatedAt`).
 
-IndexedDB event log ([`page-activity-store`](../../src/db/activity/page-activity-store.ts)) still records edits in the background for future use; `block.updated` coalesced per block within 30s. Cleared on **Reset page**.
+### Version history
+
+Below the stats footer the header menu lists restorable checkpoints ([`PageVersionHistoryPanel`](../../src/components/pages/page-version-history-panel.tsx), read on open via [`usePageSnapshots`](../../src/db/queries/use-page-snapshots.ts)). Each edit schedules a debounced capture ([`schedulePageSnapshotCapture`](../../src/lib/pages/capture-page-snapshot.ts)) that collapses a **10-minute wall-clock window** into one checkpoint of the page's full state (blocks + order + title + icon + settings); content-hash dedupe skips no-op edits. Older history coarsens over time ([`thinSnapshotDescriptors`](../../src/lib/pages/thin-page-snapshots.ts): last 1h every 10-min bucket, then hourly/daily/weekly, hard-capped at 40/page). **Restore** ([`restorePageSnapshot`](../../src/lib/pages/restore-page-snapshot.ts)) captures the current state first (so the revert is undoable), then re-applies blocks atomically via `applyPageBlockDiff` and the page metadata. Storage layout and retention: [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history). Snapshots are cleared on **Reset page**, hard delete, **Reset all**, and **Save to source**.
 
 ## Slug rules
 
