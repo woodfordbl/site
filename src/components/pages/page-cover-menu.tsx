@@ -6,7 +6,7 @@ import {
   IconUpload,
   IconWorld,
 } from "@tabler/icons-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 
 import { PageCoverUnsplashPanel } from "@/components/pages/page-cover-unsplash-panel.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -109,7 +109,7 @@ export function PageCoverDialog({
       className={cn("flex flex-col gap-0", fillHeight && "min-h-0 flex-1")}
       defaultValue="unsplash"
     >
-      <div className="relative w-full shrink-0">
+      <div className="relative flex w-full shrink-0 items-center justify-between gap-2">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 z-0 border-border border-b"
@@ -128,6 +128,18 @@ export function PageCoverDialog({
             Upload
           </TabsTrigger>
         </TabsList>
+        {headerImage ? (
+          <Button
+            className="relative z-[1] mb-1 h-7 shrink-0 text-muted-foreground"
+            onClick={() => apply(null)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <IconTrash />
+            Remove
+          </Button>
+        ) : null}
       </div>
       <TabsContent
         className={cn("mt-3", fillHeight && "flex min-h-0 flex-1 flex-col")}
@@ -160,20 +172,6 @@ export function PageCoverDialog({
     </Tabs>
   );
 
-  const removeRow: ReactNode = headerImage ? (
-    <div className="flex shrink-0 justify-end border-border border-t pt-3">
-      <Button
-        onClick={() => apply(null)}
-        size="sm"
-        type="button"
-        variant="ghost"
-      >
-        <IconTrash />
-        Remove cover
-      </Button>
-    </div>
-  ) : null;
-
   if (fillHeight) {
     return (
       <Drawer onOpenChange={onOpenChange} open={open}>
@@ -183,7 +181,6 @@ export function PageCoverDialog({
           </DrawerHeader>
           <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-2">
             {tabs}
-            {removeRow}
           </div>
         </DrawerContent>
       </Drawer>
@@ -201,7 +198,6 @@ export function PageCoverDialog({
           </DialogDescription>
         </DialogHeader>
         {tabs}
-        {removeRow}
       </DialogContent>
     </Dialog>
   );

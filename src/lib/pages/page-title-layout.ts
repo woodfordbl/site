@@ -45,30 +45,29 @@ export const pageCanvasMobileHeaderSlotClassName = "-mr-4 mb-4 -ml-7 md:hidden";
 export const pageCanvasTouchHeaderSlotClassName = "-mr-4 mb-4 -ml-3 md:hidden";
 
 /**
- * Sticky + frosted variant of the mobile header slot, used **only when the page
- * has a cover image**. The bar pins (`sticky top-0`) with a translucent
- * background + backdrop blur so the cover (and page content) scrolling beneath
- * it reads as frosted glass — the same language as iOS Safari's own chrome.
- * Falls back to a near-opaque background where `backdrop-filter` is
- * unsupported. Cover-less pages keep {@link pageCanvasMobileHeaderSlotClassName}
- * (the header scrolls away as before).
+ * Sticky variant of the mobile header slot, used **only when the page has a
+ * cover image**. The bar pins (`sticky top-0`) with a **solid, opaque**
+ * background so the cover scrolls up and is cleanly occluded by the pinned bar
+ * (no translucency or backdrop blur — content does not show through). Cover-less
+ * pages keep {@link pageCanvasMobileHeaderSlotClassName} (the header scrolls away
+ * as before).
  *
  * `pt-[env(safe-area-inset-top)]`: with `viewport-fit=cover` (set in __root) the
  * scroll region extends to the physical top of the webview, so once the bar is
  * pinned at `top-0` it can sit *behind* the system chrome (the iOS notch / a
  * collapsed Safari address bar, a standalone PWA status bar, or a landscape
- * notch). The safe-area top inset grows the frosted background up into that
- * region and pads the breadcrumb row down so it stays clear of the chrome and
- * the glass reads as continuous with it. In ordinary Safari browsing the inset
- * is `0`, so this is a no-op there — the bar simply tucks under the address bar.
+ * notch). The safe-area top inset grows the solid background up into that region
+ * and pads the breadcrumb row down so it stays clear of the chrome. In ordinary
+ * Safari browsing the inset is `0`, so this is a no-op there — the bar simply
+ * tucks under the address bar.
  */
-const STICKY_HEADER_FROST =
-  "sticky top-0 z-20 bg-background/85 pt-[env(safe-area-inset-top)] backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65";
+const STICKY_HEADER_BASE =
+  "sticky top-0 z-20 bg-background pt-[env(safe-area-inset-top)]";
 
-export const pageCanvasMobileHeaderSlotStickyClassName = `-mr-4 -ml-7 mb-4 ${STICKY_HEADER_FROST} md:hidden`;
+export const pageCanvasMobileHeaderSlotStickyClassName = `-mr-4 -ml-7 mb-4 ${STICKY_HEADER_BASE} md:hidden`;
 
 /** Touch sticky header slot — matches {@link pageCanvasTouchScrollClassName}. */
-export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STICKY_HEADER_FROST} md:hidden`;
+export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STICKY_HEADER_BASE} md:hidden`;
 
 /**
  * Desktop cover header slot. With a cover present the breadcrumb bar is overlaid
