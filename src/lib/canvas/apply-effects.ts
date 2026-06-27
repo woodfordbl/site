@@ -53,6 +53,15 @@ export function applyCanvasEffects(
         });
         break;
       }
+      case "tabs.apply": {
+        api.savePageBlocks(effect.blocks);
+        pendingFocus.push({
+          rowId: effect.focusRowId,
+          placement: "start",
+          offset: 0,
+        });
+        break;
+      }
       case "table.apply": {
         api.savePageBlocks(effect.blocks);
         pendingFocus.push({

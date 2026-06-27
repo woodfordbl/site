@@ -26,9 +26,11 @@ import {
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx";
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
-import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
+import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
+import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
+import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
   CanvasRowDragPreview,
@@ -41,6 +43,7 @@ import {
 import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
 import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
 import { useCanvasKeyboard } from "@/hooks/use-canvas-keyboard.ts";
 import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";
@@ -67,7 +70,10 @@ import {
   resolveUseFullPanelCanvasWidth,
 } from "@/lib/pages/page-content-layout.ts";
 import { PageContentLayoutProvider } from "@/lib/pages/page-content-layout-context.tsx";
-import { pageCanvasMobileScrollClassName } from "@/lib/pages/page-title-layout.ts";
+import {
+  pageCanvasMobileScrollClassName,
+  pageCanvasTouchScrollClassName,
+} from "@/lib/pages/page-title-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
@@ -122,6 +128,7 @@ function PageCanvasEditorBody({
     fullWidth,
     isNarrowViewport,
   });
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const runAfterBlockActionsMenuClose = useCloseBlockActionsMenuBeforeAction();
   const { pages } = useMergedPageListItems();
   const dispatchPage = usePageDispatch(pages);
@@ -381,83 +388,84 @@ function PageCanvasEditorBody({
 
   return (
     <CanvasEditorContext.Provider value={actions}>
-      <CanvasSelectionContext.Provider value={selectionValue}>
-        <CanvasFocusContext.Provider value={editor.focus}>
-          <CanvasEditorStateContext.Provider value={stateValue}>
-            <CanvasSlashProvider pages={pages}>
-              <CanvasOverclickListener scrollRootRef={scrollRootRef} />
-              <DndSurface config={dndConfig}>
-                <DragOverlay>
-                  {({ pointer }) => {
-                    if (tableRowPreviewMeta) {
-                      return (
-                        <TableRowDragPreview
-                          preview={{
-                            ...tableRowPreviewMeta,
-                            clientX: pointer.x,
-                            clientY: pointer.y,
-                          }}
-                        />
-                      );
-                    }
-                    if (canvasRowPreview) {
-                      return (
-                        <CanvasRowDragPreview
-                          pointer={pointer}
-                          preview={canvasRowPreview}
-                        />
-                      );
-                    }
-                    return null;
-                  }}
-                </DragOverlay>
-                <CanvasRowDndBridge>
-                  <PageContentLayoutProvider
-                    useFullPanelWidth={useFullPanelWidth}
-                  >
-                    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                      <div
-                        className={cn(
-                          "relative flex min-h-0 flex-1 flex-col overflow-auto",
-                          pageCanvasMobileScrollClassName
-                        )}
-                        data-scroll-restoration-id="page-canvas-scroll"
-                        ref={scrollRootRef}
-                        {...(useFullPanelWidth
-                          ? { "data-page-full-width": "" }
-                          : {})}
-                      >
+      <EditorHeadingCollapseProvider>
+        <CanvasSelectionContext.Provider value={selectionValue}>
+          <CanvasFocusContext.Provider value={editor.focus}>
+            <CanvasEditorStateContext.Provider value={stateValue}>
+              <CanvasSlashProvider pages={pages}>
+                <CanvasOverclickListener scrollRootRef={scrollRootRef} />
+                <DndSurface config={dndConfig}>
+                  <DragOverlay>
+                    {({ pointer }) => {
+                      if (tableRowPreviewMeta) {
+                        return (
+                          <TableRowDragPreview
+                            preview={{
+                              ...tableRowPreviewMeta,
+                              clientX: pointer.x,
+                              clientY: pointer.y,
+                            }}
+                          />
+                        );
+                      }
+                      if (canvasRowPreview) {
+                        return (
+                          <CanvasRowDragPreview
+                            pointer={pointer}
+                            preview={canvasRowPreview}
+                          />
+                        );
+                      }
+                      return null;
+                    }}
+                  </DragOverlay>
+                  <CanvasRowDndBridge>
+                    <PageContentLayoutProvider
+                      useFullPanelWidth={useFullPanelWidth}
+                    >
+                      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div
-                          className={pageContentColumnClassName({
-                            fullWidth,
-                            isNarrowViewport,
-                          })}
+                          className={cn(
+                            "relative flex min-h-0 flex-1 flex-col max-md:overflow-x-clip",
+                            isCoarsePrimaryPointer
+                              ? pageCanvasTouchScrollClassName
+                              : pageCanvasMobileScrollClassName
+                          )}
+                          data-scroll-restoration-id="page-canvas-scroll"
+                          ref={scrollRootRef}
+                          {...(useFullPanelWidth
+                            ? { "data-page-full-width": "" }
+                            : {})}
                         >
-                          {headerSlot}
-                          {titleSlot}
-                          <CanvasDropZone onDropPage={handleDropPageIntoCanvas}>
-                            <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                              {editor.rows.map((row) => (
-                                <CanvasRowView
-                                  key={row.rowId}
-                                  mode="edit"
-                                  row={row}
-                                />
-                              ))}
-                            </div>
-                          </CanvasDropZone>
+                          <div
+                            className={pageContentColumnClassName({
+                              fullWidth,
+                              isNarrowViewport,
+                            })}
+                          >
+                            {headerSlot}
+                            {titleSlot}
+                            <CanvasDropZone
+                              onDropPage={handleDropPageIntoCanvas}
+                            >
+                              <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                                <CanvasRowList mode="edit" rows={editor.rows} />
+                              </div>
+                            </CanvasDropZone>
+                          </div>
                         </div>
+                        <CanvasMenuRoot />
+                        <MobileBlockActionsDrawer />
+                        <MobileEditorToolbar />
                       </div>
-                      <CanvasMenuRoot />
-                      <MobileBlockActionsDrawer />
-                    </div>
-                  </PageContentLayoutProvider>
-                </CanvasRowDndBridge>
-              </DndSurface>
-            </CanvasSlashProvider>
-          </CanvasEditorStateContext.Provider>
-        </CanvasFocusContext.Provider>
-      </CanvasSelectionContext.Provider>
+                    </PageContentLayoutProvider>
+                  </CanvasRowDndBridge>
+                </DndSurface>
+              </CanvasSlashProvider>
+            </CanvasEditorStateContext.Provider>
+          </CanvasFocusContext.Provider>
+        </CanvasSelectionContext.Provider>
+      </EditorHeadingCollapseProvider>
     </CanvasEditorContext.Provider>
   );
 }

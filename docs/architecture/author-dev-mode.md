@@ -9,7 +9,7 @@
 
 ## Save all
 
-[`saveAllLocalPages`](../../src/lib/content/save-all-pages.ts) is the single dev author action (the footer no longer offers a per-page Save). It enumerates `localPagesCollection.toArray`, skips locally-deleted (tombstoned) rows, and for each remaining page rebuilds rows from the stored block shard ([`readBootstrapPageBlocks`](../../src/db/queries/read-bootstrap-page-blocks.ts) → `buildBlockTree`), then reuses the per-page pipeline (`exportPageDocument` → `preparePageDocumentForAuthorSave` → `saveMediaAssets` → `savePage`). After each page it clears local metadata + block shard and `markPageClean`; one `sweepOrphanAssets` runs at the end. The footer reports a saved/failed summary; failures are collected per page without aborting the batch.
+[`saveAllLocalPages`](../../src/lib/content/save-all-pages.ts) is the single dev author action (the footer no longer offers a per-page Save). It enumerates `localPagesCollection.toArray`, skips locally-deleted (tombstoned) rows, and for each remaining page rebuilds rows from the stored block shard ([`readBootstrapPageBlocks`](../../src/db/queries/read-bootstrap-page-blocks.ts) → `buildBlockTree`), then reuses the per-page pipeline (`exportPageDocument` → `preparePageDocumentForAuthorSave` → `saveMediaAssets` → `savePage`). After each page it clears local metadata + block shard, version-history snapshots (`clearPageSnapshots`), and `markPageClean`; one `sweepOrphanAssets` runs at the end (its live set now also unions snapshot-referenced asset ids — see [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history)). The footer reports a saved/failed summary; failures are collected per page without aborting the batch.
 
 ## Safety
 

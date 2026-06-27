@@ -6,6 +6,7 @@
 @import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant hover-none (@media (hover: none));
 
 @theme inline {
   --font-heading: var(--font-sans);
@@ -334,13 +335,25 @@
     transition-delay: var(--reveal-delay, 0ms);
   }
 
-  /* No-hover (touch) pointers: simple reveals stay reachable; swaps rest so the
-     two slot elements never both show. Uses `(hover: none)` — hover capability,
-     not viewport width or `(pointer: coarse)` (see MEDIA_HOVER_NONE in
-     device-layout.constants.ts). */
+  /* No-hover (touch) pointers: simple reveals stay reachable; swaps rest on the
+     revealed element so the slot's affordance stays visible. Uses `(hover: none)`
+     — hover capability, not viewport width or `(pointer: coarse)` (see
+     MEDIA_HOVER_NONE in device-layout.constants.ts). */
   @media (hover: none) {
     :where(.hover-reveal) {
       opacity: 1;
+    }
+
+    /* Touch has no hover to surface the page-row expand chevron (.swap-reveal),
+       so rest on it instead of the icon (.swap-conceal): the chevron is the only
+       way to expand/collapse a row, so it must stay visible. Pointer events for
+       the trigger are enabled with the `hover-none:` variant in page-list-item. */
+    :where(.swap-reveal) {
+      opacity: 1;
+    }
+
+    :where(.swap-conceal) {
+      opacity: 0;
     }
   }
 

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
-import { buildPageMeta } from "@/lib/content/page-head.ts";
+import { buildPageLinks, buildPageMeta } from "@/lib/content/page-head.ts";
 import { pageBySlugQueryOptions } from "@/lib/content/page-query.ts";
 import { pageHasLocalDraft } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { loadDirtyPageIds } from "@/lib/local-draft/load-dirty-page-ids.ts";
@@ -18,9 +18,13 @@ export const Route = createFileRoute("/")({
       pageHasLocalDraft: pageHasLocalDraft(page.id, dirtyPageIds),
     };
   },
-  head: ({ loaderData }) => ({
-    meta: loaderData ? buildPageMeta(loaderData.page) : [],
-  }),
+  head: ({ loaderData }) =>
+    loaderData
+      ? {
+          meta: buildPageMeta(loaderData.page),
+          links: buildPageLinks(loaderData.page),
+        }
+      : { meta: [] },
   component: HomePage,
 });
 

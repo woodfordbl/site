@@ -400,3 +400,75 @@ describe("replacePageBlocks", () => {
     );
   });
 });
+
+describe("block createdAt on update", () => {
+  let ops: typeof import("@/db/queries/block-collection-ops.ts");
+
+  beforeAll(async () => {
+    ops = await import("@/db/queries/block-collection-ops.ts");
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupTransactionMock();
+    mocks.pageUpdate.mockImplementation(
+      (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {
+        const draft: { blockOrder?: string[]; updatedAt?: string } = {};
+        update(draft);
+        return draft;
+      }
+    );
+  });
+
+  function captureUpdatedDraft(
+    seedCreatedAt?: string
+  ): { createdAt?: string }[] {
+    const captured: { createdAt?: string }[] = [];
+    mocks.blockUpdate.mockImplementation(
+      (
+        id: string,
+        update: (draft: LocalBlock & { createdAt?: string }) => void
+      ) => {
+        const draft: LocalBlock & { createdAt?: string } = {
+          ...localBlock(textBlock(id)),
+          createdAt: seedCreatedAt,
+        };
+        update(draft);
+        captured.push(draft);
+        return draft;
+      }
+    );
+    return captured;
+  }
+
+  it("preserves an existing createdAt when a block is edited", async () => {
+    const { applyPageBlockDiff } = ops;
+    const captured = captureUpdatedDraft("2025-01-01T00:00:00.000Z");
+
+    applyPageBlockDiff(
+      pageId,
+      [textBlock("a", "before")],
+      [textBlock("a", "after")],
+      [localBlock(textBlock("a", "before"))]
+    );
+    await flushAsync();
+
+    expect(mocks.blockUpdate).toHaveBeenCalledWith("a", expect.any(Function));
+    expect(captured[0]?.createdAt).toBe("2025-01-01T00:00:00.000Z");
+  });
+
+  it("backfills createdAt for a legacy row missing the field", async () => {
+    const { applyPageBlockDiff } = ops;
+    const captured = captureUpdatedDraft(undefined);
+
+    applyPageBlockDiff(
+      pageId,
+      [textBlock("a", "before")],
+      [textBlock("a", "after")],
+      [localBlock(textBlock("a", "before"))]
+    );
+    await flushAsync();
+
+    expect(typeof captured[0]?.createdAt).toBe("string");
+  });
+});

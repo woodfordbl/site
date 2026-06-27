@@ -3,17 +3,21 @@
 import {
   IconArrowsMaximize,
   IconCopy,
+  IconDeviceFloppy,
   IconDots,
   IconLink,
+  IconRefresh,
   IconTextSize,
   IconTrash,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
+import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -34,25 +38,30 @@ import {
 } from "@/components/ui/dropdown-menu.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { usePageActions } from "@/hooks/use-page-actions.ts";
+import {
+  type PageCanvasFooterActionsInput,
+  usePageCanvasFooterActions,
+} from "@/hooks/use-page-canvas-footer-actions.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
-interface PageHeaderMenuProps {
+interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
   serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
 }
 
 export function PageHeaderMenu({
+  onAfterReset,
   pageId,
   seed,
   serverPage,
 }: PageHeaderMenuProps) {
+  const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const isNarrowViewport = useIsNarrowViewport();
   const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
     usePageSettings({
       pageId,
@@ -61,9 +70,10 @@ export function PageHeaderMenu({
     });
   const { canDelete, copyLink, deletePage, duplicate, moveTo, pages } =
     usePageActions(pageId);
+  const footerActions = usePageCanvasFooterActions({ onAfterReset, pageId });
 
-  const searchableEntries = useMemo(
-    (): ActionMenuEntry[] => [
+  const searchableEntries = useMemo((): ActionMenuEntry[] => {
+    const entries: ActionMenuEntry[] = [
       {
         id: "copy-link",
         label: "Copy link",
@@ -90,9 +100,57 @@ export function PageHeaderMenu({
           setDeleteOpen(true);
         },
       },
-    ],
-    [copyLink, duplicate]
-  );
+    ];
+
+    if (isNarrowViewport && footerActions.visible) {
+      if (footerActions.hasUpdates) {
+        entries.push({
+          id: "refresh",
+          label: "Refresh site content",
+          icon: <IconRefresh />,
+          keywords: ["refresh", "sync", "remote", "site"],
+          onSelect: () => {
+            footerActions.setConfirmAction("refresh");
+          },
+        });
+      }
+      if (footerActions.isDev) {
+        entries.push({
+          id: "save-all",
+          label: "Save all to source",
+          icon: <IconDeviceFloppy />,
+          keywords: ["save", "source", "dev", "export"],
+          onSelect: () => {
+            footerActions.setConfirmAction("saveAll");
+          },
+        });
+      }
+      if (footerActions.hasLocalChanges) {
+        entries.push({
+          id: "reset-page",
+          label: "Reset page",
+          icon: <IconRefresh />,
+          keywords: ["reset", "revert", "remote"],
+          destructive: true,
+          onSelect: () => {
+            footerActions.setConfirmAction("reset");
+          },
+        });
+        entries.push({
+          id: "reset-all",
+          label: "Reset all",
+          icon: <IconRefresh />,
+          keywords: ["reset", "all", "revert"],
+          destructive: true,
+          onSelect: () => {
+            footerActions.setConfirmAction("resetAll");
+          },
+        });
+      }
+    }
+
+    return entries;
+  }, [copyLink, duplicate, footerActions, isNarrowViewport]);
 
   const handleDelete = () => {
     deletePage();
@@ -169,6 +227,7 @@ export function PageHeaderMenu({
                 <IconCopy />
                 Duplicate page
               </DropdownMenuItem>
+              <PageVersionHistorySubmenu pageId={pageId} />
               <PageHeaderMenuMoveSubmenu
                 onMoveTo={(parentId) => {
                   runAfterClose(() => {
@@ -189,6 +248,52 @@ export function PageHeaderMenu({
                 Delete
               </DropdownMenuItem>
             </DropdownMenuGroup>
+            {isNarrowViewport && footerActions.visible ? (
+              <>
+                {footerActions.hasUpdates ? (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      footerActions.setConfirmAction("refresh");
+                    }}
+                  >
+                    <IconRefresh />
+                    Refresh site content
+                  </DropdownMenuItem>
+                ) : null}
+                {footerActions.isDev ? (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      footerActions.setConfirmAction("saveAll");
+                    }}
+                  >
+                    <IconDeviceFloppy />
+                    Save all to source
+                  </DropdownMenuItem>
+                ) : null}
+                {footerActions.hasLocalChanges ? (
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        footerActions.setConfirmAction("reset");
+                      }}
+                      variant="destructive"
+                    >
+                      <IconRefresh />
+                      Reset page
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        footerActions.setConfirmAction("resetAll");
+                      }}
+                      variant="destructive"
+                    >
+                      <IconRefresh />
+                      Reset all
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </>
+            ) : null}
             <DropdownMenuSeparator />
             <PageActivityPanel pageId={pageId} />
           </ActionMenuSearchSection>
@@ -219,6 +324,16 @@ export function PageHeaderMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PageCanvasConfirmDialog
+        confirmAction={footerActions.confirmAction}
+        onConfirm={footerActions.handleConfirm}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            footerActions.setConfirmAction(null);
+          }
+        }}
+      />
     </>
   );
 }

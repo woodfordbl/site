@@ -5,10 +5,14 @@ import { ColumnsView } from "@/components/blocks/types/columns/columns-view.tsx"
 import { ListView } from "@/components/blocks/types/list/list-view.tsx";
 import { TableRowView } from "@/components/blocks/types/table/table-row-view.tsx";
 import { TableView } from "@/components/blocks/types/table/table-view.tsx";
+import { TabContainer } from "@/components/blocks/types/tabs/tab-container.tsx";
+import { TabsView } from "@/components/blocks/types/tabs/tabs-view.tsx";
 
 registerContainerLoader("list", () => ListView);
 registerContainerLoader("checklist", () => ChecklistView);
 registerContainerLoader("columns", () => ColumnsView);
 registerContainerLoader("column", () => ColumnContainer);
+registerContainerLoader("tabs", () => TabsView);
+registerContainerLoader("tab", () => TabContainer);
 registerContainerLoader("table", () => TableView);
 registerContainerLoader("tableRow", () => TableRowView);

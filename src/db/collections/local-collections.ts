@@ -5,6 +5,7 @@ import {
 import { sweepOrphanAssets } from "@/db/assets/asset-gc.ts";
 import { createBlockShardStorageEventApi } from "@/db/collections/block-shard-storage-events.ts";
 import {
+  backfillBlockCreatedAt,
   backfillPageCreatedAt,
   migrateLocalStorageToV2,
 } from "@/db/collections/migrate-local-storage.ts";
@@ -12,6 +13,7 @@ import {
   BLOCK_COLLECTION_STORAGE_KEY,
   pageShardedBlockStorage,
 } from "@/db/collections/page-sharded-block-storage.ts";
+import { scheduleSnapshotPurge } from "@/db/snapshots/snapshot-purge.ts";
 import { reconcileDirtyPagesCookie } from "@/lib/local-draft/reconcile-dirty-pages-cookie.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
@@ -105,11 +107,13 @@ function startLocalCollectionsSync(): void {
   }
 
   backfillPageCreatedAt();
+  backfillBlockCreatedAt();
   migrateLocalStorageToV2();
   reconcileDirtyPagesCookie();
   localPagesCollection.startSyncImmediate();
   localBlocksCollection.startSyncImmediate();
   scheduleOrphanAssetSweep();
+  scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;
 }
 

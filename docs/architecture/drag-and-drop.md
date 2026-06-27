@@ -9,7 +9,7 @@ Native HTML5 drag-and-drop shared by the **canvas block editor** and the **sideb
 | Core (pure) | [`src/lib/dnd/`](../../src/lib/dnd/) | MIME channel, rect snapshots, vertical bands, external drag store |
 | Headless React | [`src/components/dnd/`](../../src/components/dnd/) | `DndSurface`, prop-getter hooks, optional `DragOverlay` |
 | Canvas domain | [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) | Block/column/list drop targets → `row.move` / `row.moveToPosition` |
-| Sidebar domain | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) | Page tree bands (sibling vs nest) → `page.reposition` |
+| Sidebar domain | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) | Page tree bands (sibling vs nest) → `page.reposition` (the header ⋯ menu's **Move to** picker, [`page-move-targets.ts`](../../src/lib/pages/page-move-targets.ts), dispatches the same command) |
 
 ```mermaid
 flowchart TD
@@ -48,7 +48,7 @@ flowchart TD
 
 | Hook | Use |
 |------|-----|
-| `useDragSource({ id, holdMs?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. On coarse pointers it swaps the native path for a pointer-event drag (see [Touch drags](#touch-pointer-drags)). `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
+| `useDragSource({ id, holdMs?, dragAxis?, haptics?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. On coarse pointers it swaps the native path for a pointer-event drag (see [Touch drags](#touch-pointer-drags)). `dragAxis: "x" \| "y"` direction-locks the touch-drag start so an orthogonal scroll wins (table grips); `haptics: true` opts the touch drag into pick-up/drop feedback. `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
 | `useDropZone()` | Spread `getDropZoneProps()` on the container (`nav`, canvas wrapper) |
 | `useDropTarget(selector)` | `useSyncExternalStore` slice of `dropTarget` — only rows whose selector result changes re-render |
 | `useDragState(selector)` | Same for `draggingId` / `pointer` (e.g. disable inputs while dragging) |
@@ -61,7 +61,7 @@ flowchart TD
 
 [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) wraps the canvas in an outer [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (canvas row channel) and a [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) that re-exposes that context to descendants. Nested table column [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) instances shadow the nearest `DndContext`; table row structure handles set `useCanvasRowSurface: true` on `useDragSource` so row drags still write `application/x-canvas-row-id` and commit through the canvas resolver.
 
-The DnD surface is part of the editor chunk only. The pre-editor read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) / [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) render blocks without any `DndSurface`, so reorder DnD activates once `PageCanvasEditor` swaps in — see [canvas-editor — Render pipeline](./canvas-editor.md#render-pipeline-flash-free).
+The DnD surface is part of the editor chunk only. The pre-editor read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) / [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) render blocks without any `DndSurface`, so reorder DnD activates once `PageCanvasEditor` swaps in — see [canvas-editor — Render pipeline](./canvas-editor.md#render-pipeline-flash-free). The [version-history preview](./pages.md#version-history) (`CanvasBlocksReadOnly mode="view"`) likewise has no DnD.
 
 ### Touch (pointer) drags
 
@@ -84,7 +84,7 @@ Native HTML5 DnD never starts on touch, so on coarse primary pointers (`(pointer
 Drop indicators:
 
 - Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight.
-- Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-selection-primary` horizontal/vertical lines).
+- Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), [`TabView`](../../src/components/blocks/types/tabs/tab-view.tsx) (tab content shares the column-child drop model), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-selection-primary` horizontal/vertical lines).
 
 ### Table layout
 
@@ -103,6 +103,8 @@ Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (can
 - **Canvas** — the [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) fills the scroll area (`flex-1`) so the empty space below the last block still receives native `dragover`/`drop`; a pointer past the last row resolves to `after` the last top-level row.
 - **Sidebar → canvas (cross-surface)** — the surfaces are MIME-isolated, but the canvas drop zone additionally sniffs the sidebar's `PAGE_DRAG_MIME_TYPE` (`application/x-page-id`) on `dragover`/`drop`. Dropping a sidebar page onto a canvas inserts a child `pageLink` at the drop position ([`resolveTopLevelInsertEdge`](../../src/lib/canvas/resolve-drop-target.ts) → `row.insert` with `pageId`) and re-nests the page under the open page ([`usePageReposition`](../../src/hooks/use-page-reposition.ts), `appendPageLinkOnParent:false` since the link is placed here), guarded by [`canDropPageIntoCanvas`](../../src/lib/pages/page-canvas-drop.ts) (self / cycle / depth via `assertCanReposition`).
 
+External image/video **files** are not a drop path — the canvas drop zone only resolves row/page MIME channels. Inserting media from outside the app is handled on **paste** instead ([`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) → `media` blocks; see [canvas-commands.md](../reference/canvas-commands.md)).
+
 ## Performance
 
 Previously, every row re-rendered on each `dragover` because `dropTarget` lived in React context or parent state. The external store plus `useDropTarget` / `useDragState` selectors compare the selected slice with `Object.is` and bail out when unchanged, so only rows affected by the current target (and the overlay) update per pointer move.
@@ -119,6 +121,8 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 - [Pages — Sidebar drag-and-drop](./pages.md#sidebar-drag-and-drop)
 - [Canvas commands](../reference/canvas-commands.md)
 - [Page commands — `page.reposition`](../reference/page-commands.md#page-reposition)
+
+Reposition and canvas structural drops persist through the same paths that schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history).
 
 ## Scope
 

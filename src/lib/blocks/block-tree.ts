@@ -3,6 +3,7 @@ import {
   coerceContainerChildBlocks,
   ensureColumnMinimumChildren,
   ensureTableMinimumGrid,
+  ensureTabMinimumChildren,
   normalizeBlock,
 } from "@/lib/blocks/normalize-block.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -74,7 +75,9 @@ function mergeSiblingScope(
 /** Build the canvas row forest from already-ordered blocks (order preserved per scope). */
 export function buildBlockTree(blocks: Block[]): CanvasRow[] {
   const normalized = ensureTableMinimumGrid(
-    ensureColumnMinimumChildren(coerceContainerChildBlocks(blocks))
+    ensureTabMinimumChildren(
+      ensureColumnMinimumChildren(coerceContainerChildBlocks(blocks))
+    )
   );
   return mergeSiblingScope(groupBlocksByParent(normalized), null);
 }

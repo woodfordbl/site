@@ -4,6 +4,7 @@ import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import {
@@ -115,6 +116,9 @@ export function persistPageSettings(options: {
     syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
   }
 
+  if (hasLocalPageDocument(options.pageId)) {
+    schedulePageSnapshotCapture(options.pageId);
+  }
   if (options.font !== undefined) {
     recordFontSettingActivity(options.pageId, options.font);
   }

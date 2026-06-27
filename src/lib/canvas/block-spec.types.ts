@@ -53,6 +53,8 @@ export interface BlockBehavior {
 
 export interface BlockViewProps<T extends LeafBlockType> {
   props: PropsFor<T>;
+  /** Row context for views that need their place in the tree (e.g. heading collapse). */
+  row?: CanvasRow;
 }
 
 export interface BlockEditPropsBase<T extends LeafBlockType> {
@@ -124,6 +126,7 @@ export interface SlashMenuItem {
   keywords: string[];
   label: string;
   listVariant?: "bullet" | "ordered";
+  tabCount?: number;
   tableColumns?: number;
   tableRows?: number;
 }

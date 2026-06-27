@@ -14,6 +14,7 @@ import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import type { PageIconPickerEmojiPanelProps } from "@/components/pages/page-icon-picker-emoji-panel.tsx";
 import type { PageIconPickerIconPanelProps } from "@/components/pages/page-icon-picker-icon-panel.tsx";
 import { Button, type buttonVariants } from "@/components/ui/button.tsx";
+import { useMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import {
   Popover,
   PopoverContent,
@@ -33,14 +34,22 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 /** Placeholder chrome (search + scroll box) shown while a lazy panel chunk resolves. */
-function GlyphIconPickerPanelShell() {
+function GlyphIconPickerPanelShell({ fillHeight }: { fillHeight: boolean }) {
   return (
-    <div className="flex w-full min-w-0 flex-col">
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-col",
+        fillHeight && "min-h-0 flex-1"
+      )}
+    >
       <div
         aria-hidden
         className="mb-2 h-8 shrink-0 rounded-lg border border-input"
       />
-      <div aria-hidden className="h-[320px] w-full" />
+      <div
+        aria-hidden
+        className={cn("w-full", fillHeight ? "min-h-0 flex-1" : "h-[320px]")}
+      />
     </div>
   );
 }
@@ -48,40 +57,66 @@ function GlyphIconPickerPanelShell() {
 function GlyphIconPickerPopoverContent({
   EmojiPanel,
   IconPanel,
+  onRemove,
   onSelect,
   open,
 }: {
   EmojiPanel: ComponentType<PageIconPickerEmojiPanelProps> | null;
   IconPanel: ComponentType<PageIconPickerIconPanelProps> | null;
+  onRemove?: () => void;
   onSelect: (nextIcon: string) => void;
   open: boolean;
 }) {
+  // In drawer presentation (touch) the popover becomes a tall bottom sheet, so
+  // let the tabs fill it and hand that height down to the grid panels.
+  const fillHeight = useMenuPresentation().presentation === "drawer";
+
   return (
-    <Tabs className="w-full gap-0" defaultValue="emoji">
-      <div className="px-2 pt-2 pb-2">
-        <TabsList className="flex h-9 w-fit rounded-none p-0">
+    <Tabs
+      className={cn("w-full gap-0", fillHeight && "min-h-0 flex-1")}
+      defaultValue="emoji"
+    >
+      {/* Underline tabs whose active indicator intersects a full-width divider,
+          matching the link/upload embed tabs. */}
+      <div className="relative flex w-full items-center justify-between gap-2 px-2 pt-2">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 border-border border-b"
+        />
+        <TabsList className="relative z-[1]" variant="line">
           <TabsTrigger value="emoji">Emoji</TabsTrigger>
           <TabsTrigger value="icons">Icons</TabsTrigger>
         </TabsList>
+        {onRemove ? (
+          <Button
+            className="relative z-[1] mb-1 h-7 shrink-0 text-muted-foreground"
+            onClick={onRemove}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Remove
+          </Button>
+        ) : null}
       </div>
       <TabsContent
-        className="m-0 flex min-h-0 flex-col px-2 pt-0 pb-2"
+        className="m-0 flex min-h-0 flex-col px-2 pt-2 pb-2"
         value="emoji"
       >
         {open && EmojiPanel ? (
           <EmojiPanel onSelect={onSelect} />
         ) : (
-          <GlyphIconPickerPanelShell />
+          <GlyphIconPickerPanelShell fillHeight={fillHeight} />
         )}
       </TabsContent>
       <TabsContent
-        className="m-0 flex min-h-0 flex-col px-2 pt-0 pb-2"
+        className="m-0 flex min-h-0 flex-col px-2 pt-2 pb-2"
         value="icons"
       >
         {open && IconPanel ? (
           <IconPanel onSelect={onSelect} />
         ) : (
-          <GlyphIconPickerPanelShell />
+          <GlyphIconPickerPanelShell fillHeight={fillHeight} />
         )}
       </TabsContent>
     </Tabs>
@@ -121,6 +156,8 @@ export interface GlyphIconPickerProps {
   hideTrigger?: boolean;
   icon?: string;
   onOpenChange?: (open: boolean) => void;
+  /** When provided and an icon is set, shows a "Remove" action that clears it. */
+  onRemove?: () => void;
   onSelect: (nextIcon: string) => void;
   open?: boolean;
   triggerButtonSize?: "icon" | "icon-xs" | "icon-sm" | "icon-lg";
@@ -137,6 +174,7 @@ export function GlyphIconPicker({
   hideTrigger = false,
   icon,
   onOpenChange: onOpenChangeProp,
+  onRemove,
   onSelect,
   open: openProp,
   triggerButtonSize = "icon-lg",
@@ -164,6 +202,11 @@ export function GlyphIconPicker({
     },
     [onSelect, setOpen]
   );
+
+  const handleRemove = useCallback(() => {
+    onRemove?.();
+    setOpen(false);
+  }, [onRemove, setOpen]);
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -212,6 +255,7 @@ export function GlyphIconPicker({
         <GlyphIconPickerPopoverContent
           EmojiPanel={EmojiPanel}
           IconPanel={IconPanel}
+          onRemove={onRemove && icon ? handleRemove : undefined}
           onSelect={handleSelect}
           open={open}
         />

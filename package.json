@@ -20,6 +20,7 @@
     "@tanstack/react-start": "^1.168.26",
     "@tanstack/react-virtual": "^3.14.3",
     "@tanstack/router-plugin": "^1.168.18",
+    "@vercel/og": "^0.11.1",
     "bowser": "^2.14.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -54,6 +55,7 @@
     "@typescript/native-preview": "7.0.0-dev.20260624.1",
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^29.1.1",
+    "sharp": "^0.35.2",
     "typescript": "^6.0.3",
     "ultracite": "7.8.3",
     "vite": "^8.1.0",
@@ -64,6 +66,7 @@
   "scripts": {
     "dev": "pnpm sync && vite dev --port 3000",
     "build": "pnpm sync && node scripts/generate-sitemap.mjs && vite build",
+    "gen:icons": "node scripts/generate-icons.mjs",
     "sync:emojibase": "node scripts/sync-emojibase-public.mjs",
     "sync:icons": "node scripts/sync-tabler-icons-public.mjs",
     "preview": "vite preview",

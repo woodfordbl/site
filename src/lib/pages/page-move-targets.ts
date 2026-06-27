@@ -10,6 +10,8 @@ export interface PageMoveTargetItem {
   id: string;
   keywords: string[];
   label: string;
+  /** Stored icon of the target page (emoji or `tabler:Name`); unset for "Top level". */
+  pageIcon?: string;
   parentId: string | null;
 }
 
@@ -89,6 +91,7 @@ export function getPageMoveTargetItems(
       parentId: candidate.id,
       label: candidate.title,
       icon: IconFile,
+      pageIcon: candidate.icon,
       keywords: [
         candidate.title,
         ...parsePagePath(candidate.slug),
