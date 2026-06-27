@@ -35,6 +35,11 @@ export type CanvasEffect =
       focusRowId: string;
     }
   | {
+      type: "tabs.apply";
+      blocks: Block[];
+      focusRowId: string;
+    }
+  | {
       type: "table.apply";
       blocks: Block[];
       focusRowId: string;
