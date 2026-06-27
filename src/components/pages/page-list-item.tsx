@@ -9,7 +9,11 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useDragSource, useDropTarget } from "@/components/dnd/use-dnd.ts";
+import {
+  useDragSource,
+  useDragState,
+  useDropTarget,
+} from "@/components/dnd/use-dnd.ts";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
@@ -414,6 +418,7 @@ export function PageListItem({
   const [isRenaming, setIsRenaming] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [iconPickerSeed, setIconPickerSeed] = useState<
     PageMetadataSeed | undefined
   >();
@@ -456,6 +461,35 @@ export function PageListItem({
     (target: PageListDropTarget | null) =>
       target?.kind === "nest" && target.parentPageId === page.id
   );
+
+  // A touch drag-reorder begins with the same press-and-hold that Base UI's
+  // context menu treats as a long-press, so dragging a row would otherwise pop
+  // its actions drawer open. Keep the menu controlled and refuse to open it
+  // while a drag is active (or just settled); page actions stay reachable via
+  // the always-visible row "⋯" button on touch.
+  const isAnyDragging = useDragState((state) => state.draggingId != null);
+  const wasDraggingRef = useRef(false);
+  const dragEndedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (isAnyDragging) {
+      wasDraggingRef.current = true;
+      setContextMenuOpen(false);
+    } else if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      dragEndedAtRef.current = Date.now();
+    }
+  }, [isAnyDragging]);
+
+  const handleContextMenuOpenChange = useCallback((next: boolean) => {
+    if (
+      next &&
+      (wasDraggingRef.current || Date.now() - dragEndedAtRef.current < 400)
+    ) {
+      return;
+    }
+    setContextMenuOpen(next);
+  }, []);
 
   const ensureSeed = useCallback(async (): Promise<PageMetadataSeed | null> => {
     if (localPage) {
@@ -659,11 +693,14 @@ export function PageListItem({
   const menu = isRenaming ? (
     rowContent
   ) : (
-    <ContextMenu>
+    <ContextMenu
+      onOpenChange={handleContextMenuOpenChange}
+      open={contextMenuOpen}
+    >
       <ContextMenuTrigger className="block w-full">
         {rowContent}
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="[--accent-foreground:var(--sidebar-accent-foreground)] [--accent:var(--sidebar-accent)]">
         <ContextMenuGroup>
           <ContextMenuLabel>Page</ContextMenuLabel>
           <ContextMenuItem onClick={handleDuplicate}>

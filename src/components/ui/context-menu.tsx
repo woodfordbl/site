@@ -3,7 +3,7 @@
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import type * as React from "react";
-import { type MouseEvent, useState } from "react";
+import { type MouseEvent, useCallback, useState } from "react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
 import {
   asClassName,
@@ -25,9 +25,29 @@ import {
 } from "@/components/ui/menu-presentation.tsx";
 import { cn } from "@/lib/utils.ts";
 
-function ContextMenu({ children, ...props }: ContextMenuPrimitive.Root.Props) {
+function ContextMenu({
+  children,
+  open: openProp,
+  onOpenChange,
+  ...props
+}: ContextMenuPrimitive.Root.Props) {
   const presentation = useResolvedMenuPresentation();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? Boolean(openProp) : uncontrolledOpen;
+  const setOpen = useCallback(
+    (next: boolean, ...rest: unknown[]) => {
+      if (!isControlled) {
+        setUncontrolledOpen(next);
+      }
+      (
+        onOpenChange as
+          | ((open: boolean, ...args: unknown[]) => void)
+          | undefined
+      )?.(next, ...rest);
+    },
+    [isControlled, onOpenChange]
+  );
 
   if (presentation === "drawer") {
     // Keep the Base UI root + trigger mounted so the long-press gesture still
@@ -36,7 +56,7 @@ function ContextMenu({ children, ...props }: ContextMenuPrimitive.Root.Props) {
     return (
       <MenuRootProvider open={open} presentation="drawer" setOpen={setOpen}>
         <ContextMenuPrimitive.Root
-          onOpenChange={(next) => setOpen(next)}
+          onOpenChange={setOpen}
           open={open}
           {...props}
         >
@@ -47,7 +67,12 @@ function ContextMenu({ children, ...props }: ContextMenuPrimitive.Root.Props) {
   }
 
   return (
-    <ContextMenuPrimitive.Root data-slot="context-menu" {...props}>
+    <ContextMenuPrimitive.Root
+      data-slot="context-menu"
+      onOpenChange={setOpen}
+      open={open}
+      {...props}
+    >
       {children}
     </ContextMenuPrimitive.Root>
   );

@@ -334,6 +334,49 @@ describe("resolveDropTargetFromPointer toggle headings", () => {
     });
   });
 
+  it("drops onto an expanded, populated toggle title as its first child", () => {
+    const rows = [
+      row("a"),
+      toggleRow("tg", { children: [row("c1")] }),
+      row("z"),
+    ];
+    const rects = new Map<string, DOMRect>([
+      ["a", rect(0, 40)],
+      ["tg", rect(40, 40)],
+      ["c1", rect(80, 40)],
+      ["z", rect(120, 40)],
+    ]);
+
+    // Pointer over the toggle's title region (above its visible child) nests the
+    // dragged row as the toggle's first child rather than placing it as a sibling.
+    expect(resolveDropTargetFromPointer(rows, 50, 55, rects, "a")).toEqual({
+      rowId: "tg",
+      edge: "before",
+      atScopeStart: true,
+    });
+  });
+
+  it("still nests between visible children of an expanded toggle", () => {
+    const rows = [
+      row("a"),
+      toggleRow("tg", { children: [row("c1")] }),
+      row("z"),
+    ];
+    const rects = new Map<string, DOMRect>([
+      ["a", rect(0, 40)],
+      ["tg", rect(40, 40)],
+      ["c1", rect(80, 40)],
+      ["z", rect(120, 40)],
+    ]);
+
+    // Pointer over the lower half of the visible child resolves to that child's
+    // own edge (which stays inside the toggle scope), not the toggle scope start.
+    expect(resolveDropTargetFromPointer(rows, 50, 110, rects, "a")).toEqual({
+      rowId: "c1",
+      edge: "after",
+    });
+  });
+
   it("treats a collapsed toggle as an ordinary before/after target", () => {
     const rows = [
       row("a"),
