@@ -280,8 +280,8 @@ function tableLayoutBleedClassNames(options: {
   return {
     outerClassName:
       mode === "edit"
-        ? "-mx-12 w-[calc(100%+6rem)]"
-        : "-mr-12 w-[calc(100%+3rem)]",
+        ? "w-full md:-mx-12 md:w-[calc(100%+6rem)]"
+        : "w-full md:-mr-12 md:w-[calc(100%+3rem)]",
     scrollPaddingClassName: mode === "edit" ? "px-12" : "pl-12",
     innerFlexClassName:
       mode === "edit" ? "-mx-12 items-start gap-0" : "-ml-12 flex-col gap-0.5",

@@ -80,6 +80,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         content:
           "width=device-width, initial-scale=1, interactive-widget=resizes-content",
       },
+      {
+        name: "theme-color",
+        content: "#0a0a0a",
+      },
     ];
 
     return {
@@ -89,10 +93,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
             ...baseMeta,
             {
               title: "Blake Woodford",
-            },
-            {
-              name: "theme-color",
-              content: "#0a0a0a",
             },
           ],
       links: [
