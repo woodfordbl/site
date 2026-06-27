@@ -7,19 +7,27 @@ import { persistPageSettings } from "@/lib/pages/persist-page-settings.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 import {
   type PageFont,
+  type PageHeaderImage,
+  type PageTextScale,
   resolvePageFont,
   resolvePageFullWidth,
-  resolvePageSmallText,
 } from "@/lib/schemas/page-settings.ts";
 
 interface UsePageSettingsOptions {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
+  serverPage?: Pick<
+    Page,
+    "font" | "fullWidth" | "headerImage" | "textScale"
+  > | null;
 }
 
 /**
  * Resolves merged page display settings (server defaults + local overlay) and persists changes.
+ *
+ * `textScale` is intentionally left `undefined` when neither the local overlay
+ * nor the shipped page sets it, so the page inherits the global site default via
+ * the CSS cascade (see {@link pageContentTypographyProps}).
  */
 export function usePageSettings({
   pageId,
@@ -36,12 +44,12 @@ export function usePageSettings({
     return resolvePageFont(serverPage?.font);
   }, [localPage?.font, serverPage?.font]);
 
-  const smallText = useMemo(() => {
-    if (localPage?.smallText !== undefined) {
-      return resolvePageSmallText(localPage.smallText);
+  const textScale = useMemo((): PageTextScale | undefined => {
+    if (localPage?.textScale !== undefined) {
+      return localPage.textScale;
     }
-    return resolvePageSmallText(serverPage?.smallText);
-  }, [localPage?.smallText, serverPage?.smallText]);
+    return serverPage?.textScale ?? undefined;
+  }, [localPage?.textScale, serverPage?.textScale]);
 
   const fullWidth = useMemo(() => {
     if (localPage?.fullWidth !== undefined) {
@@ -49,6 +57,15 @@ export function usePageSettings({
     }
     return resolvePageFullWidth(serverPage?.fullWidth);
   }, [localPage?.fullWidth, serverPage?.fullWidth]);
+
+  // A local document always wins once it exists, so an explicit local removal
+  // (headerImage cleared) correctly hides a server-shipped cover.
+  const headerImage = useMemo((): PageHeaderImage | undefined => {
+    if (localPage) {
+      return localPage.headerImage;
+    }
+    return serverPage?.headerImage;
+  }, [localPage, serverPage?.headerImage]);
 
   const setFont = useCallback(
     (nextFont: PageFont) => {
@@ -62,11 +79,11 @@ export function usePageSettings({
     [pageId, pages, seed]
   );
 
-  const setSmallText = useCallback(
-    (nextSmallText: boolean) => {
+  const setTextScale = useCallback(
+    (nextTextScale: PageTextScale | null) => {
       persistPageSettings({
         pageId,
-        smallText: nextSmallText,
+        textScale: nextTextScale,
         pages,
         seed,
       });
@@ -86,5 +103,26 @@ export function usePageSettings({
     [pageId, pages, seed]
   );
 
-  return { font, fullWidth, setFont, setFullWidth, setSmallText, smallText };
+  const setHeaderImage = useCallback(
+    (nextHeaderImage: PageHeaderImage | null) => {
+      persistPageSettings({
+        pageId,
+        headerImage: nextHeaderImage,
+        pages,
+        seed,
+      });
+    },
+    [pageId, pages, seed]
+  );
+
+  return {
+    font,
+    fullWidth,
+    headerImage,
+    setFont,
+    setFullWidth,
+    setHeaderImage,
+    setTextScale,
+    textScale,
+  };
 }

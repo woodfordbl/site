@@ -746,6 +746,35 @@
 }
 
 /*
+ * Page text size. A single inherited multiplier `--page-text-scale` is consumed
+ * directly inside each block's `font-size: calc(<rem> * var(--page-text-scale))`
+ * (see lib/blocks/block-spacing.ts + heading-typography.ts). The multiplier is
+ * read at the element that sets `font-size`, so a per-page override resolves
+ * correctly via the cascade. (Routing the size through an intermediate `--fs-*`
+ * token declared on :root does NOT work — descendants inherit its already
+ * resolved value and ignore an overridden scale.)
+ *
+ * The `data-page-text-scale` attribute is set on `<html>` for the global site
+ * default and on the page content wrapper for a per-page override; the deeper
+ * element wins, and an unset page inherits the global value.
+ */
+:root {
+  --page-text-scale: 1;
+}
+
+[data-page-text-scale="small"] {
+  --page-text-scale: 0.875;
+}
+
+[data-page-text-scale="default"] {
+  --page-text-scale: 1;
+}
+
+[data-page-text-scale="large"] {
+  --page-text-scale: 1.125;
+}
+
+/*
  * `code` block — Shiki dual-theme tokens. Each token <span> carries a baked
  * light `color` plus a `--shiki-dark` variable (see lib/code/highlighter.ts);
  * under `.dark` we swap to the dark variable. Plaintext spans have no variable

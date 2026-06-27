@@ -23,22 +23,24 @@ function hashString(input: string): string {
 export function hashPageMetadata(fields: {
   font?: "default" | "serif" | "mono";
   fullWidth?: boolean;
+  headerImage?: unknown;
   icon?: string;
   parentId: string | null;
   sidebarOrder?: number;
   slug: string;
-  smallText?: boolean;
+  textScale?: "small" | "default" | "large";
   title: string;
 }): string {
   return hashString(
     stableStringify({
       font: fields.font ?? null,
       fullWidth: fields.fullWidth ?? null,
+      headerImage: fields.headerImage ?? null,
       icon: fields.icon ?? null,
       parentId: fields.parentId,
       sidebarOrder: fields.sidebarOrder ?? null,
       slug: fields.slug,
-      smallText: fields.smallText ?? null,
+      textScale: fields.textScale ?? null,
       title: fields.title,
     })
   );

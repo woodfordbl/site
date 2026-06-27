@@ -57,7 +57,7 @@ export function SnapshotPreview({
   const { className: typographyClassName, ...typographyData } =
     pageContentTypographyProps({
       font: content?.settings.font ?? "default",
-      smallText: content?.settings.smallText ?? false,
+      textScale: content?.settings.textScale,
     });
 
   if (!content) {

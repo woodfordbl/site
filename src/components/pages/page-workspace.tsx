@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
+import { PageCover } from "@/components/pages/page-cover.tsx";
+import { PageCoverProvider } from "@/components/pages/page-cover-context.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -28,7 +30,12 @@ import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.
 import type { PageSnapshotDescriptor } from "@/lib/pages/page-snapshot-types.ts";
 import {
   pageCanvasMobileHeaderSlotClassName,
+  pageCanvasMobileHeaderSlotStickyClassName,
   pageCanvasTouchHeaderSlotClassName,
+  pageCanvasTouchHeaderSlotStickyClassName,
+  pageCoverDesktopHeaderSlotClassName,
+  pageCoverMobileClassName,
+  pageCoverTouchClassName,
 } from "@/lib/pages/page-title-layout.ts";
 import { rememberSlugPageResolution } from "@/lib/pages/remember-slug-page-resolution.ts";
 import {
@@ -50,6 +57,25 @@ type PageWorkspaceProps = {
       page: LocalPage;
     }
 );
+
+/**
+ * Picks the mobile header slot class. With a cover present the bar is sticky +
+ * frosted (so the cover scrolls up and reads as glass behind it); without one it
+ * keeps the legacy scroll-away behavior.
+ */
+function resolveHeaderSlotClassName(
+  isCoarsePrimaryPointer: boolean,
+  hasCover: boolean
+): string {
+  if (isCoarsePrimaryPointer) {
+    return hasCover
+      ? pageCanvasTouchHeaderSlotStickyClassName
+      : pageCanvasTouchHeaderSlotClassName;
+  }
+  return hasCover
+    ? pageCanvasMobileHeaderSlotStickyClassName
+    : pageCanvasMobileHeaderSlotClassName;
+}
 
 function toServerPageSource(
   page: Page | LocalPage,
@@ -136,12 +162,13 @@ function PageWorkspaceBody({
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const { font, fullWidth, smallText } = usePageSettings({
-    pageId: page.id,
-    seed: titleSeed,
-    serverPage,
-  });
-  const typographyProps = pageContentTypographyProps({ font, smallText });
+  const { font, fullWidth, headerImage, setHeaderImage, textScale } =
+    usePageSettings({
+      pageId: page.id,
+      seed: titleSeed,
+      serverPage,
+    });
+  const typographyProps = pageContentTypographyProps({ font, textScale });
   const { className: typographyClassName, ...typographyDataProps } =
     typographyProps;
   // Bumped after a reset/refresh/save-all clears local state for the open page
@@ -172,26 +199,47 @@ function PageWorkspaceBody({
     />
   );
 
+  // Mobile always renders the header inside the scroll region. Desktop does too
+  // *when a cover is present* — overlaid on the cover's base and pinned on
+  // scroll; otherwise it stays a fixed bar above the scroll region (below).
+  const hasCover = Boolean(headerImage);
+  const headerSlot =
+    isNarrowViewport || hasCover ? (
+      <div
+        className={
+          isNarrowViewport
+            ? resolveHeaderSlotClassName(isCoarsePrimaryPointer, hasCover)
+            : pageCoverDesktopHeaderSlotClassName
+        }
+      >
+        {header}
+      </div>
+    ) : null;
+
   const canvasContent = (
     <div
-      className={cn("min-h-0 min-w-0 flex-1", typographyClassName)}
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col",
+        typographyClassName
+      )}
       {...typographyDataProps}
     >
       <PageCanvas
-        fullWidth={fullWidth}
-        headerSlot={
-          isNarrowViewport ? (
-            <div
+        coverSlot={
+          headerImage ? (
+            <PageCover
               className={
                 isCoarsePrimaryPointer
-                  ? pageCanvasTouchHeaderSlotClassName
-                  : pageCanvasMobileHeaderSlotClassName
+                  ? pageCoverTouchClassName
+                  : pageCoverMobileClassName
               }
-            >
-              {header}
-            </div>
+              headerImage={headerImage}
+              key={headerImage.src}
+            />
           ) : null
         }
+        fullWidth={fullWidth}
+        headerSlot={headerSlot}
         isNarrowViewport={isNarrowViewport}
         key={`${page.id}:${canvasNonce}`}
         pageHasLocalDraft={pageHasLocalDraft}
@@ -211,36 +259,42 @@ function PageWorkspaceBody({
   );
 
   return (
-    <VersionPreviewProvider value={{ enterPreview }}>
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <div
-          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"
-          data-page-main-panel=""
-        >
-          {previewDescriptor ? (
-            <PageVersionPreview
-              descriptor={previewDescriptor}
-              onExit={exitPreview}
-              onRestored={handleRestored}
-              pageId={page.id}
-            />
-          ) : (
-            <>
-              {showSidebarRail ? <PageSidebarRail /> : null}
-              {/* Desktop: header is fixed above the scroll region. Mobile: it
-                  lives inside the scroll region (as headerSlot) so it scrolls. */}
-              {isNarrowViewport ? null : header}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                {canvasContent}
-              </div>
-            </>
-          )}
+    <PageCoverProvider
+      headerImage={headerImage}
+      setHeaderImage={setHeaderImage}
+    >
+      <VersionPreviewProvider value={{ enterPreview }}>
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+          <div
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"
+            data-page-main-panel=""
+          >
+            {previewDescriptor ? (
+              <PageVersionPreview
+                descriptor={previewDescriptor}
+                onExit={exitPreview}
+                onRestored={handleRestored}
+                pageId={page.id}
+              />
+            ) : (
+              <>
+                {showSidebarRail ? <PageSidebarRail /> : null}
+                {/* Desktop with no cover: header is a fixed bar above the scroll
+                    region. Mobile, or desktop with a cover: it lives inside the
+                    scroll region (as headerSlot). */}
+                {isNarrowViewport || hasCover ? null : header}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  {canvasContent}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end gap-1 px-2 max-md:hidden md:px-0">
+            <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
+            <SiteSettingsTrigger pageId={page.id} />
+          </div>
         </div>
-        <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end gap-1 px-2 max-md:hidden md:px-0">
-          <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
-          <SiteSettingsTrigger pageId={page.id} />
-        </div>
-      </div>
-    </VersionPreviewProvider>
+      </VersionPreviewProvider>
+    </PageCoverProvider>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
-
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
@@ -18,7 +17,10 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
+  serverPage?: Pick<
+    Page,
+    "font" | "fullWidth" | "headerImage" | "textScale"
+  > | null;
 }
 
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */

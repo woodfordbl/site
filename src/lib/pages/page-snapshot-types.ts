@@ -1,5 +1,5 @@
 import type { Block } from "@/lib/schemas/block.ts";
-import type { PageFont } from "@/lib/schemas/page-settings.ts";
+import type { PageFont, PageTextScale } from "@/lib/schemas/page-settings.ts";
 
 /** Wall-clock window size that collapses a burst of edits into one checkpoint. */
 export const SNAPSHOT_BUCKET_MS = 600_000; // 10 minutes
@@ -36,7 +36,7 @@ export interface PageSnapshotContent {
   id: string;
   settings: {
     font?: PageFont;
-    smallText?: boolean;
+    textScale?: PageTextScale;
   };
   title: string;
 }

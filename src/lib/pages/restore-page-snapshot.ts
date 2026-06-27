@@ -35,7 +35,7 @@ function restorePageMetadata(
     draft.title = content.title;
     draft.icon = content.icon;
     draft.font = content.settings.font;
-    draft.smallText = content.settings.smallText;
+    draft.textScale = content.settings.textScale;
     draft.updatedAt = new Date().toISOString();
   });
   markPageDirty(pageId);

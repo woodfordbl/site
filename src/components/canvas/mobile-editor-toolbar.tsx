@@ -270,7 +270,7 @@ export function MobileEditorToolbar() {
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
               <ToolbarButton
-                className="text-destructive"
+                className="hover:text-destructive active:text-destructive"
                 label="Delete block"
                 onPress={handleDelete}
               >

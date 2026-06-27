@@ -30,7 +30,7 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
     icon: localPage.icon,
     font: localPage.font,
     fullWidth: localPage.fullWidth,
-    smallText: localPage.smallText,
+    textScale: localPage.textScale,
   });
 
   const { doc, assets } = await preparePageDocumentForAuthorSave(exported);

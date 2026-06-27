@@ -10,13 +10,18 @@ import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import {
   recordFontSettingActivity,
   recordFullWidthSettingActivity,
-  recordSmallTextSettingActivity,
+  recordHeaderImageSettingActivity,
+  recordTextScaleSettingActivity,
 } from "@/lib/pages/record-page-activity.ts";
 import {
   isLocallyDeletedPage,
   localPageSchema,
 } from "@/lib/schemas/local-page.ts";
-import type { PageFont } from "@/lib/schemas/page-settings.ts";
+import type {
+  PageFont,
+  PageHeaderImage,
+  PageTextScale,
+} from "@/lib/schemas/page-settings.ts";
 
 const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
 const seededPageIds = new Set<string>();
@@ -34,37 +39,46 @@ function applyPageSettingsDraft(
   draft: {
     font?: "default" | "serif" | "mono";
     fullWidth?: boolean;
-    smallText?: boolean;
+    headerImage?: PageHeaderImage;
+    textScale?: PageTextScale;
     updatedAt: string;
   },
   options: {
     font?: PageFont;
     fullWidth?: boolean;
-    smallText?: boolean;
+    headerImage?: PageHeaderImage | null;
+    textScale?: PageTextScale | null;
     updatedAt: string;
   }
 ): void {
   if (options.font !== undefined) {
     draft.font = options.font === "default" ? undefined : options.font;
   }
-  if (options.smallText !== undefined) {
-    draft.smallText = options.smallText ? true : undefined;
+  if (options.textScale !== undefined) {
+    // `null` clears the per-page override so the page inherits the site default.
+    draft.textScale = options.textScale ?? undefined;
   }
   if (options.fullWidth !== undefined) {
     draft.fullWidth = options.fullWidth ? true : undefined;
+  }
+  if (options.headerImage !== undefined) {
+    draft.headerImage = options.headerImage ?? undefined;
   }
   draft.updatedAt = options.updatedAt;
 }
 
 /**
- * Persists display settings (`font`, `smallText`, `fullWidth`) to `localPagesCollection` (lazy-seeds when needed).
+ * Persists display settings (`font`, `textScale`, `fullWidth`) to `localPagesCollection` (lazy-seeds when needed).
  * @see docs/architecture/pages.md#page-settings
  */
 export function persistPageSettings(options: {
   pageId: string;
   font?: PageFont;
   fullWidth?: boolean;
-  smallText?: boolean;
+  /** `PageHeaderImage` sets a cover; `null` removes it; omit to leave unchanged. */
+  headerImage?: PageHeaderImage | null;
+  /** A scale sets the override; `null` clears it; `undefined` leaves it as-is. */
+  textScale?: PageTextScale | null;
   seed?: PageMetadataSeed;
   pages?: PageSummary[];
 }): void {
@@ -86,7 +100,7 @@ export function persistPageSettings(options: {
       title: existingPage.title,
       font: undefined,
       fullWidth: undefined,
-      smallText: undefined,
+      textScale: undefined,
     });
 
     localPagesCollection.insert({
@@ -100,8 +114,9 @@ export function persistPageSettings(options: {
         options.font !== undefined && options.font !== "default"
           ? options.font
           : undefined,
-      smallText: options.smallText ? true : undefined,
+      textScale: options.textScale ?? undefined,
       fullWidth: options.fullWidth ? true : undefined,
+      headerImage: options.headerImage ?? undefined,
       serverBaselineHash: options.seed.serverBaselineHash,
       serverMetadataBaseline,
       createdAt: now,
@@ -122,10 +137,16 @@ export function persistPageSettings(options: {
   if (options.font !== undefined) {
     recordFontSettingActivity(options.pageId, options.font);
   }
-  if (options.smallText !== undefined) {
-    recordSmallTextSettingActivity(options.pageId, options.smallText);
+  if (options.textScale !== undefined) {
+    recordTextScaleSettingActivity(options.pageId, options.textScale);
   }
   if (options.fullWidth !== undefined) {
     recordFullWidthSettingActivity(options.pageId, options.fullWidth);
+  }
+  if (options.headerImage !== undefined) {
+    recordHeaderImageSettingActivity(
+      options.pageId,
+      options.headerImage !== null
+    );
   }
 }

@@ -13,6 +13,8 @@ import { PageCanvasLocalView } from "./page-canvas-local-view.tsx";
 import { PageCanvasServer } from "./page-canvas-server.tsx";
 
 interface PageCanvasProps {
+  /** Rendered at the very top of the scroll region (full-bleed page cover image). */
+  coverSlot?: ReactNode;
   fullWidth: boolean;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
@@ -55,7 +57,9 @@ function PageCanvasClient(props: PageCanvasProps) {
   if (showLocal) {
     return (
       <PageCanvasLocalView
+        coverSlot={props.coverSlot}
         fullWidth={props.fullWidth}
+        headerSlot={props.headerSlot}
         isNarrowViewport={props.isNarrowViewport}
         serverPage={props.serverPage}
         titleSlot={props.titleSlot}
@@ -65,7 +69,9 @@ function PageCanvasClient(props: PageCanvasProps) {
 
   return (
     <PageCanvasServer
+      coverSlot={props.coverSlot}
       fullWidth={props.fullWidth}
+      headerSlot={props.headerSlot}
       isNarrowViewport={props.isNarrowViewport}
       serverPage={props.serverPage}
       titleSlot={props.titleSlot}
@@ -74,6 +80,7 @@ function PageCanvasClient(props: PageCanvasProps) {
 }
 
 export function PageCanvas({
+  coverSlot,
   fullWidth,
   headerSlot,
   isNarrowViewport,
@@ -94,7 +101,9 @@ export function PageCanvas({
 
     return (
       <PageCanvasServer
+        coverSlot={coverSlot}
         fullWidth={fullWidth}
+        headerSlot={headerSlot}
         isNarrowViewport={isNarrowViewport}
         serverPage={serverPage}
         titleSlot={titleSlot}
@@ -104,6 +113,7 @@ export function PageCanvas({
 
   return (
     <PageCanvasClient
+      coverSlot={coverSlot}
       fullWidth={fullWidth}
       headerSlot={headerSlot}
       isNarrowViewport={isNarrowViewport}

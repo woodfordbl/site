@@ -6,8 +6,8 @@ import {
   IconDeviceFloppy,
   IconDots,
   IconLink,
+  IconPhoto,
   IconRefresh,
-  IconTextSize,
   IconTrash,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
@@ -15,8 +15,10 @@ import { useMemo, useState } from "react";
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
-import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
+import { usePageCover } from "@/components/pages/page-cover-context.tsx";
+import { PageHeaderMenuFontSubmenu } from "@/components/pages/page-header-menu-font-submenu.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageHeaderMenuTextSizeSubmenu } from "@/components/pages/page-header-menu-text-size-submenu.tsx";
 import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -50,7 +52,10 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
+  serverPage?: Pick<
+    Page,
+    "font" | "fullWidth" | "headerImage" | "textScale"
+  > | null;
 }
 
 export function PageHeaderMenu({
@@ -62,7 +67,9 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
+  const cover = usePageCover();
+  const headerImage = cover?.headerImage;
+  const { font, fullWidth, setFont, setFullWidth, setTextScale, textScale } =
     usePageSettings({
       pageId,
       seed,
@@ -74,6 +81,15 @@ export function PageHeaderMenu({
 
   const searchableEntries = useMemo((): ActionMenuEntry[] => {
     const entries: ActionMenuEntry[] = [
+      {
+        id: "cover-image",
+        label: headerImage ? "Change cover" : "Add cover",
+        icon: <IconPhoto />,
+        keywords: ["cover", "header", "image", "photo", "banner", "unsplash"],
+        onSelect: () => {
+          cover?.openPicker();
+        },
+      },
       {
         id: "copy-link",
         label: "Copy link",
@@ -150,7 +166,14 @@ export function PageHeaderMenu({
     }
 
     return entries;
-  }, [copyLink, duplicate, footerActions, isNarrowViewport]);
+  }, [
+    copyLink,
+    cover,
+    duplicate,
+    footerActions,
+    headerImage,
+    isNarrowViewport,
+  ]);
 
   const handleDelete = () => {
     deletePage();
@@ -185,19 +208,16 @@ export function PageHeaderMenu({
             activeKey={open ? pageId : null}
             items={searchableEntries}
           >
-            <PageHeaderMenuFontRow
+            <PageHeaderMenuFontSubmenu
               font={font}
               onFontChange={(nextFont) => {
                 setFont(nextFont);
               }}
             />
-            <DropdownMenuSwitchItem
-              checked={smallText}
-              onCheckedChange={setSmallText}
-            >
-              <IconTextSize />
-              Small text
-            </DropdownMenuSwitchItem>
+            <PageHeaderMenuTextSizeSubmenu
+              onTextScaleChange={setTextScale}
+              textScale={textScale}
+            />
             {isNarrowViewport ? null : (
               <DropdownMenuSwitchItem
                 checked={fullWidth}
@@ -207,6 +227,16 @@ export function PageHeaderMenu({
                 Full width
               </DropdownMenuSwitchItem>
             )}
+            <DropdownMenuItem
+              onClick={() => {
+                runAfterClose(() => {
+                  cover?.openPicker();
+                });
+              }}
+            >
+              <IconPhoto />
+              {headerImage ? "Change cover" : "Add cover"}
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
@@ -237,6 +267,7 @@ export function PageHeaderMenu({
                 pageId={pageId}
                 pages={pages}
               />
+              {isNarrowViewport ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={!canDelete}
                 onClick={() => {

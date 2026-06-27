@@ -59,7 +59,7 @@ function readCaptureInputs(
     blockOrder,
     title: localPage.title,
     icon: localPage.icon,
-    settings: { font: localPage.font, smallText: localPage.smallText },
+    settings: { font: localPage.font, textScale: localPage.textScale },
   };
 
   const descriptor: Omit<PageSnapshotDescriptor, "id"> = {
@@ -72,7 +72,7 @@ function readCaptureInputs(
       parentId: localPage.parentId,
       sidebarOrder: localPage.sidebarOrder,
       slug: localPage.slug,
-      smallText: localPage.smallText,
+      textScale: localPage.textScale,
       title: localPage.title,
     }),
     blockCount: blocks.length,
