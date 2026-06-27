@@ -217,7 +217,7 @@ Optional fields on page documents:
 | `fullWidth` | `boolean` | `false` (omit field) — desktop only; mobile always full-bleed |
 | `headerImage` | `{ source, src, alt?, credit?, focalY? }` ([`pageHeaderImageSchema`](../../src/lib/schemas/page-settings.ts)) | none (omit field) |
 
-When `fullWidth` is off on desktop, the canvas title + blocks render in a centered **708px** column inside the scroll inset (`px-12`). Toggle on in the page header **⋯** menu (hidden on narrow viewports).
+When `fullWidth` is off on desktop, the canvas title + blocks render in a centered **708px** column inside the scroll inset (`px-12`); a cover stays full-bleed regardless. Toggle on in the page header **⋯** menu (hidden on narrow viewports).
 
 Writes go through [`persistPageSettings`](../../src/lib/pages/persist-page-settings.ts) (lazy-seeds shipped pages like title edits). Author **Save all** includes settings in exported JSON. `headerImage` also feeds [`hashPageMetadata`](../../src/lib/content/page-metadata-hash.ts) for stale detection and records a [`recordHeaderImageSettingActivity`](../../src/lib/pages/record-page-activity.ts) event.
 
