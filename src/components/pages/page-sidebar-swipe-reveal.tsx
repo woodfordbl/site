@@ -310,6 +310,9 @@ export function PageSidebarSwipeReveal({
   const isDragging = dragOffset !== null;
   const isRevealed = translateX > 0;
   const overlayProgress = Math.min(translateX / sidebarWidth, 1);
+  // Front-load the sidebar-color fade (ease-out quadratic) so the bars/safe
+  // areas read as sidebar-gray early in the swipe rather than only near the end.
+  const revealProgress = overlayProgress * (2 - overlayProgress);
 
   // Drive the page background (the surface iOS Safari samples for its top/bottom
   // bar tint) toward the sidebar color as the sidebar is revealed, so the bars
@@ -317,13 +320,13 @@ export function PageSidebarSwipeReveal({
   // dragging flag drops the CSS transition so the tint tracks the finger 1:1.
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--sidebar-reveal", String(overlayProgress));
+    root.style.setProperty("--sidebar-reveal", String(revealProgress));
     root.toggleAttribute("data-swipe-dragging", isDragging);
     return () => {
       root.style.removeProperty("--sidebar-reveal");
       root.removeAttribute("data-swipe-dragging");
     };
-  }, [overlayProgress, isDragging]);
+  }, [revealProgress, isDragging]);
 
   return (
     <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-sidebar">
@@ -385,7 +388,7 @@ export function PageSidebarSwipeReveal({
         )}
         style={{
           height: "env(safe-area-inset-top)",
-          opacity: overlayProgress,
+          opacity: revealProgress,
         }}
       />
       <div
@@ -396,7 +399,7 @@ export function PageSidebarSwipeReveal({
         )}
         style={{
           height: "env(safe-area-inset-bottom)",
-          opacity: overlayProgress,
+          opacity: revealProgress,
         }}
       />
 
