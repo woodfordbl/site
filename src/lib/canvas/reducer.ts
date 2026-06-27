@@ -65,6 +65,12 @@ import {
   planTableToggleHeaderRow,
   planTableUpdateColumnWidths,
 } from "@/lib/canvas/table-layout.ts";
+import {
+  buildBlocksForTabsCreate,
+  planTabsAddTab,
+  planTabsMoveTab,
+  planTabsRemoveTab,
+} from "@/lib/canvas/tabs-layout.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 /**
@@ -654,6 +660,52 @@ export function canvasReducer(
       return {
         state,
         effects: planColumnsRemoveColumn(state.rows, command.columnRowId),
+      };
+    }
+
+    case "tabs.create": {
+      const flatBlocks = blocksFromRows(state.rows);
+      const { blocks, focusRowId } = buildBlocksForTabsCreate(
+        flatBlocks,
+        state.rows,
+        command.rowId,
+        command.count,
+        command.text
+      );
+      if (!focusRowId) {
+        return { state, effects };
+      }
+
+      effects.push({
+        type: "tabs.apply",
+        blocks,
+        focusRowId,
+      });
+      return { state, effects };
+    }
+
+    case "tabs.addTab": {
+      return {
+        state,
+        effects: planTabsAddTab(state.rows, command.tabsRowId),
+      };
+    }
+
+    case "tabs.removeTab": {
+      return {
+        state,
+        effects: planTabsRemoveTab(state.rows, command.tabRowId),
+      };
+    }
+
+    case "tabs.moveTab": {
+      return {
+        state,
+        effects: planTabsMoveTab(
+          state.rows,
+          command.tabRowId,
+          command.direction
+        ),
       };
     }
 

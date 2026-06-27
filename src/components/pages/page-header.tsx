@@ -9,12 +9,13 @@ import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
-interface PageHeaderProps {
+interface PageHeaderProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
   serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
@@ -56,12 +57,17 @@ function PageHeaderBreadcrumb({
   pages: ReturnType<typeof useMergedPageListItems>["pages"];
   titleSeed?: PageMetadataSeed;
 }) {
+  const isNarrowViewport = useIsNarrowViewport();
   const currentSummary = pages.find((page) => page.id === pageId);
 
-  const ancestors = getAncestorPageIds(pageId, pages)
-    .map((id) => pages.find((page) => page.id === id))
-    .filter((page): page is NonNullable<typeof page> => Boolean(page))
-    .reverse();
+  // On mobile the breadcrumb collapses to just the current page; ancestor crumbs
+  // (and their drawer menus) are only shown on wider viewports.
+  const ancestors = isNarrowViewport
+    ? []
+    : getAncestorPageIds(pageId, pages)
+        .map((id) => pages.find((page) => page.id === id))
+        .filter((page): page is NonNullable<typeof page> => Boolean(page))
+        .reverse();
 
   if (!currentSummary) {
     return null;
@@ -97,7 +103,12 @@ function PageHeaderBreadcrumb({
   );
 }
 
-export function PageHeader({ pageId, seed, serverPage }: PageHeaderProps) {
+export function PageHeader({
+  onAfterReset,
+  pageId,
+  seed,
+  serverPage,
+}: PageHeaderProps) {
   const { pages } = useMergedPageListItems();
 
   return (
@@ -105,7 +116,12 @@ export function PageHeader({ pageId, seed, serverPage }: PageHeaderProps) {
       <PageHeaderSidebarToggle />
       <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <PageHeaderMenu pageId={pageId} seed={seed} serverPage={serverPage} />
+        <PageHeaderMenu
+          onAfterReset={onAfterReset}
+          pageId={pageId}
+          seed={seed}
+          serverPage={serverPage}
+        />
       </div>
     </header>
   );

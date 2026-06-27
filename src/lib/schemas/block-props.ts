@@ -3,6 +3,12 @@ import { z } from "zod";
 export const headingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
+  /**
+   * When true, the blocks under this heading (following siblings up to the next
+   * heading of equal-or-higher level) are hidden. Absent means expanded; kept
+   * optional so unchanged headings keep their row identity across tree rebuilds.
+   */
+  collapsed: z.boolean().optional(),
 });
 
 export const textPropsSchema = z.object({
@@ -44,6 +50,18 @@ export const columnsPropsSchema = z.object({});
 /** Flex-grow ratio for resizable column widths (default 1). */
 export const columnPropsSchema = z.object({
   width: z.number().positive().optional(),
+});
+
+/** `tabs` block props: the author-chosen default tab (a `tab` block's id). */
+export const tabsPropsSchema = z.object({
+  defaultTabId: z.string().optional(),
+});
+
+/** `tab` block props: the tab's display name and optional leading glyph. */
+export const tabPropsSchema = z.object({
+  label: z.string().default(""),
+  /** Emoji or `tabler:IconName` — same encoding as page/callout icons. */
+  icon: z.string().optional(),
 });
 
 export const mediaKindSchema = z.enum(["image", "video"]);
@@ -114,6 +132,8 @@ export type PageLinkProps = z.infer<typeof pageLinkPropsSchema>;
 export type DividerProps = z.infer<typeof dividerPropsSchema>;
 export type ColumnsProps = z.infer<typeof columnsPropsSchema>;
 export type ColumnProps = z.infer<typeof columnPropsSchema>;
+export type TabsProps = z.infer<typeof tabsPropsSchema>;
+export type TabProps = z.infer<typeof tabPropsSchema>;
 export type MediaKind = z.infer<typeof mediaKindSchema>;
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
 export type MediaProps = z.infer<typeof mediaPropsSchema>;

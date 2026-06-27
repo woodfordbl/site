@@ -17,6 +17,8 @@ import {
   tableCellPropsSchema,
   tablePropsSchema,
   tableRowPropsSchema,
+  tabPropsSchema,
+  tabsPropsSchema,
   textPropsSchema,
 } from "./block-props.ts";
 
@@ -33,6 +35,8 @@ export const blockTypeSchema = z.enum([
   "divider",
   "columns",
   "column",
+  "tabs",
+  "tab",
   "media",
   "embed",
   "table",
@@ -97,6 +101,14 @@ export const blockSchema = z.discriminatedUnion("type", [
   blockBaseSchema.extend({
     type: z.literal("column"),
     props: columnPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("tabs"),
+    props: tabsPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("tab"),
+    props: tabPropsSchema,
   }),
   blockBaseSchema.extend({
     type: z.literal("media"),

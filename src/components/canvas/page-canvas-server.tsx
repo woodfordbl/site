@@ -7,10 +7,12 @@ import {
   CanvasEditorContext,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx";
-import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
+import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
+import { ReadOnlyHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
+import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import {
   pageContentColumnClassName,
   resolveUseFullPanelCanvasWidth,
@@ -22,8 +24,14 @@ import { cn } from "@/lib/utils.ts";
 
 interface CanvasBlocksReadOnlyProps {
   blocks: Block[];
-  fullWidth: boolean;
-  isNarrowViewport: boolean;
+  fullWidth?: boolean;
+  isNarrowViewport?: boolean;
+  /**
+   * `"edit"` (default) mirrors the live editor markup so the SSR/bootstrap view
+   * swaps without layout shift. `"view"` renders each block's read-only `View`
+   * component (no `contentEditable`, no gutters) — used for the history preview.
+   */
+  mode?: BlockMode;
   pageId: string;
   titleSlot?: ReactNode;
 }
@@ -69,8 +77,9 @@ function createNoopCanvasEditorActions(
  */
 export function CanvasBlocksReadOnly({
   blocks,
-  fullWidth,
-  isNarrowViewport,
+  fullWidth = false,
+  isNarrowViewport = false,
+  mode = "edit",
   pageId,
   titleSlot,
 }: CanvasBlocksReadOnlyProps) {
@@ -91,32 +100,32 @@ export function CanvasBlocksReadOnly({
     <CanvasEditorContext.Provider value={actions}>
       <CanvasMenuProvider>
         <BlockActionsMenuProvider>
-          <PageContentLayoutProvider useFullPanelWidth={useFullPanelWidth}>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div
-                className={cn(
-                  "relative flex min-h-0 flex-1 flex-col overflow-auto",
-                  pageCanvasMobileScrollClassName
-                )}
-                data-scroll-restoration-id="page-canvas-scroll"
-                {...(useFullPanelWidth ? { "data-page-full-width": "" } : {})}
-              >
+          <ReadOnlyHeadingCollapseProvider>
+            <PageContentLayoutProvider useFullPanelWidth={useFullPanelWidth}>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div
-                  className={pageContentColumnClassName({
-                    fullWidth,
-                    isNarrowViewport,
-                  })}
+                  className={cn(
+                    "relative flex min-h-0 flex-1 flex-col overflow-auto",
+                    pageCanvasMobileScrollClassName
+                  )}
+                  data-scroll-restoration-id="page-canvas-scroll"
+                  {...(useFullPanelWidth ? { "data-page-full-width": "" } : {})}
                 >
-                  {titleSlot}
-                  <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                    {rows.map((row) => (
-                      <CanvasRowView key={row.rowId} mode="edit" row={row} />
-                    ))}
+                  <div
+                    className={pageContentColumnClassName({
+                      fullWidth,
+                      isNarrowViewport,
+                    })}
+                  >
+                    {titleSlot}
+                    <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                      <CanvasRowList mode={mode} rows={rows} />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </PageContentLayoutProvider>
+            </PageContentLayoutProvider>
+          </ReadOnlyHeadingCollapseProvider>
         </BlockActionsMenuProvider>
       </CanvasMenuProvider>
     </CanvasEditorContext.Provider>

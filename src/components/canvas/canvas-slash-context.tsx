@@ -150,7 +150,8 @@ export function CanvasSlashProvider({
         if (
           item.id !== "list" &&
           item.id !== "checklist" &&
-          item.id !== "columns"
+          item.id !== "columns" &&
+          item.id !== "tabs"
         ) {
           dispatch({
             type: "focus.set",

@@ -8,6 +8,14 @@
   ],
   "overrides": [
     {
+      // public/ holds static and generated assets (icons, manifest, generated
+      // JSON), not hand-authored source — skip lint/format/assist for it.
+      "includes": ["public/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    },
+    {
       "includes": ["src/components/ui/**"],
       "linter": {
         "rules": {

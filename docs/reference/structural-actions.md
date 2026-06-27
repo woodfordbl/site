@@ -8,6 +8,7 @@ Priority order in `resolveStructuralAction` ([`resolve-structural-action.ts`](..
 1. Empty + indent > 0 → `indent.adjust` -1
 2. Empty + previous sibling → `row.delete` + focus previous (list items stay in the list)
 3. Empty + container child whose policy uses `onEmptyChildDelete: lift-out` → `block.liftAsText` (for list, first or sole empty item; sole item replaces the list row; indent preserved)
+3a. Empty + only child of a `column` → `columns.removeColumn` (unwraps the columns block when fewer than 2 columns remain); only child of a `tab` → `tabs.removeTab` (dissolves the tabs block when the last tab is removed)
 4. Empty + only child of a container that does not lift empty child delete → `container.unwrap`
 5. Empty + top-level + previous row accepts merge → `block.mergeIntoPreviousCanvasRow`
 6. Empty + top-level user row → `row.delete` + focus up (no-op when it is the sole top-level row)

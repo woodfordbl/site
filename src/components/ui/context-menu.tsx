@@ -1,10 +1,56 @@
+"use client";
+
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import type * as React from "react";
+import { type MouseEvent, useState } from "react";
+import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
+import {
+  asClassName,
+  DrawerCheckTrailing,
+  DrawerMenuRow,
+  DrawerMenuSectionLabel,
+  DrawerMenuSeparator,
+  MenuDrawerSubDrawer,
+  MenuDrawerSubProvider,
+  MenuPresentationProvider,
+  MenuRadioGroupProvider,
+  MenuRootProvider,
+  useMenuDrawerSub,
+  useMenuPresentation,
+  useMenuRadioGroup,
+  useMenuRoot,
+  useResolvedMenuPresentation,
+  withoutWidthClasses,
+} from "@/components/ui/menu-presentation.tsx";
 import { cn } from "@/lib/utils.ts";
 
-function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
-  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
+function ContextMenu({ children, ...props }: ContextMenuPrimitive.Root.Props) {
+  const presentation = useResolvedMenuPresentation();
+  const [open, setOpen] = useState(false);
+
+  if (presentation === "drawer") {
+    // Keep the Base UI root + trigger mounted so the long-press gesture still
+    // opens the menu, but mirror its open state into a drawer (no positioned
+    // popup is rendered in drawer mode).
+    return (
+      <MenuRootProvider open={open} presentation="drawer" setOpen={setOpen}>
+        <ContextMenuPrimitive.Root
+          onOpenChange={(next) => setOpen(next)}
+          open={open}
+          {...props}
+        >
+          {children}
+        </ContextMenuPrimitive.Root>
+      </MenuRootProvider>
+    );
+  }
+
+  return (
+    <ContextMenuPrimitive.Root data-slot="context-menu" {...props}>
+      {children}
+    </ContextMenuPrimitive.Root>
+  );
 }
 
 function ContextMenuPortal({ ...props }: ContextMenuPrimitive.Portal.Props) {
@@ -32,12 +78,31 @@ function ContextMenuContent({
   alignOffset = 4,
   side = "right",
   sideOffset = 0,
+  children,
   ...props
 }: ContextMenuPrimitive.Popup.Props &
   Pick<
     ContextMenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
+  const root = useMenuRoot();
+
+  if (root) {
+    return (
+      <Drawer onOpenChange={root.setOpen} open={root.open}>
+        <DrawerContent
+          className={withoutWidthClasses(asClassName(className))}
+          hasTitle={false}
+          variant="menu"
+        >
+          <MenuPresentationProvider close={() => root.setOpen(false)}>
+            {children}
+          </MenuPresentationProvider>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Positioner
@@ -54,25 +119,41 @@ function ContextMenuContent({
           )}
           data-slot="context-menu-content"
           {...props}
-        />
+        >
+          {children}
+        </ContextMenuPrimitive.Popup>
       </ContextMenuPrimitive.Positioner>
     </ContextMenuPrimitive.Portal>
   );
 }
 
-function ContextMenuGroup({ ...props }: ContextMenuPrimitive.Group.Props) {
+function ContextMenuGroup({
+  children,
+  ...props
+}: ContextMenuPrimitive.Group.Props) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <>{children}</>;
+  }
   return (
-    <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />
+    <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props}>
+      {children}
+    </ContextMenuPrimitive.Group>
   );
 }
 
 function ContextMenuLabel({
   className,
   inset,
+  children,
   ...props
 }: ContextMenuPrimitive.GroupLabel.Props & {
   inset?: boolean;
 }) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <DrawerMenuSectionLabel>{children}</DrawerMenuSectionLabel>;
+  }
   return (
     <ContextMenuPrimitive.GroupLabel
       className={cn(
@@ -82,7 +163,9 @@ function ContextMenuLabel({
       data-inset={inset}
       data-slot="context-menu-label"
       {...props}
-    />
+    >
+      {children}
+    </ContextMenuPrimitive.GroupLabel>
   );
 }
 
@@ -90,11 +173,33 @@ function ContextMenuItem({
   className,
   inset,
   variant = "default",
+  children,
+  disabled,
+  onClick,
   ...props
 }: ContextMenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: "default" | "destructive";
 }) {
+  const { presentation, close } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <DrawerMenuRow
+        destructive={variant === "destructive"}
+        disabled={disabled}
+        onClick={(event) => {
+          (onClick as ((event: MouseEvent<HTMLElement>) => void) | undefined)?.(
+            event
+          );
+          close();
+        }}
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <ContextMenuPrimitive.Item
       className={cn(
@@ -104,14 +209,27 @@ function ContextMenuItem({
       data-inset={inset}
       data-slot="context-menu-item"
       data-variant={variant}
+      disabled={disabled}
+      onClick={onClick}
       {...props}
-    />
+    >
+      {children}
+    </ContextMenuPrimitive.Item>
   );
 }
 
-function ContextMenuSub({ ...props }: ContextMenuPrimitive.SubmenuRoot.Props) {
+function ContextMenuSub({
+  children,
+  ...props
+}: ContextMenuPrimitive.SubmenuRoot.Props) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <MenuDrawerSubProvider>{children}</MenuDrawerSubProvider>;
+  }
   return (
-    <ContextMenuPrimitive.SubmenuRoot data-slot="context-menu-sub" {...props} />
+    <ContextMenuPrimitive.SubmenuRoot data-slot="context-menu-sub" {...props}>
+      {children}
+    </ContextMenuPrimitive.SubmenuRoot>
   );
 }
 
@@ -123,6 +241,25 @@ function ContextMenuSubTrigger({
 }: ContextMenuPrimitive.SubmenuTrigger.Props & {
   inset?: boolean;
 }) {
+  const { presentation } = useMenuPresentation();
+  const sub = useMenuDrawerSub();
+
+  if (presentation === "drawer") {
+    if (sub) {
+      sub.titleRef.current = children;
+    }
+    return (
+      <DrawerMenuRow
+        onClick={() => sub?.setOpen(true)}
+        trailing={
+          <IconChevronRight className="size-5 shrink-0 text-muted-foreground" />
+        }
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <ContextMenuPrimitive.SubmenuTrigger
       className={cn(
@@ -140,15 +277,33 @@ function ContextMenuSubTrigger({
 }
 
 function ContextMenuSubContent({
+  children,
   ...props
 }: React.ComponentProps<typeof ContextMenuContent>) {
+  const { presentation } = useMenuPresentation();
+  const sub = useMenuDrawerSub();
+
+  if (presentation === "drawer") {
+    return (
+      <MenuDrawerSubDrawer
+        onOpenChange={(next) => sub?.setOpen(next)}
+        open={sub?.open ?? false}
+        title={sub?.titleRef.current}
+      >
+        {children}
+      </MenuDrawerSubDrawer>
+    );
+  }
+
   return (
     <ContextMenuContent
       className="shadow-lg"
       data-slot="context-menu-sub-content"
       side="right"
       {...props}
-    />
+    >
+      {children}
+    </ContextMenuContent>
   );
 }
 
@@ -161,6 +316,19 @@ function ContextMenuCheckboxItem({
 }: ContextMenuPrimitive.CheckboxItem.Props & {
   inset?: boolean;
 }) {
+  const { presentation } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <DrawerMenuRow
+        onClick={() => props.onCheckedChange?.(!checked, undefined as never)}
+        trailing={<DrawerCheckTrailing checked={Boolean(checked)} />}
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <ContextMenuPrimitive.CheckboxItem
       checked={checked}
@@ -183,13 +351,35 @@ function ContextMenuCheckboxItem({
 }
 
 function ContextMenuRadioGroup({
+  children,
+  onValueChange,
+  value,
   ...props
 }: ContextMenuPrimitive.RadioGroup.Props) {
+  const { presentation } = useMenuPresentation();
+
+  if (presentation === "drawer") {
+    return (
+      <MenuRadioGroupProvider
+        setValue={(next) =>
+          (onValueChange as ((value: string) => void) | undefined)?.(next)
+        }
+        value={typeof value === "string" ? value : undefined}
+      >
+        {children}
+      </MenuRadioGroupProvider>
+    );
+  }
+
   return (
     <ContextMenuPrimitive.RadioGroup
       data-slot="context-menu-radio-group"
+      onValueChange={onValueChange}
+      value={value}
       {...props}
-    />
+    >
+      {children}
+    </ContextMenuPrimitive.RadioGroup>
   );
 }
 
@@ -197,10 +387,31 @@ function ContextMenuRadioItem({
   className,
   children,
   inset,
+  value,
   ...props
 }: ContextMenuPrimitive.RadioItem.Props & {
   inset?: boolean;
 }) {
+  const { presentation, close } = useMenuPresentation();
+  const group = useMenuRadioGroup();
+
+  if (presentation === "drawer") {
+    const checked = group?.value === value;
+    return (
+      <DrawerMenuRow
+        onClick={() => {
+          if (typeof value === "string") {
+            group?.setValue(value);
+          }
+          close();
+        }}
+        trailing={<DrawerCheckTrailing checked={checked} />}
+      >
+        {children}
+      </DrawerMenuRow>
+    );
+  }
+
   return (
     <ContextMenuPrimitive.RadioItem
       className={cn(
@@ -209,6 +420,7 @@ function ContextMenuRadioItem({
       )}
       data-inset={inset}
       data-slot="context-menu-radio-item"
+      value={value}
       {...props}
     >
       <span className="pointer-events-none absolute right-2">
@@ -225,6 +437,10 @@ function ContextMenuSeparator({
   className,
   ...props
 }: ContextMenuPrimitive.Separator.Props) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return <DrawerMenuSeparator />;
+  }
   return (
     <ContextMenuPrimitive.Separator
       className={cn("-mx-1 my-1 h-px bg-border", className)}
@@ -238,6 +454,10 @@ function ContextMenuShortcut({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const { presentation } = useMenuPresentation();
+  if (presentation === "drawer") {
+    return null;
+  }
   return (
     <span
       className={cn(

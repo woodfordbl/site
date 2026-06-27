@@ -79,7 +79,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
             },
             {
               name: "viewport",
-              content: "width=device-width, initial-scale=1",
+              content:
+                "width=device-width, initial-scale=1, interactive-widget=resizes-content",
+            },
+            {
+              name: "theme-color",
+              content: "#0a0a0a",
             },
             ...buildNotFoundMeta(),
           ]
@@ -89,16 +94,39 @@ export const Route = createRootRouteWithContext<RouterContext>()({
             },
             {
               name: "viewport",
-              content: "width=device-width, initial-scale=1",
+              content:
+                "width=device-width, initial-scale=1, interactive-widget=resizes-content",
             },
             {
               title: "Blake Woodford",
+            },
+            {
+              name: "theme-color",
+              content: "#0a0a0a",
             },
           ],
       links: [
         {
           rel: "stylesheet",
           href: appCss,
+        },
+        {
+          rel: "icon",
+          href: "/favicon.ico",
+          sizes: "any",
+        },
+        {
+          rel: "icon",
+          type: "image/svg+xml",
+          href: "/favicon.svg",
+        },
+        {
+          rel: "apple-touch-icon",
+          href: "/apple-touch-icon.png",
+        },
+        {
+          rel: "manifest",
+          href: "/manifest.json",
         },
       ],
     };

@@ -5,6 +5,8 @@ import { blockSchema } from "./block.ts";
 export const localBlockSchema = blockSchema.and(
   z.object({
     pageId: z.string(),
+    /** Set once when the block row is first inserted; optional for back-compat. */
+    createdAt: z.string().optional(),
     updatedAt: z.string(),
   })
 );
@@ -14,17 +16,24 @@ export type LocalBlock = z.infer<typeof localBlockSchema>;
 export function toLocalBlock(
   block: z.infer<typeof blockSchema>,
   pageId: string,
-  updatedAt: string
+  updatedAt: string,
+  createdAt?: string
 ): LocalBlock {
   return {
     ...block,
     pageId,
+    createdAt: createdAt ?? updatedAt,
     updatedAt,
   };
 }
 
 export function toBlock(localBlock: LocalBlock): z.infer<typeof blockSchema> {
-  const { pageId: _pageId, updatedAt: _updatedAt, ...block } = localBlock;
+  const {
+    pageId: _pageId,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...block
+  } = localBlock;
   return block;
 }
 

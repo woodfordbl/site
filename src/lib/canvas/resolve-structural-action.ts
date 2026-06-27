@@ -78,6 +78,18 @@ function resolveEmptyBlockActions(ctx: StructuralContext): CanvasCommand[] {
     ];
   }
 
+  if (
+    ctx.parentRow?.effectiveBlock.type === "tab" &&
+    ctx.parentRow.children.length === 1
+  ) {
+    return [
+      {
+        type: "tabs.removeTab",
+        tabRowId: ctx.parentRow.rowId,
+      },
+    ];
+  }
+
   if (ctx.parentRow && ctx.parentRow.children.length === 1) {
     return [{ type: "container.unwrap", containerRowId: ctx.parentRow.rowId }];
   }

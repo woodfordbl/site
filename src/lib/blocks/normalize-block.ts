@@ -61,6 +61,16 @@ export function coerceContainerChildBlock(
     };
   }
 
+  if (containerType === "tabs" && block.type !== "tab") {
+    return {
+      id: block.id,
+      type: "tab",
+      parentId: block.parentId ?? null,
+      indent: block.indent,
+      props: { label: "" },
+    };
+  }
+
   if (containerType === "table" && block.type !== "tableRow") {
     return {
       id: block.id,
@@ -126,6 +136,32 @@ export function ensureColumnMinimumChildren(blocks: Block[]): Block[] {
     if (!hasChild) {
       const text = createEmptyBlock("text");
       text.parentId = columnId;
+      next.push(text);
+      changed = true;
+    }
+  }
+
+  return changed ? next : blocks;
+}
+
+/** Each `tab` block keeps at least one child (empty `text` row). */
+export function ensureTabMinimumChildren(blocks: Block[]): Block[] {
+  const tabIds = blocks
+    .filter((block) => block.type === "tab")
+    .map((block) => block.id);
+
+  if (tabIds.length === 0) {
+    return blocks;
+  }
+
+  const next = [...blocks];
+  let changed = false;
+
+  for (const tabId of tabIds) {
+    const hasChild = next.some((block) => (block.parentId ?? null) === tabId);
+    if (!hasChild) {
+      const text = createEmptyBlock("text");
+      text.parentId = tabId;
       next.push(text);
       changed = true;
     }

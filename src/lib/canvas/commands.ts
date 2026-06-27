@@ -64,6 +64,15 @@ export type CanvasCommand =
   | { type: "columns.addColumn"; columnsRowId: string }
   | { type: "columns.removeColumn"; columnRowId: string }
   | {
+      type: "tabs.create";
+      rowId: string;
+      count: number;
+      text?: string;
+    }
+  | { type: "tabs.addTab"; tabsRowId: string }
+  | { type: "tabs.removeTab"; tabRowId: string }
+  | { type: "tabs.moveTab"; tabRowId: string; direction: "prev" | "next" }
+  | {
       type: "table.create";
       rowId: string;
       columns?: number;

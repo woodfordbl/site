@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { putAsset } from "@/db/assets/asset-store.ts";
 import {
   type ServerPageSource,
   usePageCanvas,
@@ -35,7 +36,24 @@ import {
   flattenCanvasRows,
 } from "@/lib/canvas/focusable-rows.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
+import { buildAssetMediaBlock } from "@/lib/media/paste-media.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+
+/** Stores pasted files as content-addressed assets, returning media blocks in order. */
+async function storeFilesAsMediaBlocks(files: File[]): Promise<Block[]> {
+  const blocks: Block[] = [];
+  for (const file of files) {
+    try {
+      const { assetId, mimeType } = await putAsset(file);
+      blocks.push(
+        buildAssetMediaBlock({ assetId, mimeType, fileName: file.name })
+      );
+    } catch {
+      // Skip files that fail to store (e.g. IndexedDB unavailable).
+    }
+  }
+  return blocks;
+}
 
 /**
  * Canvas editing state + identity-stable actions. Every action reads volatile
@@ -316,6 +334,16 @@ export function useCanvasEditor(
     [dispatch, getRows]
   );
 
+  const resolvePasteTargetRowId = useCallback(() => {
+    const rows = getRows();
+    return (
+      rowIdsInDocumentOrder(rows, selectionRef.current.selectedRowIds).at(-1) ??
+      focusRef.current?.rowId ??
+      getActiveCanvasRowId() ??
+      rows.at(-1)?.rowId
+    );
+  }, [getRows]);
+
   const pasteClipboard = useCallback(() => {
     const payload = clipboardRef.current;
     if (!payload?.blocks.length || pasteInFlightRef.current) {
@@ -324,11 +352,7 @@ export function useCanvasEditor(
 
     pasteInFlightRef.current = true;
 
-    const rows = getRows();
-    const targetRowId =
-      rowIdsInDocumentOrder(rows, selectionRef.current.selectedRowIds).at(-1) ??
-      focusRef.current?.rowId ??
-      rows.at(-1)?.rowId;
+    const targetRowId = resolvePasteTargetRowId();
 
     if (!targetRowId) {
       pasteInFlightRef.current = false;
@@ -341,7 +365,29 @@ export function useCanvasEditor(
     queueMicrotask(() => {
       pasteInFlightRef.current = false;
     });
-  }, [clearSelection, getRows, rowActions]);
+  }, [clearSelection, resolvePasteTargetRowId, rowActions]);
+
+  const insertMediaFiles = useCallback(
+    (files: File[]) => {
+      const targetRowId = resolvePasteTargetRowId();
+      if (!targetRowId) {
+        return;
+      }
+
+      // Store assets and insert blocks asynchronously; the paste handler that
+      // calls this has already claimed the event by the time the bytes land.
+      storeFilesAsMediaBlocks(files)
+        .then((blocks) => {
+          if (blocks.length === 0) {
+            return;
+          }
+          rowActions.pasteAfter(targetRowId, blocks);
+          clearSelection();
+        })
+        .catch(() => undefined);
+    },
+    [clearSelection, resolvePasteTargetRowId, rowActions]
+  );
 
   const handleCanvasPaste = useCallback(
     (event: ClipboardEvent) => {
@@ -349,12 +395,19 @@ export function useCanvasEditor(
         clipboard: clipboardRef.current,
         copySelection,
         deleteSelection,
+        insertMediaFiles,
         pasteClipboard,
         selectAll,
         selectedCount: selectionRef.current.selectedRowIds.length,
       });
     },
-    [copySelection, deleteSelection, pasteClipboard, selectAll]
+    [
+      copySelection,
+      deleteSelection,
+      insertMediaFiles,
+      pasteClipboard,
+      selectAll,
+    ]
   );
 
   const isRowSelected = useCallback(

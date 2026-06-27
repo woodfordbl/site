@@ -13,7 +13,11 @@ import {
 } from "@/hooks/use-resolved-page.ts";
 import { useSlugPageResolution } from "@/hooks/use-slug-page-resolution.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
-import { buildNoIndexMeta, buildPageMeta } from "@/lib/content/page-head.ts";
+import {
+  buildNoIndexMeta,
+  buildPageLinks,
+  buildPageMeta,
+} from "@/lib/content/page-head.ts";
 import { pageBySlugQueryOptions } from "@/lib/content/page-query.ts";
 import {
   hasAnyLocalDrafts,
@@ -57,12 +61,13 @@ export const Route = createFileRoute("/$")({
       return { kind: "pending" as const, slug };
     }
   },
-  head: ({ loaderData }) => ({
-    meta:
-      loaderData?.kind === "server"
-        ? buildPageMeta(loaderData.page)
-        : buildNoIndexMeta(),
-  }),
+  head: ({ loaderData }) =>
+    loaderData?.kind === "server"
+      ? {
+          meta: buildPageMeta(loaderData.page),
+          links: buildPageLinks(loaderData.page),
+        }
+      : { meta: buildNoIndexMeta() },
   component: SplatPage,
 });
 
