@@ -13,10 +13,19 @@ import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
+import {
+  pageContentColumnClassName,
+  resolveUseFullPanelCanvasWidth,
+} from "@/lib/pages/page-content-layout.ts";
+import { PageContentLayoutProvider } from "@/lib/pages/page-content-layout-context.tsx";
+import { pageCanvasMobileScrollClassName } from "@/lib/pages/page-title-layout.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import { cn } from "@/lib/utils.ts";
 
 interface CanvasBlocksReadOnlyProps {
   blocks: Block[];
+  fullWidth?: boolean;
+  isNarrowViewport?: boolean;
   /**
    * `"edit"` (default) mirrors the live editor markup so the SSR/bootstrap view
    * swaps without layout shift. `"view"` renders each block's read-only `View`
@@ -68,6 +77,8 @@ function createNoopCanvasEditorActions(
  */
 export function CanvasBlocksReadOnly({
   blocks,
+  fullWidth = false,
+  isNarrowViewport = false,
   mode = "edit",
   pageId,
   titleSlot,
@@ -80,23 +91,40 @@ export function CanvasBlocksReadOnly({
     () => createNoopCanvasEditorActions(rows, pageId),
     [rows, pageId]
   );
+  const useFullPanelWidth = resolveUseFullPanelCanvasWidth({
+    fullWidth,
+    isNarrowViewport,
+  });
 
   return (
     <CanvasEditorContext.Provider value={actions}>
       <CanvasMenuProvider>
         <BlockActionsMenuProvider>
           <ReadOnlyHeadingCollapseProvider>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div
-                className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
-                data-scroll-restoration-id="page-canvas-scroll"
-              >
-                {titleSlot}
-                <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                  <CanvasRowList mode={mode} rows={rows} />
+            <PageContentLayoutProvider useFullPanelWidth={useFullPanelWidth}>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div
+                  className={cn(
+                    "relative flex min-h-0 flex-1 flex-col overflow-auto",
+                    pageCanvasMobileScrollClassName
+                  )}
+                  data-scroll-restoration-id="page-canvas-scroll"
+                  {...(useFullPanelWidth ? { "data-page-full-width": "" } : {})}
+                >
+                  <div
+                    className={pageContentColumnClassName({
+                      fullWidth,
+                      isNarrowViewport,
+                    })}
+                  >
+                    {titleSlot}
+                    <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                      <CanvasRowList mode={mode} rows={rows} />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </PageContentLayoutProvider>
           </ReadOnlyHeadingCollapseProvider>
         </BlockActionsMenuProvider>
       </CanvasMenuProvider>
@@ -105,17 +133,23 @@ export function CanvasBlocksReadOnly({
 }
 
 interface PageCanvasServerProps {
+  fullWidth: boolean;
+  isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }
 
 export function PageCanvasServer({
+  fullWidth,
+  isNarrowViewport,
   serverPage,
   titleSlot,
 }: PageCanvasServerProps) {
   return (
     <CanvasBlocksReadOnly
       blocks={serverPage.blocks}
+      fullWidth={fullWidth}
+      isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}
     />

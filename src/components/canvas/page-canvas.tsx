@@ -8,20 +8,15 @@ import {
 
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
-import type { Block } from "@/lib/schemas/block.ts";
 
 import { PageCanvasLocalView } from "./page-canvas-local-view.tsx";
-import {
-  CanvasBlocksReadOnly,
-  PageCanvasServer,
-} from "./page-canvas-server.tsx";
-
-/** Stable empty block list for the local-first SSR placeholder. */
-const NO_BLOCKS: Block[] = [];
+import { PageCanvasServer } from "./page-canvas-server.tsx";
 
 interface PageCanvasProps {
+  fullWidth: boolean;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
+  isNarrowViewport: boolean;
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   /** Rendered at the top of the scroll region, above the blocks (page title). */
@@ -60,6 +55,8 @@ function PageCanvasClient(props: PageCanvasProps) {
   if (showLocal) {
     return (
       <PageCanvasLocalView
+        fullWidth={props.fullWidth}
+        isNarrowViewport={props.isNarrowViewport}
         serverPage={props.serverPage}
         titleSlot={props.titleSlot}
       />
@@ -68,6 +65,8 @@ function PageCanvasClient(props: PageCanvasProps) {
 
   return (
     <PageCanvasServer
+      fullWidth={props.fullWidth}
+      isNarrowViewport={props.isNarrowViewport}
       serverPage={props.serverPage}
       titleSlot={props.titleSlot}
     />
@@ -75,7 +74,9 @@ function PageCanvasClient(props: PageCanvasProps) {
 }
 
 export function PageCanvas({
+  fullWidth,
   headerSlot,
+  isNarrowViewport,
   pageHasLocalDraft,
   serverPage,
   titleSlot,
@@ -83,55 +84,29 @@ export function PageCanvas({
   const isClient = useIsClient();
 
   if (!isClient) {
-    // #region agent log
-    if (typeof window !== "undefined") {
-      fetch(
-        "http://127.0.0.1:7470/ingest/098618e1-bf18-4afe-b4fc-70958180656a",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Debug-Session-Id": "a3ab7e",
-          },
-          body: JSON.stringify({
-            sessionId: "a3ab7e",
-            hypothesisId: "H_PC2",
-            location: "page-canvas.tsx:PageCanvas(!isClient)",
-            message: "SSR/hydration branch",
-            data: {
-              pageId: serverPage.id,
-              pageHasLocalDraft,
-              serverBlocks: serverPage.blocks.length,
-              rendered: pageHasLocalDraft ? "empty-placeholder" : "server",
-            },
-            timestamp: Date.now(),
-          }),
-        }
-      ).catch(() => {
-        /* debug */
-      });
-    }
-    // #endregion
-
-    // First-time/clean visitors get full SSR content. For locally-edited pages,
-    // skip server blocks entirely so the browser never paints a stale server
-    // frame before the client swaps in local-first content (TanStack DB).
+    // First-time/clean visitors get full SSR content. Locally-edited pages are
+    // rendered purely client-side from local (TanStack DB): emit NO SSR content
+    // at all (no server title/icon, no placeholder body) so the browser never
+    // paints any server frame for a dirty page. @see docs/architecture/local-first-persistence.md
     if (pageHasLocalDraft) {
-      return (
-        <CanvasBlocksReadOnly
-          blocks={NO_BLOCKS}
-          pageId={serverPage.id}
-          titleSlot={titleSlot}
-        />
-      );
+      return null;
     }
 
-    return <PageCanvasServer serverPage={serverPage} titleSlot={titleSlot} />;
+    return (
+      <PageCanvasServer
+        fullWidth={fullWidth}
+        isNarrowViewport={isNarrowViewport}
+        serverPage={serverPage}
+        titleSlot={titleSlot}
+      />
+    );
   }
 
   return (
     <PageCanvasClient
+      fullWidth={fullWidth}
       headerSlot={headerSlot}
+      isNarrowViewport={isNarrowViewport}
       pageHasLocalDraft={pageHasLocalDraft}
       serverPage={serverPage}
       titleSlot={titleSlot}

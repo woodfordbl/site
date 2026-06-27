@@ -117,6 +117,27 @@
     },
     {
       "globs": [
+        "src/components/settings/**",
+        "src/lib/appearance/**",
+        "src/lib/settings/**",
+        "src/lib/schemas/site-appearance.ts",
+        "src/lib/pages/page-activity-analytics.ts",
+        "src/hooks/use-site-activity-analytics.ts",
+        "src/components/layout/theme-provider.tsx",
+        "src/db/activity/page-activity-store.ts"
+      ],
+      "docs": [
+        "docs/architecture/site-settings.md",
+        "docs/architecture/pages.md"
+      ],
+      "majorGlobs": [
+        "src/components/settings/**",
+        "src/components/layout/theme-provider.tsx",
+        "src/lib/appearance/**"
+      ]
+    },
+    {
+      "globs": [
         "src/hooks/use-canvas*.ts",
         "src/hooks/use-page*.ts",
         "src/hooks/use-slash*.ts",
@@ -176,6 +197,8 @@
         "src/hooks/use-page-actions.ts",
         "src/hooks/use-page-settings.ts",
         "src/lib/pages/persist-page-settings.ts",
+        "src/lib/pages/page-content-layout.ts",
+        "src/lib/pages/page-content-layout-context.tsx",
         "src/lib/pages/copy-page-link.ts",
         "src/lib/pages/page-move-targets.ts",
         "src/components/pages/page-version-history-submenu.tsx",

@@ -5,6 +5,8 @@ import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 
 interface PageCanvasLocalViewProps {
+  fullWidth: boolean;
+  isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }
@@ -15,6 +17,8 @@ interface PageCanvasLocalViewProps {
  * loads. Falls back to server blocks if no local shard is present.
  */
 export function PageCanvasLocalView({
+  fullWidth,
+  isNarrowViewport,
   serverPage,
   titleSlot,
 }: PageCanvasLocalViewProps) {
@@ -26,6 +30,8 @@ export function PageCanvasLocalView({
   return (
     <CanvasBlocksReadOnly
       blocks={blocks}
+      fullWidth={fullWidth}
+      isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}
     />

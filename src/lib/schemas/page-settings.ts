@@ -6,6 +6,7 @@ export type PageFont = z.infer<typeof pageFontSchema>;
 
 export const pageSettingsSchema = z.object({
   font: pageFontSchema.optional(),
+  fullWidth: z.boolean().optional(),
   smallText: z.boolean().optional(),
 });
 
@@ -19,4 +20,8 @@ export function resolvePageFont(font: PageFont | undefined): PageFont {
 
 export function resolvePageSmallText(smallText: boolean | undefined): boolean {
   return smallText ?? false;
+}
+
+export function resolvePageFullWidth(fullWidth: boolean | undefined): boolean {
+  return fullWidth ?? false;
 }
