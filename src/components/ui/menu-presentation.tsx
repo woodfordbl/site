@@ -219,7 +219,7 @@ export function MenuPresentationProvider({
     <MenuPresentationContext.Provider value={{ close, presentation: "drawer" }}>
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-3",
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-2",
           className
         )}
       >
@@ -253,7 +253,7 @@ export function MenuDrawerSubDrawer({
   return (
     <DrawerNestedRoot onOpenChange={onOpenChange} open={open}>
       <DrawerContent hasTitle={false} variant="menu">
-        <div className="flex items-center gap-1 px-1 py-2">
+        <div className="flex items-center gap-1 px-2 py-1.5">
           <button
             aria-label="Back"
             className="flex size-9 items-center justify-center rounded-lg text-muted-foreground active:bg-accent"
@@ -285,7 +285,7 @@ export function MenuDrawerSubDrawer({
 
 const rowClassName = (destructive?: boolean) =>
   cn(
-    "group/drawer-row flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-[15px] no-underline outline-none transition-colors active:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-5 [&_svg]:shrink-0",
+    "group/drawer-row flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm no-underline outline-none transition-colors active:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-5 [&_svg]:shrink-0",
     destructive
       ? "text-destructive [&_svg]:text-destructive"
       : "text-foreground [&_svg]:text-muted-foreground"
@@ -372,7 +372,7 @@ export function DrawerMenuRow({
 
 export function DrawerMenuSectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+    <div className="px-3 pt-2 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
       {children}
     </div>
   );
