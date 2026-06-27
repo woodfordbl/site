@@ -37,12 +37,25 @@ export const pageCanvasMobileScrollClassName =
 export const pageCanvasTouchScrollClassName =
   "overflow-auto pr-4 pb-[50vh] pl-3 md:px-12 md:py-12 md:pb-12";
 
-/** Mobile header slot inset — negative margins cancel the scroll padding so the
- *  header sits flush to the panel edge (gutter-lane variant). */
-export const pageCanvasMobileHeaderSlotClassName = "-mr-4 mb-4 -ml-7 md:hidden";
+/**
+ * Mobile header slot (cover-less pages). Negative margins cancel the scroll
+ * padding so the header sits flush to the panel edge (gutter-lane variant).
+ *
+ * `bg-background pt-[env(safe-area-inset-top)]`: with `viewport-fit=cover` (set
+ * in __root) the scroll region extends to the physical top of the webview, so
+ * this header — the first thing in the scroll region — sits behind the system
+ * chrome (iOS notch / collapsed Safari address bar / PWA status bar). The
+ * safe-area top inset pads the breadcrumb row down so it stays clear of the
+ * chrome, and the opaque background fills that inset with `bg-background` so the
+ * `bg-sidebar` layered behind the content (see {@link PageSidebarSwipeReveal})
+ * can't show through. In ordinary Safari browsing the inset is `0` (no-op).
+ */
+const HEADER_SLOT_SAFE_AREA = "bg-background pt-[env(safe-area-inset-top)]";
+
+export const pageCanvasMobileHeaderSlotClassName = `-mr-4 mb-4 -ml-7 ${HEADER_SLOT_SAFE_AREA} md:hidden`;
 
 /** Touch header slot inset — matches {@link pageCanvasTouchScrollClassName}. */
-export const pageCanvasTouchHeaderSlotClassName = "-mr-4 mb-4 -ml-3 md:hidden";
+export const pageCanvasTouchHeaderSlotClassName = `-mr-4 mb-4 -ml-3 ${HEADER_SLOT_SAFE_AREA} md:hidden`;
 
 /**
  * Sticky variant of the mobile header slot, used **only when the page has a
