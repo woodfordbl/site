@@ -7,6 +7,7 @@ import {
   deleteAllBlocksForPage,
   seedPageBlocks,
 } from "@/db/queries/block-collection-ops.ts";
+import { clearPageSnapshots } from "@/db/snapshots/page-snapshot-store.ts";
 import { useLocalPages } from "@/hooks/use-local-pages.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import type { PageCommand } from "@/lib/canvas/commands.ts";
@@ -31,7 +32,6 @@ import {
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import { persistPageReposition } from "@/lib/pages/persist-page-reposition.ts";
-import { recordPageCreatedActivity } from "@/lib/pages/record-page-activity.ts";
 import { planPageReposition } from "@/lib/pages/reposition-page.ts";
 import { resetAllToRemote } from "@/lib/pages/reset-all-to-remote.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
@@ -60,6 +60,7 @@ function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
 
   if (isHardDeleteLocalPage(localPage)) {
     localPagesCollection.delete(pageId);
+    clearPageSnapshots(pageId).catch(() => undefined);
     syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
     return;
   }
@@ -266,10 +267,6 @@ function applyPagePersistEffect(
       updatedAt: now,
     });
     seedPageBlocks(effect.pageId, blocksToSeed);
-    recordPageCreatedActivity(
-      effect.pageId,
-      Boolean(effect.initialBlocks && effect.initialBlocks.length > 0)
-    );
     return;
   }
 
