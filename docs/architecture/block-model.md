@@ -7,6 +7,8 @@
 - **Checklist** blocks are containers only (empty props)
 - **Columns** blocks are containers only (empty props); children are **column** blocks only
 - **Column** blocks are generic-scope containers (`allowedChildTypes: *`); children are normal canvas rows (text, heading, nested list, etc.)
+- **Tabs** blocks are containers (`props.defaultTabId` — the author's default tab); children are **tab** blocks only
+- **Tab** blocks are generic-scope containers (`allowedChildTypes: *`) with `props.label` (the tab name); children are normal canvas rows
 - **Table** blocks are containers (`hasHeaderRow`, `columnWidths[]`); children are **tableRow** only. Trailing row/column count can be adjusted via plus-control pointer scrub — [table-blocks](./table-blocks.md#trailing-plus-controls).
 - **Table row** blocks are containers (empty props); children are **tableCell** only (sibling order = column index)
 - **Table cell** blocks are leaves with `props.text` (plain text only in v1)
@@ -44,6 +46,11 @@ page (canvas)
 │   │   ├── text / heading / … (parentId: column)
 │   │   └── list (parentId: column) …
 │   └── column …
+├── tabs (parentId: null, optional props.defaultTabId)
+│   ├── tab (parentId: tabs, props.label)
+│   │   ├── text / heading / … (parentId: tab)
+│   │   └── list (parentId: tab) …
+│   └── tab …
 ├── table (parentId: null | column, props.hasHeaderRow, props.columnWidths in px — legacy ratio values ≤10 migrate at render)
 │   ├── tableRow (parentId: table)
 │   │   ├── tableCell (parentId: tableRow, props.text)

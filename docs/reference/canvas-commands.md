@@ -43,6 +43,9 @@ Structural row commands must persist the full next document order, not only the 
 | `columns.create` | Replace the active row with a `columns` shell and `count` (2–4) `column` children, each seeded with one `text` row (first column keeps slash text). Planner: [`planColumnsCreate`](../../src/lib/canvas/columns-layout.ts). |
 | `columns.addColumn` | Append a `column` + empty `text` (max 4); equalize `column.props.width`. |
 | `columns.removeColumn` | Delete a column subtree; when fewer than 2 columns remain, [`planColumnsUnwrap`](../../src/lib/canvas/columns-layout.ts) hoists content to the canvas parent. |
+| `tabs.create` | Replace the active row with a `tabs` shell and `count` `tab` children (labelled `Tab 1…N`), each seeded with one `text` row (first tab keeps slash text). Planner: [`planTabsCreate`](../../src/lib/canvas/tabs-layout.ts). |
+| `tabs.addTab` | Append a `tab` + empty `text` (max 8), labelled by current tab count. |
+| `tabs.removeTab` | Delete a tab subtree; removing the last tab (`MIN_TABS_COUNT` 1) calls [`planTabsUnwrap`](../../src/lib/canvas/tabs-layout.ts) to dissolve the block. Tab renames and the author's default tab (`tabs.props.defaultTabId`) persist via the generic `row.update`. |
 | `table.create` | Replace the active row with a `table` shell, `rows` × `columns` grid of `tableRow` / `tableCell`, optional `hasHeaderRow`, seed first cell from slash text. Planner: [`planTableCreate`](../../src/lib/canvas/table-layout.ts). |
 | `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count; anchor `tableRowId` + optional `edge` (`before` \| `after`). Optional `focus` (default `true`); trailing plus scrub passes `focus: false` on intermediate adds. Structure-handle menu, hover add-row control, and trailing plus scrub. |
 | `table.addColumn` | Insert empty `tableCell` at `columnIndex` + `edge` in every row; extend `table.props.columnWidths`. Optional `focus` (default `true`); trailing plus scrub passes `focus: false` on intermediate adds. |
@@ -96,6 +99,8 @@ Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canva
 | Delete | `table.removeRow` / `table.removeColumn` |
 
 Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item. Both capture full subtrees — `subtreeBlocksFromSelectedRows` ([`block-selection.ts`](../../src/lib/canvas/block-selection.ts)) for selections, `flattenRows` for a single row.
+
+Pasting image/video files (e.g. a screenshot) is intercepted in [`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) before the field-focus guard: `extractMediaFiles` ([`paste-media.ts`](../../src/lib/media/paste-media.ts)) pulls the files, `insertMediaFiles` stores each as an IndexedDB asset and inserts `media` blocks via `rows.paste` after the target row — so it works even while a text field is focused. Non-media paste falls through to the block-clipboard path above.
 
 The gutter/mobile block menu also renders a non-command **Added / Last edited** footer ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx)) from the row's `LocalBlock` timestamps. Block commits also schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](../architecture/local-first-persistence.md#page-snapshots-version-history).
 

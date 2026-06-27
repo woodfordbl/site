@@ -75,6 +75,16 @@ describe("getSlashMenuItems", () => {
 
     expect(items.some((item) => item.key === "columns-3")).toBe(true);
   });
+
+  it("includes a tabs entry with tabCount for the tabs query", () => {
+    const items = filterSlashMenuItems("tabs");
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "tabs-2", id: "tabs", tabCount: 2 }),
+      ])
+    );
+  });
 });
 
 describe("container block specs", () => {

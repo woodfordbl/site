@@ -219,7 +219,7 @@ Writes go through [`persistPageSettings`](../../src/lib/pages/persist-page-setti
 
 ### Page stats
 
-Inline footer at the bottom of the header menu ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)): **Total blocks**, **Total words**, **Created at**, **Last edited at** — from [`buildPageActivitySummary`](../../src/lib/pages/page-activity-summary.ts) (block count, word count, `LocalPage.createdAt`, max of page/block `updatedAt`).
+Inline footer at the bottom of the header menu ([`PageActivityPanel`](../../src/components/pages/page-activity-panel.tsx)): **Total blocks**, **Total words**, **Created at**, **Last edited at** — from [`buildPageActivitySummary`](../../src/lib/pages/page-activity-summary.ts) (block count, word count, `LocalPage.createdAt`, max of page/block `updatedAt`). Word count ([`page-word-count.ts`](../../src/lib/pages/page-word-count.ts)) sums primary-text blocks; container shells (`columns`/`column`, `tabs`/`tab`, `table`/`tableRow`, list/checklist) contribute zero and their text children are counted directly.
 
 ### Version history
 

@@ -46,6 +46,16 @@ export const columnPropsSchema = z.object({
   width: z.number().positive().optional(),
 });
 
+/** `tabs` block props: the author-chosen default tab (a `tab` block's id). */
+export const tabsPropsSchema = z.object({
+  defaultTabId: z.string().optional(),
+});
+
+/** `tab` block props: the tab's display name. */
+export const tabPropsSchema = z.object({
+  label: z.string().default(""),
+});
+
 export const mediaKindSchema = z.enum(["image", "video"]);
 export const mediaSourceSchema = z.enum(["url", "asset"]);
 
@@ -104,6 +114,8 @@ export type PageLinkProps = z.infer<typeof pageLinkPropsSchema>;
 export type DividerProps = z.infer<typeof dividerPropsSchema>;
 export type ColumnsProps = z.infer<typeof columnsPropsSchema>;
 export type ColumnProps = z.infer<typeof columnPropsSchema>;
+export type TabsProps = z.infer<typeof tabsPropsSchema>;
+export type TabProps = z.infer<typeof tabPropsSchema>;
 export type MediaKind = z.infer<typeof mediaKindSchema>;
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
 export type MediaProps = z.infer<typeof mediaPropsSchema>;

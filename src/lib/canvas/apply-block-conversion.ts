@@ -77,6 +77,13 @@ export function applyBlockConversion(
       count: item.columnCount ?? 2,
       text: cleanedText,
     });
+  } else if (item.id === "tabs") {
+    dispatch({
+      type: "tabs.create",
+      rowId: row.rowId,
+      count: item.tabCount ?? 2,
+      text: cleanedText,
+    });
   } else if (item.id === "table") {
     dispatch({
       type: "table.create",
