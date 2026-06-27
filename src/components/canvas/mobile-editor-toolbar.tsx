@@ -139,6 +139,12 @@ export function MobileEditorToolbar() {
         return;
       }
       pickerTargetRef.current = rowId;
+      // Blur the field so the on-screen keyboard hides behind the picker sheet
+      // (the row is already captured above, so the edit still targets it).
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
       setPickerMode(mode);
     },
     [resolveTargetRowId]
