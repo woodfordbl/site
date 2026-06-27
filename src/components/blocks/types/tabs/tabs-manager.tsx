@@ -150,6 +150,7 @@ function TabSubmenu({
           <GlyphIconPicker
             ariaLabel="Change tab icon"
             icon={icon}
+            onRemove={() => updateTabProps({ icon: undefined })}
             onSelect={(nextIcon) => updateTabProps({ icon: nextIcon })}
             triggerButtonSize="icon-sm"
           />

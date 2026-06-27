@@ -57,11 +57,13 @@ function GlyphIconPickerPanelShell({ fillHeight }: { fillHeight: boolean }) {
 function GlyphIconPickerPopoverContent({
   EmojiPanel,
   IconPanel,
+  onRemove,
   onSelect,
   open,
 }: {
   EmojiPanel: ComponentType<PageIconPickerEmojiPanelProps> | null;
   IconPanel: ComponentType<PageIconPickerIconPanelProps> | null;
+  onRemove?: () => void;
   onSelect: (nextIcon: string) => void;
   open: boolean;
 }) {
@@ -76,7 +78,7 @@ function GlyphIconPickerPopoverContent({
     >
       {/* Underline tabs whose active indicator intersects a full-width divider,
           matching the link/upload embed tabs. */}
-      <div className="relative w-full px-2 pt-2">
+      <div className="relative flex w-full items-center justify-between gap-2 px-2 pt-2">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 bottom-0 z-0 border-border border-b"
@@ -85,6 +87,17 @@ function GlyphIconPickerPopoverContent({
           <TabsTrigger value="emoji">Emoji</TabsTrigger>
           <TabsTrigger value="icons">Icons</TabsTrigger>
         </TabsList>
+        {onRemove ? (
+          <Button
+            className="relative z-[1] mb-1 h-7 shrink-0 text-muted-foreground"
+            onClick={onRemove}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Remove
+          </Button>
+        ) : null}
       </div>
       <TabsContent
         className="m-0 flex min-h-0 flex-col px-2 pt-2 pb-2"
@@ -143,6 +156,8 @@ export interface GlyphIconPickerProps {
   hideTrigger?: boolean;
   icon?: string;
   onOpenChange?: (open: boolean) => void;
+  /** When provided and an icon is set, shows a "Remove" action that clears it. */
+  onRemove?: () => void;
   onSelect: (nextIcon: string) => void;
   open?: boolean;
   triggerButtonSize?: "icon" | "icon-xs" | "icon-sm" | "icon-lg";
@@ -159,6 +174,7 @@ export function GlyphIconPicker({
   hideTrigger = false,
   icon,
   onOpenChange: onOpenChangeProp,
+  onRemove,
   onSelect,
   open: openProp,
   triggerButtonSize = "icon-lg",
@@ -186,6 +202,11 @@ export function GlyphIconPicker({
     },
     [onSelect, setOpen]
   );
+
+  const handleRemove = useCallback(() => {
+    onRemove?.();
+    setOpen(false);
+  }, [onRemove, setOpen]);
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -234,6 +255,7 @@ export function GlyphIconPicker({
         <GlyphIconPickerPopoverContent
           EmojiPanel={EmojiPanel}
           IconPanel={IconPanel}
+          onRemove={onRemove && icon ? handleRemove : undefined}
           onSelect={handleSelect}
           open={open}
         />
