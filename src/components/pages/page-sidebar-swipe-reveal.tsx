@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils.ts";
 const VELOCITY_SNAP_PX_PER_MS = 0.5;
 /** Fallback sidebar width (18rem at a 16px root) before the layer is measured. */
 const SIDEBAR_WIDTH_FALLBACK_PX = 288;
+/** White wash opacity over the content at full open; scales with swipe progress. */
+const OVERLAY_MAX_OPACITY = 0.6;
 
 type Axis = "undecided" | "horizontal" | "vertical";
 
@@ -262,6 +264,7 @@ export function PageSidebarSwipeReveal({
   const translateX = dragOffset ?? (openMobile ? sidebarWidth : 0);
   const isDragging = dragOffset !== null;
   const isRevealed = translateX > 0;
+  const overlayProgress = Math.min(translateX / sidebarWidth, 1);
 
   return (
     <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-sidebar">
@@ -294,14 +297,20 @@ export function PageSidebarSwipeReveal({
           {children}
         </div>
 
-        {openMobile ? (
-          <div
-            aria-hidden
-            className="absolute inset-0 z-10 bg-white/30"
-            style={{ touchAction: "none" }}
-            {...gestureHandlers}
-          />
-        ) : null}
+        {/* White wash over the content; opacity tracks swipe progress. */}
+        <div
+          aria-hidden
+          className={cn(
+            "absolute inset-0 z-10 bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+            isDragging && "transition-none",
+            openMobile ? "pointer-events-auto" : "pointer-events-none"
+          )}
+          style={{
+            opacity: overlayProgress * OVERLAY_MAX_OPACITY,
+            touchAction: "none",
+          }}
+          {...(openMobile ? gestureHandlers : {})}
+        />
       </div>
 
       {/* Left-edge hit strip — captures the opening swipe while closed. */}

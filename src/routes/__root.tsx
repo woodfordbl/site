@@ -80,10 +80,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         content:
           "width=device-width, initial-scale=1, interactive-widget=resizes-content",
       },
-      {
-        name: "theme-color",
-        content: "#0a0a0a",
-      },
     ];
 
     return {
@@ -125,18 +121,31 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   shellComponent: RootDocument,
 });
 
+/** Hex equivalents of the `--sidebar` token (see styles.css) used for the
+ *  iOS Safari bar tint, kept theme-aware so the chrome matches the canvas. */
+const THEME_COLOR_BY_APPEARANCE = {
+  dark: "#16130e",
+  light: "#efefeb",
+} as const;
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { deviceLayoutHints, siteAppearance } = useRouteContext({
     from: "__root__",
   });
+  const isDark = siteAppearance.resolvedTheme === "dark";
 
   return (
-    <html
-      className={siteAppearance.resolvedTheme === "dark" ? "dark" : undefined}
-      lang="en"
-    >
+    <html className={isDark ? "dark" : undefined} lang="en">
       <head>
         <HeadContent />
+        <meta
+          content={
+            isDark
+              ? THEME_COLOR_BY_APPEARANCE.dark
+              : THEME_COLOR_BY_APPEARANCE.light
+          }
+          name="theme-color"
+        />
       </head>
       <body>
         <ThemeProvider initialHints={siteAppearance}>

@@ -400,7 +400,10 @@
 
   html {
     overscroll-behavior: none;
-    @apply font-sans;
+    /* Canvas background iOS Safari paints behind its translucent top/bottom bars
+       and the auto-filled notch/home-indicator edges. Sidebar color so the app
+       reads edge-to-edge on mobile; body paints `bg-background` over its own box. */
+    @apply bg-sidebar font-sans;
   }
 
   /*
