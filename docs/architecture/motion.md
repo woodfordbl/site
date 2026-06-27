@@ -98,3 +98,12 @@ to a short `opacity 100ms ease`, matching `.overlay-popover-surface`.
 3. Only reach for a site-specific trigger when the reveal condition isn't "hover
    the container" (a specific sibling, a `:has()` selector, etc.) — keep that
    utility and still use the shared classes for the hidden/animated base.
+
+## Scroll containment
+
+`html`/`body` carry `overscroll-behavior: none` in [`styles.css`](../../src/styles.css)
+because the app shell is fixed-height (`site-shell` `h-svh; overflow-hidden`) and
+never scrolls — so a touch fling at a scroll boundary must not rubber-band the
+page. On iOS that rubber-band pans the visual viewport, which is the main source
+of jitter for the keyboard toolbar; inner scrollers add `overscroll-contain` of
+their own. See [keyboard-toolbar](./keyboard-toolbar.md).
