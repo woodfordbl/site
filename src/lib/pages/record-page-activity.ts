@@ -103,6 +103,16 @@ export function recordTextScaleSettingActivity(
   );
 }
 
+export function recordHeaderImageSettingActivity(
+  pageId: string,
+  hasCover: boolean
+): void {
+  recordPageSettingsActivity(
+    pageId,
+    hasCover ? "Updated cover image" : "Removed cover image"
+  );
+}
+
 export function recordFullWidthSettingActivity(
   pageId: string,
   enabled: boolean

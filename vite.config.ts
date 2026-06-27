@@ -19,6 +19,14 @@ const ogHandler = fileURLToPath(
   new URL("./routes/api/og.get.ts", import.meta.url)
 );
 
+const unsplashSearchHandler = fileURLToPath(
+  new URL("./routes/api/unsplash/search.get.ts", import.meta.url)
+);
+
+const unsplashDownloadHandler = fileURLToPath(
+  new URL("./routes/api/unsplash/download.post.ts", import.meta.url)
+);
+
 /**
  * Nitro module that re-adds `continue: true` to header-only routes in the
  * generated Vercel Build Output config once the preset has written it. Without
@@ -86,7 +94,19 @@ const config = defineConfig({
     // bundled into the Vercel function output (filesystem scanning of root
     // `routes/` isn't wired in this TanStack Start dev integration).
     nitro({
-      handlers: [{ route: "/api/og", method: "GET", handler: ogHandler }],
+      handlers: [
+        { route: "/api/og", method: "GET", handler: ogHandler },
+        {
+          route: "/api/unsplash/search",
+          method: "GET",
+          handler: unsplashSearchHandler,
+        },
+        {
+          route: "/api/unsplash/download",
+          method: "POST",
+          handler: unsplashDownloadHandler,
+        },
+      ],
       // Workaround for a Nitro bug on the Vercel preset. Nitro's Vite plugin
       // auto-adds a `routeRules["/assets/**"]` cache-control header, but the
       // Vercel preset emits header-only route rules as Build Output API routes

@@ -13,6 +13,8 @@ import {
 } from "@/db/snapshots/page-snapshot-store.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
+const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
+
 function collectAssetIdsFromBlocks(blocks: Block[]): Set<string> {
   const referenced = new Set<string>();
   for (const block of blocks) {
@@ -23,6 +25,34 @@ function collectAssetIdsFromBlocks(blocks: Block[]): Set<string> {
     ) {
       referenced.add(block.props.src);
     }
+  }
+  return referenced;
+}
+
+/**
+ * Cover ("header") images can be content-addressed asset uploads referenced from
+ * a local page document's `headerImage` (not from any block), so the sweep must
+ * treat them as live or it would reclaim an uploaded cover on the next boot.
+ */
+function collectCoverAssetIds(storage: Storage): Set<string> {
+  const referenced = new Set<string>();
+  const raw = storage.getItem(LOCAL_PAGES_STORAGE_KEY);
+  if (!raw) {
+    return referenced;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      { data?: { headerImage?: { source?: string; src?: string } } }
+    >;
+    for (const stored of Object.values(parsed)) {
+      const headerImage = stored?.data?.headerImage;
+      if (headerImage?.source === "asset" && headerImage.src) {
+        referenced.add(headerImage.src);
+      }
+    }
+  } catch {
+    // Malformed local-pages blob: treat as no cover references.
   }
   return referenced;
 }
@@ -43,6 +73,10 @@ export function collectReferencedAssetIds(
     for (const assetId of collectAssetIdsFromBlocks(blocks)) {
       referenced.add(assetId);
     }
+  }
+
+  for (const assetId of collectCoverAssetIds(storage)) {
+    referenced.add(assetId);
   }
 
   return referenced;

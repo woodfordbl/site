@@ -44,6 +44,63 @@ export const pageCanvasMobileHeaderSlotClassName = "-mr-4 mb-4 -ml-7 md:hidden";
 /** Touch header slot inset — matches {@link pageCanvasTouchScrollClassName}. */
 export const pageCanvasTouchHeaderSlotClassName = "-mr-4 mb-4 -ml-3 md:hidden";
 
+/**
+ * Sticky variant of the mobile header slot, used **only when the page has a
+ * cover image**. The bar pins (`sticky top-0`) with a **solid, opaque**
+ * background so the cover scrolls up and is cleanly occluded by the pinned bar
+ * (no translucency or backdrop blur — content does not show through). Cover-less
+ * pages keep {@link pageCanvasMobileHeaderSlotClassName} (the header scrolls away
+ * as before).
+ *
+ * `pt-[env(safe-area-inset-top)]`: with `viewport-fit=cover` (set in __root) the
+ * scroll region extends to the physical top of the webview, so once the bar is
+ * pinned at `top-0` it can sit *behind* the system chrome (the iOS notch / a
+ * collapsed Safari address bar, a standalone PWA status bar, or a landscape
+ * notch). The safe-area top inset grows the solid background up into that region
+ * and pads the breadcrumb row down so it stays clear of the chrome. In ordinary
+ * Safari browsing the inset is `0`, so this is a no-op there — the bar simply
+ * tucks under the address bar.
+ */
+const STICKY_HEADER_BASE =
+  "sticky top-0 z-20 bg-background pt-[env(safe-area-inset-top)]";
+
+export const pageCanvasMobileHeaderSlotStickyClassName = `-mr-4 -ml-7 mb-4 ${STICKY_HEADER_BASE} md:hidden`;
+
+/** Touch sticky header slot — matches {@link pageCanvasTouchScrollClassName}. */
+export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STICKY_HEADER_BASE} md:hidden`;
+
+/**
+ * Desktop cover header slot. With a cover present the breadcrumb bar is overlaid
+ * on the **base of the cover image** (pulled up by its own `h-12` height) and
+ * pinned to the top on scroll (`sticky top-0`) so page content scrolls beneath
+ * it. Full-bleed (cancels the desktop `px-12` inset + grows width past the
+ * overlay scrollbar) with a translucent light gradient + backdrop blur for
+ * contrast — over the image at rest and over content once pinned. Shown only at
+ * `md+`; mobile keeps its own header slot.
+ */
+export const pageCoverDesktopHeaderSlotClassName =
+  "-mt-12 -mx-12 sticky top-0 z-20 w-[calc(100%+6rem)] bg-gradient-to-b from-background/55 to-background/90 backdrop-blur-md backdrop-saturate-150 max-md:hidden";
+
+/**
+ * Full-bleed cover ("header image") wrapper. Negative margins cancel the scroll
+ * region padding — the mobile gutter lane (`pl-7`) and desktop `px-12`/`py-12` —
+ * AND the width is grown by that same horizontal padding (`w-[calc(100%+…)]`)
+ * so the cover actually spans edge to edge (negative margins alone don't widen a
+ * `w-full` element when the scrollbar is an overlay). Mobile has no top padding
+ * to cancel, so only the desktop top inset is pulled.
+ *
+ * Fine-pointer mobile gutter: `pl-7` (1.75rem) + `pr-4` (1rem) = 2.75rem;
+ * desktop `px-12` = 6rem.
+ */
+// `md:mb-0`: on desktop the breadcrumb header overlays the cover's base (it is
+// pulled up onto the cover), so the cover needs no bottom margin there.
+export const pageCoverMobileClassName =
+  "-mr-4 -ml-7 mb-3 w-[calc(100%+2.75rem)] md:-mx-12 md:-mt-12 md:mb-0 md:w-[calc(100%+6rem)]";
+
+/** Touch cover inset — `pl-3` (0.75rem) + `pr-4` (1rem) = 1.75rem; desktop 6rem. */
+export const pageCoverTouchClassName =
+  "-mr-4 -ml-3 mb-3 w-[calc(100%+1.75rem)] md:-mx-12 md:-mt-12 md:mb-0 md:w-[calc(100%+6rem)]";
+
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";
 

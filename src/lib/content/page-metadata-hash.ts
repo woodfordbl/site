@@ -23,6 +23,7 @@ function hashString(input: string): string {
 export function hashPageMetadata(fields: {
   font?: "default" | "serif" | "mono";
   fullWidth?: boolean;
+  headerImage?: unknown;
   icon?: string;
   parentId: string | null;
   sidebarOrder?: number;
@@ -34,6 +35,7 @@ export function hashPageMetadata(fields: {
     stableStringify({
       font: fields.font ?? null,
       fullWidth: fields.fullWidth ?? null,
+      headerImage: fields.headerImage ?? null,
       icon: fields.icon ?? null,
       parentId: fields.parentId,
       sidebarOrder: fields.sidebarOrder ?? null,

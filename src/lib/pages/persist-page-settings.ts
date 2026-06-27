@@ -10,13 +10,18 @@ import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import {
   recordFontSettingActivity,
   recordFullWidthSettingActivity,
+  recordHeaderImageSettingActivity,
   recordTextScaleSettingActivity,
 } from "@/lib/pages/record-page-activity.ts";
 import {
   isLocallyDeletedPage,
   localPageSchema,
 } from "@/lib/schemas/local-page.ts";
-import type { PageFont, PageTextScale } from "@/lib/schemas/page-settings.ts";
+import type {
+  PageFont,
+  PageHeaderImage,
+  PageTextScale,
+} from "@/lib/schemas/page-settings.ts";
 
 const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
 const seededPageIds = new Set<string>();
@@ -34,12 +39,14 @@ function applyPageSettingsDraft(
   draft: {
     font?: "default" | "serif" | "mono";
     fullWidth?: boolean;
+    headerImage?: PageHeaderImage;
     textScale?: PageTextScale;
     updatedAt: string;
   },
   options: {
     font?: PageFont;
     fullWidth?: boolean;
+    headerImage?: PageHeaderImage | null;
     textScale?: PageTextScale | null;
     updatedAt: string;
   }
@@ -54,6 +61,9 @@ function applyPageSettingsDraft(
   if (options.fullWidth !== undefined) {
     draft.fullWidth = options.fullWidth ? true : undefined;
   }
+  if (options.headerImage !== undefined) {
+    draft.headerImage = options.headerImage ?? undefined;
+  }
   draft.updatedAt = options.updatedAt;
 }
 
@@ -65,6 +75,8 @@ export function persistPageSettings(options: {
   pageId: string;
   font?: PageFont;
   fullWidth?: boolean;
+  /** `PageHeaderImage` sets a cover; `null` removes it; omit to leave unchanged. */
+  headerImage?: PageHeaderImage | null;
   /** A scale sets the override; `null` clears it; `undefined` leaves it as-is. */
   textScale?: PageTextScale | null;
   seed?: PageMetadataSeed;
@@ -104,6 +116,7 @@ export function persistPageSettings(options: {
           : undefined,
       textScale: options.textScale ?? undefined,
       fullWidth: options.fullWidth ? true : undefined,
+      headerImage: options.headerImage ?? undefined,
       serverBaselineHash: options.seed.serverBaselineHash,
       serverMetadataBaseline,
       createdAt: now,
@@ -129,5 +142,11 @@ export function persistPageSettings(options: {
   }
   if (options.fullWidth !== undefined) {
     recordFullWidthSettingActivity(options.pageId, options.fullWidth);
+  }
+  if (options.headerImage !== undefined) {
+    recordHeaderImageSettingActivity(
+      options.pageId,
+      options.headerImage !== null
+    );
   }
 }

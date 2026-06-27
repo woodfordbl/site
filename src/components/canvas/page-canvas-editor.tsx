@@ -77,6 +77,8 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
+  /** Rendered at the very top of the scroll region (full-bleed page cover image). */
+  coverSlot?: ReactNode;
   fullWidth: boolean;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
@@ -109,6 +111,7 @@ function CanvasOverclickListener({
 }
 
 function PageCanvasEditorBody({
+  coverSlot,
   editor,
   fullWidth,
   headerSlot,
@@ -116,6 +119,7 @@ function PageCanvasEditorBody({
   serverPage,
   titleSlot,
 }: {
+  coverSlot?: ReactNode;
   editor: CanvasEditorState;
   fullWidth: boolean;
   headerSlot?: ReactNode;
@@ -442,13 +446,14 @@ function PageCanvasEditorBody({
                             ? { "data-page-full-width": "" }
                             : {})}
                         >
+                          {coverSlot}
+                          {headerSlot}
                           <div
                             className={pageContentColumnClassName({
                               fullWidth,
                               isNarrowViewport,
                             })}
                           >
-                            {headerSlot}
                             {titleSlot}
                             <CanvasDropZone
                               onDropPage={handleDropPageIntoCanvas}
@@ -551,6 +556,7 @@ function CanvasDropZone({
 }
 
 export function PageCanvasEditor({
+  coverSlot,
   fullWidth,
   headerSlot,
   isNarrowViewport,
@@ -564,6 +570,7 @@ export function PageCanvasEditor({
     <CanvasMenuProvider>
       <BlockActionsMenuProvider>
         <PageCanvasEditorBody
+          coverSlot={coverSlot}
           editor={editor}
           fullWidth={fullWidth}
           headerSlot={headerSlot}
