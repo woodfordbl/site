@@ -14,9 +14,9 @@ import { useMemo, useState } from "react";
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
-import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
+import { PageHeaderMenuFontSubmenu } from "@/components/pages/page-header-menu-font-submenu.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
-import { PageHeaderMenuTextSizeRow } from "@/components/pages/page-header-menu-text-size-row.tsx";
+import { PageHeaderMenuTextSizeSubmenu } from "@/components/pages/page-header-menu-text-size-submenu.tsx";
 import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -185,13 +185,13 @@ export function PageHeaderMenu({
             activeKey={open ? pageId : null}
             items={searchableEntries}
           >
-            <PageHeaderMenuFontRow
+            <PageHeaderMenuFontSubmenu
               font={font}
               onFontChange={(nextFont) => {
                 setFont(nextFont);
               }}
             />
-            <PageHeaderMenuTextSizeRow
+            <PageHeaderMenuTextSizeSubmenu
               onTextScaleChange={setTextScale}
               textScale={textScale}
             />

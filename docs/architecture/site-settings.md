@@ -35,7 +35,7 @@ Dev/sync actions were removed from [`PageCanvasFooter`](../../src/components/can
 - Cookie: `site-appearance` via [`site-appearance-cookie.ts`](../../src/lib/appearance/site-appearance-cookie.ts) (carries the whole appearance object).
 - SSR: [`loadSiteAppearance`](../../src/lib/appearance/load-site-appearance.ts) in root `beforeLoad`; `html.dark` class and `html[data-page-text-scale]` seeded from [`readSiteAppearanceFromRequest`](../../src/lib/appearance/read-site-appearance.server.ts) (no flash).
 - Client: [`ThemeProvider`](../../src/components/layout/theme-provider.tsx) applies `document.documentElement.classList` (theme) and `dataset.pageTextScale` (text size), and listens to `prefers-color-scheme` when theme is `system`.
-- The `data-page-text-scale` attribute drives the `--page-text-scale` multiplier / `--fs-*` typography tokens in `styles.css`; per-page overrides set the same attribute on the page content wrapper and win via the cascade.
+- The `data-page-text-scale` attribute sets the `--page-text-scale` multiplier that each block's `font-size: calc(<rem> * var(--page-text-scale))` reads (`styles.css`); per-page overrides set the same attribute on the page content wrapper and win via the cascade. (The multiplier must be read directly in `font-size`, not via an intermediate token declared on `:root`, or descendant overrides are ignored.)
 
 ## Analytics
 

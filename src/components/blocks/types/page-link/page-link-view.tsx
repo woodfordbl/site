@@ -23,7 +23,7 @@ export function PageLinkView({ props }: PageLinkViewProps) {
 
   if (!page) {
     return (
-      <p className="text-[length:var(--fs-body)] text-muted-foreground italic">
+      <p className="text-[length:calc(1.125rem*var(--page-text-scale))] text-muted-foreground italic">
         Missing page
       </p>
     );
@@ -32,7 +32,7 @@ export function PageLinkView({ props }: PageLinkViewProps) {
   const navTarget = resolvePageNavTarget(props.pageId, pages);
 
   return (
-    <p className="text-[length:var(--fs-body)] leading-relaxed">
+    <p className="text-[length:calc(1.125rem*var(--page-text-scale))] leading-relaxed">
       <Link
         className="inline-flex items-center gap-1.5 text-foreground hover:text-foreground/80"
         {...navTarget}

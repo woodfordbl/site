@@ -14,11 +14,11 @@ const canvasGutterFirstLinePaddingClassNames = {
 
 /**
  * Shared body copy typography for text-like blocks (one line height by default).
- * Size reads the `--fs-body` token so it tracks the page text scale (see
+ * Size multiplies by `--page-text-scale` so it tracks the page text scale (see
  * styles.css `[data-page-text-scale]`).
  */
 export const bodyTextTypographyClassName =
-  "text-[length:var(--fs-body)] leading-relaxed";
+  "text-[length:calc(1.125rem*var(--page-text-scale))] leading-relaxed";
 
 export const bodyTextClassName = `${bodyTextTypographyClassName} text-foreground`;
 
