@@ -1,4 +1,5 @@
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
+import type { BlockType } from "@/lib/schemas/block.ts";
 
 export type MarkdownShortcutMatch =
   | { kind: "heading"; level: 1 | 2 | 3 | 4 }
@@ -23,14 +24,26 @@ export function matchMarkdownShortcut(
   return MARKDOWN_SHORTCUTS[text] ?? null;
 }
 
-/** List, divider, and heading shortcuts only apply on top-level canvas rows. */
-export function requiresTopLevelRow(match: MarkdownShortcutMatch): boolean {
-  return (
-    match.kind === "list" ||
-    match.kind === "checklist" ||
-    match.kind === "divider" ||
-    match.kind === "heading"
-  );
+/**
+ * The block type a markdown shortcut produces. List and checklist shortcuts
+ * wrap the row in a container of that type; heading and divider convert it in
+ * place. Used to check whether a parent container accepts the result, so the
+ * shortcut works inside generic-scope containers (toggle headings, columns,
+ * tabs) while staying blocked inside type-restricted ones (lists, checklists).
+ */
+export function markdownShortcutResultType(
+  match: MarkdownShortcutMatch
+): BlockType {
+  switch (match.kind) {
+    case "heading":
+      return "heading";
+    case "list":
+      return "list";
+    case "checklist":
+      return "checklist";
+    default:
+      return "divider";
+  }
 }
 
 export function getMarkdownShortcutHint(

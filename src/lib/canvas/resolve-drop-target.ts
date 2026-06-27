@@ -192,11 +192,13 @@ export function resolveColumnContentDrop(
 
 /**
  * Drop resolution when the pointer is over a toggle heading's own row (its
- * title region or empty content area). An expanded, empty toggle accepts the
- * drop as its first child (`atScopeStart`). A toggle with visible children lets
- * those children resolve their own drops, and a collapsed toggle is treated as
- * an ordinary before/after target (its children are hidden), so both return
- * `null` here to fall through to `normalizeDropTarget`.
+ * title region or empty content area). An expanded toggle — empty or populated —
+ * accepts the drop as its first child (`atScopeStart`), so dropping a block onto
+ * the heading reliably files it under the toggle. Individual children still
+ * resolve their own before/after drops when the pointer is over them, so a drop
+ * can also land between existing children. A collapsed toggle hides its children,
+ * so it stays an ordinary before/after target (return `null` to fall through to
+ * `normalizeDropTarget`); expand it first to nest into it.
  */
 function resolveToggleHeadingDrop(
   rows: CanvasRow[],
@@ -214,7 +216,7 @@ function resolveToggleHeadingDrop(
     return null;
   }
   const collapsed = row.effectiveBlock.props.collapsed === true;
-  if (collapsed || row.children.length > 0) {
+  if (collapsed) {
     return null;
   }
   return { rowId: toggleRowId, edge: "before", atScopeStart: true };

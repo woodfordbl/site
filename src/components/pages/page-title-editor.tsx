@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useContext, useRef, useState } from "react";
 
+import { CanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
@@ -8,6 +9,7 @@ import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
+import { isBlockEmpty } from "@/lib/blocks/is-block-empty.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import {
@@ -57,6 +59,11 @@ function PageTitleEditorView({
   const [prevPersistedSlug, setPrevPersistedSlug] = useState(persistedSlug);
   const previousSlugRef = useRef(persistedSlug);
   const isEditingRef = useRef(false);
+
+  // The title editor renders inside the canvas editor providers (as the canvas
+  // title slot), so it can drive the document directly. Null when the canvas
+  // editor bundle has not mounted yet (SSR / first paint).
+  const canvasEditor = useContext(CanvasEditorContext);
 
   if (!isEditingRef.current && persistedTitle !== prevPersistedTitle) {
     setPrevPersistedTitle(persistedTitle);
@@ -112,6 +119,31 @@ function PageTitleEditorView({
     isEditingRef.current = true;
   }, []);
 
+  // Enter from the title moves the caret into the page body, adding a fresh
+  // top-of-page block to land in. Reuse the existing leading empty text row when
+  // there is one so repeated Enter presses don't pile up blank blocks.
+  const handleEnter = useCallback(() => {
+    if (!canvasEditor) {
+      return;
+    }
+
+    const [firstRow] = canvasEditor.getRows();
+    if (
+      firstRow &&
+      firstRow.effectiveBlock.type === "text" &&
+      isBlockEmpty(firstRow.effectiveBlock)
+    ) {
+      canvasEditor.dispatch({
+        type: "focus.set",
+        rowId: firstRow.rowId,
+        placement: "start",
+      });
+      return;
+    }
+
+    canvasEditor.insertAtScopeStart(null, { blockType: "text" });
+  }, [canvasEditor]);
+
   return (
     <div className={pageTitleEditorLayoutClassName}>
       <div className={pageTitleIconSlotClassName}>
@@ -136,6 +168,7 @@ function PageTitleEditorView({
           headingTypographyClassNames[1]
         )}
         onChange={handleChange}
+        onEnter={handleEnter}
         onTextBlur={handleBlur}
         onTextFocus={handleFocus}
         placeholder={DEFAULT_PAGE_TITLE}

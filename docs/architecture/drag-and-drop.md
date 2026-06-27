@@ -72,6 +72,7 @@ Native HTML5 DnD never starts on touch, so on coarse primary pointers (`(pointer
 - [`DndSurface.beginPointerDrag`](../../src/components/dnd/dnd-surface.tsx) starts the store, resolves the first target, and runs an rAF **edge auto-scroll** loop against the nearest scrollable ancestor (the native `dragover` path gets browser auto-scroll for free). `movePointer` feeds subsequent positions; `commitPointerDrop` applies `onDrop` from the store snapshot.
 - Because the finger grabs the left gutter (outside the row content rects), the canvas `resolveDropTarget` nudges the pointer X into the content column for pointer drags only (`pointerDragActiveRef` in [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx)); native (mouse) drags keep their true X.
 - The drag image is a React overlay, not a native chip: [`CanvasRowDragPreview`](../../src/components/dnd/canvas-row-drag-preview.tsx) renders a clone of `[data-canvas-row-content]` (live field values copied via [`cloneNodeWithFieldValues`](../../src/lib/dnd/drag-image.ts)) so the dragged block reads as itself, not the browser's translucent box. Sidebar/table touch drags reuse their existing overlays.
+- Touch drags with `useDragSource({ haptics: true })` fire a `pickUp` tick on lift and a `drop` tick on release — see [Haptics](./haptics.md) for the moment vocabulary and the when-to-use rules.
 
 ## Surface wiring
 

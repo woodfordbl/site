@@ -470,12 +470,14 @@ export function canvasReducer(
         pageId: command.options?.pageId,
         pageLinkVariant: command.options?.pageLinkVariant,
       });
-      converted.parentId = containerParent?.effectiveBlock.parentId ?? null;
 
       if (shouldLiftConversionFromContainer(containerParent, command.to)) {
         if (!containerParent) {
           return { state, effects };
         }
+        // Type-restricted containers (list, checklist) reject the new type, so
+        // the converted block is lifted out as a following sibling.
+        converted.parentId = containerParent.effectiveBlock.parentId ?? null;
         effects.push(
           ...planLiftContainerChildConversion(
             state.rows,
@@ -495,6 +497,10 @@ export function canvasReducer(
         return { state, effects };
       }
 
+      // Convert in place. Top-level rows stay at the top level; children of
+      // generic-scope containers (toggle heading, column, tab) keep their
+      // parent, so the converted block stays nested. `convertBlockType` already
+      // preserves the source block's `parentId`.
       effects.push({ type: "persist", rowId: command.rowId, block: converted });
       effects.push({
         type: "focus",
@@ -908,7 +914,16 @@ export function canvasReducer(
           ? ctx.parent
           : null;
 
-      if (containerParent) {
+      // Generic-scope parents (toggle heading, column, tab) accept the new
+      // container as a child, so it is built in place. Type-restricted parents
+      // (list, checklist) reject it, so the row is lifted out first.
+      if (
+        containerParent &&
+        !isAllowedChild(
+          containerParent.effectiveBlock.type,
+          command.containerType
+        )
+      ) {
         const childText = command.childText ?? getTextFromBlock(sourceBlock);
         const textBlock = convertBlockType(sourceBlock, "text", {
           text: childText,
