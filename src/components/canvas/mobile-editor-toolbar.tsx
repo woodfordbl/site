@@ -24,6 +24,7 @@ import { MobileBlockTypePicker } from "@/components/canvas/mobile-block-type-pic
 import { Button } from "@/components/ui/button.tsx";
 import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useHaptics } from "@/hooks/haptics.ts";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
@@ -44,11 +45,18 @@ function ToolbarButton({
   label: string;
   onPress: () => void;
 }) {
+  const haptic = useHaptics();
   return (
     <Button
       aria-label={label}
       className="text-muted-foreground"
-      onClick={onPress}
+      onClick={() => {
+        // Each bar action is a discrete tap — fire a light selection tick before
+        // delegating so the feedback lands immediately (no-op on desktop / fine
+        // pointers via the provider). Mirrors the slash-menu / checkbox pattern.
+        haptic("selection");
+        onPress();
+      }}
       onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
         // Keep the editor field focused (don't dismiss the keyboard).
         event.preventDefault();
