@@ -46,7 +46,7 @@ src/components/blocks/
 
 Only `registry.ts` imports every block component. Other code imports from `@/components/blocks/registry.ts`; shared container child chrome belongs in `container-children.tsx` so each container component only customizes markers, spacing, and wrapper UI.
 
-The media source primitives are not block-only: the asset store, [`useAssetObjectUrl`](../../src/hooks/use-asset-object-url.ts) / `resolveMediaDisplayUrl`, [`infer-media-kind.ts`](../../src/lib/media/infer-media-kind.ts), the `LinkUploadTabs` / `SourceLinkPanel` / `SourceUploadPanel` picker UI, the overlay hover toolbar pattern, and the copy/download helpers in [`media-actions.ts`](../../src/lib/media/media-actions.ts) are all reused by the non-block [page cover](./pages.md#page-cover) (which adds an Unsplash search source + CDN sizing in [`unsplash.ts`](../../src/lib/media/unsplash.ts)).
+The media source primitives are not block-only: the asset store, [`useAssetObjectUrl`](../../src/hooks/use-asset-object-url.ts) / `resolveMediaDisplayUrl`, [`infer-media-kind.ts`](../../src/lib/media/infer-media-kind.ts), the `LinkUploadTabs` / `SourceLinkPanel` / `SourceUploadPanel` picker UI, the overlay hover toolbar pattern, and the copy/download helpers in [`media-actions.ts`](../../src/lib/media/media-actions.ts) are all reused by the non-block [page cover](./pages.md#page-cover) (which adds an Unsplash search source + CDN sizing in [`unsplash.ts`](../../src/lib/media/unsplash.ts), and a responsive dialog/drawer picker with infinite-scroll search).
 
 ## editStrategy
 

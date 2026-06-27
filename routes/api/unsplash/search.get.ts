@@ -1,9 +1,10 @@
 import { defineHandler } from "nitro";
 import { getQuery, setResponseHeader, setResponseStatus } from "nitro/h3";
 
-import type {
-  UnsplashSearchResponse,
-  UnsplashSearchResult,
+import {
+  UNSPLASH_PAGE_SIZE,
+  type UnsplashSearchResponse,
+  type UnsplashSearchResult,
 } from "@/lib/media/unsplash.ts";
 
 /**
@@ -18,7 +19,7 @@ import type {
  * cached briefly to spare the rate quota, since the route is publicly reachable.
  */
 
-const PER_PAGE = 24;
+const PER_PAGE = UNSPLASH_PAGE_SIZE;
 
 function firstString(value: unknown): string {
   if (Array.isArray(value)) {

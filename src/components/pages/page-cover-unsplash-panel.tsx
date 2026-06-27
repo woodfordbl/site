@@ -1,26 +1,43 @@
 "use client";
 
 import { IconSearch } from "@tabler/icons-react";
-import { type QueryClient, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import {
+  infiniteQueryOptions,
+  type QueryClient,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import type {
-  UnsplashSearchResponse,
-  UnsplashSearchResult,
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group.tsx";
+import { ScrollArea } from "@/components/ui/scroll-area.tsx";
+import {
+  UNSPLASH_PAGE_SIZE,
+  type UnsplashSearchResponse,
+  type UnsplashSearchResult,
+  withUnsplashUtm,
 } from "@/lib/media/unsplash.ts";
 import type { PageHeaderImage } from "@/lib/schemas/page-settings.ts";
+import { cn } from "@/lib/utils.ts";
 
 interface PageCoverUnsplashPanelProps {
-  /** When true, the default feed / current search loads (dialog is open). */
+  /** When true, the dialog/drawer is open so the feed / current search loads. */
   active: boolean;
+  /** When true (mobile drawer), the panel + scroll area stretch to fill height. */
+  fillHeight: boolean;
   onSelect: (headerImage: PageHeaderImage) => void;
 }
 
-async function searchUnsplash(term: string): Promise<UnsplashSearchResult[]> {
+async function fetchUnsplashPage(
+  term: string,
+  page: number
+): Promise<UnsplashSearchResponse> {
   const response = await fetch(
-    `/api/unsplash/search?q=${encodeURIComponent(term)}`
+    `/api/unsplash/search?q=${encodeURIComponent(term)}&page=${page}`
   );
   const payload = (await response.json()) as
     | UnsplashSearchResponse
@@ -30,22 +47,29 @@ async function searchUnsplash(term: string): Promise<UnsplashSearchResult[]> {
       "error" in payload ? payload.error : "Unsplash search failed.";
     throw new Error(message);
   }
-  return payload.results;
+  return payload;
 }
 
-/** Shared query options so the panel and hover-prefetch reuse the same cache entry. */
-export function unsplashSearchQueryOptions(term: string) {
-  return {
-    queryKey: ["unsplash-search", term] as const,
-    queryFn: () => searchUnsplash(term),
+/** Shared infinite-query options so the panel and hover-prefetch share a cache entry. */
+export function unsplashInfiniteQueryOptions(term: string) {
+  return infiniteQueryOptions({
+    queryKey: ["unsplash", term] as const,
+    queryFn: ({ pageParam }) => fetchUnsplashPage(term, pageParam),
+    initialPageParam: 1,
+    // The popular feed has no total count, so page off result fullness — works
+    // for both the feed and search (a short page means there is no next page).
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.results.length >= UNSPLASH_PAGE_SIZE
+        ? allPages.length + 1
+        : undefined,
     staleTime: 5 * 60 * 1000,
-  };
+  });
 }
 
 /** Warms the default Unsplash feed so the picker opens with images already loaded. */
 export function prefetchUnsplashDefaults(queryClient: QueryClient): void {
   queryClient
-    .prefetchQuery(unsplashSearchQueryOptions(""))
+    .prefetchInfiniteQuery(unsplashInfiniteQueryOptions(""))
     .catch(() => undefined);
 }
 
@@ -60,15 +84,54 @@ function triggerDownload(downloadLocation: string): void {
 
 export function PageCoverUnsplashPanel({
   active,
+  fillHeight,
   onSelect,
 }: PageCoverUnsplashPanelProps) {
   const [draft, setDraft] = useState("");
   const [term, setTerm] = useState("");
+  const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { data, error, isFetching } = useQuery({
-    ...unsplashSearchQueryOptions(term),
+  // Debounce the search box → query term.
+  useEffect(() => {
+    const id = setTimeout(() => setTerm(draft.trim()), 350);
+    return () => clearTimeout(id);
+  }, [draft]);
+
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    ...unsplashInfiniteQueryOptions(term),
     enabled: active,
   });
+
+  const results = data?.pages.flatMap((page) => page.results) ?? [];
+
+  // Infinite scroll: load the next page as the sentinel nears the viewport.
+  useEffect(() => {
+    if (!viewportEl) {
+      return;
+    }
+    const sentinel = sentinelRef.current;
+    if (!sentinel) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { root: viewportEl, rootMargin: "300px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [viewportEl, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleSelect = (result: UnsplashSearchResult) => {
     triggerDownload(result.downloadLocation);
@@ -81,70 +144,77 @@ export function PageCoverUnsplashPanel({
   };
 
   return (
-    <div className="flex flex-col gap-3" data-slot="unsplash-panel">
-      <form
-        className="flex gap-2"
-        onSubmit={(submitEvent) => {
-          submitEvent.preventDefault();
-          setTerm(draft.trim());
-        }}
-      >
-        <Input
-          aria-label="Search Unsplash"
+    <div
+      className={cn("flex flex-col gap-3", fillHeight && "min-h-0 flex-1")}
+      data-slot="unsplash-panel"
+    >
+      <InputGroup className="shrink-0">
+        <InputGroupAddon align="inline-start">
+          <InputGroupText>
+            <IconSearch aria-hidden />
+          </InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput
+          aria-label="Search Unsplash photos"
           onChange={(changeEvent) => setDraft(changeEvent.target.value)}
-          placeholder="Search Unsplash photos"
+          placeholder="Search…"
           value={draft}
         />
-        <Button
-          aria-label="Search"
-          size="icon"
-          type="submit"
-          variant="secondary"
-        >
-          <IconSearch aria-hidden />
-        </Button>
-      </form>
+      </InputGroup>
 
       {error ? (
-        <p className="text-destructive text-sm">{(error as Error).message}</p>
+        <p className="shrink-0 text-destructive text-sm">
+          {(error as Error).message}
+        </p>
       ) : null}
 
-      {data && data.length === 0 && !isFetching ? (
-        <p className="text-muted-foreground text-sm">No photos found.</p>
-      ) : null}
-
-      <div className="grid max-h-[22rem] grid-cols-4 gap-2 overflow-y-auto">
-        {data?.map((result) => (
-          <button
-            className="group relative aspect-[4/3] overflow-hidden rounded-md bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            key={result.id}
-            onClick={() => handleSelect(result)}
-            title={
-              result.alt
-                ? `${result.alt} — ${result.credit.name}`
-                : `Photo by ${result.credit.name}`
-            }
-            type="button"
-          >
-            <img
-              alt={result.alt}
-              className="h-full w-full object-cover transition-transform group-hover:scale-105"
-              height={300}
-              loading="lazy"
-              src={result.thumbUrl}
-              width={400}
-            />
-            <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5 text-[10px] text-white/90 opacity-0 transition-opacity group-hover:opacity-100">
-              {result.credit.name}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <p className="text-[11px] text-muted-foreground leading-tight">
-        Photos from Unsplash. Selecting one credits the photographer
-        automatically.
-      </p>
+      <ScrollArea
+        className={cn("w-full", fillHeight ? "min-h-0 flex-1" : "h-[420px]")}
+        viewportClassName="overscroll-contain pr-2"
+        viewportRef={setViewportEl}
+      >
+        {results.length === 0 && !isFetching ? (
+          <p className="text-muted-foreground text-sm">No photos found.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            {results.map((result) => (
+              <figure className="flex flex-col gap-1" key={result.id}>
+                <button
+                  className="group relative aspect-[4/3] overflow-hidden rounded-md bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => handleSelect(result)}
+                  title={result.alt || `Photo by ${result.credit.name}`}
+                  type="button"
+                >
+                  <img
+                    alt={result.alt}
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    height={300}
+                    loading="lazy"
+                    src={result.thumbUrl}
+                    width={400}
+                  />
+                </button>
+                <figcaption className="truncate px-0.5 text-muted-foreground text-xs">
+                  <a
+                    className="hover:text-foreground hover:underline"
+                    href={withUnsplashUtm(result.credit.link)}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {result.credit.name}
+                  </a>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
+        <div aria-hidden className="h-1" ref={sentinelRef} />
+        {isFetchingNextPage ? (
+          <p className="py-2 text-center text-muted-foreground text-xs">
+            Loading…
+          </p>
+        ) : null}
+      </ScrollArea>
     </div>
   );
 }
