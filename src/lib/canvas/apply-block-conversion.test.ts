@@ -1,4 +1,5 @@
 import {
+  IconChevronRight,
   IconLayoutColumns,
   IconLayoutNavbar,
   IconTable,
@@ -154,6 +155,79 @@ describe("applyBlockConversion tabs", () => {
         rowId: "row-1",
         count: 2,
         text: "",
+      },
+    ]);
+  });
+});
+
+describe("applyBlockConversion toggle heading", () => {
+  it("dispatches toggleHeading.create with the slash item's level, no absorb", () => {
+    const row: CanvasRow = {
+      rowId: "row-1",
+      effectiveBlock: textBlock("row-1", null, "/toggle"),
+      children: [],
+    };
+
+    const commands: unknown[] = [];
+    applyBlockConversion(
+      row,
+      {
+        key: "toggleHeading-2",
+        id: "toggleHeading",
+        toggleHeadingLevel: 2,
+        label: "Toggle heading 2",
+        aliases: [],
+        icon: IconChevronRight,
+        keywords: ["toggle heading 2"],
+      },
+      (command) => {
+        commands.push(command);
+      }
+    );
+
+    expect(commands).toEqual([
+      {
+        type: "toggleHeading.create",
+        rowId: "row-1",
+        level: 2,
+        text: "",
+        absorb: false,
+      },
+    ]);
+  });
+
+  it("passes absorb through from the turn-into path", () => {
+    const row: CanvasRow = {
+      rowId: "row-1",
+      effectiveBlock: textBlock("row-1", null, "Section"),
+      children: [],
+    };
+
+    const commands: unknown[] = [];
+    applyBlockConversion(
+      row,
+      {
+        key: "toggleHeading-1",
+        id: "toggleHeading",
+        toggleHeadingLevel: 1,
+        label: "Toggle heading 1",
+        aliases: [],
+        icon: IconChevronRight,
+        keywords: ["toggle heading 1"],
+      },
+      (command) => {
+        commands.push(command);
+      },
+      { absorb: true }
+    );
+
+    expect(commands).toEqual([
+      {
+        type: "toggleHeading.create",
+        rowId: "row-1",
+        level: 1,
+        text: "Section",
+        absorb: true,
       },
     ]);
   });

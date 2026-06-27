@@ -49,6 +49,7 @@ Structural row commands must persist the full next document order, not only the 
 | `tabs.addTab` | Append a `tab` + empty `text` (max 8), labelled by current tab count. |
 | `tabs.removeTab` | Delete a tab subtree; removing the last tab (`MIN_TABS_COUNT` 1) calls [`planTabsUnwrap`](../../src/lib/canvas/tabs-layout.ts) to dissolve the block. Tab renames, the optional tab icon (`tab.props.icon`), and the author's default tab (`tabs.props.defaultTabId`) persist via the generic `row.update`. |
 | `tabs.moveTab` | Reorder a tab one slot toward the start (`prev`) or end (`next`) among its siblings; no-op at the ends. Planner: [`planTabsMoveTab`](../../src/lib/canvas/tabs-layout.ts). |
+| `toggleHeading.create` | Convert the active row into a `toggleHeading` (`level` 1–4, seeded `text`). With `absorb: true` (gutter / mobile "Turn into") the following same-scope siblings up to the next heading/toggleHeading of equal-or-higher level are re-parented in as children; `absorb: false` (slash insert) yields an empty toggle. Re-leveling an existing toggle keeps its children and `collapsed`. Planner: [`planToggleHeadingCreate`](../../src/lib/canvas/toggle-heading-layout.ts). Converting a toggle back to a leaf goes through `row.convert`, which lifts children out as following siblings via [`planToggleHeadingUnwrap`](../../src/lib/canvas/toggle-heading-layout.ts). Collapse persists via the generic `row.update` (`toggleHeading.props.collapsed`). |
 | `table.create` | Replace the active row with a `table` shell, `rows` × `columns` grid of `tableRow` / `tableCell`, optional `hasHeaderRow`, seed first cell from slash text. Planner: [`planTableCreate`](../../src/lib/canvas/table-layout.ts). |
 | `table.addRow` | Insert a `tableRow` with empty cells matching sibling column count; anchor `tableRowId` + optional `edge` (`before` \| `after`). Optional `focus` (default `true`); trailing plus scrub passes `focus: false` on intermediate adds. Structure-handle menu, hover add-row control, and trailing plus scrub. |
 | `table.addColumn` | Insert empty `tableCell` at `columnIndex` + `edge` in every row; extend `table.props.columnWidths`. Optional `focus` (default `true`); trailing plus scrub passes `focus: false` on intermediate adds. |
@@ -88,7 +89,7 @@ Press and release the grab handle (without dragging) highlights the row and open
 
 | Menu item | Dispatches / hook |
 |-----------|-------------------|
-| Turn into | `slash.convert` or `container.wrap` (inline-text blocks only) |
+| Turn into | `slash.convert` or `container.wrap`; eligible source types are gated by `canTurnIntoBlock` (text, heading, quote, callout, code) |
 | Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids) |
 | Delete | `row.delete` |
 
@@ -113,7 +114,7 @@ Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Paste cloning: `c
 
 | Command | Meaning |
 |---------|---------|
-| `slash.convert` | Convert block type (Heading 1–4, Text, Bullet list, Numbered list, Checklist, Quote, Page link, Media, Embed, Divider). Container children lift out unless the container allows the target. Heading selections pass `headingLevel` (1–4). List selections use `container.wrap` with `listVariant`. Checklist selections use `container.wrap` with `containerType: checklist`. Page link selections pass `pageId` and optional `pageLinkVariant`: `linked` (**Link To Page**) or `child` (**New Page**). |
+| `slash.convert` | Convert block type (Heading 1–4, Text, Bullet list, Numbered list, Checklist, Quote, Code, Page link, Media, Embed, Divider). Container children lift out unless the container allows the target. Heading selections pass `headingLevel` (1–4). List selections use `container.wrap` with `listVariant`. Checklist selections use `container.wrap` with `containerType: checklist`. Page link selections pass `pageId` and optional `pageLinkVariant`: `linked` (**Link To Page**) or `child` (**New Page**). |
 
 ## Author (dev only)
 

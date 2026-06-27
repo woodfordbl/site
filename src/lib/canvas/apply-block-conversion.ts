@@ -56,13 +56,21 @@ export function applyBlockConversion(
   row: CanvasRow,
   item: SlashMenuItem,
   dispatch: (command: CanvasCommand) => void,
-  options?: { text?: string }
+  options?: { text?: string; absorb?: boolean }
 ): void {
   const cleanedText =
     options?.text ??
     stripSlashCommandText(getTextFromBlock(row.effectiveBlock));
 
-  if (item.id === "list" || item.id === "checklist") {
+  if (item.id === "toggleHeading") {
+    dispatch({
+      type: "toggleHeading.create",
+      rowId: row.rowId,
+      level: item.toggleHeadingLevel ?? 1,
+      text: cleanedText,
+      absorb: options?.absorb ?? false,
+    });
+  } else if (item.id === "list" || item.id === "checklist") {
     dispatch({
       type: "container.wrap",
       rowId: row.rowId,

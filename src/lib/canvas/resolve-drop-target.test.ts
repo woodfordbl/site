@@ -298,3 +298,58 @@ describe("resolveDropTargetFromPointer horizontal filtering", () => {
     });
   });
 });
+
+function toggleRow(
+  rowId: string,
+  options: { collapsed?: boolean; children?: CanvasRow[] } = {}
+): CanvasRow {
+  return {
+    rowId,
+    effectiveBlock: {
+      id: rowId,
+      type: "toggleHeading",
+      props: {
+        level: 1,
+        text: rowId,
+        ...(options.collapsed ? { collapsed: true } : {}),
+      },
+    },
+    children: options.children ?? [],
+  };
+}
+
+describe("resolveDropTargetFromPointer toggle headings", () => {
+  it("drops into an empty, expanded toggle as its first child", () => {
+    const rows = [row("a"), toggleRow("tg"), row("z")];
+    const rects = new Map<string, DOMRect>([
+      ["a", rect(0, 40)],
+      ["tg", rect(40, 40)],
+      ["z", rect(80, 40)],
+    ]);
+
+    expect(resolveDropTargetFromPointer(rows, 50, 55, rects, "a")).toEqual({
+      rowId: "tg",
+      edge: "before",
+      atScopeStart: true,
+    });
+  });
+
+  it("treats a collapsed toggle as an ordinary before/after target", () => {
+    const rows = [
+      row("a"),
+      toggleRow("tg", { collapsed: true, children: [row("c1")] }),
+      row("z"),
+    ];
+    const rects = new Map<string, DOMRect>([
+      ["a", rect(0, 40)],
+      ["tg", rect(40, 40)],
+      ["z", rect(80, 40)],
+    ]);
+
+    // Bottom half of the collapsed toggle -> after it (children stay hidden).
+    expect(resolveDropTargetFromPointer(rows, 50, 75, rects, "a")).toEqual({
+      rowId: "z",
+      edge: "before",
+    });
+  });
+});

@@ -13,6 +13,7 @@ import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import { PageVersionPreview } from "@/components/pages/page-version-preview.tsx";
 import { VersionPreviewProvider } from "@/components/pages/version-preview-context.tsx";
+import { SiteSettingsTrigger } from "@/components/settings/site-settings-trigger.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import {
   useIsCoarsePrimaryPointer,
@@ -135,7 +136,7 @@ function PageWorkspaceBody({
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const { font, smallText } = usePageSettings({
+  const { font, fullWidth, smallText } = usePageSettings({
     pageId: page.id,
     seed: titleSeed,
     serverPage,
@@ -143,8 +144,7 @@ function PageWorkspaceBody({
   const typographyProps = pageContentTypographyProps({ font, smallText });
   const { className: typographyClassName, ...typographyDataProps } =
     typographyProps;
-  // Bumped after a reset/refresh/save-all clears local state for the open page
-  // so the canvas remounts and re-reads fresh (shipped) data.
+
   const [canvasNonce, setCanvasNonce] = useState(0);
   const bumpCanvasNonce = useCallback(() => {
     setCanvasNonce((nonce) => nonce + 1);
@@ -177,6 +177,7 @@ function PageWorkspaceBody({
       {...typographyDataProps}
     >
       <PageCanvas
+        fullWidth={fullWidth}
         headerSlot={
           isNarrowViewport ? (
             <div
@@ -190,6 +191,7 @@ function PageWorkspaceBody({
             </div>
           ) : null
         }
+        isNarrowViewport={isNarrowViewport}
         key={`${page.id}:${canvasNonce}`}
         pageHasLocalDraft={pageHasLocalDraft}
         serverPage={toServerPageSource(page, initialBlocks)}
@@ -235,6 +237,9 @@ function PageWorkspaceBody({
         </div>
         <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end px-2 max-md:hidden md:px-0">
           <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
+        </div>
+        <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end">
+          <SiteSettingsTrigger pageId={page.id} />
         </div>
       </div>
     </VersionPreviewProvider>

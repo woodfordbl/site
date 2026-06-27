@@ -1,7 +1,6 @@
 import { memo } from "react";
 
 import { BlockTreeNode } from "@/components/canvas/block-tree-node.tsx";
-import { useVisibleScopeRows } from "@/components/canvas/heading-collapse-context.tsx";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 
 interface CanvasRowViewProps {
@@ -21,9 +20,9 @@ function CanvasRowViewImpl({ mode, row }: CanvasRowViewProps) {
 export const CanvasRowView = memo(CanvasRowViewImpl);
 
 /**
- * Render a sibling scope, hiding rows that sit under a collapsed heading. Used
- * for the page body in both the editor and the read-only view; column children
- * filter the same way via {@link useVisibleScopeRows} directly.
+ * Render a sibling scope. Collapsed toggle headings hide their own children
+ * locally (the container simply does not render them), so the page body needs
+ * no scope-level filtering here.
  */
 export function CanvasRowList({
   mode,
@@ -32,11 +31,9 @@ export function CanvasRowList({
   mode: "view" | "edit";
   rows: CanvasRow[];
 }) {
-  const visibleRows = useVisibleScopeRows(rows);
-
   return (
     <>
-      {visibleRows.map((row) => (
+      {rows.map((row) => (
         <CanvasRowView key={row.rowId} mode={mode} row={row} />
       ))}
     </>

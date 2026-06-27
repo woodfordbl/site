@@ -30,6 +30,7 @@ export const CONTAINER_BLOCK_TYPES = [
   "tab",
   "table",
   "tableRow",
+  "toggleHeading",
 ] as const satisfies readonly BlockType[];
 
 export type ContainerBlockType = (typeof CONTAINER_BLOCK_TYPES)[number];
@@ -67,6 +68,14 @@ const textIsEmpty = (block: { props: { text: string } }): boolean =>
 
 export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
   heading: {
+    defaultProps: () => ({ level: 1, text: "" }),
+    isEmpty: textIsEmpty,
+    hasPrimaryText: true,
+  },
+  toggleHeading: {
+    // Container with a primary heading title; children are separate rows. The
+    // title-text emptiness here drives structural keys — row-level emptiness
+    // accounting for children lives in `is-block-empty.ts` (`isRowEmpty`).
     defaultProps: () => ({ level: 1, text: "" }),
     isEmpty: textIsEmpty,
     hasPrimaryText: true,

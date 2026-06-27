@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  IconArrowsMaximize,
   IconCopy,
   IconDeviceFloppy,
   IconDots,
@@ -49,7 +50,7 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
 }
 
 export function PageHeaderMenu({
@@ -58,14 +59,15 @@ export function PageHeaderMenu({
   seed,
   serverPage,
 }: PageHeaderMenuProps) {
-  const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const { font, setFont, setSmallText, smallText } = usePageSettings({
-    pageId,
-    seed,
-    serverPage,
-  });
+  const isNarrowViewport = useIsNarrowViewport();
+  const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
+    usePageSettings({
+      pageId,
+      seed,
+      serverPage,
+    });
   const { canDelete, copyLink, deletePage, duplicate, moveTo, pages } =
     usePageActions(pageId);
   const footerActions = usePageCanvasFooterActions({ onAfterReset, pageId });
@@ -196,6 +198,15 @@ export function PageHeaderMenu({
               <IconTextSize />
               Small text
             </DropdownMenuSwitchItem>
+            {isNarrowViewport ? null : (
+              <DropdownMenuSwitchItem
+                checked={fullWidth}
+                onCheckedChange={setFullWidth}
+              >
+                <IconArrowsMaximize />
+                Full width
+              </DropdownMenuSwitchItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem

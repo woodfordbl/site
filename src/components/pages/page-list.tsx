@@ -5,7 +5,6 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,7 +23,6 @@ import {
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.tsx";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
-import { useIsClient } from "@/hooks/use-is-client.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
@@ -54,7 +52,7 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 import { NewPageButton } from "./new-page-button.tsx";
-import { PageListItem, PageListItemStatic } from "./page-list-item.tsx";
+import { PageListItem } from "./page-list-item.tsx";
 
 /** HTML5 drag channel for sidebar page rows. */
 const pageDragChannel = createDragChannel(PAGE_DRAG_MIME_TYPE);
@@ -123,21 +121,19 @@ function PageListTree({
 
 function PageListContent({
   initialExpandedIds,
-  interactive,
   pages,
 }: {
-  /** SSR-known expand state (from the cookie) so the static shell matches the hydrated tree. */
+  /** SSR-known expand state (from the cookie) so the SSR tree matches the hydrated tree. */
   initialExpandedIds?: readonly string[];
-  interactive: boolean;
   pages: PageSummary[];
 }) {
   const activePage = useActivePageRef();
   const dispatch = usePageDispatch(pages);
   const tree = useMemo(() => buildPageTree(pages), [pages]);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
-    interactive
-      ? readPageListExpandedIdsFromDocument()
-      : new Set(initialExpandedIds)
+  // Always seed from the SSR-known cookie prop so the server and first client
+  // render match exactly; the live cookie is re-read on mount for cross-tab sync.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () => new Set(initialExpandedIds)
   );
   const [previewMeta, setPreviewMeta] = useState<Omit<
     PageListDragPreviewState,
@@ -171,24 +167,16 @@ function PageListContent({
   );
 
   useEffect(() => {
-    if (!interactive) {
-      return;
-    }
-
     setExpandedIds(readPageListExpandedIdsFromDocument());
-  }, [interactive]);
+  }, []);
 
   useEffect(() => {
-    if (!interactive) {
-      return;
-    }
-
     const knownPageIds = new Set(pages.map((page) => page.id));
     const persisted = new Set(
       [...expandedIds].filter((pageId) => knownPageIds.has(pageId))
     );
     writePageListExpandedIdsToDocument(persisted);
-  }, [expandedIds, interactive, pages]);
+  }, [expandedIds, pages]);
 
   const handleToggleExpand = useCallback((pageId: string) => {
     setExpandedIds((previous) => {
@@ -281,12 +269,8 @@ function PageListContent({
     [dispatch, ensurePageSeed, pages]
   );
 
-  const dndConfig = useMemo<DndSurfaceConfig<PageListDropTarget> | null>(() => {
-    if (!interactive) {
-      return null;
-    }
-
-    return {
+  const dndConfig = useMemo<DndSurfaceConfig<PageListDropTarget>>(
+    () => ({
       channel: pageDragChannel,
       dragImage: { kind: "overlay" },
       rowAttribute: PAGE_LIST_ROW_ATTRIBUTE,
@@ -324,8 +308,9 @@ function PageListContent({
         });
       },
       onDragEnd: () => setPreviewMeta(null),
-    };
-  }, [interactive, pages, repositionFromDropTarget, visibleRows]);
+    }),
+    [pages, repositionFromDropTarget, visibleRows]
+  );
 
   if (tree.length === 0) {
     return (
@@ -353,8 +338,8 @@ function PageListContent({
   const listTree = (
     <PageListTree
       expandedIds={effectiveExpandedIds}
-      navRef={interactive ? navRef : undefined}
-      onToggleExpand={interactive ? handleToggleExpand : () => undefined}
+      navRef={navRef}
+      onToggleExpand={handleToggleExpand}
       pages={pages}
       renderItem={({
         depth,
@@ -362,26 +347,18 @@ function PageListContent({
         onToggleExpand,
         pages: p,
         row,
-      }) =>
-        interactive ? (
-          <PageListItem
-            depth={depth}
-            expandedIds={ids}
-            onToggleExpand={onToggleExpand}
-            pages={p}
-            row={row}
-          />
-        ) : (
-          <PageListItemStatic depth={depth} row={row} />
-        )
-      }
+      }) => (
+        <PageListItem
+          depth={depth}
+          expandedIds={ids}
+          onToggleExpand={onToggleExpand}
+          pages={p}
+          row={row}
+        />
+      )}
       tree={tree}
     />
   );
-
-  if (!(interactive && dndConfig)) {
-    return listTree;
-  }
 
   return (
     <DndSurface config={dndConfig}>
@@ -404,21 +381,14 @@ function PageListContent({
 }
 
 export function PageList() {
-  const isClient = useIsClient();
   const { sidebarPrefs } = useRouteContext({
     from: "__root__",
   });
   const { pages } = useMergedPageListItems();
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  useLayoutEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   return (
     <PageListContent
       initialExpandedIds={sidebarPrefs.expandedPageIds}
-      interactive={isClient && isHydrated}
       pages={pages}
     />
   );

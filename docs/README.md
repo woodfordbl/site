@@ -9,6 +9,7 @@ Start here for canvas, pages, and data-layer behavior.
 - [Canvas editor](./architecture/canvas-editor.md) — command bus, reducer, focus
 - [Drag-and-drop](./architecture/drag-and-drop.md) — shared HTML5 DnD toolkit (canvas + sidebar)
 - [Pages](./architecture/pages.md) — user pages, empty canvas, routing
+- [Site settings](./architecture/site-settings.md) — `/settings` shell, theme, analytics, dev actions
 - [Local-first persistence](./architecture/local-first-persistence.md) — server JSON vs local page documents, lazy seed, hash/revert
 - [Author dev mode](./architecture/author-dev-mode.md) — save to `content/pages/*.json`
 - [Block types](./architecture/block-types.md) — BlockSpec / ContainerSpec; how-to: [Adding a block type](./architecture/block-types.md#adding-a-block-type)
