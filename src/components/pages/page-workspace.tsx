@@ -33,6 +33,7 @@ import {
   pageCanvasMobileHeaderSlotStickyClassName,
   pageCanvasTouchHeaderSlotClassName,
   pageCanvasTouchHeaderSlotStickyClassName,
+  pageCoverDesktopHeaderSlotClassName,
   pageCoverMobileClassName,
   pageCoverTouchClassName,
 } from "@/lib/pages/page-title-layout.ts";
@@ -198,6 +199,23 @@ function PageWorkspaceBody({
     />
   );
 
+  // Mobile always renders the header inside the scroll region. Desktop does too
+  // *when a cover is present* — overlaid on the cover's base and pinned on
+  // scroll; otherwise it stays a fixed bar above the scroll region (below).
+  const hasCover = Boolean(headerImage);
+  const headerSlot =
+    isNarrowViewport || hasCover ? (
+      <div
+        className={
+          isNarrowViewport
+            ? resolveHeaderSlotClassName(isCoarsePrimaryPointer, hasCover)
+            : pageCoverDesktopHeaderSlotClassName
+        }
+      >
+        {header}
+      </div>
+    ) : null;
+
   const canvasContent = (
     <div
       className={cn("min-h-0 min-w-0 flex-1", typographyClassName)}
@@ -218,18 +236,7 @@ function PageWorkspaceBody({
           ) : null
         }
         fullWidth={fullWidth}
-        headerSlot={
-          isNarrowViewport ? (
-            <div
-              className={resolveHeaderSlotClassName(
-                isCoarsePrimaryPointer,
-                Boolean(headerImage)
-              )}
-            >
-              {header}
-            </div>
-          ) : null
-        }
+        headerSlot={headerSlot}
         isNarrowViewport={isNarrowViewport}
         key={`${page.id}:${canvasNonce}`}
         pageHasLocalDraft={pageHasLocalDraft}
@@ -269,9 +276,10 @@ function PageWorkspaceBody({
             ) : (
               <>
                 {showSidebarRail ? <PageSidebarRail /> : null}
-                {/* Desktop: header is fixed above the scroll region. Mobile: it
-                    lives inside the scroll region (as headerSlot) so it scrolls. */}
-                {isNarrowViewport ? null : header}
+                {/* Desktop with no cover: header is a fixed bar above the scroll
+                    region. Mobile, or desktop with a cover: it lives inside the
+                    scroll region (as headerSlot). */}
+                {isNarrowViewport || hasCover ? null : header}
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                   {canvasContent}
                 </div>

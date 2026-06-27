@@ -26,6 +26,7 @@ interface CanvasBlocksReadOnlyProps {
   blocks: Block[];
   coverSlot?: ReactNode;
   fullWidth?: boolean;
+  headerSlot?: ReactNode;
   isNarrowViewport?: boolean;
   /**
    * `"edit"` (default) mirrors the live editor markup so the SSR/bootstrap view
@@ -80,6 +81,7 @@ export function CanvasBlocksReadOnly({
   blocks,
   coverSlot,
   fullWidth = false,
+  headerSlot,
   isNarrowViewport = false,
   mode = "edit",
   pageId,
@@ -114,6 +116,7 @@ export function CanvasBlocksReadOnly({
                   {...(useFullPanelWidth ? { "data-page-full-width": "" } : {})}
                 >
                   {coverSlot}
+                  {headerSlot}
                   <div
                     className={pageContentColumnClassName({
                       fullWidth,
@@ -138,6 +141,7 @@ export function CanvasBlocksReadOnly({
 interface PageCanvasServerProps {
   coverSlot?: ReactNode;
   fullWidth: boolean;
+  headerSlot?: ReactNode;
   isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
@@ -146,6 +150,7 @@ interface PageCanvasServerProps {
 export function PageCanvasServer({
   coverSlot,
   fullWidth,
+  headerSlot,
   isNarrowViewport,
   serverPage,
   titleSlot,
@@ -155,6 +160,7 @@ export function PageCanvasServer({
       blocks={serverPage.blocks}
       coverSlot={coverSlot}
       fullWidth={fullWidth}
+      headerSlot={headerSlot}
       isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}

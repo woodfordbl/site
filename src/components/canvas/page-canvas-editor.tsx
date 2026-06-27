@@ -447,13 +447,13 @@ function PageCanvasEditorBody({
                             : {})}
                         >
                           {coverSlot}
+                          {headerSlot}
                           <div
                             className={pageContentColumnClassName({
                               fullWidth,
                               isNarrowViewport,
                             })}
                           >
-                            {headerSlot}
                             {titleSlot}
                             <CanvasDropZone
                               onDropPage={handleDropPageIntoCanvas}

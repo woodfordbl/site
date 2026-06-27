@@ -7,6 +7,7 @@ import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 interface PageCanvasLocalViewProps {
   coverSlot?: ReactNode;
   fullWidth: boolean;
+  headerSlot?: ReactNode;
   isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
@@ -20,6 +21,7 @@ interface PageCanvasLocalViewProps {
 export function PageCanvasLocalView({
   coverSlot,
   fullWidth,
+  headerSlot,
   isNarrowViewport,
   serverPage,
   titleSlot,
@@ -34,6 +36,7 @@ export function PageCanvasLocalView({
       blocks={blocks}
       coverSlot={coverSlot}
       fullWidth={fullWidth}
+      headerSlot={headerSlot}
       isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}

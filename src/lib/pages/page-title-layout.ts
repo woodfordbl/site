@@ -51,6 +51,18 @@ export const pageCanvasMobileHeaderSlotStickyClassName = `-mr-4 -ml-7 mb-4 ${STI
 export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STICKY_HEADER_FROST} md:hidden`;
 
 /**
+ * Desktop cover header slot. With a cover present the breadcrumb bar is overlaid
+ * on the **base of the cover image** (pulled up by its own `h-12` height) and
+ * pinned to the top on scroll (`sticky top-0`) so page content scrolls beneath
+ * it. Full-bleed (cancels the desktop `px-12` inset + grows width past the
+ * overlay scrollbar) with a translucent light gradient + backdrop blur for
+ * contrast — over the image at rest and over content once pinned. Shown only at
+ * `md+`; mobile keeps its own header slot.
+ */
+export const pageCoverDesktopHeaderSlotClassName =
+  "-mt-12 -mx-12 sticky top-0 z-20 w-[calc(100%+6rem)] bg-gradient-to-b from-background/55 to-background/90 backdrop-blur-md backdrop-saturate-150 max-md:hidden";
+
+/**
  * Full-bleed cover ("header image") wrapper. Negative margins cancel the scroll
  * region padding — the mobile gutter lane (`pl-7`) and desktop `px-12`/`py-12` —
  * AND the width is grown by that same horizontal padding (`w-[calc(100%+…)]`)
@@ -61,12 +73,14 @@ export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STIC
  * Fine-pointer mobile gutter: `pl-7` (1.75rem) + `pr-4` (1rem) = 2.75rem;
  * desktop `px-12` = 6rem.
  */
+// `md:mb-0`: on desktop the breadcrumb header overlays the cover's base (it is
+// pulled up onto the cover), so the cover needs no bottom margin there.
 export const pageCoverMobileClassName =
-  "-mr-4 -ml-7 mb-3 w-[calc(100%+2.75rem)] md:-mx-12 md:-mt-12 md:mb-6 md:w-[calc(100%+6rem)]";
+  "-mr-4 -ml-7 mb-3 w-[calc(100%+2.75rem)] md:-mx-12 md:-mt-12 md:mb-0 md:w-[calc(100%+6rem)]";
 
 /** Touch cover inset — `pl-3` (0.75rem) + `pr-4` (1rem) = 1.75rem; desktop 6rem. */
 export const pageCoverTouchClassName =
-  "-mr-4 -ml-3 mb-3 w-[calc(100%+1.75rem)] md:-mx-12 md:-mt-12 md:mb-6 md:w-[calc(100%+6rem)]";
+  "-mr-4 -ml-3 mb-3 w-[calc(100%+1.75rem)] md:-mx-12 md:-mt-12 md:mb-0 md:w-[calc(100%+6rem)]";
 
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";

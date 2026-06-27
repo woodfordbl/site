@@ -59,6 +59,7 @@ function PageCanvasClient(props: PageCanvasProps) {
       <PageCanvasLocalView
         coverSlot={props.coverSlot}
         fullWidth={props.fullWidth}
+        headerSlot={props.headerSlot}
         isNarrowViewport={props.isNarrowViewport}
         serverPage={props.serverPage}
         titleSlot={props.titleSlot}
@@ -70,6 +71,7 @@ function PageCanvasClient(props: PageCanvasProps) {
     <PageCanvasServer
       coverSlot={props.coverSlot}
       fullWidth={props.fullWidth}
+      headerSlot={props.headerSlot}
       isNarrowViewport={props.isNarrowViewport}
       serverPage={props.serverPage}
       titleSlot={props.titleSlot}
@@ -101,6 +103,7 @@ export function PageCanvas({
       <PageCanvasServer
         coverSlot={coverSlot}
         fullWidth={fullWidth}
+        headerSlot={headerSlot}
         isNarrowViewport={isNarrowViewport}
         serverPage={serverPage}
         titleSlot={titleSlot}
