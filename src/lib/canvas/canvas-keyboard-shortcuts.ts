@@ -1,5 +1,6 @@
 import type { CanvasClipboardPayload } from "@/lib/canvas/clipboard.ts";
 import { handleBlockModifierArrowKeyDown } from "@/lib/editor/field-keydown.ts";
+import { extractMediaFiles } from "@/lib/media/paste-media.ts";
 
 export interface CanvasSelectionArrowHandlers {
   extendSelectionDown?: () => void;
@@ -15,6 +16,11 @@ export interface CanvasKeyboardHandlers extends CanvasSelectionArrowHandlers {
   deleteSelection: () => void;
   pasteClipboard: () => void;
   selectAll: () => void;
+}
+
+export interface CanvasPasteHandlers extends CanvasKeyboardHandlers {
+  /** Stores pasted image/video files as assets and inserts media blocks. */
+  insertMediaFiles: (files: File[]) => void;
 }
 
 function isBlockFieldFocused(event?: KeyboardEvent): boolean {
@@ -82,8 +88,19 @@ export function handleCanvasKeyboardShortcut(
 
 export function handleCanvasPasteEvent(
   event: ClipboardEvent,
-  handlers: CanvasKeyboardHandlers
+  handlers: CanvasPasteHandlers
 ): void {
+  // Image/video paste renders as a media block — including while a text field
+  // is focused (e.g. pasting a screenshot mid-paragraph), so it runs before the
+  // field-focus guard that defers plain-text paste to the browser.
+  const mediaFiles = extractMediaFiles(event.clipboardData);
+  if (mediaFiles.length > 0) {
+    event.preventDefault();
+    event.stopPropagation();
+    handlers.insertMediaFiles(mediaFiles);
+    return;
+  }
+
   if (isBlockFieldFocused()) {
     return;
   }
