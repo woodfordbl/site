@@ -4,20 +4,11 @@ import { PageList } from "@/components/pages/page-list.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet.tsx";
-import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  useSidebar,
 } from "@/components/ui/sidebar.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 /** Pins the sidebar when collapsed (hover peek overlay). */
@@ -70,31 +61,11 @@ function PageSidebarPanel({ className }: { className?: string }) {
   );
 }
 
-function PageSidebarMobileSheet() {
-  const { openMobile, setOpenMobile } = useSidebar();
-
-  return (
-    <Sheet onOpenChange={setOpenMobile} open={openMobile}>
-      <SheetContent
-        className="w-[min(18rem,85vw)] bg-background p-0 text-foreground [&>button]:hidden"
-        side="left"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Pages</SheetTitle>
-          <SheetDescription>Page navigation sidebar.</SheetDescription>
-        </SheetHeader>
-        <PageSidebarPanel className="bg-background text-foreground" />
-      </SheetContent>
-    </Sheet>
-  );
-}
-
+/**
+ * The same sidebar panel on every breakpoint. On desktop it lives in a resizable
+ * panel; on mobile {@link PageSidebarSwipeReveal} positions it behind the content
+ * and reveals it with an inset swipe (replacing the former overlay sheet).
+ */
 export function PageSidebar() {
-  const isNarrowViewport = useIsNarrowViewport();
-
-  if (isNarrowViewport) {
-    return <PageSidebarMobileSheet />;
-  }
-
   return <PageSidebarPanel />;
 }

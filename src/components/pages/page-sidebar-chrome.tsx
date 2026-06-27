@@ -11,6 +11,7 @@ import {
 import { type PanelSize, usePanelRef } from "react-resizable-panels";
 
 import { PageSidebarHoverReveal } from "@/components/pages/page-sidebar-hover-reveal.tsx";
+import { PageSidebarSwipeReveal } from "@/components/pages/page-sidebar-swipe-reveal.tsx";
 import {
   ResizablePanel,
   ResizablePanelGroup,
@@ -184,12 +185,9 @@ export function PageSidebarChromeProvider({
   const chromeBody = (() => {
     if (isNarrowViewport) {
       return (
-        <>
-          {sidebar}
-          <div className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden md:pt-2 md:pr-2">
-            {children}
-          </div>
-        </>
+        <PageSidebarSwipeReveal sidebar={sidebar}>
+          {children}
+        </PageSidebarSwipeReveal>
       );
     }
 

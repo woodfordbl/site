@@ -395,7 +395,23 @@
 
   body {
     overscroll-behavior: none;
-    @apply bg-background text-foreground;
+    /* The page background is the surface iOS Safari samples for its top/bottom
+       bar tint. Mix from content background → sidebar as the mobile sidebar is
+       revealed (`--sidebar-reveal`, driven by PageSidebarSwipeReveal) so the
+       bars fade to the sidebar color *with the swipe* rather than being
+       permanently gray. Defaults to the content background (var unset = 0). */
+    background-color: color-mix(
+      in oklab,
+      var(--background),
+      var(--sidebar) calc(var(--sidebar-reveal, 0) * 100%)
+    );
+    transition: background-color 200ms var(--ease-drawer);
+    @apply text-foreground;
+  }
+
+  /* While dragging, the bar tint tracks the finger 1:1 (no settle animation). */
+  html[data-swipe-dragging] body {
+    transition: none;
   }
 
   html {
