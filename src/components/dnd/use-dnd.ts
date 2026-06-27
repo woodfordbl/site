@@ -16,6 +16,7 @@ import {
   DndContext,
   type DndContextValue,
 } from "@/components/dnd/dnd-surface.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { usePointerClickVsDrag } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { prepareDataTransferForMove } from "@/lib/dnd/drag-channel.ts";
@@ -121,6 +122,15 @@ export function useCanvasRowDropTarget<TDropTarget, S>(
 }
 
 interface UseDragSourceOptions {
+  /**
+   * Locks the touch-drag start to one axis (vaul's `isDeltaInDirection`): the
+   * drag begins only when dominant-axis travel clears the threshold *and*
+   * exceeds the cross-axis delta, so an orthogonal scroll wins instead. Omit for
+   * the original radial threshold (any direction).
+   */
+  dragAxis?: "x" | "y";
+  /** Fire pick-up / drop haptics on touch drags (opt-in; off for non-grip sources). */
+  haptics?: boolean;
   /** Hold duration (ms) before the grab cursor activates; omit to disable. */
   holdMs?: number;
   id: string;
@@ -150,6 +160,28 @@ const MOVE_THRESHOLD_PX = 2;
 /** Touch drags start past this travel so a tap-to-open still registers as a tap. */
 const TOUCH_DRAG_THRESHOLD_PX = 6;
 
+/**
+ * Whether a touch movement should start a drag. Without `dragAxis` the gate is
+ * radial (any direction). With `dragAxis` it is direction-locked (vaul's
+ * `isDeltaInDirection`): the dominant-axis travel must clear the threshold and
+ * beat the cross-axis, so an orthogonal scroll wins instead of the drag.
+ */
+function passedTouchDragThreshold(
+  movedX: number,
+  movedY: number,
+  dragAxis: "x" | "y" | undefined
+): boolean {
+  if (!dragAxis) {
+    return Math.hypot(movedX, movedY) >= TOUCH_DRAG_THRESHOLD_PX;
+  }
+  const along = dragAxis === "x" ? movedX : movedY;
+  const across = dragAxis === "x" ? movedY : movedX;
+  return (
+    Math.abs(along) >= TOUCH_DRAG_THRESHOLD_PX &&
+    Math.abs(along) > Math.abs(across)
+  );
+}
+
 function compose<E>(
   ours: (event: E) => void,
   theirs?: (event: E) => void
@@ -173,6 +205,8 @@ export function useDragSource(options: UseDragSourceOptions): {
   shouldSuppressClick: () => boolean;
 } {
   const {
+    dragAxis,
+    haptics,
     id,
     holdMs,
     onClickWithoutDrag,
@@ -184,6 +218,7 @@ export function useDragSource(options: UseDragSourceOptions): {
   const ctx = useCanvasRowSurface ? canvasRowCtx : nestedCtx;
   const isDragging = useDragState((state) => state.draggingId === id);
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
+  const haptic = useHaptics();
 
   const [holdReady, setHoldReady] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
@@ -247,7 +282,7 @@ export function useDragSource(options: UseDragSourceOptions): {
       }
       const movedX = event.clientX - origin.x;
       const movedY = event.clientY - origin.y;
-      if (Math.hypot(movedX, movedY) < TOUCH_DRAG_THRESHOLD_PX) {
+      if (!passedTouchDragThreshold(movedX, movedY, dragAxis)) {
         return;
       }
       isTouchDraggingRef.current = true;
@@ -259,8 +294,12 @@ export function useDragSource(options: UseDragSourceOptions): {
       clickVsDragStart(event as unknown as ReactDragEvent<HTMLElement>);
       setIsMoving(true);
       ctx?.beginPointerDrag(id, { x: event.clientX, y: event.clientY });
+      // Firmer tick as the grip lifts off into a reorder drag.
+      if (haptics) {
+        haptic("pickUp");
+      }
     },
-    [clickVsDragStart, ctx, id]
+    [clickVsDragStart, ctx, dragAxis, haptic, haptics, id]
   );
 
   const touchPointerUp = useCallback(
@@ -280,13 +319,17 @@ export function useDragSource(options: UseDragSourceOptions): {
         clickVsDragEnd();
         setIsMoving(false);
         ctx?.commitPointerDrop();
+        // Settle as the grip drops into its new slot.
+        if (haptics) {
+          haptic("drop");
+        }
       }
       // A tap opens the menu via the trailing native `click` (handleClick), not
       // here: opening on pointerup would let the menu trigger's own click toggle
       // it straight back closed. A real drag captures the pointer, so no click
       // fires and the menu stays closed.
     },
-    [clickVsDragEnd, ctx]
+    [clickVsDragEnd, ctx, haptic, haptics]
   );
 
   const touchPointerCancel = useCallback(() => {

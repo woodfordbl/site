@@ -373,8 +373,8 @@ export function TableView({ row, mode }: BlockContainerProps) {
       className={cn(
         "group/table-layout min-w-0 overflow-visible",
         mode === "edit"
-          ? "-mx-12 w-[calc(100%+6rem)]"
-          : "-mr-12 w-[calc(100%+3rem)]",
+          ? "w-full md:-mx-12 md:w-[calc(100%+6rem)]"
+          : "w-full md:-mr-12 md:w-[calc(100%+3rem)]",
         columnHandleRevealClasses
       )}
       data-table-id={grid.tableId}
