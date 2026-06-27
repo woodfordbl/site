@@ -22,13 +22,17 @@ export function PageLinkView({ props }: PageLinkViewProps) {
   const showExternalIcon = pageLinkShowsExternalIcon(props, page, canvasPageId);
 
   if (!page) {
-    return <p className="text-lg text-muted-foreground italic">Missing page</p>;
+    return (
+      <p className="text-[length:calc(1.125rem*var(--page-text-scale))] text-muted-foreground italic">
+        Missing page
+      </p>
+    );
   }
 
   const navTarget = resolvePageNavTarget(props.pageId, pages);
 
   return (
-    <p className="text-lg leading-relaxed">
+    <p className="text-[length:calc(1.125rem*var(--page-text-scale))] leading-relaxed">
       <Link
         className="inline-flex items-center gap-1.5 text-foreground hover:text-foreground/80"
         {...navTarget}

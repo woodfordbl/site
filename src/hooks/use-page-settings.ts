@@ -8,9 +8,9 @@ import type { Page } from "@/lib/schemas/page.ts";
 import {
   type PageFont,
   type PageHeaderImage,
+  type PageTextScale,
   resolvePageFont,
   resolvePageFullWidth,
-  resolvePageSmallText,
 } from "@/lib/schemas/page-settings.ts";
 
 interface UsePageSettingsOptions {
@@ -18,12 +18,16 @@ interface UsePageSettingsOptions {
   seed?: PageMetadataSeed;
   serverPage?: Pick<
     Page,
-    "font" | "fullWidth" | "smallText" | "headerImage"
+    "font" | "fullWidth" | "headerImage" | "textScale"
   > | null;
 }
 
 /**
  * Resolves merged page display settings (server defaults + local overlay) and persists changes.
+ *
+ * `textScale` is intentionally left `undefined` when neither the local overlay
+ * nor the shipped page sets it, so the page inherits the global site default via
+ * the CSS cascade (see {@link pageContentTypographyProps}).
  */
 export function usePageSettings({
   pageId,
@@ -40,12 +44,12 @@ export function usePageSettings({
     return resolvePageFont(serverPage?.font);
   }, [localPage?.font, serverPage?.font]);
 
-  const smallText = useMemo(() => {
-    if (localPage?.smallText !== undefined) {
-      return resolvePageSmallText(localPage.smallText);
+  const textScale = useMemo((): PageTextScale | undefined => {
+    if (localPage?.textScale !== undefined) {
+      return localPage.textScale;
     }
-    return resolvePageSmallText(serverPage?.smallText);
-  }, [localPage?.smallText, serverPage?.smallText]);
+    return serverPage?.textScale ?? undefined;
+  }, [localPage?.textScale, serverPage?.textScale]);
 
   const fullWidth = useMemo(() => {
     if (localPage?.fullWidth !== undefined) {
@@ -75,11 +79,11 @@ export function usePageSettings({
     [pageId, pages, seed]
   );
 
-  const setSmallText = useCallback(
-    (nextSmallText: boolean) => {
+  const setTextScale = useCallback(
+    (nextTextScale: PageTextScale | null) => {
       persistPageSettings({
         pageId,
-        smallText: nextSmallText,
+        textScale: nextTextScale,
         pages,
         seed,
       });
@@ -118,7 +122,7 @@ export function usePageSettings({
     setFont,
     setFullWidth,
     setHeaderImage,
-    setSmallText,
-    smallText,
+    setTextScale,
+    textScale,
   };
 }

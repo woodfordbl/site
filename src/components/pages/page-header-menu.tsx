@@ -8,7 +8,6 @@ import {
   IconLink,
   IconPhoto,
   IconRefresh,
-  IconTextSize,
   IconTrash,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
@@ -17,8 +16,9 @@ import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
-import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
+import { PageHeaderMenuFontSubmenu } from "@/components/pages/page-header-menu-font-submenu.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageHeaderMenuTextSizeSubmenu } from "@/components/pages/page-header-menu-text-size-submenu.tsx";
 import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -54,7 +54,7 @@ interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   seed?: PageMetadataSeed;
   serverPage?: Pick<
     Page,
-    "font" | "fullWidth" | "smallText" | "headerImage"
+    "font" | "fullWidth" | "headerImage" | "textScale"
   > | null;
 }
 
@@ -69,7 +69,7 @@ export function PageHeaderMenu({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const cover = usePageCover();
   const headerImage = cover?.headerImage;
-  const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
+  const { font, fullWidth, setFont, setFullWidth, setTextScale, textScale } =
     usePageSettings({
       pageId,
       seed,
@@ -208,19 +208,16 @@ export function PageHeaderMenu({
             activeKey={open ? pageId : null}
             items={searchableEntries}
           >
-            <PageHeaderMenuFontRow
+            <PageHeaderMenuFontSubmenu
               font={font}
               onFontChange={(nextFont) => {
                 setFont(nextFont);
               }}
             />
-            <DropdownMenuSwitchItem
-              checked={smallText}
-              onCheckedChange={setSmallText}
-            >
-              <IconTextSize />
-              Small text
-            </DropdownMenuSwitchItem>
+            <PageHeaderMenuTextSizeSubmenu
+              onTextScaleChange={setTextScale}
+              textScale={textScale}
+            />
             {isNarrowViewport ? null : (
               <DropdownMenuSwitchItem
                 checked={fullWidth}
@@ -270,6 +267,7 @@ export function PageHeaderMenu({
                 pageId={pageId}
                 pages={pages}
               />
+              {isNarrowViewport ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={!canDelete}
                 onClick={() => {

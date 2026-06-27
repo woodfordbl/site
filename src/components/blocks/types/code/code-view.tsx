@@ -21,7 +21,7 @@ export function CodeView({ props }: CodeViewProps) {
       <span className="pointer-events-none absolute top-2 right-3 select-none text-muted-foreground text-xs">
         {codeLanguageLabel(language)}
       </span>
-      <pre className="code-shiki overflow-x-auto whitespace-pre-wrap break-words px-4 py-3 pr-20 text-sm leading-6">
+      <pre className="code-shiki overflow-x-auto whitespace-pre-wrap break-words px-4 py-3 pr-20 text-[length:calc(0.875rem*var(--page-text-scale))] leading-6">
         {/* Shiki emits sanitized token markup (token <span>s + <br> line breaks). */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: trusted Shiki highlighter output */}
         <code dangerouslySetInnerHTML={{ __html: html || " " }} />

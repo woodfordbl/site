@@ -19,7 +19,7 @@ interface PageHeaderProps extends PageCanvasFooterActionsInput {
   seed?: PageMetadataSeed;
   serverPage?: Pick<
     Page,
-    "font" | "fullWidth" | "smallText" | "headerImage"
+    "font" | "fullWidth" | "headerImage" | "textScale"
   > | null;
 }
 

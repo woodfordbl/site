@@ -28,7 +28,7 @@ export function hashPageMetadata(fields: {
   parentId: string | null;
   sidebarOrder?: number;
   slug: string;
-  smallText?: boolean;
+  textScale?: "small" | "default" | "large";
   title: string;
 }): string {
   return hashString(
@@ -40,7 +40,7 @@ export function hashPageMetadata(fields: {
       parentId: fields.parentId,
       sidebarOrder: fields.sidebarOrder ?? null,
       slug: fields.slug,
-      smallText: fields.smallText ?? null,
+      textScale: fields.textScale ?? null,
       title: fields.title,
     })
   );

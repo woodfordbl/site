@@ -133,6 +133,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html
       className={siteAppearance.resolvedTheme === "dark" ? "dark" : undefined}
+      data-page-text-scale={siteAppearance.appearance.textScale}
       lang="en"
     >
       <head>
