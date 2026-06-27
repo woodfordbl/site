@@ -96,16 +96,59 @@ export function PageSidebarSwipeReveal({
     }
   }, [openMobile]);
 
-  // Haptic tick whenever the sidebar commits to open or closed — covers the
-  // swipe settle, the hamburger, Escape, and backdrop tap alike. Skips the
-  // initial mount by seeding the ref with the current state.
-  const prevOpenRef = useRef(openMobile);
-  useEffect(() => {
-    if (prevOpenRef.current !== openMobile) {
-      prevOpenRef.current = openMobile;
-      haptic("selection");
+  // Suppress iOS Safari's left-edge "swipe back" so it doesn't fire instead of
+  // (or alongside) our open gesture. touch-action alone doesn't stop Safari's
+  // system gesture; non-passive touchstart/touchmove preventDefault on the edge
+  // strip does. Callback ref so the listeners attach/detach exactly when the
+  // strip (rendered only while closed) mounts/unmounts.
+  const edgeStripRef = useCallback((strip: HTMLDivElement | null) => {
+    if (!strip) {
+      return;
     }
+    const prevent = (event: TouchEvent) => {
+      event.preventDefault();
+    };
+    strip.addEventListener("touchstart", prevent, { passive: false });
+    strip.addEventListener("touchmove", prevent, { passive: false });
+    return () => {
+      strip.removeEventListener("touchstart", prevent);
+      strip.removeEventListener("touchmove", prevent);
+    };
+  }, []);
+
+  // Haptic tick whenever the sidebar commits to open or closed. Gesture commits
+  // fire the haptic *synchronously* inside the pointer handler (iOS Safari's
+  // web-haptics switch trick needs to run within the user-gesture context) and
+  // set skipCommitHapticRef so this effect doesn't double-fire. The effect still
+  // covers non-gesture commits: hamburger, Escape, programmatic. Seeded with the
+  // current state to skip the initial mount.
+  const prevOpenRef = useRef(openMobile);
+  const skipCommitHapticRef = useRef(false);
+  useEffect(() => {
+    if (prevOpenRef.current === openMobile) {
+      return;
+    }
+    prevOpenRef.current = openMobile;
+    if (skipCommitHapticRef.current) {
+      skipCommitHapticRef.current = false;
+      return;
+    }
+    haptic("selection");
   }, [openMobile, haptic]);
+
+  // Commit open/closed from a gesture: fire the haptic synchronously (within the
+  // gesture) when the state actually changes, then flag the effect to skip it.
+  const commitOpenFromGesture = useCallback(
+    (next: boolean) => {
+      if (next !== openMobile) {
+        haptic("selection");
+        skipCommitHapticRef.current = true;
+      }
+      setDragOffset(null);
+      setOpenMobile(next);
+    },
+    [haptic, openMobile, setOpenMobile]
+  );
 
   const releaseCapture = useCallback((pointerId: number) => {
     if (captureElRef.current?.hasPointerCapture(pointerId)) {
@@ -210,9 +253,10 @@ export function PageSidebarSwipeReveal({
       if (!didDrag) {
         // A tap: on the open backdrop it closes; on the closed edge strip it
         // does nothing (only a swipe opens).
-        setDragOffset(null);
         if (openMobile) {
-          setOpenMobile(false);
+          commitOpenFromGesture(false);
+        } else {
+          setDragOffset(null);
         }
         return;
       }
@@ -234,15 +278,14 @@ export function PageSidebarSwipeReveal({
       }
 
       // Release capture (above) before flipping state so the CSS transition runs.
-      setDragOffset(null);
-      setOpenMobile(shouldOpen);
+      commitOpenFromGesture(shouldOpen);
     },
     [
+      commitOpenFromGesture,
       dragOffset,
       endGesture,
       openMobile,
       releaseCapture,
-      setOpenMobile,
       sidebarWidth,
     ]
   );
@@ -319,10 +362,12 @@ export function PageSidebarSwipeReveal({
       {openMobile ? null : (
         <div
           aria-hidden
-          className="absolute inset-y-0 left-0 z-20 w-3"
-          // touch-action: none claims the left-edge horizontal swipe so iOS
-          // Safari's back-navigation gesture doesn't fire from this strip
-          // (Android/Chrome is already covered by `overscroll-behavior: none`).
+          className="absolute inset-y-0 left-0 z-20 w-5"
+          // touch-action: none + the non-passive preventDefault effect above
+          // claim the left-edge horizontal swipe so iOS Safari's back-navigation
+          // gesture doesn't fire from this strip. ~20px wide to cover Safari's
+          // edge zone. (Android/Chrome is covered by `overscroll-behavior: none`.)
+          ref={edgeStripRef}
           style={{ touchAction: "none" }}
           {...gestureHandlers}
         />
