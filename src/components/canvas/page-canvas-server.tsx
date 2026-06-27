@@ -7,7 +7,8 @@ import {
   CanvasEditorContext,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx";
-import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
+import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
+import { ReadOnlyHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
@@ -84,19 +85,19 @@ export function CanvasBlocksReadOnly({
     <CanvasEditorContext.Provider value={actions}>
       <CanvasMenuProvider>
         <BlockActionsMenuProvider>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div
-              className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
-              data-scroll-restoration-id="page-canvas-scroll"
-            >
-              {titleSlot}
-              <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                {rows.map((row) => (
-                  <CanvasRowView key={row.rowId} mode={mode} row={row} />
-                ))}
+          <ReadOnlyHeadingCollapseProvider>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div
+                className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
+                data-scroll-restoration-id="page-canvas-scroll"
+              >
+                {titleSlot}
+                <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                  <CanvasRowList mode={mode} rows={rows} />
+                </div>
               </div>
             </div>
-          </div>
+          </ReadOnlyHeadingCollapseProvider>
         </BlockActionsMenuProvider>
       </CanvasMenuProvider>
     </CanvasEditorContext.Provider>
