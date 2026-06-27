@@ -48,7 +48,7 @@ flowchart TD
 
 | Hook | Use |
 |------|-----|
-| `useDragSource({ id, holdMs?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. On coarse pointers it swaps the native path for a pointer-event drag (see [Touch drags](#touch-pointer-drags)). `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
+| `useDragSource({ id, holdMs?, dragAxis?, haptics?, onClickWithoutDrag?, useCanvasRowSurface? })` | Spread `getSourceProps()` on the draggable element; composes [`usePointerClickVsDrag`](../../src/hooks/use-pointer-click-vs-drag.ts) and optional hold-to-grab. On coarse pointers it swaps the native path for a pointer-event drag (see [Touch drags](#touch-pointer-drags)). `dragAxis: "x" \| "y"` direction-locks the touch-drag start so an orthogonal scroll wins (table grips); `haptics: true` opts the touch drag into pick-up/drop feedback. `useCanvasRowSurface` binds to the parent canvas row [`DndContext`](../../src/components/dnd/dnd-surface.tsx) via [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) when nested inside another surface (table column DnD). |
 | `useDropZone()` | Spread `getDropZoneProps()` on the container (`nav`, canvas wrapper) |
 | `useDropTarget(selector)` | `useSyncExternalStore` slice of `dropTarget` — only rows whose selector result changes re-render |
 | `useDragState(selector)` | Same for `draggingId` / `pointer` (e.g. disable inputs while dragging) |
@@ -102,6 +102,8 @@ Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (can
 - **Sidebar** — each row splits into a small top/bottom **sibling** edge (`PAGE_LIST_SIBLING_EDGE_PX`) and a wide central **nest** band (`resolveBand` `middle` → nest). The edge is kept small (6px) so dropping onto a page's body reliably nests it rather than reordering; the between-row gaps reuse the same value for "insert between siblings".
 - **Canvas** — the [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) fills the scroll area (`flex-1`) so the empty space below the last block still receives native `dragover`/`drop`; a pointer past the last row resolves to `after` the last top-level row.
 - **Sidebar → canvas (cross-surface)** — the surfaces are MIME-isolated, but the canvas drop zone additionally sniffs the sidebar's `PAGE_DRAG_MIME_TYPE` (`application/x-page-id`) on `dragover`/`drop`. Dropping a sidebar page onto a canvas inserts a child `pageLink` at the drop position ([`resolveTopLevelInsertEdge`](../../src/lib/canvas/resolve-drop-target.ts) → `row.insert` with `pageId`) and re-nests the page under the open page ([`usePageReposition`](../../src/hooks/use-page-reposition.ts), `appendPageLinkOnParent:false` since the link is placed here), guarded by [`canDropPageIntoCanvas`](../../src/lib/pages/page-canvas-drop.ts) (self / cycle / depth via `assertCanReposition`).
+
+External image/video **files** are not a drop path — the canvas drop zone only resolves row/page MIME channels. Inserting media from outside the app is handled on **paste** instead ([`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) → `media` blocks; see [canvas-commands.md](../reference/canvas-commands.md)).
 
 ## Performance
 

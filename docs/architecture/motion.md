@@ -64,9 +64,12 @@ Overrides in use:
 On `@media (hover: none)` pointers (`MEDIA_HOVER_NONE` in
 [`device-layout.constants.ts`](../../src/lib/device/device-layout.constants.ts)),
 simple `.hover-reveal` controls stay at full opacity so they remain reachable
-(there is no hover to reveal them). Swaps are left at rest (concealed element
-shown, revealed element hidden) so the two slot-stacked elements never both
-show. This axis is **hover capability**, not viewport width and not
+(there is no hover to reveal them). Swaps rest on the **revealed** element
+(`.swap-reveal` shown, `.swap-conceal` hidden) so the slot's affordance stays
+visible — for the page-row swap that means the expand chevron, the only way to
+toggle a row on touch, is shown instead of the icon, and its
+`CollapsibleTrigger` opts back into pointer events with the `hover-none:` Tailwind
+variant. This axis is **hover capability**, not viewport width and not
 `(pointer: coarse)` — canvas touch UX uses
 [`useIsCoarsePrimaryPointer`](../../src/hooks/device-layout.ts) separately; see
 [canvas-editor — Device signals](./canvas-editor.md#device-signals).

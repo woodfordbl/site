@@ -126,7 +126,7 @@ export function PageSidebarHoverReveal({
       <div
         aria-hidden={!open}
         className={cn(
-          "pointer-events-none fixed inset-0 z-40 bg-foreground/5",
+          "pointer-events-none fixed inset-0 z-40 bg-black/20",
           "transition-opacity motion-reduce:transition-none",
           open ? "opacity-100" : "opacity-0"
         )}

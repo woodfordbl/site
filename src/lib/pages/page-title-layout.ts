@@ -18,6 +18,21 @@ export const pageTitleIconPickerClassName = "mt-0 sm:mt-0.5";
 export const pageCanvasMobileScrollClassName =
   "overflow-auto pr-4 pb-4 pl-7 md:px-12 md:py-12 md:pb-12";
 
+/**
+ * Touch (coarse pointer) canvas scroll inset. The drag gutter is not rendered on
+ * coarse pointers, so the reserved gutter lane is dropped and the content left
+ * edge lines up with the mobile header's sidebar button (`px-3`) instead.
+ */
+export const pageCanvasTouchScrollClassName =
+  "overflow-auto pr-4 pb-4 pl-3 md:px-12 md:py-12 md:pb-12";
+
+/** Mobile header slot inset — negative margins cancel the scroll padding so the
+ *  header sits flush to the panel edge (gutter-lane variant). */
+export const pageCanvasMobileHeaderSlotClassName = "-mr-4 mb-4 -ml-7 md:hidden";
+
+/** Touch header slot inset — matches {@link pageCanvasTouchScrollClassName}. */
+export const pageCanvasTouchHeaderSlotClassName = "-mr-4 mb-4 -ml-3 md:hidden";
+
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";
 

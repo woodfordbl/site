@@ -100,6 +100,8 @@ Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canva
 
 Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item. Both capture full subtrees — `subtreeBlocksFromSelectedRows` ([`block-selection.ts`](../../src/lib/canvas/block-selection.ts)) for selections, `flattenRows` for a single row.
 
+Pasting image/video files (e.g. a screenshot) is intercepted in [`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) before the field-focus guard: `extractMediaFiles` ([`paste-media.ts`](../../src/lib/media/paste-media.ts)) pulls the files, `insertMediaFiles` stores each as an IndexedDB asset and inserts `media` blocks via `rows.paste` after the target row — so it works even while a text field is focused. Non-media paste falls through to the block-clipboard path above.
+
 Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Paste cloning: `cloneBlocksForPaste` in `src/lib/canvas/clipboard.ts`.
 
 ## Slash

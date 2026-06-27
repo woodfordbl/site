@@ -12,13 +12,20 @@ import {
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import {
+  useIsCoarsePrimaryPointer,
+  useIsNarrowViewport,
+} from "@/hooks/device-layout.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
+import {
+  pageCanvasMobileHeaderSlotClassName,
+  pageCanvasTouchHeaderSlotClassName,
+} from "@/lib/pages/page-title-layout.ts";
 import { rememberSlugPageResolution } from "@/lib/pages/remember-slug-page-resolution.ts";
 import {
   isLocallyDeletedPage,
@@ -122,6 +129,7 @@ function PageWorkspaceBody({
   titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
 }) {
   const isNarrowViewport = useIsNarrowViewport();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
   const { font, smallText } = usePageSettings({
@@ -156,7 +164,15 @@ function PageWorkspaceBody({
       <PageCanvas
         headerSlot={
           isNarrowViewport ? (
-            <div className="-mr-4 mb-4 -ml-7 md:hidden">{header}</div>
+            <div
+              className={
+                isCoarsePrimaryPointer
+                  ? pageCanvasTouchHeaderSlotClassName
+                  : pageCanvasMobileHeaderSlotClassName
+              }
+            >
+              {header}
+            </div>
           ) : null
         }
         key={`${page.id}:${canvasNonce}`}
