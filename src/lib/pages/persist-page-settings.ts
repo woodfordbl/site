@@ -4,12 +4,9 @@ import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
-import {
-  recordFontSettingActivity,
-  recordSmallTextSettingActivity,
-} from "@/lib/pages/record-page-activity.ts";
 import {
   isLocallyDeletedPage,
   localPageSchema,
@@ -91,10 +88,7 @@ export function persistPageSettings(options: {
     syncPageListLocalPreviewFromCollection(localPagesCollection.toArray);
   }
 
-  if (options.font !== undefined) {
-    recordFontSettingActivity(options.pageId, options.font);
-  }
-  if (options.smallText !== undefined) {
-    recordSmallTextSettingActivity(options.pageId, options.smallText);
+  if (hasLocalPageDocument(options.pageId)) {
+    schedulePageSnapshotCapture(options.pageId);
   }
 }

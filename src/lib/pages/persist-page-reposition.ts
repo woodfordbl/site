@@ -3,8 +3,8 @@ import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
-import { recordPageRepositionActivity } from "@/lib/pages/record-page-activity.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
 import { normalizePageSlug, pageSlugsEqual } from "@/lib/pages/slugify.ts";
 import { syncPageUrl } from "@/lib/pages/sync-url.ts";
@@ -125,5 +125,5 @@ export function persistPageReposition(options: {
     syncPageUrl(slug, { userPage: existingPage.routeBy === "id" });
   }
 
-  recordPageRepositionActivity(plan.pageId);
+  schedulePageSnapshotCapture(plan.pageId);
 }

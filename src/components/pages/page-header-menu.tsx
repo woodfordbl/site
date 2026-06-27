@@ -16,6 +16,7 @@ import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -215,6 +216,7 @@ export function PageHeaderMenu({
                 <IconCopy />
                 Duplicate page
               </DropdownMenuItem>
+              <PageVersionHistorySubmenu pageId={pageId} />
               <PageHeaderMenuMoveSubmenu
                 onMoveTo={(parentId) => {
                   runAfterClose(() => {
@@ -237,7 +239,6 @@ export function PageHeaderMenu({
             </DropdownMenuGroup>
             {isNarrowViewport && footerActions.visible ? (
               <>
-                <DropdownMenuSeparator />
                 {footerActions.hasUpdates ? (
                   <DropdownMenuItem
                     onClick={() => {
