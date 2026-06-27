@@ -1,4 +1,5 @@
 import { BlockTreeNode } from "@/components/canvas/block-tree-node.tsx";
+import { useVisibleScopeRows } from "@/components/canvas/heading-collapse-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
@@ -11,6 +12,7 @@ interface ColumnViewProps {
 }
 
 export function ColumnView({ columnRow, mode }: ColumnViewProps) {
+  const visibleChildren = useVisibleScopeRows(columnRow.children);
   const showScopeStart = useDropTarget(
     (target: DropTarget | null) =>
       target?.rowId === columnRow.rowId && target.atScopeStart === true
@@ -30,7 +32,7 @@ export function ColumnView({ columnRow, mode }: ColumnViewProps) {
           className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 -translate-y-1/2 bg-selection-primary"
         />
       ) : null}
-      {columnRow.children.map((child) => (
+      {visibleChildren.map((child) => (
         <BlockTreeNode
           key={child.rowId}
           mode={mode}
