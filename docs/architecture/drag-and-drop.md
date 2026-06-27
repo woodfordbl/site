@@ -61,7 +61,7 @@ flowchart TD
 
 [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx) wraps the canvas in an outer [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (canvas row channel) and a [`CanvasRowDndBridge`](../../src/components/dnd/canvas-row-dnd-bridge.tsx) that re-exposes that context to descendants. Nested table column [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) instances shadow the nearest `DndContext`; table row structure handles set `useCanvasRowSurface: true` on `useDragSource` so row drags still write `application/x-canvas-row-id` and commit through the canvas resolver.
 
-The DnD surface is part of the editor chunk only. The pre-editor read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) / [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) render blocks without any `DndSurface`, so reorder DnD activates once `PageCanvasEditor` swaps in — see [canvas-editor — Render pipeline](./canvas-editor.md#render-pipeline-flash-free).
+The DnD surface is part of the editor chunk only. The pre-editor read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx) / [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) render blocks without any `DndSurface`, so reorder DnD activates once `PageCanvasEditor` swaps in — see [canvas-editor — Render pipeline](./canvas-editor.md#render-pipeline-flash-free). The [version-history preview](./pages.md#version-history) (`CanvasBlocksReadOnly mode="view"`) likewise has no DnD.
 
 ### Touch (pointer) drags
 

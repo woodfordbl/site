@@ -11,10 +11,17 @@ import { CanvasRowView } from "@/components/canvas/canvas-row.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
+import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 interface CanvasBlocksReadOnlyProps {
   blocks: Block[];
+  /**
+   * `"edit"` (default) mirrors the live editor markup so the SSR/bootstrap view
+   * swaps without layout shift. `"view"` renders each block's read-only `View`
+   * component (no `contentEditable`, no gutters) — used for the history preview.
+   */
+  mode?: BlockMode;
   pageId: string;
   titleSlot?: ReactNode;
 }
@@ -60,6 +67,7 @@ function createNoopCanvasEditorActions(
  */
 export function CanvasBlocksReadOnly({
   blocks,
+  mode = "edit",
   pageId,
   titleSlot,
 }: CanvasBlocksReadOnlyProps) {
@@ -84,7 +92,7 @@ export function CanvasBlocksReadOnly({
               {titleSlot}
               <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
                 {rows.map((row) => (
-                  <CanvasRowView key={row.rowId} mode="edit" row={row} />
+                  <CanvasRowView key={row.rowId} mode={mode} row={row} />
                 ))}
               </div>
             </div>
