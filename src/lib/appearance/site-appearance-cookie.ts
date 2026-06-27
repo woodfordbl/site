@@ -7,7 +7,6 @@ import {
   DEFAULT_SITE_APPEARANCE,
   type SiteAppearance,
   siteAppearanceSchema,
-  type ThemePreference,
 } from "@/lib/schemas/site-appearance.ts";
 
 export function parseSiteAppearanceCookie(
@@ -47,10 +46,4 @@ export function writeSiteAppearanceToDocument(
     SITE_APPEARANCE_COOKIE_NAME,
     serializeSiteAppearanceCookie(appearance)
   );
-}
-
-export function writeThemePreferenceToDocument(
-  theme: ThemePreference
-): boolean {
-  return writeSiteAppearanceToDocument({ theme });
 }

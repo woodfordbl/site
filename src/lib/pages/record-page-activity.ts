@@ -4,7 +4,7 @@ import {
   type PageActivityEventType,
 } from "@/lib/pages/page-activity-events.ts";
 import type { Block } from "@/lib/schemas/block.ts";
-import type { PageFont } from "@/lib/schemas/page-settings.ts";
+import type { PageFont, PageTextScale } from "@/lib/schemas/page-settings.ts";
 
 const BLOCK_UPDATE_DEBOUNCE_MS = 30_000;
 
@@ -81,13 +81,25 @@ export function recordFontSettingActivity(
   );
 }
 
-export function recordSmallTextSettingActivity(
+function textScaleSettingLabel(textScale: PageTextScale): string {
+  if (textScale === "small") {
+    return "Small";
+  }
+  if (textScale === "large") {
+    return "Large";
+  }
+  return "Default";
+}
+
+export function recordTextScaleSettingActivity(
   pageId: string,
-  enabled: boolean
+  textScale: PageTextScale | null
 ): void {
   recordPageSettingsActivity(
     pageId,
-    enabled ? "Turned on small text" : "Turned off small text"
+    textScale === null
+      ? "Changed text size to site default"
+      : `Changed text size to ${textScaleSettingLabel(textScale)}`
   );
 }
 
