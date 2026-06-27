@@ -71,6 +71,10 @@ import {
   planTabsMoveTab,
   planTabsRemoveTab,
 } from "@/lib/canvas/tabs-layout.ts";
+import {
+  planToggleHeadingCreate,
+  planToggleHeadingUnwrap,
+} from "@/lib/canvas/toggle-heading-layout.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 /**
@@ -403,6 +407,29 @@ export function canvasReducer(
         return { state, effects };
       }
 
+      // Converting a toggle heading to a leaf (heading/text/…) lifts its
+      // children out as following siblings, in order.
+      if (
+        ctx.row.effectiveBlock.type === "toggleHeading" &&
+        command.to !== "toggleHeading"
+      ) {
+        const converted = convertBlockType(ctx.row.effectiveBlock, command.to, {
+          text: command.options?.text,
+          indent: command.options?.indent,
+          headingLevel: command.options?.headingLevel,
+          pageId: command.options?.pageId,
+          pageLinkVariant: command.options?.pageLinkVariant,
+        });
+        return {
+          state,
+          effects: planToggleHeadingUnwrap(
+            state.rows,
+            command.rowId,
+            converted
+          ),
+        };
+      }
+
       const containerParent =
         ctx.parent && isContainerBlockType(ctx.parent.effectiveBlock.type)
           ? ctx.parent
@@ -682,6 +709,21 @@ export function canvasReducer(
         focusRowId,
       });
       return { state, effects };
+    }
+
+    case "toggleHeading.create": {
+      return {
+        state,
+        effects: planToggleHeadingCreate(
+          state.rows,
+          command.rowId,
+          command.level,
+          {
+            seedText: command.text,
+            absorb: command.absorb,
+          }
+        ),
+      };
     }
 
     case "tabs.addTab": {

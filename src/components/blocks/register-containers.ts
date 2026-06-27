@@ -7,6 +7,7 @@ import { TableRowView } from "@/components/blocks/types/table/table-row-view.tsx
 import { TableView } from "@/components/blocks/types/table/table-view.tsx";
 import { TabContainer } from "@/components/blocks/types/tabs/tab-container.tsx";
 import { TabsView } from "@/components/blocks/types/tabs/tabs-view.tsx";
+import { ToggleHeadingView } from "@/components/blocks/types/toggle-heading/toggle-heading-view.tsx";
 
 registerContainerLoader("list", () => ListView);
 registerContainerLoader("checklist", () => ChecklistView);
@@ -16,3 +17,4 @@ registerContainerLoader("tabs", () => TabsView);
 registerContainerLoader("tab", () => TabContainer);
 registerContainerLoader("table", () => TableView);
 registerContainerLoader("tableRow", () => TableRowView);
+registerContainerLoader("toggleHeading", () => ToggleHeadingView);

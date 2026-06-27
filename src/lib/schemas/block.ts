@@ -20,10 +20,12 @@ import {
   tabPropsSchema,
   tabsPropsSchema,
   textPropsSchema,
+  toggleHeadingPropsSchema,
 } from "./block-props.ts";
 
 export const blockTypeSchema = z.enum([
   "heading",
+  "toggleHeading",
   "text",
   "list",
   "quote",
@@ -57,6 +59,10 @@ export const blockSchema = z.discriminatedUnion("type", [
   blockBaseSchema.extend({
     type: z.literal("heading"),
     props: headingPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("toggleHeading"),
+    props: toggleHeadingPropsSchema,
   }),
   blockBaseSchema.extend({
     type: z.literal("text"),

@@ -46,7 +46,7 @@ export function useRowGutterHandlers(row: CanvasRow): RowGutterHandlers {
     () => ({
       isSelected,
       onConvert: (item) => {
-        applyBlockConversion(row, item, dispatch);
+        applyBlockConversion(row, item, dispatch, { absorb: true });
         dispatch({ type: "focus.set", rowId, placement: "start" });
       },
       onDelete: () => {
