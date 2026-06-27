@@ -7,8 +7,11 @@ export const pageTitleUnderlineClassName =
 
 /**
  * Whether a `pageLink` row should show the arrow-up-right icon.
- * `variant: linked` always shows; `variant: child` never does.
- * Legacy blocks without `variant` compare `targetPage.parentId` to `canvasPageId`.
+ * Relational rule (primary): a block is a subpage (no arrow) only when the canvas it
+ * lives in is the target page's current parent; everywhere else it's a link (arrow).
+ * This makes moves auto-correct — a moved page's old-parent link grows the arrow and
+ * its new-parent link drops it, with no block writes. Stored `props.variant` is used
+ * only as an SSR/unknown fallback when the target or canvas id is not yet resolved.
  * @see docs/architecture/pages.md#page-links
  */
 export function pageLinkShowsExternalIcon(
@@ -16,6 +19,10 @@ export function pageLinkShowsExternalIcon(
   targetPage: PageSummary | null,
   canvasPageId: string | null
 ): boolean {
+  if (targetPage && canvasPageId) {
+    return targetPage.parentId !== canvasPageId;
+  }
+
   if (props.variant === "child") {
     return false;
   }
@@ -24,9 +31,5 @@ export function pageLinkShowsExternalIcon(
     return true;
   }
 
-  if (!(targetPage && canvasPageId)) {
-    return false;
-  }
-
-  return targetPage.parentId !== canvasPageId;
+  return false;
 }

@@ -12,7 +12,7 @@ const childPage: PageSummary = {
 };
 
 describe("pageLinkShowsExternalIcon", () => {
-  it("hides the icon for slash New Page child links", () => {
+  it("hides the icon when the canvas is the target's current parent (subpage)", () => {
     expect(
       pageLinkShowsExternalIcon(
         { pageId: "child", variant: "child" },
@@ -22,29 +22,90 @@ describe("pageLinkShowsExternalIcon", () => {
     ).toBe(false);
   });
 
-  it("shows the icon for Link To Page references", () => {
+  it("shows the icon when the canvas is not the target's parent (link)", () => {
+    expect(
+      pageLinkShowsExternalIcon(
+        { pageId: "child", variant: "child" },
+        childPage,
+        "elsewhere"
+      )
+    ).toBe(true);
+  });
+
+  it("relational rule overrides authoring variant", () => {
+    // A `linked` block whose target is in fact a child of the current canvas
+    // renders as a subpage (no arrow) — the live parent relationship wins.
     expect(
       pageLinkShowsExternalIcon(
         { pageId: "child", variant: "linked" },
         childPage,
         "parent"
       )
+    ).toBe(false);
+    // A `linked` block on a canvas that is not the target's parent shows the arrow.
+    expect(
+      pageLinkShowsExternalIcon(
+        { pageId: "child", variant: "linked" },
+        childPage,
+        "elsewhere"
+      )
     ).toBe(true);
   });
 
-  it("infers child links without variant when the target is a direct child", () => {
-    expect(
-      pageLinkShowsExternalIcon({ pageId: "child" }, childPage, "parent")
-    ).toBe(false);
-  });
-
-  it("infers linked pages without variant when the target is not a direct child", () => {
+  it("auto-corrects across a move: same block flips by which parent renders it", () => {
+    const block = { pageId: "child", variant: "child" as const };
+    // Lives in the old parent's canvas after the page moved away → now a link.
     expect(
       pageLinkShowsExternalIcon(
-        { pageId: "other" },
-        { ...childPage, id: "other", parentId: null },
+        block,
+        { ...childPage, parentId: "newParent" },
         "parent"
       )
     ).toBe(true);
+    // Lives in the new parent's canvas → subpage.
+    expect(
+      pageLinkShowsExternalIcon(
+        block,
+        { ...childPage, parentId: "newParent" },
+        "newParent"
+      )
+    ).toBe(false);
+  });
+
+  it("falls back to the stored variant when the target is unknown", () => {
+    expect(
+      pageLinkShowsExternalIcon(
+        { pageId: "child", variant: "child" },
+        null,
+        "parent"
+      )
+    ).toBe(false);
+    expect(
+      pageLinkShowsExternalIcon(
+        { pageId: "child", variant: "linked" },
+        null,
+        "parent"
+      )
+    ).toBe(true);
+    expect(pageLinkShowsExternalIcon({ pageId: "child" }, null, "parent")).toBe(
+      false
+    );
+  });
+
+  it("falls back to the stored variant when the canvas id is unknown", () => {
+    expect(
+      pageLinkShowsExternalIcon(
+        { pageId: "child", variant: "linked" },
+        childPage,
+        null
+      )
+    ).toBe(true);
+    expect(
+      pageLinkShowsExternalIcon(
+        { pageId: "child", variant: "child" },
+        childPage,
+        null
+      )
+    ).toBe(false);
   });
 });
