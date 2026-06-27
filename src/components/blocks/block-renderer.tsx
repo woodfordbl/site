@@ -58,7 +58,7 @@ export function BlockRenderer({
       spacingClassName={spacingClassName}
     >
       {mode === "view" ? (
-        <BlockView block={block} />
+        <BlockView block={block} row={row} />
       ) : (
         <LeafBlockEdit
           autoFocus={autoFocus}
@@ -73,7 +73,7 @@ export function BlockRenderer({
   );
 }
 
-function BlockView({ block }: { block: Block }) {
+function BlockView({ block, row }: { block: Block; row: CanvasRow }) {
   if (isContainerBlockType(block.type)) {
     return null;
   }
@@ -86,7 +86,7 @@ function BlockView({ block }: { block: Block }) {
 
   const View = spec.View as BlockViewComponent<typeof leafType>;
   const leafBlock = block as Extract<Block, { type: typeof leafType }>;
-  return <View props={leafBlock.props} />;
+  return <View props={leafBlock.props} row={row} />;
 }
 
 function LeafBlockEdit({
