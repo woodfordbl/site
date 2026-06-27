@@ -106,7 +106,7 @@ export function CodeEdit({
 
   return (
     <div
-      className="code-shiki relative rounded-md bg-muted text-sm leading-6"
+      className="code-shiki relative rounded-md bg-muted text-[length:var(--fs-small)] leading-6"
       ref={wrapperRef}
     >
       <div className="absolute top-1.5 right-2 z-10">

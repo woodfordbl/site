@@ -743,6 +743,39 @@
 }
 
 /*
+ * Page text size. A single inherited multiplier `--page-text-scale` feeds the
+ * `--fs-*` size tokens that canvas typography reads (see lib/blocks/
+ * block-spacing.ts + heading-typography.ts). The `data-page-text-scale`
+ * attribute is set on `<html>` for the global site default and on the page
+ * content wrapper for a per-page override — the deeper element wins via the
+ * cascade, and an unset page inherits the global value.
+ */
+:root {
+  --page-text-scale: 1;
+  --fs-body: calc(1.125rem * var(--page-text-scale)); /* was text-lg */
+  --fs-h1: calc(1.5rem * var(--page-text-scale)); /* was text-2xl */
+  --fs-h1-sm: calc(1.875rem * var(--page-text-scale)); /* was sm:text-3xl */
+  --fs-h2: calc(1.25rem * var(--page-text-scale)); /* was text-xl */
+  --fs-h2-sm: calc(1.5rem * var(--page-text-scale)); /* was sm:text-2xl */
+  --fs-h3: calc(1.125rem * var(--page-text-scale)); /* was text-lg */
+  --fs-h3-sm: calc(1.25rem * var(--page-text-scale)); /* was sm:text-xl */
+  --fs-h4: calc(1rem * var(--page-text-scale)); /* was text-base */
+  --fs-small: calc(0.875rem * var(--page-text-scale)); /* was text-sm */
+}
+
+[data-page-text-scale="small"] {
+  --page-text-scale: 0.875;
+}
+
+[data-page-text-scale="default"] {
+  --page-text-scale: 1;
+}
+
+[data-page-text-scale="large"] {
+  --page-text-scale: 1.125;
+}
+
+/*
  * `code` block — Shiki dual-theme tokens. Each token <span> carries a baked
  * light `color` plus a `--shiki-dark` variable (see lib/code/highlighter.ts);
  * under `.dark` we swap to the dark variable. Plaintext spans have no variable

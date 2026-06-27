@@ -14,7 +14,8 @@ import {
   readSystemPrefersDark,
   resolveTheme,
 } from "@/lib/appearance/resolve-theme.ts";
-import { writeThemePreferenceToDocument } from "@/lib/appearance/site-appearance-cookie.ts";
+import { writeSiteAppearanceToDocument } from "@/lib/appearance/site-appearance-cookie.ts";
+import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type {
   ResolvedTheme,
   ThemePreference,
@@ -22,7 +23,9 @@ import type {
 
 interface ThemeContextValue {
   resolvedTheme: ResolvedTheme;
+  setTextScale: (textScale: PageTextScale) => void;
   setTheme: (theme: ThemePreference) => void;
+  textScale: PageTextScale;
   theme: ThemePreference;
 }
 
@@ -32,15 +35,22 @@ function applyResolvedTheme(resolvedTheme: ResolvedTheme): void {
   document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
 }
 
+function applyTextScale(textScale: PageTextScale): void {
+  document.documentElement.dataset.pageTextScale = textScale;
+}
+
 interface ThemeProviderProps {
   children: ReactNode;
   initialHints: SiteAppearanceHints;
 }
 
-/** Applies site theme preference to `document.documentElement` and persists to cookie. */
+/** Applies site appearance preferences to `document.documentElement` and persists to cookie. */
 export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<ThemePreference>(
     initialHints.appearance.theme
+  );
+  const [textScale, setTextScaleState] = useState<PageTextScale>(
+    initialHints.appearance.textScale
   );
   const [prefersDark, setPrefersDark] = useState(() =>
     initialHints.appearance.theme === "system"
@@ -58,6 +68,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   }, [resolvedTheme]);
 
   useEffect(() => {
+    applyTextScale(textScale);
+  }, [textScale]);
+
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const sync = () => {
       setPrefersDark(media.matches);
@@ -68,18 +82,31 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     return () => media.removeEventListener("change", sync);
   }, []);
 
-  const setTheme = useCallback((nextTheme: ThemePreference) => {
-    setThemeState(nextTheme);
-    writeThemePreferenceToDocument(nextTheme);
-  }, []);
+  const setTheme = useCallback(
+    (nextTheme: ThemePreference) => {
+      setThemeState(nextTheme);
+      writeSiteAppearanceToDocument({ theme: nextTheme, textScale });
+    },
+    [textScale]
+  );
+
+  const setTextScale = useCallback(
+    (nextTextScale: PageTextScale) => {
+      setTextScaleState(nextTextScale);
+      writeSiteAppearanceToDocument({ theme, textScale: nextTextScale });
+    },
+    [theme]
+  );
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       resolvedTheme,
+      setTextScale,
       setTheme,
+      textScale,
       theme,
     }),
-    [resolvedTheme, setTheme, theme]
+    [resolvedTheme, setTextScale, setTheme, textScale, theme]
   );
 
   return (
@@ -100,13 +127,13 @@ export function useSiteAppearance(): ThemeContextValue {
   return useThemeContext();
 }
 
-/** Persists theme preference cookie after client changes. */
+/** Persists appearance preferences cookie after client changes. */
 export function SyncSiteAppearanceCookieEffect() {
-  const { theme } = useSiteAppearance();
+  const { textScale, theme } = useSiteAppearance();
 
   useEffect(() => {
-    writeThemePreferenceToDocument(theme);
-  }, [theme]);
+    writeSiteAppearanceToDocument({ theme, textScale });
+  }, [textScale, theme]);
 
   return null;
 }

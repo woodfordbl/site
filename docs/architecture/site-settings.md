@@ -1,6 +1,6 @@
 # Site settings
 
-Site-wide preferences live on **`/settings`** routes inside the normal app shell ([`SiteSettingsLayout`](../../src/components/settings/site-settings-layout.tsx)). Page-level font/small-text settings stay in [`PageHeaderMenu`](../../src/components/pages/page-header-menu.tsx).
+Site-wide preferences live on **`/settings`** routes inside the normal app shell ([`SiteSettingsLayout`](../../src/components/settings/site-settings-layout.tsx)). Page-level font/text-size settings stay in [`PageHeaderMenu`](../../src/components/pages/page-header-menu.tsx); the **global text-size default** lives here in Appearance and pages inherit it unless they set a per-page override.
 
 ## Trigger and layout
 
@@ -22,19 +22,20 @@ Search params ([`settings-search.ts`](../../src/lib/settings/settings-search.ts)
 
 | Section | Panel | Notes |
 |---------|-------|-------|
-| Appearance | [`AppearancePanel`](../../src/components/settings/panels/appearance-panel.tsx) | Interface theme dropdown (`SettingsItemField` + `SettingsItemSelect`) |
+| Appearance | [`AppearancePanel`](../../src/components/settings/panels/appearance-panel.tsx) | Interface theme dropdown + **Text size** (Small / Default / Large) — the site-wide default page text size (`SettingsItemField` + `SettingsItemSelect`) |
 | Keyboard shortcuts | [`KeyboardShortcutsPanel`](../../src/components/settings/panels/keyboard-shortcuts-panel.tsx) | Data from [`keyboard-shortcuts.ts`](../../src/lib/settings/keyboard-shortcuts.ts) |
 | Analytics | [`AnalyticsPanel`](../../src/components/settings/panels/analytics-panel.tsx) | Greyscale charts (`palette="grey"`) from IndexedDB activity log |
 | Development | [`DevelopmentPanel`](../../src/components/settings/panels/development-panel.tsx) | Save all, reset, refresh — shown only when [`usePageCanvasFooterActions`](../../src/hooks/use-page-canvas-footer-actions.ts) reports `visible` |
 
 Dev/sync actions were removed from [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx) (footer strip removed from workspace) and from the header menu.
 
-## Appearance / theme
+## Appearance / theme / text size
 
-- Schema: [`site-appearance.ts`](../../src/lib/schemas/site-appearance.ts) (`theme`: `light` \| `dark` \| `system`).
-- Cookie: `site-appearance` via [`site-appearance-cookie.ts`](../../src/lib/appearance/site-appearance-cookie.ts).
-- SSR: [`loadSiteAppearance`](../../src/lib/appearance/load-site-appearance.ts) in root `beforeLoad`; `html.dark` class seeded from [`readSiteAppearanceFromRequest`](../../src/lib/appearance/read-site-appearance.server.ts).
-- Client: [`ThemeProvider`](../../src/components/layout/theme-provider.tsx) applies `document.documentElement.classList` and listens to `prefers-color-scheme` when theme is `system`.
+- Schema: [`site-appearance.ts`](../../src/lib/schemas/site-appearance.ts) (`theme`: `light` \| `dark` \| `system`; `textScale`: `small` \| `default` \| `large`).
+- Cookie: `site-appearance` via [`site-appearance-cookie.ts`](../../src/lib/appearance/site-appearance-cookie.ts) (carries the whole appearance object).
+- SSR: [`loadSiteAppearance`](../../src/lib/appearance/load-site-appearance.ts) in root `beforeLoad`; `html.dark` class and `html[data-page-text-scale]` seeded from [`readSiteAppearanceFromRequest`](../../src/lib/appearance/read-site-appearance.server.ts) (no flash).
+- Client: [`ThemeProvider`](../../src/components/layout/theme-provider.tsx) applies `document.documentElement.classList` (theme) and `dataset.pageTextScale` (text size), and listens to `prefers-color-scheme` when theme is `system`.
+- The `data-page-text-scale` attribute drives the `--page-text-scale` multiplier / `--fs-*` typography tokens in `styles.css`; per-page overrides set the same attribute on the page content wrapper and win via the cascade.
 
 ## Analytics
 

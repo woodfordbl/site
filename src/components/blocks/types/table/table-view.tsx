@@ -431,7 +431,7 @@ export function TableView({ row, mode }: BlockContainerProps) {
                   <div className="relative isolate">
                     <table
                       className={cn(
-                        "relative z-0 table-fixed caption-bottom border-collapse text-sm",
+                        "relative z-0 table-fixed caption-bottom border-collapse text-[length:var(--fs-small)]",
                         "[&_tr]:border-0",
                         "[&_td]:overflow-visible",
                         "[&_th]:overflow-visible"

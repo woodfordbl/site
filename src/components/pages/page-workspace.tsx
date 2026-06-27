@@ -136,12 +136,12 @@ function PageWorkspaceBody({
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const { font, fullWidth, smallText } = usePageSettings({
+  const { font, fullWidth, textScale } = usePageSettings({
     pageId: page.id,
     seed: titleSeed,
     serverPage,
   });
-  const typographyProps = pageContentTypographyProps({ font, smallText });
+  const typographyProps = pageContentTypographyProps({ font, textScale });
   const { className: typographyClassName, ...typographyDataProps } =
     typographyProps;
   // Bumped after a reset/refresh/save-all clears local state for the open page

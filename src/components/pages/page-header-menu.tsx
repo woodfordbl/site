@@ -7,7 +7,6 @@ import {
   IconDots,
   IconLink,
   IconRefresh,
-  IconTextSize,
   IconTrash,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
+import { PageHeaderMenuTextSizeRow } from "@/components/pages/page-header-menu-text-size-row.tsx";
 import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -50,7 +50,7 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "fullWidth" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "fullWidth" | "textScale"> | null;
 }
 
 export function PageHeaderMenu({
@@ -62,7 +62,7 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const { font, fullWidth, setFont, setFullWidth, setSmallText, smallText } =
+  const { font, fullWidth, setFont, setFullWidth, setTextScale, textScale } =
     usePageSettings({
       pageId,
       seed,
@@ -191,13 +191,10 @@ export function PageHeaderMenu({
                 setFont(nextFont);
               }}
             />
-            <DropdownMenuSwitchItem
-              checked={smallText}
-              onCheckedChange={setSmallText}
-            >
-              <IconTextSize />
-              Small text
-            </DropdownMenuSwitchItem>
+            <PageHeaderMenuTextSizeRow
+              onTextScaleChange={setTextScale}
+              textScale={textScale}
+            />
             {isNarrowViewport ? null : (
               <DropdownMenuSwitchItem
                 checked={fullWidth}
