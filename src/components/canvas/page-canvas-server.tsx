@@ -16,6 +16,7 @@ import type { Block } from "@/lib/schemas/block.ts";
 
 interface CanvasBlocksReadOnlyProps {
   blocks: Block[];
+  coverSlot?: ReactNode;
   pageId: string;
   titleSlot?: ReactNode;
 }
@@ -61,6 +62,7 @@ function createNoopCanvasEditorActions(
  */
 export function CanvasBlocksReadOnly({
   blocks,
+  coverSlot,
   pageId,
   titleSlot,
 }: CanvasBlocksReadOnlyProps) {
@@ -83,6 +85,7 @@ export function CanvasBlocksReadOnly({
                 className="relative flex min-h-0 flex-1 flex-col overflow-auto px-12 py-12"
                 data-scroll-restoration-id="page-canvas-scroll"
               >
+                {coverSlot}
                 {titleSlot}
                 <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
                   <CanvasRowList mode="edit" rows={rows} />
@@ -97,17 +100,20 @@ export function CanvasBlocksReadOnly({
 }
 
 interface PageCanvasServerProps {
+  coverSlot?: ReactNode;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }
 
 export function PageCanvasServer({
+  coverSlot,
   serverPage,
   titleSlot,
 }: PageCanvasServerProps) {
   return (
     <CanvasBlocksReadOnly
       blocks={serverPage.blocks}
+      coverSlot={coverSlot}
       pageId={serverPage.id}
       titleSlot={titleSlot}
     />

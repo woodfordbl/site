@@ -7,6 +7,7 @@ import { persistPageSettings } from "@/lib/pages/persist-page-settings.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 import {
   type PageFont,
+  type PageHeaderImage,
   resolvePageFont,
   resolvePageSmallText,
 } from "@/lib/schemas/page-settings.ts";
@@ -14,7 +15,7 @@ import {
 interface UsePageSettingsOptions {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "smallText" | "headerImage"> | null;
 }
 
 /**
@@ -42,6 +43,15 @@ export function usePageSettings({
     return resolvePageSmallText(serverPage?.smallText);
   }, [localPage?.smallText, serverPage?.smallText]);
 
+  // A local document always wins once it exists, so an explicit local removal
+  // (headerImage cleared) correctly hides a server-shipped cover.
+  const headerImage = useMemo((): PageHeaderImage | undefined => {
+    if (localPage) {
+      return localPage.headerImage;
+    }
+    return serverPage?.headerImage;
+  }, [localPage, serverPage?.headerImage]);
+
   const setFont = useCallback(
     (nextFont: PageFont) => {
       persistPageSettings({
@@ -66,5 +76,24 @@ export function usePageSettings({
     [pageId, pages, seed]
   );
 
-  return { font, setFont, setSmallText, smallText };
+  const setHeaderImage = useCallback(
+    (nextHeaderImage: PageHeaderImage | null) => {
+      persistPageSettings({
+        pageId,
+        headerImage: nextHeaderImage,
+        pages,
+        seed,
+      });
+    },
+    [pageId, pages, seed]
+  );
+
+  return {
+    font,
+    headerImage,
+    setFont,
+    setHeaderImage,
+    setSmallText,
+    smallText,
+  };
 }

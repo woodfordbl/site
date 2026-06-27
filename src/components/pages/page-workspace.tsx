@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
+import { PageCover } from "@/components/pages/page-cover.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -24,7 +25,11 @@ import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import {
   pageCanvasMobileHeaderSlotClassName,
+  pageCanvasMobileHeaderSlotStickyClassName,
   pageCanvasTouchHeaderSlotClassName,
+  pageCanvasTouchHeaderSlotStickyClassName,
+  pageCoverMobileClassName,
+  pageCoverTouchClassName,
 } from "@/lib/pages/page-title-layout.ts";
 import { rememberSlugPageResolution } from "@/lib/pages/remember-slug-page-resolution.ts";
 import {
@@ -46,6 +51,25 @@ type PageWorkspaceProps = {
       page: LocalPage;
     }
 );
+
+/**
+ * Picks the mobile header slot class. With a cover present the bar is sticky +
+ * frosted (so the cover scrolls up and reads as glass behind it); without one it
+ * keeps the legacy scroll-away behavior.
+ */
+function resolveHeaderSlotClassName(
+  isCoarsePrimaryPointer: boolean,
+  hasCover: boolean
+): string {
+  if (isCoarsePrimaryPointer) {
+    return hasCover
+      ? pageCanvasTouchHeaderSlotStickyClassName
+      : pageCanvasTouchHeaderSlotClassName;
+  }
+  return hasCover
+    ? pageCanvasMobileHeaderSlotStickyClassName
+    : pageCanvasMobileHeaderSlotClassName;
+}
 
 function toServerPageSource(
   page: Page | LocalPage,
@@ -132,7 +156,7 @@ function PageWorkspaceBody({
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const { font, smallText } = usePageSettings({
+  const { font, headerImage, smallText } = usePageSettings({
     pageId: page.id,
     seed: titleSeed,
     serverPage,
@@ -162,14 +186,25 @@ function PageWorkspaceBody({
       {...typographyDataProps}
     >
       <PageCanvas
+        coverSlot={
+          headerImage ? (
+            <PageCover
+              className={
+                isCoarsePrimaryPointer
+                  ? pageCoverTouchClassName
+                  : pageCoverMobileClassName
+              }
+              headerImage={headerImage}
+            />
+          ) : null
+        }
         headerSlot={
           isNarrowViewport ? (
             <div
-              className={
-                isCoarsePrimaryPointer
-                  ? pageCanvasTouchHeaderSlotClassName
-                  : pageCanvasMobileHeaderSlotClassName
-              }
+              className={resolveHeaderSlotClassName(
+                isCoarsePrimaryPointer,
+                Boolean(headerImage)
+              )}
             >
               {header}
             </div>

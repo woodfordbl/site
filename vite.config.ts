@@ -16,6 +16,14 @@ const ogHandler = fileURLToPath(
   new URL("./routes/api/og.get.ts", import.meta.url)
 );
 
+const unsplashSearchHandler = fileURLToPath(
+  new URL("./routes/api/unsplash/search.get.ts", import.meta.url)
+);
+
+const unsplashDownloadHandler = fileURLToPath(
+  new URL("./routes/api/unsplash/download.post.ts", import.meta.url)
+);
+
 const config = defineConfig({
   define: {
     "import.meta.env.VITE_SITE_ORIGIN": JSON.stringify(SITE_ORIGIN),
@@ -29,7 +37,19 @@ const config = defineConfig({
     // bundled into the Vercel function output (filesystem scanning of root
     // `routes/` isn't wired in this TanStack Start dev integration).
     nitro({
-      handlers: [{ route: "/api/og", method: "GET", handler: ogHandler }],
+      handlers: [
+        { route: "/api/og", method: "GET", handler: ogHandler },
+        {
+          route: "/api/unsplash/search",
+          method: "GET",
+          handler: unsplashSearchHandler,
+        },
+        {
+          route: "/api/unsplash/download",
+          method: "POST",
+          handler: unsplashDownloadHandler,
+        },
+      ],
     }),
     tailwindcss(),
     tanstackStart(),

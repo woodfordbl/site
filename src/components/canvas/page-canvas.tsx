@@ -20,6 +20,8 @@ import {
 const NO_BLOCKS: Block[] = [];
 
 interface PageCanvasProps {
+  /** Rendered at the very top of the scroll region (full-bleed page cover image). */
+  coverSlot?: ReactNode;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
   pageHasLocalDraft: boolean;
@@ -60,6 +62,7 @@ function PageCanvasClient(props: PageCanvasProps) {
   if (showLocal) {
     return (
       <PageCanvasLocalView
+        coverSlot={props.coverSlot}
         serverPage={props.serverPage}
         titleSlot={props.titleSlot}
       />
@@ -68,6 +71,7 @@ function PageCanvasClient(props: PageCanvasProps) {
 
   return (
     <PageCanvasServer
+      coverSlot={props.coverSlot}
       serverPage={props.serverPage}
       titleSlot={props.titleSlot}
     />
@@ -75,6 +79,7 @@ function PageCanvasClient(props: PageCanvasProps) {
 }
 
 export function PageCanvas({
+  coverSlot,
   headerSlot,
   pageHasLocalDraft,
   serverPage,
@@ -120,17 +125,25 @@ export function PageCanvas({
       return (
         <CanvasBlocksReadOnly
           blocks={NO_BLOCKS}
+          coverSlot={coverSlot}
           pageId={serverPage.id}
           titleSlot={titleSlot}
         />
       );
     }
 
-    return <PageCanvasServer serverPage={serverPage} titleSlot={titleSlot} />;
+    return (
+      <PageCanvasServer
+        coverSlot={coverSlot}
+        serverPage={serverPage}
+        titleSlot={titleSlot}
+      />
+    );
   }
 
   return (
     <PageCanvasClient
+      coverSlot={coverSlot}
       headerSlot={headerSlot}
       pageHasLocalDraft={pageHasLocalDraft}
       serverPage={serverPage}

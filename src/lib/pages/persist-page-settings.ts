@@ -8,13 +8,14 @@ import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-lo
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import {
   recordFontSettingActivity,
+  recordHeaderImageSettingActivity,
   recordSmallTextSettingActivity,
 } from "@/lib/pages/record-page-activity.ts";
 import {
   isLocallyDeletedPage,
   localPageSchema,
 } from "@/lib/schemas/local-page.ts";
-import type { PageFont } from "@/lib/schemas/page-settings.ts";
+import type { PageFont, PageHeaderImage } from "@/lib/schemas/page-settings.ts";
 
 const LOCAL_PAGES_STORAGE_KEY = "site-local-pages";
 const seededPageIds = new Set<string>();
@@ -36,6 +37,8 @@ export function persistPageSettings(options: {
   pageId: string;
   font?: PageFont;
   smallText?: boolean;
+  /** `PageHeaderImage` sets a cover; `null` removes it; omit to leave unchanged. */
+  headerImage?: PageHeaderImage | null;
   seed?: PageMetadataSeed;
   pages?: PageSummary[];
 }): void {
@@ -50,6 +53,9 @@ export function persistPageSettings(options: {
       }
       if (options.smallText !== undefined) {
         draft.smallText = options.smallText ? true : undefined;
+      }
+      if (options.headerImage !== undefined) {
+        draft.headerImage = options.headerImage ?? undefined;
       }
       draft.updatedAt = now;
     });
@@ -77,6 +83,7 @@ export function persistPageSettings(options: {
           ? options.font
           : undefined,
       smallText: options.smallText ? true : undefined,
+      headerImage: options.headerImage ?? undefined,
       serverBaselineHash: options.seed.serverBaselineHash,
       serverMetadataBaseline,
       createdAt: now,
@@ -96,5 +103,11 @@ export function persistPageSettings(options: {
   }
   if (options.smallText !== undefined) {
     recordSmallTextSettingActivity(options.pageId, options.smallText);
+  }
+  if (options.headerImage !== undefined) {
+    recordHeaderImageSettingActivity(
+      options.pageId,
+      options.headerImage !== null
+    );
   }
 }

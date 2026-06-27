@@ -91,6 +91,16 @@ export function recordSmallTextSettingActivity(
   );
 }
 
+export function recordHeaderImageSettingActivity(
+  pageId: string,
+  hasCover: boolean
+): void {
+  recordPageSettingsActivity(
+    pageId,
+    hasCover ? "Updated cover image" : "Removed cover image"
+  );
+}
+
 export function recordBlockInsertedActivity(
   pageId: string,
   block: Block

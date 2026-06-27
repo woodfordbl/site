@@ -5,6 +5,7 @@ import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 
 interface PageCanvasLocalViewProps {
+  coverSlot?: ReactNode;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
 }
@@ -15,6 +16,7 @@ interface PageCanvasLocalViewProps {
  * loads. Falls back to server blocks if no local shard is present.
  */
 export function PageCanvasLocalView({
+  coverSlot,
   serverPage,
   titleSlot,
 }: PageCanvasLocalViewProps) {
@@ -26,6 +28,7 @@ export function PageCanvasLocalView({
   return (
     <CanvasBlocksReadOnly
       blocks={blocks}
+      coverSlot={coverSlot}
       pageId={serverPage.id}
       titleSlot={titleSlot}
     />

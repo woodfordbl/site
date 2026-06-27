@@ -11,6 +11,8 @@ Native HTML5 drag-and-drop shared by the **canvas block editor** and the **sideb
 | Canvas domain | [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) | Block/column/list drop targets → `row.move` / `row.moveToPosition` |
 | Sidebar domain | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) | Page tree bands (sibling vs nest) → `page.reposition` |
 
+The passive slots the canvas scroll region renders above the row list — the optional [page cover](./pages.md#page-cover) (`coverSlot`) and the mobile header (`headerSlot`) — sit outside the `DndSurface` and are never drop targets; canvas drag math only sees `[data-canvas-row]` elements.
+
 ```mermaid
 flowchart TD
   core["src/lib/dnd"]

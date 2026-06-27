@@ -44,6 +44,8 @@ src/components/blocks/
 
 Only `registry.ts` imports every block component. Other code imports from `@/components/blocks/registry.ts`; shared container child chrome belongs in `container-children.tsx` so each container component only customizes markers, spacing, and wrapper UI.
 
+The media source primitives are not block-only: the asset store, [`useAssetObjectUrl`](../../src/hooks/use-asset-object-url.ts) / `resolveMediaDisplayUrl`, [`infer-media-kind.ts`](../../src/lib/media/infer-media-kind.ts), and the `LinkUploadTabs` / `SourceLinkPanel` / `SourceUploadPanel` picker UI are also reused by the non-block [page cover](./pages.md#page-cover) (which adds an Unsplash search source in [`unsplash.ts`](../../src/lib/media/unsplash.ts)).
+
 ## editStrategy
 
 | Strategy | Example types | BlockRenderer keyboard wiring |

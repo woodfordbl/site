@@ -18,7 +18,7 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "smallText" | "headerImage"> | null;
 }
 
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */

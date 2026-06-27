@@ -5,6 +5,7 @@ import {
   IconDeviceFloppy,
   IconDots,
   IconLink,
+  IconPhoto,
   IconRefresh,
   IconTextSize,
   IconTrash,
@@ -14,6 +15,7 @@ import { useMemo, useState } from "react";
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
+import { PageCoverDialog } from "@/components/pages/page-cover-menu.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -48,7 +50,7 @@ import type { Page } from "@/lib/schemas/page.ts";
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
   seed?: PageMetadataSeed;
-  serverPage?: Pick<Page, "font" | "smallText"> | null;
+  serverPage?: Pick<Page, "font" | "smallText" | "headerImage"> | null;
 }
 
 export function PageHeaderMenu({
@@ -60,7 +62,15 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const { font, setFont, setSmallText, smallText } = usePageSettings({
+  const [coverOpen, setCoverOpen] = useState(false);
+  const {
+    font,
+    headerImage,
+    setFont,
+    setHeaderImage,
+    setSmallText,
+    smallText,
+  } = usePageSettings({
     pageId,
     seed,
     serverPage,
@@ -71,6 +81,15 @@ export function PageHeaderMenu({
 
   const searchableEntries = useMemo((): ActionMenuEntry[] => {
     const entries: ActionMenuEntry[] = [
+      {
+        id: "cover-image",
+        label: headerImage ? "Change cover" : "Add cover",
+        icon: <IconPhoto />,
+        keywords: ["cover", "header", "image", "photo", "banner", "unsplash"],
+        onSelect: () => {
+          setCoverOpen(true);
+        },
+      },
       {
         id: "copy-link",
         label: "Copy link",
@@ -147,7 +166,7 @@ export function PageHeaderMenu({
     }
 
     return entries;
-  }, [copyLink, duplicate, footerActions, isNarrowViewport]);
+  }, [copyLink, duplicate, footerActions, headerImage, isNarrowViewport]);
 
   const handleDelete = () => {
     deletePage();
@@ -195,6 +214,16 @@ export function PageHeaderMenu({
               <IconTextSize />
               Small text
             </DropdownMenuSwitchItem>
+            <DropdownMenuItem
+              onClick={() => {
+                runAfterClose(() => {
+                  setCoverOpen(true);
+                });
+              }}
+            >
+              <IconPhoto />
+              {headerImage ? "Change cover" : "Add cover"}
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
@@ -321,6 +350,13 @@ export function PageHeaderMenu({
             footerActions.setConfirmAction(null);
           }
         }}
+      />
+
+      <PageCoverDialog
+        headerImage={headerImage}
+        onChange={setHeaderImage}
+        onOpenChange={setCoverOpen}
+        open={coverOpen}
       />
     </>
   );

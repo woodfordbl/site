@@ -22,6 +22,7 @@ function hashString(input: string): string {
 /** Stable hash of shipped page metadata fields used for stale detection. */
 export function hashPageMetadata(fields: {
   font?: "default" | "serif" | "mono";
+  headerImage?: unknown;
   icon?: string;
   parentId: string | null;
   sidebarOrder?: number;
@@ -32,6 +33,7 @@ export function hashPageMetadata(fields: {
   return hashString(
     stableStringify({
       font: fields.font ?? null,
+      headerImage: fields.headerImage ?? null,
       icon: fields.icon ?? null,
       parentId: fields.parentId,
       sidebarOrder: fields.sidebarOrder ?? null,

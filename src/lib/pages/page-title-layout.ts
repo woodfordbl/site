@@ -33,6 +33,36 @@ export const pageCanvasMobileHeaderSlotClassName = "-mr-4 mb-4 -ml-7 md:hidden";
 /** Touch header slot inset — matches {@link pageCanvasTouchScrollClassName}. */
 export const pageCanvasTouchHeaderSlotClassName = "-mr-4 mb-4 -ml-3 md:hidden";
 
+/**
+ * Sticky + frosted variant of the mobile header slot, used **only when the page
+ * has a cover image**. The bar pins (`sticky top-0`) with a translucent
+ * background + backdrop blur so the cover (and page content) scrolling beneath
+ * it reads as frosted glass — the same language as iOS Safari's own chrome.
+ * Falls back to a near-opaque background where `backdrop-filter` is
+ * unsupported. Cover-less pages keep {@link pageCanvasMobileHeaderSlotClassName}
+ * (the header scrolls away as before).
+ */
+const STICKY_HEADER_FROST =
+  "sticky top-0 z-20 bg-background/85 backdrop-blur-md backdrop-saturate-150 supports-[backdrop-filter]:bg-background/65";
+
+export const pageCanvasMobileHeaderSlotStickyClassName = `-mr-4 -ml-7 mb-4 ${STICKY_HEADER_FROST} md:hidden`;
+
+/** Touch sticky header slot — matches {@link pageCanvasTouchScrollClassName}. */
+export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STICKY_HEADER_FROST} md:hidden`;
+
+/**
+ * Full-bleed cover ("header image") wrapper. Negative margins cancel the scroll
+ * region padding — the mobile gutter lane (`pl-7`) and desktop `px-12`/`py-12` —
+ * so the cover spans edge to edge and butts against the scroll-region top.
+ * Mobile has no top padding to cancel, so only the desktop top inset is pulled.
+ */
+export const pageCoverMobileClassName =
+  "-mr-4 -ml-7 mb-3 md:-mx-12 md:-mt-12 md:mb-6";
+
+/** Touch cover inset — matches {@link pageCanvasTouchScrollClassName}. */
+export const pageCoverTouchClassName =
+  "-mr-4 -ml-3 mb-3 md:-mx-12 md:-mt-12 md:mb-6";
+
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";
 
