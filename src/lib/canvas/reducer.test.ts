@@ -950,4 +950,117 @@ describe("canvasReducer", () => {
       expect(persist.block.type).toBe("heading");
     }
   });
+
+  it("row.convert keeps a converted heading nested inside a toggle heading", () => {
+    const blocks: Block[] = [
+      { id: "tg", type: "toggleHeading", props: { level: 1, text: "T" } },
+      { id: "c1", type: "text", props: { text: "hi" }, parentId: "tg" },
+    ];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      {
+        type: "row.convert",
+        rowId: "c1",
+        to: "heading",
+        options: { headingLevel: 2, text: "hi" },
+      }
+    );
+
+    // No lift-out: the toggle keeps its child and the child becomes a heading
+    // that stays parented to the toggle.
+    expect(result.effects.some((e) => e.type === "move")).toBe(false);
+    expect(result.effects.some((e) => e.type === "delete")).toBe(false);
+    const persist = result.effects.find((e) => e.type === "persist");
+    expect(persist?.type).toBe("persist");
+    if (persist?.type === "persist") {
+      expect(persist.rowId).toBe("c1");
+      expect(persist.block.type).toBe("heading");
+      expect(persist.block.parentId).toBe("tg");
+    }
+  });
+
+  it("row.convert keeps a converted divider nested inside a toggle heading", () => {
+    const blocks: Block[] = [
+      { id: "tg", type: "toggleHeading", props: { level: 1, text: "T" } },
+      { id: "c1", type: "text", props: { text: "" }, parentId: "tg" },
+    ];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      { type: "row.convert", rowId: "c1", to: "divider" }
+    );
+
+    expect(result.effects.some((e) => e.type === "move")).toBe(false);
+    expect(result.effects.some((e) => e.type === "delete")).toBe(false);
+    const persist = result.effects.find((e) => e.type === "persist");
+    if (persist?.type === "persist") {
+      expect(persist.block.type).toBe("divider");
+      expect(persist.block.parentId).toBe("tg");
+    }
+  });
+
+  it("container.wrap builds a list in place inside a toggle heading", () => {
+    const blocks: Block[] = [
+      { id: "tg", type: "toggleHeading", props: { level: 1, text: "T" } },
+      { id: "c1", type: "text", props: { text: "hi" }, parentId: "tg" },
+    ];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      {
+        type: "container.wrap",
+        rowId: "c1",
+        containerType: "list",
+        variant: "bullet",
+        childText: "hi",
+      }
+    );
+
+    // The toggle is not destroyed and the list stays nested under it.
+    expect(result.effects.some((e) => e.type === "delete")).toBe(false);
+    const persist = result.effects.find((e) => e.type === "persist");
+    expect(persist?.type).toBe("persist");
+    if (persist?.type === "persist") {
+      expect(persist.rowId).toBe("c1");
+      expect(persist.block.type).toBe("list");
+      expect(persist.block.parentId).toBe("tg");
+    }
+    const insert = result.effects.find((e) => e.type === "insert");
+    expect(insert?.type).toBe("insert");
+    if (insert?.type === "insert") {
+      expect(insert.block.type).toBe("text");
+      expect(insert.block.parentId).toBe("c1");
+      expect(insert.block.props).toEqual({ text: "hi" });
+      expect(insert.position.parentId).toBe("c1");
+    }
+  });
+
+  it("container.wrap still lifts a list item out of its list before wrapping", () => {
+    const blocks: Block[] = [
+      { id: "list-1", type: "list", props: { variant: "bullet" } },
+      { id: "item-a", type: "text", props: { text: "A" }, parentId: "list-1" },
+      { id: "item-b", type: "text", props: { text: "B" }, parentId: "list-1" },
+    ];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      {
+        type: "container.wrap",
+        rowId: "item-b",
+        containerType: "checklist",
+        childText: "B",
+      }
+    );
+
+    // Lists reject a nested checklist, so the row is lifted out (re-parented
+    // away from list-1) before the checklist is built.
+    const wrap = result.effects.find(
+      (e) => e.type === "persist" && e.block.type === "checklist"
+    );
+    expect(wrap?.type).toBe("persist");
+    if (wrap?.type === "persist") {
+      expect(wrap.block.parentId).not.toBe("list-1");
+    }
+  });
 });

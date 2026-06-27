@@ -10,6 +10,7 @@ import {
   applyBlockConversion,
   markdownMatchToSlashItem,
 } from "@/lib/canvas/apply-block-conversion.ts";
+import { isAllowedChild } from "@/lib/canvas/block-container-config.ts";
 import { shouldLiftContainerChildOnEnterAtCaretStart } from "@/lib/canvas/block-interactions.ts";
 import type {
   BlockEditComponent,
@@ -17,8 +18,8 @@ import type {
 } from "@/lib/canvas/block-spec.types.ts";
 import { findFocusableAdjacentRowId } from "@/lib/canvas/focusable-rows.ts";
 import {
+  markdownShortcutResultType,
   matchMarkdownShortcut,
-  requiresTopLevelRow,
 } from "@/lib/canvas/markdown-shortcuts.ts";
 import { resolveStructuralAction } from "@/lib/canvas/resolve-structural-action.ts";
 import { buildStructuralContext } from "@/lib/canvas/structural-context.ts";
@@ -107,8 +108,21 @@ export function useBlockFieldActions({
     if (!match) {
       return false;
     }
-    if (requiresTopLevelRow(match) && row.effectiveBlock.parentId) {
-      return false;
+    // Structural shortcuts work at the top level and inside generic-scope
+    // containers (toggle headings, columns, tabs). Inside a type-restricted
+    // container (list, checklist) the result type isn't an allowed child, so
+    // the shortcut is suppressed.
+    if (row.effectiveBlock.parentId) {
+      const parentType = findRowContext(canvas.getRows(), rowId)?.parent
+        ?.effectiveBlock.type;
+      if (
+        !(
+          parentType &&
+          isAllowedChild(parentType, markdownShortcutResultType(match))
+        )
+      ) {
+        return false;
+      }
     }
 
     applyBlockConversion(

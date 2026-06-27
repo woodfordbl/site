@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getMarkdownShortcutHint,
+  markdownShortcutResultType,
   matchMarkdownShortcut,
-  requiresTopLevelRow,
 } from "@/lib/canvas/markdown-shortcuts.ts";
 
 describe("matchMarkdownShortcut", () => {
@@ -40,16 +40,22 @@ describe("matchMarkdownShortcut", () => {
   });
 });
 
-describe("requiresTopLevelRow", () => {
-  it("requires top-level rows for list, divider, and heading shortcuts", () => {
-    expect(requiresTopLevelRow({ kind: "list", variant: "bullet" })).toBe(true);
-    expect(requiresTopLevelRow({ kind: "checklist" })).toBe(true);
-    expect(requiresTopLevelRow({ kind: "list", variant: "ordered" })).toBe(
-      true
+describe("markdownShortcutResultType", () => {
+  it("maps each shortcut match to the block type it produces", () => {
+    expect(
+      markdownShortcutResultType({ kind: "list", variant: "bullet" })
+    ).toBe("list");
+    expect(
+      markdownShortcutResultType({ kind: "list", variant: "ordered" })
+    ).toBe("list");
+    expect(markdownShortcutResultType({ kind: "checklist" })).toBe("checklist");
+    expect(markdownShortcutResultType({ kind: "divider" })).toBe("divider");
+    expect(markdownShortcutResultType({ kind: "heading", level: 1 })).toBe(
+      "heading"
     );
-    expect(requiresTopLevelRow({ kind: "divider" })).toBe(true);
-    expect(requiresTopLevelRow({ kind: "heading", level: 1 })).toBe(true);
-    expect(requiresTopLevelRow({ kind: "heading", level: 4 })).toBe(true);
+    expect(markdownShortcutResultType({ kind: "heading", level: 4 })).toBe(
+      "heading"
+    );
   });
 });
 
