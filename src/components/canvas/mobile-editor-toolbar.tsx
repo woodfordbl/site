@@ -197,7 +197,7 @@ export function MobileEditorToolbar() {
         <div
           aria-hidden={!visible}
           className={cn(
-            "fixed inset-x-0 top-0 z-50 flex items-center gap-2 px-3 transition-opacity duration-150",
+            "fixed inset-x-0 top-0 z-50 flex items-center gap-2 px-3 transition-opacity duration-150 will-change-transform",
             visible ? "opacity-100" : "pointer-events-none opacity-0"
           )}
           ref={anchorRef}

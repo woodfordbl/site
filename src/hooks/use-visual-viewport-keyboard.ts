@@ -10,13 +10,15 @@ const KEYBOARD_GAP_PX = 8;
  * (full-height) layout viewport, drags fixed elements during scroll, collapses
  * its URL bar (changing `window.innerHeight`), and does not fire scroll/resize
  * events during momentum scroll. To stay glued to the keyboard:
- * - Anchor by **`top`** computed straight from the visual viewport
- *   (`offsetTop + height - barHeight - gap`) — avoids the unstable `innerHeight`
- *   term and tracks the keyboard as `offsetTop` changes with scroll.
+ * - Position with a composited **`transform: translate3d`** computed straight
+ *   from the visual viewport (`offsetTop + height - barHeight - gap`) — avoids
+ *   the unstable `innerHeight` term, tracks the keyboard as `offsetTop` changes
+ *   with scroll, and (unlike animating `top`) re-pins without per-frame layout,
+ *   so scrolling stays smooth.
  * - Re-apply on visualViewport resize/scroll, capture-phase document scroll, and
  *   a continuous `requestAnimationFrame` loop while enabled, so it keeps tracking
  *   during event-less momentum scrolling.
- * - Write straight to `element.style.top` (not React state) to avoid render lag.
+ * - Write straight to `element.style.transform` (not React state) to avoid render lag.
  *
  * Visibility is driven by the caller (focus state), NOT by a keyboard-height
  * threshold — that threshold collapses during scroll (offsetTop rises) and would
@@ -40,17 +42,19 @@ export function useKeyboardToolbarAnchor(
 
     let raf = 0;
     let barHeight = 0;
-    let lastTop = Number.NaN;
+    let lastY = Number.NaN;
 
     const position = () => {
       const el = ref.current;
       if (!el) {
         return;
       }
-      const top = vv.offsetTop + vv.height - barHeight - KEYBOARD_GAP_PX;
-      if (top !== lastTop) {
-        el.style.top = `${top}px`;
-        lastTop = top;
+      const y = vv.offsetTop + vv.height - barHeight - KEYBOARD_GAP_PX;
+      if (y !== lastY) {
+        // Composited transform (not `top`) so re-pinning during scroll stays
+        // smooth — no per-frame layout.
+        el.style.transform = `translate3d(0, ${y}px, 0)`;
+        lastY = y;
       }
     };
     const onEvent = () => {
