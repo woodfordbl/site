@@ -263,7 +263,7 @@ export function MenuDrawerSubDrawer({
             <IconChevronLeft className="size-5" />
           </button>
           {title ? (
-            <span className="cn-font-heading font-medium text-base text-foreground">
+            <span className="cn-font-heading flex min-w-0 items-center gap-2 font-medium text-base text-foreground [&_svg:not([class*='size-'])]:size-5 [&_svg]:shrink-0">
               {title}
             </span>
           ) : null}

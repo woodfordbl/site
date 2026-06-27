@@ -74,8 +74,8 @@ export function PageVersionPreview({
             <DialogTitle>Restore this version?</DialogTitle>
             <DialogDescription>
               The page reverts to its state from{" "}
-              {formatRelativeTime(descriptor.timestamp)}. Your current version
-              is saved first, so you can undo this.
+              {formatRelativeTime(descriptor.timestamp)}. Any newer versions in
+              the history will be discarded.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
