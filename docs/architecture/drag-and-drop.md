@@ -103,6 +103,8 @@ Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (can
 - **Canvas** — the [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) fills the scroll area (`flex-1`) so the empty space below the last block still receives native `dragover`/`drop`; a pointer past the last row resolves to `after` the last top-level row.
 - **Sidebar → canvas (cross-surface)** — the surfaces are MIME-isolated, but the canvas drop zone additionally sniffs the sidebar's `PAGE_DRAG_MIME_TYPE` (`application/x-page-id`) on `dragover`/`drop`. Dropping a sidebar page onto a canvas inserts a child `pageLink` at the drop position ([`resolveTopLevelInsertEdge`](../../src/lib/canvas/resolve-drop-target.ts) → `row.insert` with `pageId`) and re-nests the page under the open page ([`usePageReposition`](../../src/hooks/use-page-reposition.ts), `appendPageLinkOnParent:false` since the link is placed here), guarded by [`canDropPageIntoCanvas`](../../src/lib/pages/page-canvas-drop.ts) (self / cycle / depth via `assertCanReposition`).
 
+External image/video **files** are not a drop path — the canvas drop zone only resolves row/page MIME channels. Inserting media from outside the app is handled on **paste** instead ([`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) → `media` blocks; see [canvas-commands.md](../reference/canvas-commands.md)).
+
 ## Performance
 
 Previously, every row re-rendered on each `dragover` because `dropTarget` lived in React context or parent state. The external store plus `useDropTarget` / `useDragState` selectors compare the selected slice with `Object.is` and bail out when unchanged, so only rows affected by the current target (and the overlay) update per pointer move.

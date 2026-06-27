@@ -117,6 +117,7 @@ On fine pointers (mouse/trackpad), grab handles in the gutter expose block actio
 | Delete / Backspace | `selection.delete` when blocks selected and field unfocused |
 | Cmd/Ctrl+C | Copy selected blocks (plain text to system clipboard) |
 | Cmd/Ctrl+V | `rows.paste` after last selected / focused row (via `paste` event) |
+| Cmd/Ctrl+V with image/video in clipboard | Store each file as an asset and insert `media` blocks after the target row — works even while a text field is focused (e.g. pasting a screenshot) |
 | Escape | Clear block selection |
 | Click outside grab / menu | Clear block selection; block menu closes immediately |
 
@@ -124,7 +125,7 @@ On fine pointers (mouse/trackpad), grab handles in the gutter expose block actio
 
 Each gutter composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) (provider tracks `openRowId`; trigger + [`BlockGutterMenu`](../../src/components/canvas/block-gutter-menu/block-gutter-menu.tsx) content colocated in [`BlockGutter`](../../src/components/canvas/block-gutter.tsx)). Touch reuses the same action handlers via [`useRowGutterHandlers`](../../src/components/canvas/use-row-gutter-handlers.ts) inside [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx). Base UI / Vaul handle dismiss; opening block actions calls `closeMenu()` on the slash provider so only one overlay is active at a time.
 
-Text fields keep native copy/paste while focused. Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. Overclick (empty space below block content, stretched column dead space, page bottom) is handled by [`useCanvasOverclick`](../../src/hooks/use-canvas-overclick.ts) with [`resolveOverclickRowFromPointer`](../../src/lib/canvas/resolve-overclick-row.ts). The block-actions menu closes immediately (no exit animation) when dismissed.
+Text fields keep native copy/paste while focused, except that pasting image or video files is intercepted and rendered as `media` blocks ([`extractMediaFiles`](../../src/lib/media/paste-media.ts) in [`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts)). Block selection clears when editing starts; Shift+click on another row’s grab or field still ranges from the row being edited. Clicking outside the grab handle and menu portal clears selection. Overclick (empty space below block content, stretched column dead space, page bottom) is handled by [`useCanvasOverclick`](../../src/hooks/use-canvas-overclick.ts) with [`resolveOverclickRowFromPointer`](../../src/lib/canvas/resolve-overclick-row.ts). The block-actions menu closes immediately (no exit animation) when dismissed.
 
 ## Drag and drop
 
