@@ -1,11 +1,8 @@
 "use client";
 
-import { IconLayoutSidebar, IconPhoto, IconSlash } from "@tabler/icons-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
-import { usePageCover } from "@/components/pages/page-cover-context.tsx";
-import { prefetchUnsplashDefaults } from "@/components/pages/page-cover-unsplash-panel.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -49,30 +46,6 @@ function PageHeaderSidebarToggle() {
       variant="ghost"
     >
       <IconLayoutSidebar aria-hidden />
-    </Button>
-  );
-}
-
-/** Quick add/change-cover button; prefetches the Unsplash default feed on hover. */
-function PageHeaderCoverButton() {
-  const cover = usePageCover();
-  const queryClient = useQueryClient();
-
-  if (!cover) {
-    return null;
-  }
-
-  return (
-    <Button
-      aria-label={cover.headerImage ? "Change cover" : "Add cover"}
-      className="shrink-0 text-muted-foreground"
-      onClick={cover.openPicker}
-      onPointerEnter={() => prefetchUnsplashDefaults(queryClient)}
-      size="icon-sm"
-      type="button"
-      variant="ghost"
-    >
-      <IconPhoto aria-hidden />
     </Button>
   );
 }
@@ -145,7 +118,6 @@ export function PageHeader({
       <PageHeaderSidebarToggle />
       <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <PageHeaderCoverButton />
         <PageHeaderMenu
           onAfterReset={onAfterReset}
           pageId={pageId}

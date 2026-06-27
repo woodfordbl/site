@@ -7,6 +7,7 @@ import {
   IconDownload,
   IconLink,
   IconPhoto,
+  IconTrash,
 } from "@tabler/icons-react";
 import {
   type ReactNode,
@@ -23,6 +24,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
 import {
@@ -31,6 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   resolveMediaDisplayUrl,
   useAssetObjectUrl,
@@ -205,13 +208,16 @@ function ToolbarButton({
 
 /**
  * Full-bleed page cover image. Returns `null` when the page has no cover.
- * Renders a media-style hover toolbar (Change / Reposition / Download / Copy /
- * Copy link), supports drag-to-reposition on the image itself, and a right-click
- * menu to copy the image or its link. Unsplash photos are served sized from the
- * CDN; attribution is shown in the picker, not here.
+ *
+ * Desktop shows a media-style hover toolbar (Change / Reposition / Download /
+ * Copy / Copy link) plus a right-click menu. On touch the toolbar is hidden and
+ * a long-press opens the context menu (which presents as a drawer) carrying the
+ * full action list including Remove. Reposition is a drag on the image itself.
+ * Unsplash photos are served sized from the CDN; attribution lives in the picker.
  */
 export function PageCover({ className, headerImage }: PageCoverProps) {
   const cover = usePageCover();
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const assetObjectUrl = useAssetObjectUrl(
     headerImage?.source === "asset" ? headerImage.src : undefined
   );
@@ -251,7 +257,7 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
     <ContextMenu>
       <ContextMenuTrigger
         className={cn(
-          "group/cover relative block h-[26svh] max-h-72 min-h-32 w-full overflow-hidden bg-muted",
+          "group/cover relative block h-[26svh] max-h-72 min-h-32 w-full select-none overflow-hidden bg-muted [-webkit-touch-callout:none]",
           className
         )}
         data-page-cover=""
@@ -277,64 +283,91 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
         </div>
 
         {isRepositioning ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-            <span className="rounded-full bg-black/55 px-2.5 py-1 text-white text-xs backdrop-blur-sm">
-              Drag to reposition · Esc to finish
-            </span>
+          <div className="absolute inset-x-0 bottom-3 flex justify-center">
+            <div className="flex items-center gap-2 rounded-full bg-black/55 py-1 pr-1 pl-2.5 text-white text-xs backdrop-blur-sm">
+              <span>Drag to reposition</span>
+              <button
+                className="rounded-full bg-white/20 px-2 py-0.5 font-medium hover:bg-white/30"
+                onClick={() => setIsRepositioning(false)}
+                type="button"
+              >
+                Done
+              </button>
+            </div>
           </div>
         ) : null}
 
-        <TooltipProvider delay={400}>
-          <ButtonGroup
-            aria-label="Cover actions"
-            className={cn(
-              "hover-reveal absolute top-3 right-3 z-20",
-              isRepositioning && "opacity-100"
-            )}
-            onPointerDown={(event) => event.stopPropagation()}
-            variant="overlay"
-          >
-            <ToolbarButton
-              label="Change cover"
-              onClick={() => cover?.openPicker()}
+        {/* Desktop: a media-style hover toolbar. Touch: hidden — long-press
+            opens the context menu (a drawer) with the full action list. */}
+        {isCoarsePrimaryPointer ? null : (
+          <TooltipProvider delay={400}>
+            <ButtonGroup
+              aria-label="Cover actions"
+              className={cn(
+                "hover-reveal absolute top-3 right-3 z-20",
+                isRepositioning && "opacity-100"
+              )}
+              onPointerDown={(event) => event.stopPropagation()}
+              variant="overlay"
             >
-              <IconPhoto />
-            </ToolbarButton>
-            <ToolbarButton
-              active={isRepositioning}
-              label={isRepositioning ? "Done" : "Reposition"}
-              onClick={() => setIsRepositioning((value) => !value)}
-            >
-              {isRepositioning ? <IconCheck /> : <IconArrowsMove />}
-            </ToolbarButton>
-            <ToolbarButton
-              label="Download"
-              onClick={() => {
-                downloadMedia(mediaProps, renderUrl).catch(() => undefined);
-              }}
-            >
-              <IconDownload />
-            </ToolbarButton>
-            <ToolbarButton
-              label="Copy"
-              onClick={() => {
-                copyMediaImage(mediaProps, renderUrl).catch(() => undefined);
-              }}
-            >
-              <IconCopy />
-            </ToolbarButton>
-            <ToolbarButton
-              label="Copy link"
-              onClick={() => {
-                copyMediaLink(mediaProps, displayUrl).catch(() => undefined);
-              }}
-            >
-              <IconLink />
-            </ToolbarButton>
-          </ButtonGroup>
-        </TooltipProvider>
+              <ToolbarButton
+                label="Change cover"
+                onClick={() => cover?.openPicker()}
+              >
+                <IconPhoto />
+              </ToolbarButton>
+              <ToolbarButton
+                active={isRepositioning}
+                label={isRepositioning ? "Done" : "Reposition"}
+                onClick={() => setIsRepositioning((value) => !value)}
+              >
+                {isRepositioning ? <IconCheck /> : <IconArrowsMove />}
+              </ToolbarButton>
+              <ToolbarButton
+                label="Download"
+                onClick={() => {
+                  downloadMedia(mediaProps, renderUrl).catch(() => undefined);
+                }}
+              >
+                <IconDownload />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Copy"
+                onClick={() => {
+                  copyMediaImage(mediaProps, renderUrl).catch(() => undefined);
+                }}
+              >
+                <IconCopy />
+              </ToolbarButton>
+              <ToolbarButton
+                label="Copy link"
+                onClick={() => {
+                  copyMediaLink(mediaProps, displayUrl).catch(() => undefined);
+                }}
+              >
+                <IconLink />
+              </ToolbarButton>
+            </ButtonGroup>
+          </TooltipProvider>
+        )}
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem onClick={() => cover?.openPicker()}>
+          <IconPhoto />
+          Change cover
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => setIsRepositioning(true)}>
+          <IconArrowsMove />
+          Reposition
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            downloadMedia(mediaProps, renderUrl).catch(() => undefined);
+          }}
+        >
+          <IconDownload />
+          Download
+        </ContextMenuItem>
         <ContextMenuItem
           onClick={() => {
             copyMediaImage(mediaProps, renderUrl).catch(() => undefined);
@@ -350,6 +383,14 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
         >
           <IconLink />
           Copy link to image
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onClick={() => setHeaderImage(null)}
+          variant="destructive"
+        >
+          <IconTrash />
+          Remove cover
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

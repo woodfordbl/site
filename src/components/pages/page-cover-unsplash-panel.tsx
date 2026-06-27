@@ -1,11 +1,7 @@
 "use client";
 
 import { IconSearch } from "@tabler/icons-react";
-import {
-  infiniteQueryOptions,
-  type QueryClient,
-  useInfiniteQuery,
-} from "@tanstack/react-query";
+import { infiniteQueryOptions, useInfiniteQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -64,13 +60,6 @@ export function unsplashInfiniteQueryOptions(term: string) {
         : undefined,
     staleTime: 5 * 60 * 1000,
   });
-}
-
-/** Warms the default Unsplash feed so the picker opens with images already loaded. */
-export function prefetchUnsplashDefaults(queryClient: QueryClient): void {
-  queryClient
-    .prefetchInfiniteQuery(unsplashInfiniteQueryOptions(""))
-    .catch(() => undefined);
 }
 
 /** Fire-and-forget Unsplash download trigger (required attribution telemetry). */
