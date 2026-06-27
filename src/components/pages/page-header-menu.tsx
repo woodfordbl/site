@@ -4,7 +4,6 @@ import {
   IconCopy,
   IconDeviceFloppy,
   IconDots,
-  IconHistory,
   IconLink,
   IconRefresh,
   IconTextSize,
@@ -18,7 +17,6 @@ import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageHeaderMenuFontRow } from "@/components/pages/page-header-menu-font-row.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
 import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
-import { PageVersionHistoryView } from "@/components/pages/page-version-history-view.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -37,10 +35,7 @@ import {
   DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import {
-  useIsCoarsePrimaryPointer,
-  useIsNarrowViewport,
-} from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { usePageActions } from "@/hooks/use-page-actions.ts";
 import {
   type PageCanvasFooterActionsInput,
@@ -64,10 +59,8 @@ export function PageHeaderMenu({
   serverPage,
 }: PageHeaderMenuProps) {
   const isNarrowViewport = useIsNarrowViewport();
-  const isCoarsePointer = useIsCoarsePrimaryPointer();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const { font, setFont, setSmallText, smallText } = usePageSettings({
     pageId,
     seed,
@@ -163,11 +156,6 @@ export function PageHeaderMenu({
     setOpen(false);
   };
 
-  const openHistory = () => {
-    setOpen(false);
-    setHistoryOpen(true);
-  };
-
   const runAfterClose = (action: () => void) => {
     setOpen(false);
     queueMicrotask(action);
@@ -228,14 +216,7 @@ export function PageHeaderMenu({
                 <IconCopy />
                 Duplicate page
               </DropdownMenuItem>
-              {isCoarsePointer ? (
-                <PageVersionHistorySubmenu pageId={pageId} />
-              ) : (
-                <DropdownMenuItem onClick={openHistory}>
-                  <IconHistory />
-                  Version history
-                </DropdownMenuItem>
-              )}
+              <PageVersionHistorySubmenu pageId={pageId} />
               <PageHeaderMenuMoveSubmenu
                 onMoveTo={(parentId) => {
                   runAfterClose(() => {
@@ -307,14 +288,6 @@ export function PageHeaderMenu({
           </ActionMenuSearchSection>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {isCoarsePointer ? null : (
-        <PageVersionHistoryView
-          onOpenChange={setHistoryOpen}
-          open={historyOpen}
-          pageId={pageId}
-        />
-      )}
 
       <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
         <DialogContent showCloseButton={false}>
