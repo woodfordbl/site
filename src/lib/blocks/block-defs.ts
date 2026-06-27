@@ -25,6 +25,8 @@ export const CONTAINER_BLOCK_TYPES = [
   "checklist",
   "columns",
   "column",
+  "tabs",
+  "tab",
   "table",
   "tableRow",
 ] as const satisfies readonly BlockType[];
@@ -110,6 +112,14 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
   },
   column: {
     defaultProps: () => ({}),
+    isEmpty: () => true,
+  },
+  tabs: {
+    defaultProps: () => ({}),
+    isEmpty: () => true,
+  },
+  tab: {
+    defaultProps: () => ({ label: "" }),
     isEmpty: () => true,
   },
   media: {

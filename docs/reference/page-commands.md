@@ -1,6 +1,6 @@
 # Page commands
 
-Page lifecycle commands are separate from canvas block commands (see [canvas-commands](./canvas-commands.md)). Block rendering on a page uses `BLOCK_SPECS` via `BlockTreeNode` / `BlockRenderer` (including checklist, divider, and numbered list blocks; see [block-types](../architecture/block-types.md)).
+Page lifecycle commands are separate from canvas block commands (see [canvas-commands](./canvas-commands.md)). Block rendering on a page uses `BLOCK_SPECS` via `BlockTreeNode` / `BlockRenderer` (including checklist, divider, numbered list, and tabs blocks; see [block-types](../architecture/block-types.md)).
 
 | Command | Meaning |
 |---------|---------|

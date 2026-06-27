@@ -1,4 +1,8 @@
-import { IconLayoutColumns, IconTable } from "@tabler/icons-react";
+import {
+  IconLayoutColumns,
+  IconLayoutNavbar,
+  IconTable,
+} from "@tabler/icons-react";
 import { describe, expect, it, vi } from "vitest";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
@@ -86,6 +90,75 @@ describe("applyBlockConversion columns", () => {
   });
 });
 
+describe("applyBlockConversion tabs", () => {
+  it("dispatches tabs.create with tabCount from the slash menu item", () => {
+    const row: CanvasRow = {
+      rowId: "row-1",
+      effectiveBlock: textBlock("row-1", null, "/tabs"),
+      children: [],
+    };
+
+    const commands: unknown[] = [];
+    applyBlockConversion(
+      row,
+      {
+        key: "tabs-2",
+        id: "tabs",
+        tabCount: 2,
+        label: "Tabs",
+        aliases: ["tabs"],
+        icon: IconLayoutNavbar,
+        keywords: ["tabs"],
+      },
+      (command) => {
+        commands.push(command);
+      }
+    );
+
+    expect(commands).toEqual([
+      {
+        type: "tabs.create",
+        rowId: "row-1",
+        count: 2,
+        text: "",
+      },
+    ]);
+  });
+
+  it("defaults to 2 tabs when tabCount is missing", () => {
+    const row: CanvasRow = {
+      rowId: "row-1",
+      effectiveBlock: textBlock("row-1", null),
+      children: [],
+    };
+
+    const commands: unknown[] = [];
+    applyBlockConversion(
+      row,
+      {
+        key: "tabs",
+        id: "tabs",
+        label: "Tabs",
+        aliases: [],
+        icon: IconLayoutNavbar,
+        keywords: ["tabs"],
+      },
+      (command) => {
+        commands.push(command);
+      }
+    );
+
+    expect(commands).toEqual([
+      {
+        type: "tabs.create",
+        rowId: "row-1",
+        count: 2,
+        text: "",
+      },
+    ]);
+  });
+});
+
 describe("applyBlockConversion table", () => {
   it("dispatches table.create as a 3×3 grid from the Table slash item", () => {
     const row: CanvasRow = {
@@ -160,6 +233,50 @@ describe("applyCanvasEffects columns.create", () => {
     expect(firstColumnTextRowId).toBeTruthy();
     expect(setFocus).toHaveBeenCalledWith({
       rowId: firstColumnTextRowId,
+      placement: "start",
+      offset: 0,
+    });
+  });
+});
+
+describe("applyCanvasEffects tabs.create", () => {
+  it("persists tab children and focuses the first text row", () => {
+    const blocks: Block[] = [textBlock("row-1", null, "hello")];
+    const rows = buildBlockTree(blocks);
+    const result = canvasReducer(
+      { rows },
+      { type: "tabs.create", rowId: "row-1", count: 2, text: "" }
+    );
+
+    let workingBlocks = [...blocks];
+    const setFocus = vi.fn();
+
+    applyCanvasEffects(
+      result.effects,
+      {
+        saveRow: vi.fn(),
+        savePageBlocks: (nextBlocks) => {
+          workingBlocks = nextBlocks;
+        },
+        deleteRow: vi.fn(),
+        insertRow: vi.fn(),
+        moveRow: vi.fn(),
+        revertToServer: vi.fn(),
+        acknowledgeServerBaseline: vi.fn(),
+      },
+      rows,
+      setFocus
+    );
+
+    const tree = buildBlockTree(workingBlocks);
+    const firstTabTextRowId = tree[0]?.children[0]?.children[0]?.rowId;
+
+    expect(tree).toHaveLength(1);
+    expect(tree[0]?.effectiveBlock.type).toBe("tabs");
+    expect(tree[0]?.children).toHaveLength(2);
+    expect(firstTabTextRowId).toBeTruthy();
+    expect(setFocus).toHaveBeenCalledWith({
+      rowId: firstTabTextRowId,
       placement: "start",
       offset: 0,
     });

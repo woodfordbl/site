@@ -30,6 +30,7 @@ import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
 import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
+import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
   CanvasRowDragPreview,
@@ -42,6 +43,7 @@ import {
 import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
 import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
 import { useCanvasKeyboard } from "@/hooks/use-canvas-keyboard.ts";
 import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";
@@ -63,7 +65,10 @@ import {
   canDropPageIntoCanvas,
   PAGE_DRAG_MIME_TYPE,
 } from "@/lib/pages/page-canvas-drop.ts";
-import { pageCanvasMobileScrollClassName } from "@/lib/pages/page-title-layout.ts";
+import {
+  pageCanvasMobileScrollClassName,
+  pageCanvasTouchScrollClassName,
+} from "@/lib/pages/page-title-layout.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
@@ -108,6 +113,7 @@ function PageCanvasEditorBody({
   titleSlot?: ReactNode;
 }) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
+  const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const runAfterBlockActionsMenuClose = useCloseBlockActionsMenuBeforeAction();
   const { pages } = useMergedPageListItems();
   const dispatchPage = usePageDispatch(pages);
@@ -402,8 +408,10 @@ function PageCanvasEditorBody({
                     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                       <div
                         className={cn(
-                          "relative flex min-h-0 flex-1 flex-col",
-                          pageCanvasMobileScrollClassName
+                          "relative flex min-h-0 flex-1 flex-col max-md:overflow-x-clip",
+                          isCoarsePrimaryPointer
+                            ? pageCanvasTouchScrollClassName
+                            : pageCanvasMobileScrollClassName
                         )}
                         data-scroll-restoration-id="page-canvas-scroll"
                         ref={scrollRootRef}
@@ -418,6 +426,7 @@ function PageCanvasEditorBody({
                       </div>
                       <CanvasMenuRoot />
                       <MobileBlockActionsDrawer />
+                      <MobileEditorToolbar />
                     </div>
                   </CanvasRowDndBridge>
                 </DndSurface>
