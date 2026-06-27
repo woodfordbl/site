@@ -187,9 +187,11 @@ Every bar action (`ToolbarButton`) fires a light `selection` tick via
 [`useHaptics`](../../src/hooks/haptics.ts) before delegating to its handler, so a
 tap registers physically the moment it lands. The trigger is fired on `click`
 (not the focus-preserving `mousedown`, which is `preventDefault`-ed) and is a
-no-op off coarse pointers, matching the slash-menu and checkbox pattern. The
-shared provider and the semantic moment vocabulary live in
-[`haptics-provider.tsx`](../../src/components/layout/haptics-provider.tsx).
+no-op off coarse pointers, matching the slash-menu and checkbox pattern. This is
+a bounded exception to the minimalist haptics policy — a coarse-only surface above
+the keyboard, not a precedent for ticking ordinary buttons. See
+[Haptics](./haptics.md) for the semantic moment vocabulary and the when-to-use
+rules.
 
 ## Browser support reference
 
