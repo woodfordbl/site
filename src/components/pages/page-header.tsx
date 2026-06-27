@@ -9,8 +9,8 @@ import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
-import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
