@@ -1036,6 +1036,40 @@ describe("canvasReducer", () => {
     }
   });
 
+  it("enter on an empty bullet inside a toggle lifts it to a text child of the toggle", () => {
+    const blocks: Block[] = [
+      { id: "tg", type: "toggleHeading", props: { level: 1, text: "T" } },
+      {
+        id: "list-1",
+        type: "list",
+        props: { variant: "bullet" },
+        parentId: "tg",
+      },
+      {
+        id: "b1",
+        type: "text",
+        props: { text: "first" },
+        parentId: "list-1",
+      },
+      { id: "b2", type: "text", props: { text: "" }, parentId: "list-1" },
+    ];
+    const rows = buildBlockTree(blocks);
+    // The editable surface dispatches block.liftAsText for Enter at the start of
+    // an empty list item (list.onCaretStartChildEnter === "lift-out").
+    const result = canvasReducer(
+      { rows },
+      { type: "block.liftAsText", rowId: "b2" }
+    );
+
+    const persist = result.effects.find((e) => e.type === "persist");
+    expect(persist?.type).toBe("persist");
+    if (persist?.type === "persist") {
+      expect(persist.block.type).toBe("text");
+      // Lifts out of the list but stays nested under the toggle.
+      expect(persist.block.parentId).toBe("tg");
+    }
+  });
+
   it("container.wrap still lifts a list item out of its list before wrapping", () => {
     const blocks: Block[] = [
       { id: "list-1", type: "list", props: { variant: "bullet" } },
