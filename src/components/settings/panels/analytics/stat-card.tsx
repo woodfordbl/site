@@ -4,11 +4,13 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { cn } from "@/lib/utils.ts";
 
 interface StatCardProps {
-  accent?: boolean;
   hint?: ReactNode;
   icon?: ReactNode;
   isLoading?: boolean;
   label: string;
+  /** When set, the card becomes a selectable tab button. */
+  onSelect?: () => void;
+  selected?: boolean;
   value: ReactNode;
 }
 
@@ -17,16 +19,14 @@ export function StatCard({
   value,
   hint,
   icon,
-  accent = false,
   isLoading = false,
+  onSelect,
+  selected = false,
 }: StatCardProps) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col gap-1 rounded-xl p-4 ring-1 ring-foreground/10",
-        accent ? "bg-muted/50" : "bg-card"
-      )}
-    >
+  const interactive = onSelect != null;
+
+  const body = (
+    <>
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium text-muted-foreground text-xs">
           {label}
@@ -47,6 +47,29 @@ export function StatCard({
       {hint ? (
         <span className="text-muted-foreground text-xs">{hint}</span>
       ) : null}
-    </div>
+    </>
   );
+
+  const className = cn(
+    "flex flex-col gap-1 rounded-xl p-4 text-left ring-1 transition-colors",
+    selected ? "bg-muted/60 ring-foreground/15" : "bg-card ring-foreground/10",
+    interactive &&
+      !selected &&
+      "hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  );
+
+  if (interactive) {
+    return (
+      <button
+        aria-pressed={selected}
+        className={className}
+        onClick={onSelect}
+        type="button"
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return <div className={className}>{body}</div>;
 }

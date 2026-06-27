@@ -7,18 +7,15 @@ import {
   IconFileText,
   IconPencil,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useCallback, useMemo, useState } from "react";
 
 import { AnalyticsHeatmapSection } from "@/components/settings/panels/analytics/analytics-heatmap-section.tsx";
 import { AnalyticsSection } from "@/components/settings/panels/analytics/analytics-section.tsx";
+import {
+  type BoardMetric,
+  MetricBoard,
+} from "@/components/settings/panels/analytics/metric-board.tsx";
+import { AnalyticsRangePicker } from "@/components/settings/panels/analytics/range-picker.tsx";
 import {
   type RankedBarItem,
   RankedBarList,
@@ -28,15 +25,6 @@ import { StorageBreakdown } from "@/components/settings/panels/analytics/storage
 import { WordCloud } from "@/components/settings/panels/analytics/word-cloud.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
-import { Button } from "@/components/ui/button.tsx";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -45,8 +33,10 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { useContentAnalytics } from "@/hooks/use-content-analytics.ts";
+import { useLocalPages } from "@/hooks/use-local-pages.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { useSiteActivityAnalytics } from "@/hooks/use-site-activity-analytics.ts";
+import { useSnapshotTimeline } from "@/hooks/use-snapshot-timeline.ts";
 import { useStorageAnalytics } from "@/hooks/use-storage-analytics.ts";
 import {
   formatBytes,
@@ -54,20 +44,37 @@ import {
   formatNumber,
   formatPercent,
 } from "@/lib/format.ts";
+import {
+  type DayRange,
+  formatRangeLabel,
+  presetToRange,
+  type RangePresetId,
+} from "@/lib/pages/analytics-range.ts";
 import { BLOCK_TYPE_LABELS } from "@/lib/pages/content-stats.ts";
+import { buildContentTimeline } from "@/lib/pages/content-timeline.ts";
+import { bucketActivityByRange } from "@/lib/pages/page-activity-analytics.ts";
+import { bucketPagesCreatedByDay } from "@/lib/pages/page-lifecycle-analytics.ts";
 import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
-const activityChartConfig = {
-  content: { label: "Writing", color: "var(--chart-1)" },
-  structure: { label: "Structure", color: "var(--chart-3)" },
-  lifecycle: { label: "Page changes", color: "var(--chart-2)" },
-  activePages: { label: "Active pages", color: "var(--chart-5)" },
-} satisfies ChartConfig;
+const BOARD_META: Record<
+  BoardMetric,
+  { label: string; title: string; timeSeries: boolean }
+> = {
+  edits: { label: "Edits", title: "Edits over time", timeSeries: true },
+  pages: { label: "Pages", title: "Pages created over time", timeSeries: true },
+  words: { label: "Words", title: "Words written over time", timeSeries: true },
+  storage: { label: "Storage", title: "Storage breakdown", timeSeries: false },
+};
 
-const RANGE_OPTIONS = [
-  { label: "30d", days: 30 },
-  { label: "90d", days: 90 },
-] as const;
+function storageSummaryLabel(
+  storageTotal: number,
+  quotaRatio: number | undefined
+): string {
+  if (quotaRatio) {
+    return `${formatBytes(storageTotal)} tracked · ${formatPercent(quotaRatio, 1)} of your browser quota in use`;
+  }
+  return `${formatBytes(storageTotal)} stored locally in your browser`;
+}
 
 interface AnalyticsPanelProps {
   search: SettingsSearch;
@@ -75,24 +82,77 @@ interface AnalyticsPanelProps {
 
 export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
   const section = getSettingsSection("analytics");
-  const [rangeDays, setRangeDays] = useState<number>(30);
+
+  const [metric, setMetric] = useState<BoardMetric>("edits");
+  const [preset, setPreset] = useState<RangePresetId | "custom">("30d");
+  const [range, setRange] = useState<DayRange>(() =>
+    presetToRange("30d", new Date())
+  );
 
   const {
-    byDayDetailed,
+    events,
     byPage,
     byType,
     heatmap,
     streak,
     totalEvents,
     isLoading: activityLoading,
-  } = useSiteActivityAnalytics(true, rangeDays);
+  } = useSiteActivityAnalytics(true);
   const {
     contentStats,
     wordFrequency,
     isLoading: contentLoading,
   } = useContentAnalytics();
   const { stats: storage, isLoading: storageLoading } = useStorageAnalytics();
+  const { pages: snapshotPages, isLoading: snapshotsLoading } =
+    useSnapshotTimeline();
+  const localPages = useLocalPages();
   const { pages } = useMergedPageListItems();
+
+  const earliest = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY;
+    const oldestEvent = events.at(-1);
+    if (oldestEvent) {
+      min = Math.min(min, new Date(oldestEvent.timestamp).getTime());
+    }
+    for (const page of localPages) {
+      min = Math.min(min, new Date(page.createdAt).getTime());
+    }
+    return Number.isFinite(min) ? new Date(min) : undefined;
+  }, [events, localPages]);
+
+  const handlePreset = useCallback(
+    (next: RangePresetId) => {
+      setPreset(next);
+      setRange(presetToRange(next, new Date(), earliest));
+    },
+    [earliest]
+  );
+
+  const handleCustomRange = useCallback((next: DayRange) => {
+    setPreset("custom");
+    setRange(next);
+  }, []);
+
+  const editsData = useMemo(
+    () => bucketActivityByRange(events, range),
+    [events, range]
+  );
+  const pagesData = useMemo(
+    () =>
+      bucketPagesCreatedByDay(
+        localPages.map((page) => ({
+          createdAt: page.createdAt,
+          deletedAt: page.deletedAt,
+        })),
+        range
+      ),
+    [localPages, range]
+  );
+  const wordsData = useMemo(
+    () => buildContentTimeline(snapshotPages, range),
+    [snapshotPages, range]
+  );
 
   const pageTitleById = useMemo(
     () => new Map(pages.map((page) => [page.id, page.title])),
@@ -189,131 +249,54 @@ export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
       ? storage.quotaUsage / storage.quota
       : undefined;
 
+  const boardMeta = BOARD_META[metric];
+  const storageSummary = storageSummaryLabel(storageTotal, quotaRatio);
+  const boardDescription = boardMeta.timeSeries
+    ? formatRangeLabel(range)
+    : storageSummary;
+
   return (
     <SettingsPanelShell
       description="Insights into your writing, activity, and local storage."
       search={search}
       section={section}
     >
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard
-          accent
-          hint={
-            reading > 0
-              ? `≈ ${reading} min read · ${formatNumber(contentStats.avgWordsPerPage)}/page`
-              : "across your workspace"
-          }
-          icon={<IconPencil />}
-          isLoading={contentLoading}
-          label="Words written"
-          value={formatNumber(contentStats.totalWords)}
-        />
-        <StatCard
-          hint={`${formatNumber(contentStats.totalBlocks)} blocks`}
-          icon={<IconFileText />}
-          isLoading={contentLoading}
-          label="Pages"
-          value={formatNumber(contentStats.pageCount)}
-        />
-        <StatCard
-          hint={
-            streak.currentStreak > 0
-              ? `${streak.currentStreak}-day streak`
-              : `${formatNumber(streak.activeDays)} active days`
-          }
-          icon={<IconActivity />}
-          isLoading={activityLoading}
-          label="Edits tracked"
-          value={formatNumber(totalEvents)}
-        />
-        <StatCard
-          hint={
-            storage ? `${formatNumber(storage.assetCount)} media assets` : "—"
-          }
-          icon={<IconDatabase />}
-          isLoading={storageLoading}
-          label="Storage used"
-          value={formatBytes(storageTotal)}
-        />
-      </div>
+      <MetricKpiRow
+        activityLoading={activityLoading}
+        contentLoading={contentLoading}
+        contentStats={contentStats}
+        metric={metric}
+        onSelect={setMetric}
+        reading={reading}
+        storage={storage}
+        storageLoading={storageLoading}
+        storageTotal={storageTotal}
+        streak={streak}
+        totalEvents={totalEvents}
+      />
 
       <AnalyticsSection
         action={
-          <div className="flex gap-1">
-            {RANGE_OPTIONS.map((option) => (
-              <Button
-                key={option.days}
-                onClick={() => setRangeDays(option.days)}
-                size="xs"
-                variant={rangeDays === option.days ? "secondary" : "ghost"}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
+          <AnalyticsRangePicker
+            disabled={!boardMeta.timeSeries}
+            onCustomRange={handleCustomRange}
+            onPreset={handlePreset}
+            preset={preset}
+            range={range}
+          />
         }
-        description="Edits grouped by kind, with the number of pages you touched each day."
-        title="Activity over time"
+        description={boardDescription}
+        title={boardMeta.title}
       >
-        <ChartContainer
-          className="aspect-auto h-[240px] w-full"
-          config={activityChartConfig}
-        >
-          <ComposedChart accessibilityLayer data={byDayDetailed}>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              axisLine={false}
-              dataKey="date"
-              interval="preserveStartEnd"
-              minTickGap={24}
-              tickLine={false}
-              tickMargin={8}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              width={28}
-              yAxisId="left"
-            />
-            <YAxis
-              axisLine={false}
-              orientation="right"
-              tickLine={false}
-              width={28}
-              yAxisId="right"
-            />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar
-              dataKey="content"
-              fill="var(--color-content)"
-              radius={[0, 0, 0, 0]}
-              stackId="activity"
-              yAxisId="left"
-            />
-            <Bar
-              dataKey="structure"
-              fill="var(--color-structure)"
-              stackId="activity"
-              yAxisId="left"
-            />
-            <Bar
-              dataKey="lifecycle"
-              fill="var(--color-lifecycle)"
-              radius={[4, 4, 0, 0]}
-              stackId="activity"
-              yAxisId="left"
-            />
-            <Line
-              dataKey="activePages"
-              dot={false}
-              stroke="var(--color-activePages)"
-              strokeWidth={2}
-              type="monotone"
-              yAxisId="right"
-            />
-            <ChartLegend content={<ChartLegendContent />} />
-          </ComposedChart>
-        </ChartContainer>
+        <MetricBoard
+          edits={editsData}
+          hasSnapshots={snapshotPages.length > 0}
+          metric={metric}
+          pages={pagesData}
+          storage={storage}
+          storageLoading={storageLoading || snapshotsLoading}
+          words={wordsData}
+        />
       </AnalyticsSection>
 
       <AnalyticsHeatmapSection heatmap={heatmap} />
@@ -366,11 +349,7 @@ export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <AnalyticsSection
-          description={
-            quotaRatio
-              ? `${formatBytes(storageTotal)} tracked · ${formatPercent(quotaRatio, 1)} of your browser quota in use`
-              : `${formatBytes(storageTotal)} stored locally in your browser`
-          }
+          description={storageSummary}
           title="Storage breakdown"
         >
           {storage && storage.categories.length > 0 ? (
@@ -445,6 +424,87 @@ export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
         </AnalyticsSection>
       </div>
     </SettingsPanelShell>
+  );
+}
+
+interface MetricKpiRowProps {
+  activityLoading: boolean;
+  contentLoading: boolean;
+  contentStats: ReturnType<typeof useContentAnalytics>["contentStats"];
+  metric: BoardMetric;
+  onSelect: (metric: BoardMetric) => void;
+  reading: number;
+  storage: ReturnType<typeof useStorageAnalytics>["stats"];
+  storageLoading: boolean;
+  storageTotal: number;
+  streak: ReturnType<typeof useSiteActivityAnalytics>["streak"];
+  totalEvents: number;
+}
+
+function MetricKpiRow({
+  metric,
+  onSelect,
+  contentStats,
+  streak,
+  storage,
+  totalEvents,
+  storageTotal,
+  reading,
+  contentLoading,
+  activityLoading,
+  storageLoading,
+}: MetricKpiRowProps) {
+  const wordsHint =
+    reading > 0
+      ? `≈ ${reading} min read · ${formatNumber(contentStats.avgWordsPerPage)}/page`
+      : "across your workspace";
+  const editsHint =
+    streak.currentStreak > 0
+      ? `${streak.currentStreak}-day streak`
+      : `${formatNumber(streak.activeDays)} active days`;
+  const storageHint = storage
+    ? `${formatNumber(storage.assetCount)} media assets`
+    : "—";
+
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <StatCard
+        hint={wordsHint}
+        icon={<IconPencil />}
+        isLoading={contentLoading}
+        label="Words written"
+        onSelect={() => onSelect("words")}
+        selected={metric === "words"}
+        value={formatNumber(contentStats.totalWords)}
+      />
+      <StatCard
+        hint={`${formatNumber(contentStats.totalBlocks)} blocks`}
+        icon={<IconFileText />}
+        isLoading={contentLoading}
+        label="Pages"
+        onSelect={() => onSelect("pages")}
+        selected={metric === "pages"}
+        value={formatNumber(contentStats.pageCount)}
+      />
+      <StatCard
+        hint={editsHint}
+        icon={<IconActivity />}
+        isLoading={activityLoading}
+        label="Edits tracked"
+        onSelect={() => onSelect("edits")}
+        selected={metric === "edits"}
+        value={formatNumber(totalEvents)}
+      />
+      <StatCard
+        hint={storageHint}
+        icon={<IconDatabase />}
+        isLoading={storageLoading}
+        label="Storage used"
+        onSelect={() => onSelect("storage")}
+        selected={metric === "storage"}
+        value={formatBytes(storageTotal)}
+      />
+    </div>
   );
 }
 

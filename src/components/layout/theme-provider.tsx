@@ -15,6 +15,7 @@ import {
   resolveTheme,
 } from "@/lib/appearance/resolve-theme.ts";
 import { writeSiteAppearanceToDocument } from "@/lib/appearance/site-appearance-cookie.ts";
+import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type {
   ResolvedTheme,
@@ -22,7 +23,9 @@ import type {
 } from "@/lib/schemas/site-appearance.ts";
 
 interface ThemeContextValue {
+  chartPalette: ChartPaletteId;
   resolvedTheme: ResolvedTheme;
+  setChartPalette: (chartPalette: ChartPaletteId) => void;
   setTextScale: (textScale: PageTextScale) => void;
   setTheme: (theme: ThemePreference) => void;
   textScale: PageTextScale;
@@ -39,6 +42,10 @@ function applyTextScale(textScale: PageTextScale): void {
   document.documentElement.dataset.pageTextScale = textScale;
 }
 
+function applyChartPalette(chartPalette: ChartPaletteId): void {
+  document.documentElement.dataset.chartPalette = chartPalette;
+}
+
 interface ThemeProviderProps {
   children: ReactNode;
   initialHints: SiteAppearanceHints;
@@ -51,6 +58,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   );
   const [textScale, setTextScaleState] = useState<PageTextScale>(
     initialHints.appearance.textScale
+  );
+  const [chartPalette, setChartPaletteState] = useState<ChartPaletteId>(
+    initialHints.appearance.chartPalette
   );
   const [prefersDark, setPrefersDark] = useState(() =>
     initialHints.appearance.theme === "system"
@@ -72,6 +82,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   }, [textScale]);
 
   useEffect(() => {
+    applyChartPalette(chartPalette);
+  }, [chartPalette]);
+
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const sync = () => {
       setPrefersDark(media.matches);
@@ -85,28 +99,58 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   const setTheme = useCallback(
     (nextTheme: ThemePreference) => {
       setThemeState(nextTheme);
-      writeSiteAppearanceToDocument({ theme: nextTheme, textScale });
+      writeSiteAppearanceToDocument({
+        theme: nextTheme,
+        textScale,
+        chartPalette,
+      });
     },
-    [textScale]
+    [textScale, chartPalette]
   );
 
   const setTextScale = useCallback(
     (nextTextScale: PageTextScale) => {
       setTextScaleState(nextTextScale);
-      writeSiteAppearanceToDocument({ theme, textScale: nextTextScale });
+      writeSiteAppearanceToDocument({
+        theme,
+        textScale: nextTextScale,
+        chartPalette,
+      });
     },
-    [theme]
+    [theme, chartPalette]
+  );
+
+  const setChartPalette = useCallback(
+    (nextChartPalette: ChartPaletteId) => {
+      setChartPaletteState(nextChartPalette);
+      writeSiteAppearanceToDocument({
+        theme,
+        textScale,
+        chartPalette: nextChartPalette,
+      });
+    },
+    [theme, textScale]
   );
 
   const value = useMemo<ThemeContextValue>(
     () => ({
+      chartPalette,
       resolvedTheme,
+      setChartPalette,
       setTextScale,
       setTheme,
       textScale,
       theme,
     }),
-    [resolvedTheme, setTextScale, setTheme, textScale, theme]
+    [
+      chartPalette,
+      resolvedTheme,
+      setChartPalette,
+      setTextScale,
+      setTheme,
+      textScale,
+      theme,
+    ]
   );
 
   return (
@@ -129,11 +173,11 @@ export function useSiteAppearance(): ThemeContextValue {
 
 /** Persists appearance preferences cookie after client changes. */
 export function SyncSiteAppearanceCookieEffect() {
-  const { textScale, theme } = useSiteAppearance();
+  const { chartPalette, textScale, theme } = useSiteAppearance();
 
   useEffect(() => {
-    writeSiteAppearanceToDocument({ theme, textScale });
-  }, [textScale, theme]);
+    writeSiteAppearanceToDocument({ theme, textScale, chartPalette });
+  }, [chartPalette, textScale, theme]);
 
   return null;
 }

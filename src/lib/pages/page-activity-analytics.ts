@@ -1,3 +1,4 @@
+import { type DayRange, eachDayKey } from "@/lib/pages/analytics-range.ts";
 import type {
   PageActivityEvent,
   PageActivityEventType,
@@ -166,6 +167,52 @@ export function bucketEventsByDayDetailed(
     const date = new Date(today);
     date.setDate(today.getDate() - offset);
     const dayKey = toDayKey(date.toISOString());
+    buckets.set(dayKey, {
+      detail: {
+        date: formatDayLabel(dayKey),
+        dayKey,
+        content: 0,
+        structure: 0,
+        lifecycle: 0,
+        total: 0,
+        activePages: 0,
+      },
+      pages: new Set<string>(),
+    });
+  }
+
+  for (const event of events) {
+    const dayKey = toDayKey(event.timestamp);
+    const bucket = buckets.get(dayKey);
+    if (!bucket) {
+      continue;
+    }
+    const category = EVENT_CATEGORY[event.type] ?? "lifecycle";
+    bucket.detail[category] += 1;
+    bucket.detail.total += 1;
+    bucket.pages.add(event.pageId);
+  }
+
+  return [...buckets.values()].map(({ detail, pages }) => ({
+    ...detail,
+    activePages: pages.size,
+  }));
+}
+
+/**
+ * Range-aware variant of {@link bucketEventsByDayDetailed}: daily category
+ * buckets and active-page counts spanning an explicit inclusive day range.
+ */
+export function bucketActivityByRange(
+  events: PageActivityEvent[],
+  range: DayRange
+): ActivityDayDetail[] {
+  const buckets = new Map<
+    string,
+    { detail: ActivityDayDetail; pages: Set<string> }
+  >();
+
+  for (const dayKey of eachDayKey(range)) {
     buckets.set(dayKey, {
       detail: {
         date: formatDayLabel(dayKey),
