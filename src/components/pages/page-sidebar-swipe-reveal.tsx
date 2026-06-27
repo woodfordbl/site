@@ -333,8 +333,7 @@ export function PageSidebarSwipeReveal({
         className={cn(
           "relative z-10 h-full w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none",
           isDragging && "transition-none",
-          isRevealed &&
-            "overflow-hidden rounded-3xl shadow-lg ring-1 ring-border"
+          isRevealed && "overflow-hidden rounded-3xl ring-1 ring-border"
         )}
         style={{ transform: `translateX(${translateX}px)` }}
       >
@@ -357,6 +356,23 @@ export function PageSidebarSwipeReveal({
           {...(openMobile ? gestureHandlers : {})}
         />
       </div>
+
+      {/* Keep the top safe-area sidebar-gray while revealing, so it doesn't show
+          the content's background there (e.g. a cover page's sticky header,
+          which fills the safe-area white). Height is the safe-area inset, which
+          grows non-zero exactly when scrolled (the Safari address bar
+          collapses), matching when the white would otherwise appear. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+          isDragging && "transition-none"
+        )}
+        style={{
+          height: "env(safe-area-inset-top)",
+          opacity: overlayProgress,
+        }}
+      />
 
       {/* Left-edge hit strip — captures the opening swipe while closed. */}
       {openMobile ? null : (
