@@ -4,6 +4,7 @@ import {
   calloutPropsSchema,
   checklistItemPropsSchema,
   checklistPropsSchema,
+  codePropsSchema,
   columnPropsSchema,
   columnsPropsSchema,
   dividerPropsSchema,
@@ -27,6 +28,7 @@ export const blockTypeSchema = z.enum([
   "list",
   "quote",
   "callout",
+  "code",
   "checklist",
   "checklistItem",
   "pageLink",
@@ -71,6 +73,10 @@ export const blockSchema = z.discriminatedUnion("type", [
   blockBaseSchema.extend({
     type: z.literal("callout"),
     props: calloutPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("code"),
+    props: codePropsSchema,
   }),
   blockBaseSchema.extend({
     type: z.literal("checklist"),

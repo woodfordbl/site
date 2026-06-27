@@ -261,6 +261,13 @@
       "docs": ["docs/architecture/author-dev-mode.md"]
     },
     {
+      "globs": [
+        "src/hooks/use-visual-viewport-keyboard.ts",
+        "src/components/canvas/mobile-editor-toolbar.tsx"
+      ],
+      "docs": ["docs/architecture/keyboard-toolbar.md"]
+    },
+    {
       "globs": ["src/styles.css"],
       "docs": ["docs/architecture/motion.md"]
     }
