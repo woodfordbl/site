@@ -2,13 +2,11 @@ import { type RefObject, useEffect, useState } from "react";
 
 /** Below this overlap the keyboard is treated as closed (ignores small UI chrome shifts). */
 const KEYBOARD_OPEN_THRESHOLD_PX = 80;
+/** Gap between the bar and the top of the keyboard. */
+const KEYBOARD_GAP_PX = 8;
 
 /** Pixels the on-screen keyboard overlaps the layout viewport bottom, via visualViewport. */
-function keyboardOverlapPx(): number {
-  if (typeof window === "undefined" || !window.visualViewport) {
-    return 0;
-  }
-  const vv = window.visualViewport;
+function keyboardOverlapPx(vv: VisualViewport): number {
   return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
 }
 
@@ -16,15 +14,21 @@ function keyboardOverlapPx(): number {
  * Pins a ref'd element directly above the on-screen keyboard and reports whether
  * the keyboard is open.
  *
- * Positioning is written straight to `element.style.bottom` (not React state) on
- * every `visualViewport` resize/scroll and document scroll, batched with rAF.
- * iOS Safari drags `position: fixed` elements during scroll while the keyboard is
- * up and reports a changing `visualViewport.offsetTop`, so re-pinning on those
- * events — imperatively, to avoid render lag — is what keeps the bar glued to the
- * keyboard regardless of scroll. The element must be portaled to `document.body`
- * (no transformed ancestor) for `position: fixed` to be viewport-relative.
+ * iOS Safari is the hard case: it positions `position: fixed` against the
+ * (full-height) layout viewport, drags fixed elements during scroll while the
+ * keyboard is up, collapses its URL bar (changing `window.innerHeight`), and does
+ * not fire events during momentum scroll. To stay glued to the keyboard:
+ * - Anchor by **`top`** computed straight from the visual viewport
+ *   (`offsetTop + height - barHeight`) — this avoids the unstable `innerHeight`
+ *   term and tracks the keyboard as `offsetTop` changes with scroll.
+ * - Re-apply on `visualViewport` resize/scroll and capture-phase document scroll,
+ *   **plus a `requestAnimationFrame` loop while the keyboard is open** so the bar
+ *   keeps tracking during event-less momentum scrolling.
+ * - Write straight to `element.style.top` (not React state) to avoid render lag.
  *
- * Returns `{ isOpen: false }` when disabled, on SSR, or when the API is missing.
+ * The element must be portaled to `document.body` (no transformed ancestor) so
+ * `position: fixed` is viewport-relative. Returns `{ isOpen: false }` when
+ * disabled, on SSR, or when the API is unavailable.
  */
 export function useKeyboardToolbarAnchor(
   ref: RefObject<HTMLElement | null>,
@@ -42,34 +46,56 @@ export function useKeyboardToolbarAnchor(
       return;
     }
 
-    let frame = 0;
-    const apply = () => {
-      frame = 0;
-      const overlap = keyboardOverlapPx();
+    let raf = 0;
+    let looping = false;
+    let barHeight = 0;
+
+    const apply = (): boolean => {
+      const overlap = keyboardOverlapPx(vv);
+      const open = overlap >= KEYBOARD_OPEN_THRESHOLD_PX;
       const el = ref.current;
-      if (el) {
-        el.style.bottom = `${overlap}px`;
+      if (el && open) {
+        // Bottom of the visual viewport (top of the keyboard), in layout coords.
+        const keyboardTop = vv.offsetTop + vv.height;
+        el.style.top = `${keyboardTop - barHeight - KEYBOARD_GAP_PX}px`;
       }
-      setIsOpen(overlap >= KEYBOARD_OPEN_THRESHOLD_PX);
+      setIsOpen(open);
+      return open;
     };
-    const schedule = () => {
-      if (!frame) {
-        frame = requestAnimationFrame(apply);
+
+    const loop = () => {
+      if (apply()) {
+        raf = requestAnimationFrame(loop);
+      } else {
+        looping = false;
       }
     };
 
-    apply();
-    vv.addEventListener("resize", schedule);
-    vv.addEventListener("scroll", schedule);
+    const kick = () => {
+      // Measure height on events (layout read) so the per-frame loop stays cheap.
+      const el = ref.current;
+      if (el) {
+        barHeight = el.offsetHeight;
+      }
+      const open = apply();
+      if (open && !looping) {
+        looping = true;
+        raf = requestAnimationFrame(loop);
+      }
+    };
+
+    kick();
+    vv.addEventListener("resize", kick);
+    vv.addEventListener("scroll", kick);
     // The editor content scrolls inside an overflow container (not window), so
     // listen in the capture phase to re-pin on those scrolls too.
-    document.addEventListener("scroll", schedule, true);
+    document.addEventListener("scroll", kick, true);
     return () => {
-      vv.removeEventListener("resize", schedule);
-      vv.removeEventListener("scroll", schedule);
-      document.removeEventListener("scroll", schedule, true);
-      if (frame) {
-        cancelAnimationFrame(frame);
+      vv.removeEventListener("resize", kick);
+      vv.removeEventListener("scroll", kick);
+      document.removeEventListener("scroll", kick, true);
+      if (raf) {
+        cancelAnimationFrame(raf);
       }
     };
   }, [enabled, ref]);

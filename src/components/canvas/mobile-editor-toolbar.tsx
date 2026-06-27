@@ -185,12 +185,11 @@ export function MobileEditorToolbar() {
         <div
           aria-hidden={!visible}
           className={cn(
-            "fixed inset-x-0 z-50 flex items-center gap-2 px-3 pb-1.5 transition-opacity duration-150",
+            "fixed inset-x-0 top-0 z-50 flex items-center gap-2 px-3 transition-opacity duration-150",
             visible ? "opacity-100" : "pointer-events-none opacity-0"
           )}
           ref={anchorRef}
           role="toolbar"
-          style={{ bottom: 0 }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
             <ButtonGroup variant="overlay">
