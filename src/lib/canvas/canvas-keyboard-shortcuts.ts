@@ -50,42 +50,6 @@ export function handleCanvasSelectionArrowKeyDown(
   return handled;
 }
 
-export function handleCanvasKeyboardShortcut(
-  event: KeyboardEvent,
-  handlers: CanvasKeyboardHandlers
-): void {
-  if (isBlockFieldFocused(event)) {
-    return;
-  }
-
-  if (handleCanvasSelectionArrowKeyDown(event, handlers)) {
-    return;
-  }
-
-  const mod = event.metaKey || event.ctrlKey;
-  const key = event.key.toLowerCase();
-
-  if (mod && key === "a") {
-    event.preventDefault();
-    handlers.selectAll();
-    return;
-  }
-
-  if (mod && key === "c" && handlers.selectedCount > 0) {
-    event.preventDefault();
-    handlers.copySelection().catch(() => undefined);
-    return;
-  }
-
-  if (
-    (event.key === "Backspace" || event.key === "Delete") &&
-    handlers.selectedCount > 0
-  ) {
-    event.preventDefault();
-    handlers.deleteSelection();
-  }
-}
-
 export function handleCanvasPasteEvent(
   event: ClipboardEvent,
   handlers: CanvasPasteHandlers

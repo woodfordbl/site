@@ -42,6 +42,7 @@ import {
 } from "@/components/dnd/dnd-surface.tsx";
 import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
 import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
+import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
@@ -50,7 +51,6 @@ import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
-import { handleCanvasKeyboardShortcut } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
   collectCanvasRowRects,
@@ -187,45 +187,51 @@ function PageCanvasEditorBody({
     [editor.deleteRow, runAfterBlockActionsMenuClose]
   );
 
-  const handleCanvasKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      handleCanvasKeyboardShortcut(event, {
-        clipboard: editor.clipboard,
-        copySelection: editor.copySelection,
-        deleteSelection,
-        extendSelectionDown: () => editor.extendSelectionAdjacent("down"),
-        extendSelectionUp: () => editor.extendSelectionAdjacent("up"),
-        moveRowDown: () => editor.moveSelectedRowAdjacent("down"),
-        moveRowUp: () => editor.moveSelectedRowAdjacent("up"),
-        pasteClipboard: editor.pasteClipboard,
-        selectAll: editor.selectAll,
-        selectedCount: editor.selectedRowIds.length,
-      });
+  const hasSelection = editor.selectedRowIds.length > 0;
+
+  // Registry-driven keyboard shortcuts. Each command's combo lives in the
+  // registry; ignoreInputs (set per-command) keeps these from firing while a
+  // block field is focused, replicating the old isBlockFieldFocused guard. The
+  // hasSelection guards below match the previous handler's behavior.
+  useCommandHotkeys({
+    "select-all-blocks": editor.selectAll,
+    "copy-blocks": () => {
+      if (hasSelection) {
+        editor.copySelection().catch(() => undefined);
+      }
     },
-    [
-      deleteSelection,
-      editor.clipboard,
-      editor.copySelection,
-      editor.extendSelectionAdjacent,
-      editor.moveSelectedRowAdjacent,
-      editor.pasteClipboard,
-      editor.selectAll,
-      editor.selectedRowIds.length,
-    ]
-  );
+    "delete-block": () => {
+      if (hasSelection) {
+        deleteSelection();
+      }
+    },
+    "clear-selection": editor.clearSelection,
+    "move-row-up": () => {
+      if (hasSelection) {
+        editor.moveSelectedRowAdjacent("up");
+      }
+    },
+    "move-row-down": () => {
+      if (hasSelection) {
+        editor.moveSelectedRowAdjacent("down");
+      }
+    },
+    "extend-selection-up": () => {
+      if (hasSelection) {
+        editor.extendSelectionAdjacent("up");
+      }
+    },
+    "extend-selection-down": () => {
+      if (hasSelection) {
+        editor.extendSelectionAdjacent("down");
+      }
+    },
+  });
 
   useCanvasKeyboard({
     clearSelection: editor.clearSelection,
-    hasSelection: editor.selectedRowIds.length > 0,
-    onKeyDown: handleCanvasKeyDown,
+    hasSelection,
     onPaste: editor.handleCanvasPaste,
-    selectionArrowHandlers: {
-      extendSelectionDown: () => editor.extendSelectionAdjacent("down"),
-      extendSelectionUp: () => editor.extendSelectionAdjacent("up"),
-      moveRowDown: () => editor.moveSelectedRowAdjacent("down"),
-      moveRowUp: () => editor.moveSelectedRowAdjacent("up"),
-      selectedCount: editor.selectedRowIds.length,
-    },
   });
 
   const [tableRowPreviewMeta, setTableRowPreviewMeta] = useState<Omit<

@@ -1,75 +1,39 @@
 import { useEffect, useRef } from "react";
-import type { CanvasSelectionArrowHandlers } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
-import { handleCanvasSelectionArrowKeyDown } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 
 interface UseCanvasKeyboardOptions {
   clearSelection: () => void;
   hasSelection: boolean;
-  onKeyDown: (event: KeyboardEvent) => void;
   onPaste: (event: ClipboardEvent) => void;
-  selectionArrowHandlers?: CanvasSelectionArrowHandlers;
 }
 
+/**
+ * Canvas-level pointer/clipboard wiring that isn't keyboard-shortcut dispatch.
+ * Keyboard shortcuts (select/copy/delete, move/extend row, clear selection) are
+ * registered via {@link useCommandHotkeys} in the canvas editor; this hook keeps
+ * the native `paste` ClipboardEvent (block paste reads app clipboard state) and
+ * the click-outside-to-clear-selection behavior.
+ */
 export function useCanvasKeyboard({
-  onKeyDown,
   onPaste,
   clearSelection,
   hasSelection,
-  selectionArrowHandlers,
 }: UseCanvasKeyboardOptions) {
-  const onKeyDownRef = useRef(onKeyDown);
   const onPasteRef = useRef(onPaste);
   const clearSelectionRef = useRef(clearSelection);
-  const selectionArrowHandlersRef = useRef(selectionArrowHandlers);
 
-  onKeyDownRef.current = onKeyDown;
   onPasteRef.current = onPaste;
   clearSelectionRef.current = clearSelection;
-  selectionArrowHandlersRef.current = selectionArrowHandlers;
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        clearSelectionRef.current();
-      }
-
-      onKeyDownRef.current(event);
-    };
-
     const handlePaste = (event: ClipboardEvent) => {
       onPasteRef.current(event);
     };
 
-    window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("paste", handlePaste, { capture: true });
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("paste", handlePaste, { capture: true });
     };
   }, []);
-
-  useEffect(() => {
-    if (!hasSelection) {
-      return;
-    }
-
-    const handleSelectionArrowCapture = (event: KeyboardEvent) => {
-      const handlers = selectionArrowHandlersRef.current;
-      if (!handlers) {
-        return;
-      }
-      handleCanvasSelectionArrowKeyDown(event, handlers);
-    };
-
-    window.addEventListener("keydown", handleSelectionArrowCapture, {
-      capture: true,
-    });
-    return () => {
-      window.removeEventListener("keydown", handleSelectionArrowCapture, {
-        capture: true,
-      });
-    };
-  }, [hasSelection]);
 
   useEffect(() => {
     if (!hasSelection) {

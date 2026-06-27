@@ -36,7 +36,7 @@ export function SiteSettingsTrigger({ pageId }: SiteSettingsTriggerProps) {
       >
         <IconSettings />
       </TooltipTrigger>
-      <TooltipContent>Settings</TooltipContent>
+      <TooltipContent command="open-settings">Settings</TooltipContent>
     </Tooltip>
   );
 }

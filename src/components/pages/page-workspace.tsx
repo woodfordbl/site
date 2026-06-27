@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
+import { PageCommandHotkeys } from "@/components/keyboard/page-command-hotkeys.tsx";
 import { PageCover } from "@/components/pages/page-cover.tsx";
 import { PageCoverProvider } from "@/components/pages/page-cover-context.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
@@ -264,6 +265,11 @@ function PageWorkspaceBody({
       setHeaderImage={setHeaderImage}
     >
       <VersionPreviewProvider value={{ enterPreview }}>
+        <PageCommandHotkeys
+          pageId={page.id}
+          seed={titleSeed}
+          serverPage={serverPage}
+        />
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           <div
             className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"

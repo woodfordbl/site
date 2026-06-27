@@ -23,7 +23,7 @@ function NewPageButtonLive() {
           dispatch({ type: "page.create", title: DEFAULT_PAGE_TITLE })
         }
         render={<button type="button" />}
-        tooltip="New page"
+        tooltip={{ children: "New page", command: "new-page" }}
       >
         <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
           <IconPlus aria-hidden className="size-4 shrink-0" />

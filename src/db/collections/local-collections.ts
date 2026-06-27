@@ -16,6 +16,7 @@ import {
 import { scheduleSnapshotPurge } from "@/db/snapshots/snapshot-purge.ts";
 import { reconcileDirtyPagesCookie } from "@/lib/local-draft/reconcile-dirty-pages-cookie.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
+import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
 
 function getHotData(): Record<string, unknown> {
@@ -84,6 +85,24 @@ export const localBlocksCollection = getOrCreateHotCollection(
   }
 );
 
+/**
+ * User keyboard-shortcut overrides. Holds one row per command the user has
+ * rebound away from its registry default; the resolved binding is the default
+ * overlaid with any matching row here.
+ */
+export const localKeybindingsCollection = getOrCreateHotCollection(
+  "localKeybindingsCollection",
+  () =>
+    createCollection(
+      localStorageCollectionOptions({
+        id: "local-keybindings",
+        storageKey: "site-local-keybindings",
+        getKey: (item) => item.id,
+        schema: localKeybindingSchema,
+      })
+    )
+);
+
 /** Reclaim orphaned media blobs once per boot, off the critical path. */
 function scheduleOrphanAssetSweep(): void {
   const run = () => {
@@ -112,6 +131,7 @@ function startLocalCollectionsSync(): void {
   reconcileDirtyPagesCookie();
   localPagesCollection.startSyncImmediate();
   localBlocksCollection.startSyncImmediate();
+  localKeybindingsCollection.startSyncImmediate();
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;

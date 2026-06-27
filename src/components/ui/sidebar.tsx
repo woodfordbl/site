@@ -35,7 +35,6 @@ import { cn } from "@/lib/utils.ts";
 const SIDEBAR_WIDTH = "12rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 interface SidebarContextProps {
   isNarrowViewport: boolean;
@@ -672,7 +671,6 @@ function SidebarMenuSubButton({
 }
 
 export {
-  SIDEBAR_KEYBOARD_SHORTCUT,
   SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_ICON,
   SIDEBAR_WIDTH_MOBILE,
