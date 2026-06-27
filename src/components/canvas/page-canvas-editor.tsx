@@ -408,7 +408,12 @@ function PageCanvasEditorBody({
                     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                       <div
                         className={cn(
-                          "relative flex min-h-0 flex-1 flex-col max-md:overflow-x-clip",
+                          // `overscroll-contain`: keep inner-scroll rubber-band
+                          // from chaining to the page and panning the visual
+                          // viewport, which is what makes the keyboard toolbar
+                          // jitter on iOS (see useKeyboardToolbarAnchor +
+                          // docs/architecture/keyboard-toolbar.md).
+                          "relative flex min-h-0 flex-1 flex-col overscroll-contain max-md:overflow-x-clip",
                           isCoarsePrimaryPointer
                             ? pageCanvasTouchScrollClassName
                             : pageCanvasMobileScrollClassName

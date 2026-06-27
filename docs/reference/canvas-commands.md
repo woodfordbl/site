@@ -2,6 +2,8 @@
 
 Block UI dispatches these via `useBlockFieldActions` / `BlockRenderer` (canvas context) or slash menu. The slash menu root list is built by [`buildRootSlashMenuItems`](../../src/lib/canvas/slash-menu-list.ts) and rendered as plain command rows in a field-anchored Popover (editor-driven selection at root; inline search panel for page link targets). Escape or outside dismiss suppresses reopen until the leading `/` is removed from the block text. Persisted block rows update `localBlocksCollection` immediately on content edits; structural commands run inside one block transaction per dispatch — incremental inserts/deletes/order patches committed by `commitPageBlockTransaction` (the hot path, driven from [`use-page-canvas.ts`](../../src/db/queries/use-page-canvas.ts)), with `applyPageBlockDiff` for bulk edits — keeping `localPagesCollection.blockOrder` in sync. Block types register in [`src/components/blocks/registry.ts`](../../src/components/blocks/registry.ts); container policy in [`src/lib/canvas/block-container-config.ts`](../../src/lib/canvas/block-container-config.ts).
 
+On coarse pointers, [`MobileEditorToolbar`](../../src/components/canvas/mobile-editor-toolbar.tsx) dispatches a subset of these above the keyboard — `indent.adjust`, `row.moveAdjacent`, and `slash.convert`/`container.wrap` via its Add block / Turn into pickers. Its positioning is documented in [keyboard-toolbar](../architecture/keyboard-toolbar.md).
+
 ## Row lifecycle
 
 | Command | Trigger |

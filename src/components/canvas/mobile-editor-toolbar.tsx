@@ -65,10 +65,15 @@ function ToolbarButton({
 /**
  * Mobile (coarse pointer) command bar pinned above the on-screen keyboard while a
  * canvas block field is focused. Solid outlined button-groups, portaled to
- * `document.body` so `position: fixed` is viewport-relative, anchored to the
- * keyboard top imperatively (see {@link useKeyboardToolbarAnchor}). Visibility is
- * driven by focus (not a keyboard-height threshold, which collapses during scroll
- * and would flicker the bar out). Mounted once at the editor root.
+ * `document.body` so `position: fixed` is viewport-relative. Visibility is driven
+ * by focus (not a keyboard-height threshold, which collapses during scroll and
+ * would flicker the bar out). Mounted once at the editor root.
+ *
+ * Positioning is owned per-platform by {@link useKeyboardToolbarAnchor}: on
+ * Chromium it flips this element to a `bottom`-anchor and lets CSS resize handle
+ * it; on iOS Safari it drives a composited `transform` from the visual viewport.
+ * The `top-0` base class below is the iOS anchor; the hook overrides it on
+ * Chromium. See [keyboard-toolbar](../../../docs/architecture/keyboard-toolbar.md).
  */
 export function MobileEditorToolbar() {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
