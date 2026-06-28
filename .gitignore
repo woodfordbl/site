@@ -1,5 +1,9 @@
 node_modules
 .DS_Store
+# Claude Code: commit shared launch config; ignore local state + worktrees
+.claude/*
+!.claude/launch.json
+.claude/worktrees/
 # Cursor: commit hooks + agents; ignore local state and debug logs
 .cursor/*
 !.cursor/hooks.json

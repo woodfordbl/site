@@ -88,9 +88,13 @@ export const pageCanvasTouchHeaderSlotStickyClassName = `-mr-4 -ml-3 mb-4 ${STIC
  * cancelling desktop `pt-16` scroll inset) so page content scrolls beneath it.
  * (cancels desktop `px-12`) with a solid opaque background. Shown only at `md+`;
  * mobile keeps its own header slot.
+ *
+ * `mb-16`: the cover's `-mt-16` bleed cancels the scroll region's `pt-16`, which
+ * is the 4rem of breathing room the title normally gets above it. Restore that
+ * gap below the breadcrumb bar so a covered page's title isn't flush against it.
  */
 export const pageCoverDesktopHeaderSlotClassName =
-  "sticky -top-16 z-20 -mx-12 w-[calc(100%+6rem)] bg-background max-md:hidden";
+  "sticky -top-16 z-20 mb-16 -mx-12 w-[calc(100%+6rem)] bg-background max-md:hidden";
 
 /**
  * Full-width cover ("header image") wrapper. Negative margins cancel the scroll

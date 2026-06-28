@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
 import {
   SettingsItemCard,
@@ -29,16 +31,6 @@ const TEXT_SIZE_OPTIONS: Array<{ label: string; value: PageTextScale }> = [
   { value: "large", label: "Large" },
 ];
 
-const CHART_PALETTE_OPTIONS: Array<{ label: string; value: ChartPaletteId }> =
-  CHART_PALETTE_IDS.map((id) => ({
-    value: id,
-    label: CHART_PALETTES[id].label,
-  }));
-
-interface AppearancePanelProps {
-  search: SettingsSearch;
-}
-
 const PALETTE_SWATCH_TOKENS = [
   "var(--chart-1)",
   "var(--chart-2)",
@@ -60,6 +52,20 @@ function PaletteSwatch({ palette }: { palette: ChartPaletteId }) {
       ))}
     </div>
   );
+}
+
+const CHART_PALETTE_OPTIONS: Array<{
+  label: string;
+  leading: ReactNode;
+  value: ChartPaletteId;
+}> = CHART_PALETTE_IDS.map((id) => ({
+  value: id,
+  label: CHART_PALETTES[id].label,
+  leading: <PaletteSwatch palette={id} />,
+}));
+
+interface AppearancePanelProps {
+  search: SettingsSearch;
 }
 
 export function AppearancePanel({ search }: AppearancePanelProps) {
@@ -104,14 +110,11 @@ export function AppearancePanel({ search }: AppearancePanelProps) {
         />
         <SettingsItemField
           action={
-            <div className="flex items-center gap-3">
-              <PaletteSwatch palette={chartPalette} />
-              <SettingsItemSelect
-                onValueChange={setChartPalette}
-                options={CHART_PALETTE_OPTIONS}
-                value={chartPalette}
-              />
-            </div>
+            <SettingsItemSelect
+              onValueChange={setChartPalette}
+              options={CHART_PALETTE_OPTIONS}
+              value={chartPalette}
+            />
           }
           description="Default color palette for analytics charts across the workspace."
           title="Chart palette"

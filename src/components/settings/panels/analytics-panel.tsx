@@ -25,6 +25,7 @@ import { StorageBreakdown } from "@/components/settings/panels/analytics/storage
 import { WordCloud } from "@/components/settings/panels/analytics/word-cloud.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
+import { ChartPaletteScope } from "@/components/ui/chart.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -261,168 +262,173 @@ export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
       search={search}
       section={section}
     >
-      <MetricKpiRow
-        activityLoading={activityLoading}
-        contentLoading={contentLoading}
-        contentStats={contentStats}
-        metric={metric}
-        onSelect={setMetric}
-        reading={reading}
-        storage={storage}
-        storageLoading={storageLoading}
-        storageTotal={storageTotal}
-        streak={streak}
-        totalEvents={totalEvents}
-      />
-
-      <AnalyticsSection
-        action={
-          <AnalyticsRangePicker
-            disabled={!boardMeta.timeSeries}
-            onCustomRange={handleCustomRange}
-            onPreset={handlePreset}
-            preset={preset}
-            range={range}
-          />
-        }
-        description={boardDescription}
-        title={boardMeta.title}
-      >
-        <MetricBoard
-          edits={editsData}
-          hasSnapshots={snapshotPages.length > 0}
+      <ChartPaletteScope>
+        <MetricKpiRow
+          activityLoading={activityLoading}
+          contentLoading={contentLoading}
+          contentStats={contentStats}
           metric={metric}
-          pages={pagesData}
+          onSelect={setMetric}
+          reading={reading}
           storage={storage}
-          storageLoading={storageLoading || snapshotsLoading}
-          words={wordsData}
+          storageLoading={storageLoading}
+          storageTotal={storageTotal}
+          streak={streak}
+          totalEvents={totalEvents}
         />
-      </AnalyticsSection>
 
-      <AnalyticsHeatmapSection heatmap={heatmap} />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <AnalyticsSection
-          description="Where your edits land most often."
-          title="Most edited pages"
-        >
-          <RankedBarList
-            colorVar="var(--chart-4)"
-            emptyLabel="No tracked edits yet."
-            items={mostEditedPages}
-          />
-        </AnalyticsSection>
-        <AnalyticsSection
-          description="What kinds of edits you make most."
-          title="Activity breakdown"
-        >
-          <RankedBarList
-            colorVar="var(--chart-2)"
-            emptyLabel="No tracked edits yet."
-            items={activityByType}
-          />
-        </AnalyticsSection>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AnalyticsSection
-          description="Your longest pages by word count."
-          title="Biggest pages"
-        >
-          <RankedBarList
-            colorVar="var(--chart-1)"
-            emptyLabel="No written content yet."
-            items={biggestPages}
-          />
-        </AnalyticsSection>
-        <AnalyticsSection
-          description="The blocks your pages are built from."
-          title="What your content is made of"
-        >
-          <RankedBarList
-            colorVar="var(--chart-3)"
-            emptyLabel="No blocks yet."
-            items={blockComposition}
-          />
-        </AnalyticsSection>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AnalyticsSection
-          description={storageSummary}
-          title="Storage breakdown"
-        >
-          {storage && storage.categories.length > 0 ? (
-            <StorageBreakdown
-              categories={storage.categories}
-              total={storage.totalTrackedBytes}
+          action={
+            <AnalyticsRangePicker
+              disabled={!boardMeta.timeSeries}
+              onCustomRange={handleCustomRange}
+              onPreset={handlePreset}
+              preset={preset}
+              range={range}
             />
-          ) : (
-            <p className="py-6 text-center text-muted-foreground text-sm">
-              {storageLoading ? "Measuring storage…" : "Nothing stored yet."}
-            </p>
-          )}
-        </AnalyticsSection>
-        <AnalyticsSection
-          description={
-            storage
-              ? `${formatNumber(storage.assetCount)} assets · ${formatBytes(storage.assetBytes)} total`
-              : "Locally stored images, GIFs, and video."
           }
-          title="Media assets"
+          description={boardDescription}
+          title={boardMeta.title}
         >
-          <RankedBarList
-            colorVar="var(--chart-1)"
-            emptyLabel={
-              storageLoading ? "Measuring assets…" : "No media uploaded yet."
-            }
-            items={assetTypeItems}
+          <MetricBoard
+            edits={editsData}
+            hasSnapshots={snapshotPages.length > 0}
+            metric={metric}
+            pages={pagesData}
+            storage={storage}
+            storageLoading={storageLoading || snapshotsLoading}
+            words={wordsData}
           />
         </AnalyticsSection>
-      </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AnalyticsSection
-          description={`${formatNumber(wordFrequency.uniqueWords)} unique words in your vocabulary.`}
-          title="Most-used words"
-        >
-          <WordCloud words={wordFrequency.top} />
-        </AnalyticsSection>
-        <AnalyticsSection description="The fun stuff." title="Writing insights">
-          <div className="grid grid-cols-2 gap-3">
-            <InsightStat
-              label="Current streak"
-              value={`${streak.currentStreak} ${streak.currentStreak === 1 ? "day" : "days"}`}
+        <AnalyticsHeatmapSection heatmap={heatmap} />
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <AnalyticsSection
+            description="Where your edits land most often."
+            title="Most edited pages"
+          >
+            <RankedBarList
+              colorVar="var(--chart-4)"
+              emptyLabel="No tracked edits yet."
+              items={mostEditedPages}
             />
-            <InsightStat
-              label="Longest streak"
-              value={`${streak.longestStreak} ${streak.longestStreak === 1 ? "day" : "days"}`}
+          </AnalyticsSection>
+          <AnalyticsSection
+            description="What kinds of edits you make most."
+            title="Activity breakdown"
+          >
+            <RankedBarList
+              colorVar="var(--chart-2)"
+              emptyLabel="No tracked edits yet."
+              items={activityByType}
             />
-            <InsightStat
-              hint={
-                streak.busiestDay
-                  ? `${formatNumber(streak.busiestDay.count)} edits`
-                  : undefined
+          </AnalyticsSection>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <AnalyticsSection
+            description="Your longest pages by word count."
+            title="Biggest pages"
+          >
+            <RankedBarList
+              colorVar="var(--chart-1)"
+              emptyLabel="No written content yet."
+              items={biggestPages}
+            />
+          </AnalyticsSection>
+          <AnalyticsSection
+            description="The blocks your pages are built from."
+            title="What your content is made of"
+          >
+            <RankedBarList
+              colorVar="var(--chart-3)"
+              emptyLabel="No blocks yet."
+              items={blockComposition}
+            />
+          </AnalyticsSection>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <AnalyticsSection
+            description={storageSummary}
+            title="Storage breakdown"
+          >
+            {storage && storage.categories.length > 0 ? (
+              <StorageBreakdown
+                categories={storage.categories}
+                total={storage.totalTrackedBytes}
+              />
+            ) : (
+              <p className="py-6 text-center text-muted-foreground text-sm">
+                {storageLoading ? "Measuring storage…" : "Nothing stored yet."}
+              </p>
+            )}
+          </AnalyticsSection>
+          <AnalyticsSection
+            description={
+              storage
+                ? `${formatNumber(storage.assetCount)} assets · ${formatBytes(storage.assetBytes)} total`
+                : "Locally stored images, GIFs, and video."
+            }
+            title="Media assets"
+          >
+            <RankedBarList
+              colorVar="var(--chart-1)"
+              emptyLabel={
+                storageLoading ? "Measuring assets…" : "No media uploaded yet."
               }
-              label="Busiest day"
-              value={streak.busiestDay?.date ?? "—"}
+              items={assetTypeItems}
             />
-            <InsightStat
-              label="Active days"
-              value={formatNumber(streak.activeDays)}
-            />
-            <InsightStat
-              label="Total characters"
-              value={formatCompactNumber(contentStats.totalCharacters)}
-            />
-            <InsightStat
-              hint="at 200 wpm"
-              label="Reading time"
-              value={`${reading} min`}
-            />
-          </div>
-        </AnalyticsSection>
-      </div>
+          </AnalyticsSection>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <AnalyticsSection
+            description={`${formatNumber(wordFrequency.uniqueWords)} unique words in your vocabulary.`}
+            title="Most-used words"
+          >
+            <WordCloud words={wordFrequency.top} />
+          </AnalyticsSection>
+          <AnalyticsSection
+            description="The fun stuff."
+            title="Writing insights"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <InsightStat
+                label="Current streak"
+                value={`${streak.currentStreak} ${streak.currentStreak === 1 ? "day" : "days"}`}
+              />
+              <InsightStat
+                label="Longest streak"
+                value={`${streak.longestStreak} ${streak.longestStreak === 1 ? "day" : "days"}`}
+              />
+              <InsightStat
+                hint={
+                  streak.busiestDay
+                    ? `${formatNumber(streak.busiestDay.count)} edits`
+                    : undefined
+                }
+                label="Busiest day"
+                value={streak.busiestDay?.date ?? "—"}
+              />
+              <InsightStat
+                label="Active days"
+                value={formatNumber(streak.activeDays)}
+              />
+              <InsightStat
+                label="Total characters"
+                value={formatCompactNumber(contentStats.totalCharacters)}
+              />
+              <InsightStat
+                hint="at 200 wpm"
+                label="Reading time"
+                value={`${reading} min`}
+              />
+            </div>
+          </AnalyticsSection>
+        </div>
+      </ChartPaletteScope>
     </SettingsPanelShell>
   );
 }

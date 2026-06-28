@@ -74,13 +74,10 @@ export function SiteSettingsSidebar({
       id="settings-sidebar"
     >
       <SidebarContent>
-        <div className="flex shrink-0 items-center justify-between gap-1 px-2 pt-2 pr-3 pb-0">
-          <SidebarMenu className="w-fit">
-            <SidebarMenuItem className="w-fit">
-              <SidebarMenuButton
-                className="w-fit"
-                render={<Link to={returnTo} />}
-              >
+        <div className="flex shrink-0 items-center gap-1 px-2 pt-2 pr-3 pb-0">
+          <SidebarMenu className="min-w-0 flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton render={<Link to={returnTo} />}>
                 <IconChevronLeft />
                 <span>Back to app</span>
               </SidebarMenuButton>

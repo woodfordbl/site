@@ -75,7 +75,7 @@ export function AnalyticsRangePicker({
             </button>
           }
         />
-        <PopoverContent className="w-auto" side="bottom">
+        <PopoverContent align="end" className="w-auto" side="bottom">
           <Calendar
             autoFocus
             defaultMonth={range.from}
