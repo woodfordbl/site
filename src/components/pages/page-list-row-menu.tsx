@@ -3,6 +3,7 @@
 import {
   IconCopy,
   IconDots,
+  IconLayoutGrid,
   IconPencil,
   IconPhoto,
   IconRefresh,
@@ -29,6 +30,7 @@ interface PageListRowDropdownProps {
   onDuplicate: () => void;
   onRename: () => void;
   onResetToRemote: () => void;
+  onSaveAsTemplate: () => void;
   title: string;
 }
 
@@ -41,6 +43,7 @@ export function PageListRowDropdown({
   onDuplicate,
   onRename,
   onResetToRemote,
+  onSaveAsTemplate,
   title,
 }: PageListRowDropdownProps) {
   return (
@@ -88,6 +91,10 @@ export function PageListRowDropdown({
           <DropdownMenuItem onClick={onDuplicate}>
             <IconCopy />
             Duplicate page
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onSaveAsTemplate}>
+            <IconLayoutGrid />
+            Save as template
           </DropdownMenuItem>
           {canResetToRemote ? (
             <DropdownMenuItem onClick={onResetToRemote}>
