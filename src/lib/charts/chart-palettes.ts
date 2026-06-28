@@ -4,6 +4,7 @@ export const CHART_PALETTE_IDS = [
   "blue",
   "gold",
   "green",
+  "purple",
   "grey",
 ] as const;
 
@@ -25,6 +26,7 @@ export const CHART_PALETTES: Record<ChartPaletteId, { label: string }> = {
   blue: { label: "Blue" },
   gold: { label: "Gold" },
   green: { label: "Green" },
+  purple: { label: "Purple" },
   grey: { label: "Grey" },
 };
 

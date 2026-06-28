@@ -1,15 +1,13 @@
 "use client";
 
 import { KeyboardShortcutRow } from "@/components/settings/panels/keyboard-shortcut-row.tsx";
+import {
+  SettingsItemCard,
+  SettingsItemRow,
+} from "@/components/settings/settings-item-card.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemGroup,
-  ItemTitle,
-} from "@/components/ui/item.tsx";
+import { ItemActions, ItemContent, ItemTitle } from "@/components/ui/item.tsx";
 import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
@@ -55,7 +53,7 @@ export function KeyboardShortcutsPanel({
       {COMMAND_GROUPS.map((group) => (
         <section className="flex flex-col gap-3" key={group}>
           <h2 className="font-medium text-sm">{group}</h2>
-          <ItemGroup className="gap-2">
+          <SettingsItemCard>
             {getCommandsInGroup(group).map((command) =>
               command.customizable ? (
                 <KeyboardShortcutRow
@@ -64,33 +62,33 @@ export function KeyboardShortcutsPanel({
                   resolved={resolved}
                 />
               ) : (
-                <Item key={command.id} variant="outline">
+                <SettingsItemRow key={command.id}>
                   <ItemContent>
                     <ItemTitle>{command.label}</ItemTitle>
                   </ItemContent>
                   <ItemActions>
                     <Shortcut command={command.id} />
                   </ItemActions>
-                </Item>
+                </SettingsItemRow>
               )
             )}
-          </ItemGroup>
+          </SettingsItemCard>
         </section>
       ))}
       <section className="flex flex-col gap-3">
         <h2 className="font-medium text-sm">{SEQUENCE_GROUP}</h2>
-        <ItemGroup className="gap-2">
+        <SettingsItemCard>
           {KEYBOARD_SEQUENCES.map((command) => (
-            <Item key={command.id} variant="outline">
+            <SettingsItemRow key={command.id}>
               <ItemContent>
                 <ItemTitle>{command.label}</ItemTitle>
               </ItemContent>
               <ItemActions>
                 <SequenceShortcut sequence={command.sequence} />
               </ItemActions>
-            </Item>
+            </SettingsItemRow>
           ))}
-        </ItemGroup>
+        </SettingsItemCard>
       </section>
     </SettingsPanelShell>
   );

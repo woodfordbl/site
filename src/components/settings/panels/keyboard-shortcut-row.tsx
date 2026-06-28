@@ -4,13 +4,9 @@ import { useHotkeyRecorder } from "@tanstack/react-hotkeys";
 import { useState } from "react";
 
 import { setHotkeyRecording } from "@/components/keyboard/recording-gate.ts";
+import { SettingsItemRow } from "@/components/settings/settings-item-card.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemTitle,
-} from "@/components/ui/item.tsx";
+import { ItemActions, ItemContent, ItemTitle } from "@/components/ui/item.tsx";
 import { Kbd, KbdGroup } from "@/components/ui/kbd.tsx";
 import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { formatHotkeyTokens } from "@/lib/settings/format-hotkey.ts";
@@ -81,7 +77,7 @@ export function KeyboardShortcutRow({
     : null;
 
   return (
-    <Item variant="outline">
+    <SettingsItemRow>
       <ItemContent>
         <ItemTitle>{command.label}</ItemTitle>
         {error ? (
@@ -125,6 +121,6 @@ export function KeyboardShortcutRow({
           </>
         )}
       </ItemActions>
-    </Item>
+    </SettingsItemRow>
   );
 }
