@@ -1,3 +1,4 @@
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   createRootRouteWithContext,
   HeadContent,
@@ -5,6 +6,7 @@ import {
   useRouteContext,
 } from "@tanstack/react-router";
 import { lazy } from "react";
+import { GlobalCommandHotkeys } from "@/components/keyboard/global-command-hotkeys.tsx";
 import {
   DeviceLayoutProvider,
   SyncDeviceLayoutCookieEffect,
@@ -156,7 +158,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <ThemeProvider initialHints={siteAppearance}>
           <DeviceLayoutProvider initialHints={deviceLayoutHints}>
             <HapticsProvider>
-              <AppProviders>{children}</AppProviders>
+              <HotkeysProvider>
+                <AppProviders>
+                  <GlobalCommandHotkeys />
+                  {children}
+                </AppProviders>
+              </HotkeysProvider>
               <SyncDeviceLayoutCookieEffect />
               <SyncSiteAppearanceCookieEffect />
             </HapticsProvider>

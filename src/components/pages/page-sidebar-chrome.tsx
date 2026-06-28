@@ -4,22 +4,19 @@ import {
   type ReactNode,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
 import { type PanelSize, usePanelRef } from "react-resizable-panels";
 
+import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
 import { PageSidebarHoverReveal } from "@/components/pages/page-sidebar-hover-reveal.tsx";
 import { PageSidebarSwipeReveal } from "@/components/pages/page-sidebar-swipe-reveal.tsx";
 import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable.tsx";
-import {
-  SIDEBAR_KEYBOARD_SHORTCUT,
-  SidebarProvider,
-} from "@/components/ui/sidebar.tsx";
+import { SidebarProvider } from "@/components/ui/sidebar.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import {
   clampSidebarWidthRem,
@@ -146,20 +143,7 @@ export function PageSidebarChromeProvider({
     [sidebarPanelRef]
   );
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
-      ) {
-        event.preventDefault();
-        toggleSidebar();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar]);
+  useCommandHotkeys({ "toggle-sidebar": toggleSidebar });
 
   const isCollapsed = pin === "collapsed";
 

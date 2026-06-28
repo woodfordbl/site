@@ -3,6 +3,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
+import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
 import { AnalyticsPanel } from "@/components/settings/panels/analytics-panel.tsx";
 import { AppearancePanel } from "@/components/settings/panels/appearance-panel.tsx";
 import { BackupPanel } from "@/components/settings/panels/backup-panel.tsx";
@@ -35,6 +36,11 @@ export function SiteSettingsSectionContent({
   const onAfterReset = () => {
     navigate({ to: returnTo });
   };
+
+  // ⌘Esc returns to the app from settings (the "Back to app" affordance).
+  useCommandHotkeys({
+    "back-to-app": () => navigate({ to: returnTo }),
+  });
 
   useEffect(() => {
     if (section === "development" && !showDevelopment) {
