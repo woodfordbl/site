@@ -86,7 +86,7 @@
   --ring: var(--foreground);
   --radius: 0.45rem;
   --sidebar: oklch(0.95 0.005 106);
-  --sidebar-foreground: var(--foreground);
+  --sidebar-foreground: var(--muted-foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.91 0.005 106);

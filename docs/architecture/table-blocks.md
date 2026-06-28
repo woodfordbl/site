@@ -12,7 +12,7 @@ Notion-style editable grids: a **table** container holds **tableRow** rows, each
 
 Defaults on slash create: **3×3**, `hasHeaderRow: true`, equal pixel `columnWidths` (`DEFAULT_TABLE_COLUMN_WIDTH` = 120px per column). Legacy stored ratios ≤10 migrate to px at render. Limits: `MIN_TABLE_COLUMNS = 2`, `MIN_TABLE_ROWS = 1`, `MAX_TABLE_COLUMNS = 10`.
 
-Tables work at canvas root and inside **column** containers (`allowedChildTypes: *`). The wrapper uses `w-full min-w-0` with horizontal scroll when column widths exceed the parent. On overflow, the edit layout bleeds `-mx-12 w-[calc(100%+6rem)]` into both canvas horizontal paddings; scroll content pairs `px-12` / `-mx-12` so max scroll aligns the table’s leading and trailing edges with the panel padding (and the block gutter scrolls with the table).
+Tables work at canvas root and inside **column** containers (`allowedChildTypes: *`). The wrapper uses `w-full min-w-0` with horizontal scroll when column widths exceed the parent. On overflow, the edit layout bleeds `-mx-12 w-[calc(100%+6rem)]` into both canvas horizontal paddings; scroll content pairs `px-12` / `-mx-12` so max scroll aligns the table’s leading and trailing edges with the panel padding (and the block gutter scrolls with the table). Desktop canvas scroll uses `md:pt-16` top inset ([`page-title-layout.ts`](../../src/lib/pages/page-title-layout.ts)) to clear a sticky cover header when present.
 
 ## Worked example (test fixture)
 

@@ -114,7 +114,7 @@ export function PageHeader({
   const { pages } = useMergedPageListItems();
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-1 border-sidebar-border border-b px-3">
+    <header className="flex shrink-0 items-center gap-1 border-sidebar-border border-b px-3 py-1">
       <PageHeaderSidebarToggle />
       <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
       <div className="ml-auto flex shrink-0 items-center gap-1">

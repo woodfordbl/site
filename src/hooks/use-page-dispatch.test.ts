@@ -40,4 +40,51 @@ describe("pageReducer page.create", () => {
       userPage: true,
     });
   });
+
+  it("places a duplicate after the source page in the sidebar", () => {
+    const pages: PageSummary[] = [
+      {
+        id: "home",
+        slug: "/",
+        title: "Home",
+        parentId: null,
+        sidebarOrder: 0,
+        routeBy: "slug",
+      },
+      {
+        id: "notes",
+        slug: "/notes",
+        title: "Notes",
+        parentId: null,
+        sidebarOrder: 1000,
+        routeBy: "slug",
+      },
+      {
+        id: "work",
+        slug: "/work",
+        title: "Work",
+        parentId: null,
+        sidebarOrder: 2000,
+        routeBy: "slug",
+      },
+    ];
+
+    const { effects } = pageReducer(
+      {
+        type: "page.create",
+        title: "Copy of Notes",
+        pageId: "copy-notes",
+        parentId: null,
+        insertAfterPageId: "notes",
+      },
+      pages
+    );
+
+    const persist = effects.find((effect) => effect.type === "page.persist");
+    expect(persist?.type).toBe("page.persist");
+    if (persist?.type === "page.persist") {
+      expect(persist.sidebarOrder).toBeGreaterThan(1000);
+      expect(persist.sidebarOrder).toBeLessThan(2000);
+    }
+  });
 });

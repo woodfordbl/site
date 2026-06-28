@@ -1,42 +1,21 @@
 {
   "id": "home",
   "slug": "/",
-  "title": "Blake Woodford",
+  "title": "Home",
+  "icon": "tabler:IconHome2Filled",
   "parentId": null,
   "blocks": [
     {
-      "id": "7f3f6cd6-ce2d-4fbe-ae78-c6ff653a864d",
-      "type": "text",
-      "props": {
-        "text": "Hi this is saved to source this is cool"
-      }
-    },
-    {
-      "id": "89f90ec3-068a-4a04-a4e7-7195af8641d5",
-      "parentId": null,
-      "indent": 0,
+      "id": "0f314bf7-727b-4f41-8344-0983901261b5",
       "type": "text",
       "props": {
         "text": ""
       }
     },
     {
-      "id": "bio-1",
-      "type": "text",
-      "props": {
-        "text": "Building thoughtful software. This site is the home for my work, writing, and experiments."
-      }
-    },
-    {
-      "id": "hero-1",
-      "type": "heading",
-      "props": {
-        "level": 1,
-        "text": "Blake Woodford"
-      }
-    },
-    {
-      "id": "0f314bf7-727b-4f41-8344-0983901261b5",
+      "id": "036955d8-8076-46ff-9c02-86a19a811b07",
+      "parentId": null,
+      "indent": 0,
       "type": "text",
       "props": {
         "text": ""

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { getPageMoveTargetItems } from "@/lib/pages/page-move-targets.ts";
+import {
+  getPageMoveTargetItems,
+  hasPageMoveTargets,
+} from "@/lib/pages/page-move-targets.ts";
 
 const pages: PageSummary[] = [
   {
@@ -40,5 +43,20 @@ describe("getPageMoveTargetItems", () => {
   it("includes top level when valid", () => {
     const targets = getPageMoveTargetItems("notes", pages);
     expect(targets.some((target) => target.parentId === null)).toBe(true);
+  });
+
+  it("omits top level when the page is already top level", () => {
+    const targets = getPageMoveTargetItems("work", pages);
+    expect(targets.some((target) => target.parentId === null)).toBe(false);
+  });
+});
+
+describe("hasPageMoveTargets", () => {
+  it("returns false when no valid targets exist", () => {
+    expect(hasPageMoveTargets("home", pages)).toBe(false);
+  });
+
+  it("returns true when at least one target exists", () => {
+    expect(hasPageMoveTargets("notes", pages)).toBe(true);
   });
 });

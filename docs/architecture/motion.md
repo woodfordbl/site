@@ -106,4 +106,5 @@ because the app shell is fixed-height (`site-shell` `h-svh; overflow-hidden`) an
 never scrolls — so a touch fling at a scroll boundary must not rubber-band the
 page. On iOS that rubber-band pans the visual viewport, which is the main source
 of jitter for the keyboard toolbar; inner scrollers add `overscroll-contain` of
-their own. See [keyboard-toolbar](./keyboard-toolbar.md).
+their own. Light-mode sidebar list labels use `--sidebar-foreground`
+(`var(--muted-foreground)`) so row chrome reads quieter than main content. See [keyboard-toolbar](./keyboard-toolbar.md).

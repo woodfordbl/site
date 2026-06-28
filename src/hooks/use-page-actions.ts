@@ -48,6 +48,7 @@ export function usePageActions(pageId: string) {
           type: "page.create",
           title: `Copy of ${page.title}`,
           parentId: page.parentId,
+          insertAfterPageId: pageId,
           initialBlocks: clonePageBlocks(sourceBlocks),
         });
       })

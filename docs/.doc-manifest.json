@@ -102,6 +102,7 @@
         "src/lib/pages/refresh-site-content.ts",
         "src/lib/pages/append-page-link-on-parent.ts",
         "src/lib/pages/resolve-user-page-by-slug.ts",
+        "src/lib/pages/page-sidebar-order.ts",
         "src/lib/pages/preload-page-icon-picker.ts",
         "src/lib/pages/page-icon-emojibase.ts",
         "src/lib/pages/page-icon.ts",
@@ -239,7 +240,11 @@
         "src/db/queries/read-bootstrap-page-blocks.ts",
         "src/lib/content/save-media-assets.ts",
         "src/lib/content/save-all-pages.ts",
-        "src/lib/content/prepare-page-document-for-author-save.ts"
+        "src/lib/content/prepare-page-document-for-author-save.ts",
+        "src/lib/content/workspace-export.ts",
+        "src/lib/content/workspace-import.ts",
+        "src/lib/content/workspace-archive.ts",
+        "src/lib/content/collect-workspace-pages.ts"
       ]
     },
     {

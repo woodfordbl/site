@@ -151,6 +151,8 @@ export type PageCommand =
       title?: string;
       slug?: string;
       parentId?: string | null;
+      /** Inserts the new page after this sibling in the same `parentId` scope. */
+      insertAfterPageId?: string;
       pageId?: string;
       navigate?: boolean;
       initialBlocks?: Block[];

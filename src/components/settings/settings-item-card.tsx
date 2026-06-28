@@ -36,7 +36,7 @@ export function SettingsItemCard({
   return (
     <ItemGroup
       className={cn(
-        "gap-0 overflow-hidden rounded-lg border border-border",
+        "gap-0 overflow-hidden rounded-lg border border-border bg-card",
         className
       )}
     >
