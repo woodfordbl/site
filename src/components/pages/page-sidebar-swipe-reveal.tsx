@@ -489,43 +489,11 @@ export function PageSidebarSwipeReveal({
         ) : null}
       </div>
 
-      {/* Fill the top/bottom safe areas as the sidebar is revealed so the
-          content's translate (and the white wash over it) doesn't leave the
-          insets showing a split/wrong surface. Heights are the safe-area insets
-          — non-zero only with notch / home indicator (and the top grows when
-          Safari's address bar collapses on scroll); opacity tracks the swipe so
-          they switch in with the gesture.
-
-          The top inset is filled with bg-background to match the page header
-          that lives directly beneath it: the header's safe-area padding is
-          bg-background, so the inset must stay bg-background through the swipe
-          rather than fading to sidebar-gray. The bottom (home indicator) keeps
-          the sidebar tint since no header anchors it. */}
-      <div
-        aria-hidden
-        className={cn(
-          // Pinned to the viewport top on mobile (the document scrolls beneath),
-          // not the document top. Sibling of the transformed content layer, so
-          // `fixed` resolves to the viewport.
-          "pointer-events-none z-30 bg-background transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none max-md:fixed max-md:inset-x-0 max-md:top-0 md:absolute md:inset-x-0 md:top-0",
-          isDragging && "transition-none"
-        )}
-        style={{
-          height: "env(safe-area-inset-top)",
-          opacity: revealProgress,
-        }}
-      />
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none max-md:fixed max-md:inset-x-0 max-md:bottom-0 md:absolute md:inset-x-0 md:bottom-0",
-          isDragging && "transition-none"
-        )}
-        style={{
-          height: "env(safe-area-inset-bottom)",
-          opacity: revealProgress,
-        }}
-      />
+      {/* The top/bottom safe-area insets are tinted by the root `<html>`
+          background (styles.css): bg-background at rest, fading to sidebar with
+          the swipe. That covers the insets uniformly, so the old fixed fill bars
+          here are redundant — and being full-width with square corners at z-30,
+          they painted over the inset card's rounded corners during the reveal. */}
 
       {/* Left-edge hit strip — captures the opening swipe while closed. */}
       {openMobile ? null : (
