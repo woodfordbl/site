@@ -328,14 +328,34 @@ export function PageSidebarSwipeReveal({
     };
   }, [revealProgress, isDragging]);
 
+  // While the sidebar is open the document (the mobile scroller) must not scroll
+  // behind it — keeps the fixed sidebar / safe-area layers aligned and matches a
+  // native drawer. This component only renders on narrow viewports, so locking
+  // the document scroller (`<html>`) is mobile-only; on desktop the shell is
+  // already `overflow-hidden`, making this a no-op.
+  useEffect(() => {
+    if (!openMobile) {
+      return;
+    }
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = prevOverflow;
+    };
+  }, [openMobile]);
+
   return (
-    <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-sidebar">
-      {/* Sidebar layer — fixed behind the content, revealed as content slides. */}
+    <div className="relative w-full bg-sidebar max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
+      {/* Sidebar layer — fixed behind the content, revealed as content slides.
+          On mobile the document is the scroller, so this is `fixed` (pinned to
+          the viewport) rather than `absolute` against a now document-tall
+          container, which would scroll away with the body. */}
       <div
         aria-hidden={!openMobile}
         aria-label="Sidebar"
         aria-modal={openMobile}
-        className="absolute inset-y-0 left-0 z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none"
+        className="z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none max-md:fixed max-md:inset-y-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
         inert={!openMobile}
         ref={sidebarRef}
         role="dialog"
@@ -348,13 +368,18 @@ export function PageSidebarSwipeReveal({
       {/* Content layer — slides right to reveal the sidebar; rounded inset when open. */}
       <div
         className={cn(
-          "relative z-10 h-full w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none",
+          // Mobile: natural height (`min-h-svh`) so the document — not this
+          // layer — owns the scroll; desktop keeps `h-full` inside the fixed shell.
+          "relative z-10 w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none max-md:min-h-svh md:h-full",
           isDragging && "transition-none",
-          isRevealed && "overflow-hidden rounded-3xl ring-1 ring-border"
+          // Keep the rounded inset + ring when revealed, but never clamp the
+          // vertical document scroll on mobile (`overflow-x-clip`, not hidden).
+          isRevealed &&
+            "rounded-3xl ring-1 ring-border max-md:overflow-x-clip md:overflow-hidden"
         )}
         style={{ transform: `translateX(${translateX}px)` }}
       >
-        <div className="h-full w-full" inert={openMobile}>
+        <div className="w-full max-md:min-h-svh md:h-full" inert={openMobile}>
           {children}
         </div>
 
@@ -389,7 +414,10 @@ export function PageSidebarSwipeReveal({
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 z-30 bg-background transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+          // Pinned to the viewport top on mobile (the document scrolls beneath),
+          // not the document top. Sibling of the transformed content layer, so
+          // `fixed` resolves to the viewport.
+          "pointer-events-none z-30 bg-background transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none max-md:fixed max-md:inset-x-0 max-md:top-0 md:absolute md:inset-x-0 md:top-0",
           isDragging && "transition-none"
         )}
         style={{
@@ -400,7 +428,7 @@ export function PageSidebarSwipeReveal({
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+          "pointer-events-none z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none max-md:fixed max-md:inset-x-0 max-md:bottom-0 md:absolute md:inset-x-0 md:bottom-0",
           isDragging && "transition-none"
         )}
         style={{
@@ -413,7 +441,9 @@ export function PageSidebarSwipeReveal({
       {openMobile ? null : (
         <div
           aria-hidden
-          className="absolute inset-y-0 left-0 z-20 w-5"
+          // `fixed` on mobile so the opening edge-swipe zone stays pinned to the
+          // viewport's left edge at any document scroll position.
+          className="z-20 w-5 max-md:fixed max-md:inset-y-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
           // touch-action: none + the non-passive preventDefault effect above
           // claim the left-edge horizontal swipe so iOS Safari's back-navigation
           // gesture doesn't fire from this strip. ~20px wide to cover Safari's
