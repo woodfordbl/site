@@ -12,6 +12,14 @@ import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
+ * Gutter pull for callout children when the callout has no icon. The body is
+ * flush-left, so the default pull would land child drag handles on top of the
+ * callout's own margin handle; a smaller pull insets them so both are reachable.
+ * With an icon the children are already indented past it, so the default applies.
+ */
+const CALLOUT_FLUSH_CHILD_GUTTER_PULL = "-ml-5 md:-ml-7";
+
+/**
  * Callout: a container rendered as a padded muted box with an optional leading
  * glyph. Its body is real child blocks (a `text` child by default), so almost
  * any block can be nested inside. The icon picker lives here (not a leaf `Edit`)
@@ -83,6 +91,9 @@ export function CalloutView({ row, mode }: BlockContainerProps) {
         ) : null}
         {row.children.map((child) => (
           <BlockTreeNode
+            gutterPullClassName={
+              icon ? undefined : CALLOUT_FLUSH_CHILD_GUTTER_PULL
+            }
             key={child.rowId}
             mode={mode}
             parentType="callout"
