@@ -166,6 +166,9 @@ export function pageReducer(
             initialBlocks: command.initialBlocks,
             icon: command.icon,
             headerImage: command.headerImage,
+            font: command.font,
+            fullWidth: command.fullWidth,
+            textScale: command.textScale,
           },
           ...(command.navigate === false
             ? []
@@ -278,6 +281,9 @@ function applyPagePersistEffect(
       parentId: effect.parentId ?? null,
       icon: effect.icon,
       headerImage: effect.headerImage,
+      font: effect.font,
+      fullWidth: effect.fullWidth,
+      textScale: effect.textScale,
       ...(effect.sidebarOrder === undefined
         ? {}
         : { sidebarOrder: effect.sidebarOrder }),

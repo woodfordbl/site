@@ -10,6 +10,7 @@ import { AppearancePanel } from "@/components/settings/panels/appearance-panel.t
 import { BackupPanel } from "@/components/settings/panels/backup-panel.tsx";
 import { DevelopmentPanel } from "@/components/settings/panels/development-panel.tsx";
 import { KeyboardShortcutsPanel } from "@/components/settings/panels/keyboard-shortcuts-panel.tsx";
+import { TemplatePanel } from "@/components/settings/panels/template-panel.tsx";
 import {
   DEFAULT_SETTINGS_SECTION,
   type SettingsSectionId,
@@ -72,6 +73,8 @@ export function SiteSettingsSectionContent({
         );
       case "shortcuts":
         return <KeyboardShortcutsPanel search={search} />;
+      case "template":
+        return <TemplatePanel search={search} />;
       default: {
         const _exhaustive: never = section;
         return _exhaustive;

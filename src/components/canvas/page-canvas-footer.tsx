@@ -14,6 +14,7 @@ export function PageCanvasFooter(props: PageCanvasFooterProps) {
     hasLocalChanges,
     hasUpdates,
     isDev,
+    isTemplatePage,
     saveStatus,
     setConfirmAction,
     visible,
@@ -48,7 +49,7 @@ export function PageCanvasFooter(props: PageCanvasFooterProps) {
           Save all
         </Button>
       ) : null}
-      {hasLocalChanges ? (
+      {hasLocalChanges && !isTemplatePage ? (
         <>
           <Button
             onClick={() => setConfirmAction("reset")}
