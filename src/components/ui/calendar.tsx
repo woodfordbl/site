@@ -103,10 +103,7 @@ export function Calendar({
           defaults.button_next,
           "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
         ),
-        month_grid: cn(
-          defaults.month_grid,
-          "border-collapse border-spacing-0"
-        ),
+        month_grid: cn(defaults.month_grid, "border-collapse border-spacing-0"),
         weekdays: cn(defaults.weekdays),
         weekday: cn(
           defaults.weekday,
