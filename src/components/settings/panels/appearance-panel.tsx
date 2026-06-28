@@ -17,7 +17,6 @@ import {
 } from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type { ThemePreference } from "@/lib/schemas/site-appearance.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
 const THEME_OPTIONS: Array<{ label: string; value: ThemePreference }> = [
   { value: "light", label: "Light" },
@@ -64,11 +63,7 @@ const CHART_PALETTE_OPTIONS: Array<{
   leading: <PaletteSwatch palette={id} />,
 }));
 
-interface AppearancePanelProps {
-  search: SettingsSearch;
-}
-
-export function AppearancePanel({ search }: AppearancePanelProps) {
+export function AppearancePanel() {
   const {
     chartPalette,
     setChartPalette,
@@ -82,7 +77,6 @@ export function AppearancePanel({ search }: AppearancePanelProps) {
   return (
     <SettingsPanelShell
       description="Choose how the site looks on this device."
-      search={search}
       section={section}
     >
       <SettingsItemCard>
