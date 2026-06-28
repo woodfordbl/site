@@ -3,6 +3,7 @@
 import { IconSettings } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 
+import { DEFAULT_SETTINGS_SECTION } from "@/components/settings/site-settings-sections.ts";
 import { Button } from "@/components/ui/button.tsx";
 
 interface SiteSettingsTriggerProps {
@@ -17,7 +18,13 @@ export function SiteSettingsTrigger({ pageId }: SiteSettingsTriggerProps) {
   return (
     <Button
       className="pointer-events-auto"
-      render={<Link search={{ pageId, returnTo: pathname }} to="/settings" />}
+      render={
+        <Link
+          params={{ section: DEFAULT_SETTINGS_SECTION }}
+          search={{ pageId, returnTo: pathname }}
+          to="/settings/$section"
+        />
+      }
       size="xs"
       variant="outline"
     >

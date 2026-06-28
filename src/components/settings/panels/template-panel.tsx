@@ -13,15 +13,10 @@ import { getSettingsSection } from "@/components/settings/site-settings-sections
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { pageNavTargetForUserPage } from "@/lib/pages/slugify.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
 const TEMPLATE_PAGE_TITLE = "Page template";
 
-interface TemplatePanelProps {
-  search: SettingsSearch;
-}
-
-export function TemplatePanel({ search }: TemplatePanelProps) {
+export function TemplatePanel() {
   const navigate = useNavigate();
   const { pages } = useMergedPageListItems();
   const dispatch = usePageDispatch(pages);
@@ -57,7 +52,6 @@ export function TemplatePanel({ search }: TemplatePanelProps) {
   return (
     <SettingsPanelShell
       description="Design a page that every new page starts from."
-      search={search}
       section={section}
     >
       <SettingsItemCard>
