@@ -23,7 +23,7 @@ Search params ([`settings-search.ts`](../../src/lib/settings/settings-search.ts)
 | Section | Panel | Notes |
 |---------|-------|-------|
 | Appearance | [`AppearancePanel`](../../src/components/settings/panels/appearance-panel.tsx) | Interface theme dropdown + **Text size** (Small / Default / Large) — the site-wide default page text size (`SettingsItemField` + `SettingsItemSelect`) |
-| Keyboard shortcuts | [`KeyboardShortcutsPanel`](../../src/components/settings/panels/keyboard-shortcuts-panel.tsx) | Data from [`keyboard-shortcuts.ts`](../../src/lib/settings/keyboard-shortcuts.ts) |
+| Keyboard shortcuts | [`KeyboardShortcutsPanel`](../../src/components/settings/panels/keyboard-shortcuts-panel.tsx) | Rebindable rows from the [`keyboard-commands.ts`](../../src/lib/settings/keyboard-commands.ts) registry (single source of truth); user overrides persisted in TanStack DB (`localKeybindingsCollection`) via [`use-keybindings.ts`](../../src/lib/settings/use-keybindings.ts) |
 | Analytics | [`AnalyticsPanel`](../../src/components/settings/panels/analytics-panel.tsx) | Greyscale charts (`palette="grey"`) from IndexedDB activity log |
 | Development | [`DevelopmentPanel`](../../src/components/settings/panels/development-panel.tsx) | Save all, reset, refresh — shown only when [`usePageCanvasFooterActions`](../../src/hooks/use-page-canvas-footer-actions.ts) reports `visible` |
 
