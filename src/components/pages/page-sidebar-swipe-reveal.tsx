@@ -20,28 +20,6 @@ const OVERLAY_MAX_OPACITY = 0.6;
 
 type Axis = "undecided" | "horizontal" | "vertical";
 
-/** Lazily-made 1x1 canvas used to resolve CSS color tokens (oklch) to rgb. */
-let colorResolverCtx: CanvasRenderingContext2D | null = null;
-function resolveCssColorToRgb(value: string): [number, number, number] | null {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  if (!colorResolverCtx) {
-    colorResolverCtx = document.createElement("canvas").getContext("2d");
-  }
-  const ctx = colorResolverCtx;
-  if (!ctx) {
-    return null;
-  }
-  // A no-op assignment first so an unparseable value can't silently reuse a
-  // prior color; then read the rasterized pixel (the canvas normalizes oklch).
-  ctx.fillStyle = "#000";
-  ctx.fillStyle = value.trim();
-  ctx.fillRect(0, 0, 1, 1);
-  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-  return [r, g, b];
-}
-
 interface PageSidebarSwipeRevealProps {
   children: ReactNode;
   sidebar: ReactNode;
@@ -355,43 +333,20 @@ export function PageSidebarSwipeReveal({
   // areas read as sidebar-gray early in the swipe rather than only near the end.
   const revealProgress = overlayProgress * (2 - overlayProgress);
 
-  // Drive the page background (the surface iOS Safari samples for its top/bottom
-  // bar tint) toward the sidebar color as the sidebar is revealed, so the bars
-  // fade to sidebar-gray with the swipe instead of being permanently gray. The
-  // dragging flag drops the CSS transition so the tint tracks the finger 1:1.
+  // Drive the page background (the surface iOS Safari samples for the areas
+  // *behind* its top/bottom bars, via the `<html>` color-mix in styles.css)
+  // toward the sidebar color as the sidebar is revealed, so the insets fade to
+  // sidebar-gray with the swipe instead of staying bg-background. The dragging
+  // flag drops the CSS transition so the tint tracks the finger 1:1. (The top-bar
+  // `theme-color` tint itself is owned by the `prefers-color-scheme` metas in
+  // __root — iOS doesn't reliably honor a JS-updated `theme-color`.)
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--sidebar-reveal", String(revealProgress));
     root.toggleAttribute("data-swipe-dragging", isDragging);
-
-    // Keep the iOS Safari top-bar tint (`<meta name="theme-color">`) in lockstep
-    // with the body bar-tint surface: bg-background at rest, fading to bg-sidebar
-    // with the swipe. Without this the static meta would pin the status/address
-    // bar to one color while the rest of the chrome fades — the mismatch the user
-    // sees as a permanently-gray top bar. Mirrors the body `color-mix` in styles.css.
-    const meta = document.querySelector('meta[name="theme-color"]');
-    const styles = getComputedStyle(root);
-    const background = resolveCssColorToRgb(
-      styles.getPropertyValue("--background")
-    );
-    const sidebar = resolveCssColorToRgb(styles.getPropertyValue("--sidebar"));
-    if (meta && background && sidebar) {
-      const mix = background.map((channel, i) =>
-        Math.round(channel + (sidebar[i] - channel) * revealProgress)
-      );
-      meta.setAttribute("content", `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`);
-    }
-
     return () => {
       root.style.removeProperty("--sidebar-reveal");
       root.removeAttribute("data-swipe-dragging");
-      // Restore the rest tint (bg-background) when the swipe surface unmounts.
-      if (meta && background) {
-        meta.setAttribute(
-          "content",
-          `rgb(${background[0]}, ${background[1]}, ${background[2]})`
-        );
-      }
     };
   }, [revealProgress, isDragging]);
 
@@ -455,7 +410,11 @@ export function PageSidebarSwipeReveal({
 
         {/* Scrim over the content; opacity tracks swipe progress. White in light
             mode (content recedes by washing out); near-black in dark mode (a
-            white wash there reads as a jarring brighten — dark dims instead). */}
+            white wash there reads as a jarring brighten — dark dims instead).
+            Clipped *directly* (not just by the parent): its opacity transition
+            promotes it to a composited layer, and iOS WebKit does not apply an
+            ancestor's clip-path to composited descendants — so without its own
+            clip the scrim's square corners punch through the rounded card. */}
         <div
           aria-hidden
           className={cn(
@@ -466,6 +425,12 @@ export function PageSidebarSwipeReveal({
           style={{
             opacity: overlayProgress * OVERLAY_MAX_OPACITY,
             touchAction: "none",
+            // Defensive: clip the scrim itself, not just via the parent. Modern
+            // iOS (26.x) clips composited descendants by the ancestor clip-path
+            // fine, but older WebKit does not — there the scrim's square corners
+            // would punch through the rounded card. Same region, so it's a no-op
+            // where the parent clip already applies.
+            clipPath: revealClipPath,
           }}
           {...(openMobile ? gestureHandlers : {})}
         />

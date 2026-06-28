@@ -14,6 +14,7 @@ import {
 import { HapticsProvider } from "@/components/layout/haptics-provider.tsx";
 import {
   SyncSiteAppearanceCookieEffect,
+  THEME_COLOR_BY_APPEARANCE,
   ThemeProvider,
 } from "@/components/layout/theme-provider.tsx";
 import { TemplatePageProvider } from "@/components/pages/template-page-provider.tsx";
@@ -132,15 +133,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   shellComponent: RootDocument,
 });
 
-/** Hex equivalents of the `--background` token (see styles.css): the *rest* iOS
- *  Safari bar tint, so the chrome matches the page content. PageSidebarSwipeReveal
- *  fades this toward `--sidebar` (#efefeb / #15110a) live as the sidebar is
- *  swiped open, mirroring the body bar-tint surface. */
-const THEME_COLOR_BY_APPEARANCE = {
-  dark: "#181611",
-  light: "#f9f9f5",
-} as const;
-
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { deviceLayoutHints, siteAppearance, templatePageId } = useRouteContext(
     {
@@ -158,14 +150,32 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     >
       <head>
         <HeadContent />
-        <meta
-          content={
-            isDark
-              ? THEME_COLOR_BY_APPEARANCE.dark
-              : THEME_COLOR_BY_APPEARANCE.light
-          }
-          name="theme-color"
-        />
+        {/* iOS Safari tints its top bar from `theme-color`. For the "system"
+            preference, ship BOTH variants with a `prefers-color-scheme` media
+            query so the browser picks the right one natively at load — SSR can't
+            know the device's system appearance, and iOS does not reliably re-read
+            a JS-updated `theme-color`, so a single SSR meta would pin the bar to
+            the wrong (light) tint in system-dark. For an explicit light/dark
+            preference, a single meta matching the resolved theme is correct. */}
+        {siteAppearance.appearance.theme === "system" ? (
+          <>
+            <meta
+              content={THEME_COLOR_BY_APPEARANCE.light}
+              media="(prefers-color-scheme: light)"
+              name="theme-color"
+            />
+            <meta
+              content={THEME_COLOR_BY_APPEARANCE.dark}
+              media="(prefers-color-scheme: dark)"
+              name="theme-color"
+            />
+          </>
+        ) : (
+          <meta
+            content={THEME_COLOR_BY_APPEARANCE[siteAppearance.resolvedTheme]}
+            name="theme-color"
+          />
+        )}
       </head>
       <body>
         <ThemeProvider initialHints={siteAppearance}>
