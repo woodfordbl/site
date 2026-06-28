@@ -374,16 +374,22 @@ export function PageSidebarSwipeReveal({
         />
       </div>
 
-      {/* Fade sidebar-gray over the top/bottom safe areas as the sidebar is
-          revealed, so they don't show the content's background there (e.g. a
-          cover page's sticky header fills the top safe-area white). Heights are
-          the safe-area insets — non-zero only with notch / home indicator (and
-          the top grows when Safari's address bar collapses on scroll); opacity
-          tracks the swipe so they switch in with the gesture. */}
+      {/* Fill the top/bottom safe areas as the sidebar is revealed so the
+          content's translate (and the white wash over it) doesn't leave the
+          insets showing a split/wrong surface. Heights are the safe-area insets
+          — non-zero only with notch / home indicator (and the top grows when
+          Safari's address bar collapses on scroll); opacity tracks the swipe so
+          they switch in with the gesture.
+
+          The top inset is filled with bg-background to match the page header
+          that lives directly beneath it: the header's safe-area padding is
+          bg-background, so the inset must stay bg-background through the swipe
+          rather than fading to sidebar-gray. The bottom (home indicator) keeps
+          the sidebar tint since no header anchors it. */}
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+          "pointer-events-none absolute inset-x-0 top-0 z-30 bg-background transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
           isDragging && "transition-none"
         )}
         style={{
