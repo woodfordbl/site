@@ -13,10 +13,11 @@ import {
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockContainerProps } from "@/lib/canvas/block-spec.types.ts";
 import { MAX_TABS_COUNT } from "@/lib/canvas/tabs-layout.ts";
+import type { TabsSize, TabsVariant } from "@/lib/schemas/block-props.ts";
 
+import { TabContextMenu } from "./tab-context-menu.tsx";
 import { tabIcon, tabLabel } from "./tab-labels.ts";
 import { TabView } from "./tab-view.tsx";
-import { TabsManager } from "./tabs-manager.tsx";
 
 /** Tab trigger contents: an optional leading glyph followed by the label. */
 function TabTriggerLabel({
@@ -29,7 +30,11 @@ function TabTriggerLabel({
   const icon = tabIcon(tabRow);
   return (
     <span className="inline-flex items-center gap-1.5">
-      {icon ? <PageIconDisplay className="size-3.5" icon={icon} /> : null}
+      {icon ? (
+        // `text-current` overrides PageIconDisplay's muted default so the glyph
+        // tracks the trigger's color (active/hover/inactive) like the label.
+        <PageIconDisplay className="size-3.5 text-current" icon={icon} />
+      ) : null}
       {tabLabel(tabRow, index)}
     </span>
   );
@@ -45,6 +50,21 @@ function resolveDefaultTabId(row: CanvasRow, tabRows: CanvasRow[]): string {
   return tabRows[0]?.rowId ?? "";
 }
 
+/** Tab-bar size + style, falling back to the component defaults. */
+function resolveTabsAppearance(row: CanvasRow): {
+  size: TabsSize;
+  variant: TabsVariant;
+} {
+  const block = row.effectiveBlock;
+  if (block.type === "tabs") {
+    return {
+      size: block.props.size ?? "md",
+      variant: block.props.variant ?? "indicator",
+    };
+  }
+  return { size: "md", variant: "indicator" };
+}
+
 export function TabsView({ row, mode }: BlockContainerProps) {
   if (mode === "view") {
     return <TabsReadView row={row} />;
@@ -55,10 +75,15 @@ export function TabsView({ row, mode }: BlockContainerProps) {
 function TabsReadView({ row }: { row: CanvasRow }) {
   const tabRows = row.children;
   const defaultValue = resolveDefaultTabId(row, tabRows);
+  const { size, variant } = resolveTabsAppearance(row);
 
   return (
     <Tabs className="w-full gap-3" defaultValue={defaultValue}>
-      <TabsList className="max-w-full overflow-x-auto">
+      <TabsList
+        className="max-w-full overflow-x-auto"
+        size={size}
+        variant={variant}
+      >
         {tabRows.map((tabRow, index) => (
           <TabsTrigger key={tabRow.rowId} value={tabRow.rowId}>
             <TabTriggerLabel index={index} tabRow={tabRow} />
@@ -126,6 +151,8 @@ function TabsEditView({ row }: { row: CanvasRow }) {
     dispatch({ type: "tabs.addTab", tabsRowId: row.rowId });
   }, [dispatch, row.rowId]);
 
+  const { size, variant } = resolveTabsAppearance(row);
+
   return (
     <Tabs
       className="w-full gap-3"
@@ -133,11 +160,25 @@ function TabsEditView({ row }: { row: CanvasRow }) {
       value={activeId}
     >
       <div className="flex items-center gap-1" data-reveal-group>
-        <TabsList className="max-w-full overflow-x-auto">
+        <TabsList
+          className="max-w-full overflow-x-auto"
+          size={size}
+          variant={variant}
+        >
           {tabRows.map((tabRow, index) => (
-            <TabsTrigger key={tabRow.rowId} value={tabRow.rowId}>
-              <TabTriggerLabel index={index} tabRow={tabRow} />
-            </TabsTrigger>
+            <TabContextMenu
+              containerRow={row}
+              isFirst={index === 0}
+              isLast={index === tabRows.length - 1}
+              key={tabRow.rowId}
+              size={size}
+              tabRow={tabRow}
+              variant={variant}
+            >
+              <TabsTrigger value={tabRow.rowId}>
+                <TabTriggerLabel index={index} tabRow={tabRow} />
+              </TabsTrigger>
+            </TabContextMenu>
           ))}
         </TabsList>
         {tabRows.length < MAX_TABS_COUNT ? (
@@ -152,7 +193,6 @@ function TabsEditView({ row }: { row: CanvasRow }) {
             <IconPlus className="size-4" />
           </Button>
         ) : null}
-        <TabsManager row={row} />
       </div>
       {tabRows.map((tabRow) => (
         <TabsContent key={tabRow.rowId} value={tabRow.rowId}>
