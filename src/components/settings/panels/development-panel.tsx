@@ -12,16 +12,12 @@ import {
   type PageCanvasFooterActionsInput,
   usePageCanvasFooterActions,
 } from "@/hooks/use-page-canvas-footer-actions.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
-interface DevelopmentPanelProps extends PageCanvasFooterActionsInput {
-  search: SettingsSearch;
-}
+type DevelopmentPanelProps = PageCanvasFooterActionsInput;
 
 export function DevelopmentPanel({
   onAfterReset,
   pageId,
-  search,
 }: DevelopmentPanelProps) {
   const section = getSettingsSection("development");
   const {
@@ -39,7 +35,6 @@ export function DevelopmentPanel({
     return (
       <SettingsPanelShell
         description="No local changes or dev actions are available right now."
-        search={search}
         section={section}
       />
     );
@@ -48,7 +43,6 @@ export function DevelopmentPanel({
   return (
     <SettingsPanelShell
       description="Save local edits to source files, refresh from the site, or reset local changes."
-      search={search}
       section={section}
     >
       {saveStatus ? (

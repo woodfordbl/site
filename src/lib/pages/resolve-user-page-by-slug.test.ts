@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { LOCAL_DELETE_BASELINE_HASH } from "@/lib/pages/page-delete.ts";
 import { resolveActiveUserPageBySlug } from "@/lib/pages/resolve-user-page-by-slug.ts";
+import {
+  TEMPLATE_PAGE_ID,
+  TEMPLATE_PAGE_SLUG,
+} from "@/lib/pages/template-page.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
 
 function localPage(
@@ -34,5 +38,17 @@ describe("resolveActiveUserPageBySlug", () => {
     ];
 
     expect(resolveActiveUserPageBySlug(pages, "/new-page")?.id).toBe("live");
+  });
+
+  it("never resolves the template snapshot by its slug", () => {
+    const pages: LocalPage[] = [
+      localPage({
+        id: TEMPLATE_PAGE_ID,
+        slug: TEMPLATE_PAGE_SLUG,
+        serverBaselineHash: null,
+      }),
+    ];
+
+    expect(resolveActiveUserPageBySlug(pages, TEMPLATE_PAGE_SLUG)).toBeNull();
   });
 });

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TemplateRouteImport } from './routes/template'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as SplatRouteImport } from './routes/$'
@@ -17,6 +18,11 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsSectionRouteImport } from './routes/settings.$section'
 import { Route as PSplatRouteImport } from './routes/p.$'
 
+const TemplateRoute = TemplateRouteImport.update({
+  id: '/template',
+  path: '/template',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/template': typeof TemplateRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
+  '/template': typeof TemplateRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings': typeof SettingsIndexRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/template': typeof TemplateRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
@@ -87,17 +96,26 @@ export interface FileRouteTypes {
     | '/$'
     | '/dev'
     | '/settings'
+    | '/template'
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$' | '/dev' | '/p/$' | '/settings/$section' | '/settings'
+  to:
+    | '/'
+    | '/$'
+    | '/dev'
+    | '/template'
+    | '/p/$'
+    | '/settings/$section'
+    | '/settings'
   id:
     | '__root__'
     | '/'
     | '/$'
     | '/dev'
     | '/settings'
+    | '/template'
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
@@ -108,11 +126,19 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   DevRoute: typeof DevRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  TemplateRoute: typeof TemplateRoute
   PSplatRoute: typeof PSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/template': {
+      id: '/template'
+      path: '/template'
+      fullPath: '/template'
+      preLoaderRoute: typeof TemplateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -184,6 +210,7 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   DevRoute: DevRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  TemplateRoute: TemplateRoute,
   PSplatRoute: PSplatRoute,
 }
 export const routeTree = rootRouteImport
