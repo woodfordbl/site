@@ -25,14 +25,14 @@ export function AnalyticsSection({
         className
       )}
     >
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 className="font-medium text-sm">{title}</h2>
           {description ? (
             <p className="text-muted-foreground text-xs">{description}</p>
           ) : null}
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        {action ? <div className="sm:shrink-0">{action}</div> : null}
       </header>
       {children}
     </section>
