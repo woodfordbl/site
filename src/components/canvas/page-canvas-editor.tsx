@@ -31,6 +31,7 @@ import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.ts
 import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
+import { PageLinkDeleteDialog } from "@/components/canvas/page-link-delete-dialog.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
   CanvasRowDragPreview,
@@ -74,6 +75,7 @@ import {
   pageCanvasMobileScrollClassName,
   pageCanvasTouchScrollClassName,
 } from "@/lib/pages/page-title-layout.ts";
+import { resolveNestedSubpageDeletion } from "@/lib/pages/resolve-nested-subpage-deletion.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasEditorProps {
@@ -176,16 +178,51 @@ function PageCanvasEditorBody({
     [currentPageId, editor, pages, repositionPage]
   );
 
+  // Deleting a `pageLink` block that points at a nested subpage (its target's
+  // parent is this canvas) deletes the page itself, so it routes through the same
+  // "Delete page?" confirmation as the sidebar instead of silently dropping the
+  // link. Plain links to pages elsewhere keep the normal block delete.
+  const [pendingPageDeletePageId, setPendingPageDeletePageId] = useState<
+    string | null
+  >(null);
+
   const deleteSelection = useCallback(() => {
     runAfterBlockActionsMenuClose(editor.deleteSelection);
   }, [editor.deleteSelection, runAfterBlockActionsMenuClose]);
 
   const deleteRow = useCallback(
     (rowId: string) => {
-      runAfterBlockActionsMenuClose(() => editor.deleteRow(rowId));
+      const nestedPageId = resolveNestedSubpageDeletion(
+        editor.getRows(),
+        rowId,
+        pages,
+        currentPageId
+      );
+      runAfterBlockActionsMenuClose(() => {
+        if (nestedPageId) {
+          setPendingPageDeletePageId(nestedPageId);
+          return;
+        }
+        editor.deleteRow(rowId);
+      });
     },
-    [editor.deleteRow, runAfterBlockActionsMenuClose]
+    [
+      currentPageId,
+      editor.deleteRow,
+      editor.getRows,
+      pages,
+      runAfterBlockActionsMenuClose,
+    ]
   );
+
+  // Deleting the page removes the host's `pageLink` block via the shared
+  // reference cleanup, so the canvas drops the row reactively — no editor delete.
+  const handleConfirmPageDelete = useCallback(() => {
+    if (pendingPageDeletePageId) {
+      dispatchPage({ type: "page.delete", pageId: pendingPageDeletePageId });
+    }
+    setPendingPageDeletePageId(null);
+  }, [dispatchPage, pendingPageDeletePageId]);
 
   const hasSelection = editor.selectedRowIds.length > 0;
 
@@ -481,6 +518,11 @@ function PageCanvasEditorBody({
                         <CanvasMenuRoot />
                         <MobileBlockActionsDrawer />
                         <MobileEditorToolbar />
+                        <PageLinkDeleteDialog
+                          onCancel={() => setPendingPageDeletePageId(null)}
+                          onConfirm={handleConfirmPageDelete}
+                          pageId={pendingPageDeletePageId}
+                        />
                       </div>
                     </PageContentLayoutProvider>
                   </CanvasRowDndBridge>
