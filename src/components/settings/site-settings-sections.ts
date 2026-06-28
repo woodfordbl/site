@@ -1,6 +1,7 @@
 export type SettingsSectionId =
   | "appearance"
   | "analytics"
+  | "backup"
   | "development"
   | "shortcuts";
 
@@ -29,6 +30,12 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     label: "Analytics",
     group: "Workspace",
     icon: "chart",
+  },
+  {
+    id: "backup",
+    label: "Backup",
+    group: "Workspace",
+    icon: "archive",
   },
   {
     id: "development",

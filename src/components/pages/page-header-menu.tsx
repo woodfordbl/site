@@ -5,12 +5,14 @@ import {
   IconCopy,
   IconDeviceFloppy,
   IconDots,
+  IconFileExport,
   IconLink,
   IconPhoto,
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
@@ -45,6 +47,7 @@ import {
   usePageCanvasFooterActions,
 } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
+import { exportPageArchive } from "@/lib/content/workspace-export.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";

@@ -116,16 +116,19 @@ export function CanvasBlocksReadOnly({
                   {...(useFullPanelWidth ? { "data-page-full-width": "" } : {})}
                 >
                   {coverSlot}
-                  {headerSlot}
-                  <div
-                    className={pageContentColumnClassName({
-                      fullWidth,
-                      isNarrowViewport,
-                    })}
-                  >
-                    {titleSlot}
-                    <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                      <CanvasRowList mode={mode} rows={rows} />
+                  {/* See page-canvas-editor: sticky header must not be a direct flex child. */}
+                  <div className="min-w-0">
+                    {headerSlot}
+                    <div
+                      className={pageContentColumnClassName({
+                        fullWidth,
+                        isNarrowViewport,
+                      })}
+                    >
+                      {titleSlot}
+                      <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                        <CanvasRowList mode={mode} rows={rows} />
+                      </div>
                     </div>
                   </div>
                 </div>

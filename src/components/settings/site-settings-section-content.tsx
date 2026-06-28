@@ -5,6 +5,7 @@ import { useEffect } from "react";
 
 import { AnalyticsPanel } from "@/components/settings/panels/analytics-panel.tsx";
 import { AppearancePanel } from "@/components/settings/panels/appearance-panel.tsx";
+import { BackupPanel } from "@/components/settings/panels/backup-panel.tsx";
 import { DevelopmentPanel } from "@/components/settings/panels/development-panel.tsx";
 import { KeyboardShortcutsPanel } from "@/components/settings/panels/keyboard-shortcuts-panel.tsx";
 import {
@@ -51,6 +52,8 @@ export function SiteSettingsSectionContent({
       return <AppearancePanel search={search} />;
     case "analytics":
       return <AnalyticsPanel search={search} />;
+    case "backup":
+      return <BackupPanel search={search} />;
     case "development":
       return (
         <DevelopmentPanel

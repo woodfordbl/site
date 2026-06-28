@@ -62,6 +62,10 @@ export function usePageSidebarChrome() {
   return context;
 }
 
+export function useOptionalPageSidebarChrome(): PageSidebarChromeContextValue | null {
+  return useContext(PageSidebarChromeContext);
+}
+
 interface PageSidebarChromeProviderProps {
   children: ReactNode;
   sidebar: ReactNode;

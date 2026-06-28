@@ -7,7 +7,7 @@ Site-wide preferences live on **`/settings`** routes inside the normal app shell
 - [`SiteSettingsTrigger`](../../src/components/settings/site-settings-trigger.tsx) — ghost `IconSettings` button in the footer lane below the inset panel (sidebar background, not inside the main card). Navigates to `/settings/appearance` with `returnTo` and `pageId` search params.
 - [`SiteSettingsLayout`](../../src/components/settings/site-settings-layout.tsx) — full [`SiteShell`](../../src/components/layout/site-shell.tsx) with the same [`PageSidebarChromeProvider`](../../src/components/pages/page-sidebar-chrome.tsx) resizable sidebar chrome as pages; only the sidebar slot (`SiteSettingsSidebar`) and main inset differ. Mobile keeps list/detail navigation without the page sidebar sheet.
 - Mobile: `/settings` shows the nav list; section routes show the panel with **← Settings** back to the list. Desktop redirects `/settings` → `/settings/appearance` and keeps nav + panel visible.
-- Settings sidebar uses the same [`Sidebar`](../../src/components/ui/sidebar.tsx) primitives as the page list (`SidebarHeader`, `SidebarMenuButton`, `SidebarGroup`, etc.). **Back to app** is the first `SidebarMenuItem`. Panel rows use [`SettingsItemCard`](../../src/components/settings/settings-item-card.tsx) (`Item` + `ItemActions` controls).
+- Settings sidebar top row: **Back to app** as a fit-width [`SidebarMenuButton`](../../src/components/ui/sidebar.tsx) inline with [`SidebarPinAction`](../../src/components/pages/sidebar-pin-action.tsx), then Preferences/Workspace groups. Panel rows use [`SettingsItemCard`](../../src/components/settings/settings-item-card.tsx) (`Item` + `ItemActions` controls).
 
 ## Routes
 

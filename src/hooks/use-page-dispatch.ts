@@ -31,6 +31,10 @@ import {
   resolvePageDeleteTargets,
 } from "@/lib/pages/page-delete.ts";
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
+import {
+  computeSidebarOrderForInsertAfter,
+  sortPagesInScope,
+} from "@/lib/pages/page-sidebar-order.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import { persistPageReposition } from "@/lib/pages/persist-page-reposition.ts";
 import { planPageReposition } from "@/lib/pages/reposition-page.ts";
@@ -143,6 +147,12 @@ export function pageReducer(
     case "page.create": {
       const id = command.pageId ?? createId();
       const { parentId, slug, title } = resolveCreatePage(command, pages, id);
+      const sidebarOrder = command.insertAfterPageId
+        ? computeSidebarOrderForInsertAfter({
+            siblings: sortPagesInScope(pages, parentId, id),
+            insertAfterPageId: command.insertAfterPageId,
+          })
+        : undefined;
       return {
         effects: [
           {
@@ -151,6 +161,7 @@ export function pageReducer(
             slug,
             title,
             parentId,
+            sidebarOrder,
             create: true,
             initialBlocks: command.initialBlocks,
           },
@@ -263,6 +274,9 @@ function applyPagePersistEffect(
       slug,
       title: effect.title,
       parentId: effect.parentId ?? null,
+      ...(effect.sidebarOrder === undefined
+        ? {}
+        : { sidebarOrder: effect.sidebarOrder }),
       serverBaselineHash: null,
       createdAt: now,
       updatedAt: now,

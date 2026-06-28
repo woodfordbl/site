@@ -55,6 +55,7 @@ export type PageEffect =
       slug: string;
       title: string;
       parentId?: string | null;
+      sidebarOrder?: number;
       create: boolean;
       previousSlug?: string;
       initialBlocks?: Block[];

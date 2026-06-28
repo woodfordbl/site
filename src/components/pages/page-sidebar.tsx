@@ -1,8 +1,5 @@
-import { IconLayoutSidebar } from "@tabler/icons-react";
-
 import { PageList } from "@/components/pages/page-list.tsx";
-import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
-import { Button } from "@/components/ui/button.tsx";
+import { SidebarPinAction } from "@/components/pages/sidebar-pin-action.tsx";
 import {
   SidebarContent,
   SidebarGroup,
@@ -10,27 +7,6 @@ import {
   SidebarGroupLabel,
 } from "@/components/ui/sidebar.tsx";
 import { cn } from "@/lib/utils.ts";
-
-/** Pins the sidebar when collapsed (hover peek overlay). */
-function PageSidebarExpandAction() {
-  const { isCollapsed, pinSidebar } = usePageSidebarChrome();
-
-  if (!isCollapsed) {
-    return null;
-  }
-
-  return (
-    <Button
-      aria-label="Expand sidebar"
-      onClick={pinSidebar}
-      size="icon-sm"
-      type="button"
-      variant="ghost"
-    >
-      <IconLayoutSidebar aria-hidden />
-    </Button>
-  );
-}
 
 function PageSidebarPanel({ className }: { className?: string }) {
   return (
@@ -50,7 +26,7 @@ function PageSidebarPanel({ className }: { className?: string }) {
             <SidebarGroupLabel className="min-w-0 flex-1">
               Pages
             </SidebarGroupLabel>
-            <PageSidebarExpandAction />
+            <SidebarPinAction />
           </div>
           <SidebarGroupContent>
             <PageList />

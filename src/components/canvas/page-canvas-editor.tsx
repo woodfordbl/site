@@ -447,21 +447,29 @@ function PageCanvasEditorBody({
                             : {})}
                         >
                           {coverSlot}
-                          {headerSlot}
-                          <div
-                            className={pageContentColumnClassName({
-                              fullWidth,
-                              isNarrowViewport,
-                            })}
-                          >
-                            {titleSlot}
-                            <CanvasDropZone
-                              onDropPage={handleDropPageIntoCanvas}
+                          {/* Header + body share one block wrapper so `position: sticky` on
+                              the header slot is not a direct flex child of this scroll
+                              region (sticky breaks when the flex item is only header-tall). */}
+                          <div className="min-w-0">
+                            {headerSlot}
+                            <div
+                              className={pageContentColumnClassName({
+                                fullWidth,
+                                isNarrowViewport,
+                              })}
                             >
-                              <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
-                                <CanvasRowList mode="edit" rows={editor.rows} />
-                              </div>
-                            </CanvasDropZone>
+                              {titleSlot}
+                              <CanvasDropZone
+                                onDropPage={handleDropPageIntoCanvas}
+                              >
+                                <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
+                                  <CanvasRowList
+                                    mode="edit"
+                                    rows={editor.rows}
+                                  />
+                                </div>
+                              </CanvasDropZone>
+                            </div>
                           </div>
                         </div>
                         <CanvasMenuRoot />
