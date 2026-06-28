@@ -27,22 +27,32 @@ import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useHaptics } from "@/hooks/haptics.ts";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
+import { clampBlockIndent, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import { getActiveCanvasRowId } from "@/lib/canvas/block-selection.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
+import { findFocusableAdjacentRowId } from "@/lib/canvas/focusable-rows.ts";
 import { cn } from "@/lib/utils.ts";
 
 type PickerMode = "add" | "turnInto";
 
 /** Button that runs its action without stealing focus from the editor field, so
- *  the on-screen keyboard stays open (same pattern as the slash-menu rows). */
+ *  the on-screen keyboard stays open (same pattern as the slash-menu rows).
+ *
+ *  `canRun` is an optional availability predicate evaluated lazily at tap time
+ *  (rows are read live, so the toolbar never re-renders on edits — see
+ *  `useCanvasEditorContext`). When it returns false the action is at a boundary
+ *  (e.g. "move up" on the top block): fire the `disabled` warning buzz and skip
+ *  `onPress` instead of dispatching a no-op. */
 function ToolbarButton({
+  canRun,
   children,
   className,
   label,
   onPress,
 }: {
+  canRun?: () => boolean;
   children: ReactNode;
   className?: string;
   label: string;
@@ -54,6 +64,12 @@ function ToolbarButton({
       aria-label={label}
       className={cn("text-muted-foreground", className)}
       onClick={() => {
+        if (canRun && !canRun()) {
+          // At a boundary — nothing will move/change. Signal "can't" with the
+          // warning buzz and don't delegate (the dispatch would be a no-op).
+          haptic("disabled");
+          return;
+        }
         // Each bar action is a discrete tap — fire a light selection tick before
         // delegating so the feedback lands immediately (no-op on desktop / fine
         // pointers via the provider). Mirrors the slash-menu / checkbox pattern.
@@ -132,6 +148,25 @@ export function MobileEditorToolbar() {
     [dispatch, resolveTargetRowId]
   );
 
+  // Whether `indent.adjust(delta)` would change the target row's indent — false
+  // when already outdented to 0 or indented to the max (so the reducer clamps to
+  // a no-op). Evaluated at tap time against live rows.
+  const canIndent = useCallback(
+    (delta: -1 | 1) => {
+      const rowId = resolveTargetRowId();
+      if (!rowId) {
+        return false;
+      }
+      const row = findRowById(getRows(), rowId);
+      if (!row) {
+        return false;
+      }
+      const current = getBlockIndent(row.effectiveBlock);
+      return clampBlockIndent(current + delta) !== current;
+    },
+    [getRows, resolveTargetRowId]
+  );
+
   const handleMove = useCallback(
     (direction: "up" | "down") => {
       const rowId = resolveTargetRowId();
@@ -140,6 +175,20 @@ export function MobileEditorToolbar() {
       }
     },
     [dispatch, resolveTargetRowId]
+  );
+
+  // Whether `row.moveAdjacent(direction)` has a focusable neighbor to swap with —
+  // false at the top (move up) or bottom (move down) of the document. Mirrors the
+  // reducer's own boundary check so the button feels the boundary the action hits.
+  const canMove = useCallback(
+    (direction: "up" | "down") => {
+      const rowId = resolveTargetRowId();
+      return (
+        rowId !== null &&
+        findFocusableAdjacentRowId(getRows(), rowId, direction) !== null
+      );
+    },
+    [getRows, resolveTargetRowId]
   );
 
   const handleDelete = useCallback(() => {
@@ -250,18 +299,31 @@ export function MobileEditorToolbar() {
               </ToolbarButton>
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
-              <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
+              <ToolbarButton
+                canRun={() => canIndent(-1)}
+                label="Outdent"
+                onPress={() => handleIndent(-1)}
+              >
                 <IconIndentDecrease aria-hidden />
               </ToolbarButton>
-              <ToolbarButton label="Indent" onPress={() => handleIndent(1)}>
+              <ToolbarButton
+                canRun={() => canIndent(1)}
+                label="Indent"
+                onPress={() => handleIndent(1)}
+              >
                 <IconIndentIncrease aria-hidden />
               </ToolbarButton>
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
-              <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
+              <ToolbarButton
+                canRun={() => canMove("up")}
+                label="Move up"
+                onPress={() => handleMove("up")}
+              >
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
               <ToolbarButton
+                canRun={() => canMove("down")}
                 label="Move down"
                 onPress={() => handleMove("down")}
               >

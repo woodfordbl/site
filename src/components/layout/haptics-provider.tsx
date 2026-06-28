@@ -14,6 +14,8 @@ import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-pro
  * - `press` — the confirming buzz when a long-press arms a block (menu ready).
  * - `pickUp` — a firmer tick when an armed block lifts into a reorder drag.
  * - `drop` — the settle when a dragged block commits to its new slot.
+ * - `disabled` — a soft warning buzz when a tapped command can't run because it's
+ *   at a boundary (e.g. "move up" on the top block — nothing moves).
  * - `success` — a two-stage pulse for a completed, consequential action.
  *
  * This union is the allowlist: call sites go through {@link useHaptics}, never
@@ -28,6 +30,7 @@ export type HapticMoment =
   | "press"
   | "pickUp"
   | "drop"
+  | "disabled"
   | "success";
 
 /** Maps each semantic moment to a `web-haptics` preset name. */
@@ -36,6 +39,7 @@ const MOMENT_PRESET: Record<HapticMoment, string> = {
   press: "medium",
   pickUp: "rigid",
   drop: "soft",
+  disabled: "warning",
   success: "success",
 };
 
