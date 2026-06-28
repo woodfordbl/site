@@ -222,6 +222,31 @@ function resolveToggleHeadingDrop(
   return { rowId: toggleRowId, edge: "before", atScopeStart: true };
 }
 
+/**
+ * Drop resolution when the pointer is over a callout's own row (its icon or
+ * padding). The callout is a generic-scope container, so dropping a block onto
+ * it files the block as its first child (`atScopeStart`). Individual children
+ * still resolve their own before/after drops when hovered, so a drop can also
+ * land between existing children. Mirrors {@link resolveToggleHeadingDrop}.
+ */
+function resolveCalloutDrop(
+  rows: CanvasRow[],
+  calloutRowId: string,
+  draggingRowId: string
+): DropTarget | null {
+  const row = findRowById(rows, calloutRowId);
+  if (row?.effectiveBlock.type !== "callout") {
+    return null;
+  }
+  if (
+    calloutRowId === draggingRowId ||
+    isRowDescendantOf(rows, draggingRowId, calloutRowId)
+  ) {
+    return null;
+  }
+  return { rowId: calloutRowId, edge: "before", atScopeStart: true };
+}
+
 function resolveEmptyColumnDrop(
   rows: CanvasRow[],
   columnRowId: string,
@@ -322,6 +347,11 @@ function resolveRowHitDrop(
   const toggleDrop = resolveToggleHeadingDrop(rows, row.rowId, draggingRowId);
   if (toggleDrop) {
     return toggleDrop;
+  }
+
+  const calloutDrop = resolveCalloutDrop(rows, row.rowId, draggingRowId);
+  if (calloutDrop) {
+    return calloutDrop;
   }
 
   return normalizeDropTarget(rows, row.rowId, resolveDropEdge(clientY, rect));

@@ -102,6 +102,19 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
   },
+  callout: {
+    // Generic-scope container (like `toggleHeading`) holding the callout body
+    // as children. Backspacing the empty sole child lifts it out, dissolving
+    // the callout rather than orphaning content.
+    allowedChildTypes: "*",
+    defaultChildType: "text",
+    onDisallowedChildConversion: "prevent",
+    onEmptyChildDelete: "lift-out",
+    onEmptyChildEnter: "insert-sibling",
+    onCaretStartChildEnter: "insert-sibling",
+    insertSiblingOnEnter: true,
+    acceptEmptyMergeFromAfter: true,
+  },
 };
 
 export function getContainerDefinition(

@@ -7,6 +7,7 @@ import { createBlockShardStorageEventApi } from "@/db/collections/block-shard-st
 import {
   backfillBlockCreatedAt,
   backfillPageCreatedAt,
+  migrateCalloutsToContainers,
   migrateLocalStorageToV2,
 } from "@/db/collections/migrate-local-storage.ts";
 import {
@@ -16,6 +17,7 @@ import {
 import { scheduleSnapshotPurge } from "@/db/snapshots/snapshot-purge.ts";
 import { reconcileDirtyPagesCookie } from "@/lib/local-draft/reconcile-dirty-pages-cookie.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
+import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
 
@@ -103,6 +105,24 @@ export const localKeybindingsCollection = getOrCreateHotCollection(
     )
 );
 
+/**
+ * Pages the user has pinned to the sidebar Favorites section. Holds one row per
+ * favorite keyed by page id, so a favorite resolves the same whether the page is
+ * user-created locally or served from shipped content.
+ */
+export const localFavoritesCollection = getOrCreateHotCollection(
+  "localFavoritesCollection",
+  () =>
+    createCollection(
+      localStorageCollectionOptions({
+        id: "local-favorites",
+        storageKey: "site-local-favorites",
+        getKey: (item) => item.id,
+        schema: localFavoriteSchema,
+      })
+    )
+);
+
 /** Reclaim orphaned media blobs once per boot, off the critical path. */
 function scheduleOrphanAssetSweep(): void {
   const run = () => {
@@ -128,10 +148,14 @@ function startLocalCollectionsSync(): void {
   backfillPageCreatedAt();
   backfillBlockCreatedAt();
   migrateLocalStorageToV2();
+  // After shards exist (post-V2), fold legacy leaf callouts into the container
+  // model so their text survives the schema strip on read.
+  migrateCalloutsToContainers();
   reconcileDirtyPagesCookie();
   localPagesCollection.startSyncImmediate();
   localBlocksCollection.startSyncImmediate();
   localKeybindingsCollection.startSyncImmediate();
+  localFavoritesCollection.startSyncImmediate();
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;

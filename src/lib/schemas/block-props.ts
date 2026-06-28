@@ -29,8 +29,12 @@ export const quotePropsSchema = z.object({
   text: z.string(),
 });
 
+/**
+ * `callout` block props: an optional leading glyph. The callout is a container
+ * whose body is real child blocks (a `text` child by default), so it carries no
+ * primary text of its own. `icon` absent means the icon was removed.
+ */
 export const calloutPropsSchema = z.object({
-  text: z.string(),
   /** Emoji or `tabler:IconName` — same encoding as page icons. */
   icon: z.string().optional(),
 });

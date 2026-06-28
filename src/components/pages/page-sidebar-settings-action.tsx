@@ -4,6 +4,7 @@ import { IconSettings } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useMemo } from "react";
 
+import { DEFAULT_SETTINGS_SECTION } from "@/components/settings/site-settings-sections.ts";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -35,7 +36,13 @@ export function PageSidebarSettingsAction() {
     <SidebarMenuItem>
       <SidebarMenuButton
         className="text-sidebar-foreground/70"
-        render={<Link search={{ pageId, returnTo: pathname }} to="/settings" />}
+        render={
+          <Link
+            params={{ section: DEFAULT_SETTINGS_SECTION }}
+            search={{ pageId, returnTo: pathname }}
+            to="/settings/$section"
+          />
+        }
       >
         <IconSettings aria-hidden className="size-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">Settings</span>

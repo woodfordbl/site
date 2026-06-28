@@ -41,6 +41,7 @@ export function applyCanvasEffects(
           placement: effect.placement,
           offset: effect.offset,
           embedAction: effect.embedAction,
+          calloutAction: effect.calloutAction,
         });
         break;
       }

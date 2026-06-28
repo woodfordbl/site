@@ -1,9 +1,13 @@
 import {
   IconChevronRight,
   IconCopy,
+  IconCopyOff,
+  IconLayoutGrid,
   IconPencil,
   IconPhoto,
   IconRefresh,
+  IconStar,
+  IconStarOff,
   IconTrash,
 } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
@@ -14,9 +18,11 @@ import {
   useDragState,
   useDropTarget,
 } from "@/components/dnd/use-dnd.ts";
+import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
+import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
 import { Button, iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   Collapsible,
@@ -29,6 +35,10 @@ import {
   ContextMenuGroup,
   ContextMenuItem,
   ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
 import {
@@ -44,23 +54,19 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
 } from "@/components/ui/sidebar.tsx";
-import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
+import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
-import { hashPageBlocks } from "@/lib/content/block-hash.ts";
+import { usePageReposition } from "@/hooks/use-page-reposition.ts";
+import { usePageRowEditing } from "@/hooks/use-page-row-editing.ts";
+import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { loadPage } from "@/lib/content/load-page.ts";
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
-import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
-import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
-import {
-  type PageMetadataSeed,
-  persistPageMetadata,
-} from "@/lib/pages/persist-page-metadata.ts";
 import type { PageListDropTarget } from "@/lib/pages/resolve-page-list-drop-target.ts";
 import {
   resolveDeleteRedirectTarget,
@@ -77,8 +83,6 @@ interface PageListItemProps {
   pages: PageSummary[];
   row: PageRow;
 }
-
-import { resolveSourceBlocksForPage } from "@/lib/pages/resolve-source-page-blocks.ts";
 
 const PAGE_LIST_DRAG_HOLD_MS = 50;
 
@@ -115,15 +119,19 @@ interface PageListRowLinkProps {
   hasChildren: boolean;
   icon?: string;
   isExpanded: boolean;
+  isFavorite: boolean;
   isNestTarget: boolean;
   menuActionRef: React.RefObject<HTMLButtonElement | null>;
   navTarget: PageNavTarget;
   onChangeIcon: () => void;
   onDelete: () => void;
-  onDuplicate: () => void;
+  onDuplicate: (withContent: boolean) => void;
+  onMoveTo: (parentId: string | null) => void;
   onRename: () => void;
   onResetToRemote: () => void;
+  onSaveAsTemplate: () => void;
   onToggleExpand: (pageId: string) => void;
+  onToggleFavorite: () => void;
   pageId: string;
   pages: PageSummary[];
   row: PageRow;
@@ -140,15 +148,19 @@ function PageListRowLink({
   hasChildren,
   icon,
   isExpanded,
+  isFavorite,
   isNestTarget,
   menuActionRef,
   navTarget,
   onChangeIcon,
   onDelete,
   onDuplicate,
+  onMoveTo,
   onRename,
   onResetToRemote,
+  onSaveAsTemplate,
   onToggleExpand,
+  onToggleFavorite,
   pageId,
   pages,
   row,
@@ -257,12 +269,18 @@ function PageListRowLink({
         <PageListRowDropdown
           canDelete={canDelete}
           canResetToRemote={canResetToRemote}
+          isFavorite={isFavorite}
           menuActionRef={menuActionRef}
           onChangeIcon={onChangeIcon}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
+          onMoveTo={onMoveTo}
           onRename={onRename}
           onResetToRemote={onResetToRemote}
+          onSaveAsTemplate={onSaveAsTemplate}
+          onToggleFavorite={onToggleFavorite}
+          pageId={pageId}
+          pages={pages}
           title={title}
         />
       )}
@@ -406,43 +424,37 @@ export function PageListItem({
   const hasChildren = row.children.length > 0;
   const isExpanded = expandedIds.has(page.id);
   const dispatch = usePageDispatch(pages);
+  const reposition = usePageReposition(pages, dispatch);
   const navigate = useNavigate();
   const activePage = useActivePageRef();
+  const saveAsTemplate = useSavePageAsTemplate(page);
   const localPage = useLocalPageById(page.id);
+  const isFavorite = useIsFavorite(page.id);
+  const { toggleFavorite } = useFavoriteActions();
   // The row body (and its context menu) render identically on SSR and client so
   // hydration reconciles in place with no remount. The closed-by-default portal
   // siblings below only mount on the client, keeping their heavy modules out of
   // the server render without disturbing the row DOM.
   const isClient = useIsClient();
 
-  const [isRenaming, setIsRenaming] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [iconPickerSeed, setIconPickerSeed] = useState<
-    PageMetadataSeed | undefined
-  >();
-  const persistedTitle = localPage?.title ?? page.title;
-  const persistedSlug = localPage?.slug ?? page.slug;
-
-  const [title, setTitle] = useState(persistedTitle);
-  const [prevPersistedTitle, setPrevPersistedTitle] = useState(persistedTitle);
-  const [prevPersistedSlug, setPrevPersistedSlug] = useState(persistedSlug);
-  const previousSlugRef = useRef(persistedSlug);
-  const isRenamingRef = useRef(false);
-  const seedRef = useRef<PageMetadataSeed | null>(null);
   const menuActionRef = useRef<HTMLButtonElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isRenamingRef.current && persistedTitle !== prevPersistedTitle) {
-    setPrevPersistedTitle(persistedTitle);
-    setTitle(persistedTitle);
-  }
-
-  if (persistedSlug !== prevPersistedSlug) {
-    setPrevPersistedSlug(persistedSlug);
-    previousSlugRef.current = persistedSlug;
-  }
+  const {
+    handleTitleChange,
+    iconPickerOpen,
+    iconPickerSeed,
+    isRenaming,
+    openChangeIcon,
+    previousSlugRef,
+    renameInputRef,
+    seedRef,
+    setIconPickerOpen,
+    startRenaming,
+    stopRenaming,
+    title,
+  } = usePageRowEditing({ localPage, page, pages });
 
   const canDeleteRow = canDeletePage(page.id, pages);
   const canResetToRemote =
@@ -491,80 +503,32 @@ export function PageListItem({
     setContextMenuOpen(next);
   }, []);
 
-  const ensureSeed = useCallback(async (): Promise<PageMetadataSeed | null> => {
-    if (localPage) {
-      return null;
-    }
-
-    if (seedRef.current) {
-      return seedRef.current;
-    }
-
-    const loaded = await loadPage({ data: { slug: page.slug } });
-    seedRef.current = {
-      blocks: loaded.blocks,
-      serverBaselineHash: hashPageBlocks(loaded.blocks),
-    };
-    return seedRef.current;
-  }, [localPage, page.slug]);
-
-  const handleTitleChange = useCallback(
-    (nextTitle: string) => {
-      setTitle(nextTitle);
-
-      if (nextTitle.trim() === "") {
-        return;
-      }
-
-      const applyPersist = (seed?: PageMetadataSeed) => {
-        persistPageMetadata({
-          pageId: page.id,
-          slug: previousSlugRef.current,
-          previousSlug: previousSlugRef.current,
-          title: nextTitle,
-          pages,
-          seed,
-        });
-      };
-
-      if (localPage) {
-        applyPersist();
-        return;
-      }
-
-      ensureSeed()
-        .then((seed) => {
-          if (seed) {
-            applyPersist(seed);
-          }
-        })
-        .catch(() => undefined);
-    },
-    [ensureSeed, localPage, page.id, pages]
-  );
-
   const handleResetToRemote = useCallback(() => {
     dispatch({ type: "page.resetToRemote", pageId: page.id });
   }, [dispatch, page.id]);
 
-  const handleDuplicate = useCallback(() => {
-    // Read local blocks lazily (non-reactively) so the sidebar row stays
-    // SSR-safe — a live query here would abort server rendering.
-    const localBlocks = readBootstrapPageBlocks(page.id).blocks;
-    resolveSourceBlocksForPage(page, localBlocks)
-      .then((source) => {
-        dispatch({
-          type: "page.create",
-          title: `Copy of ${page.title}`,
-          parentId: page.parentId,
-          insertAfterPageId: page.id,
-          initialBlocks: clonePageBlocks(source.blocks),
-          icon: source.icon,
-          headerImage: source.headerImage,
-        });
-      })
-      .catch(() => undefined);
-  }, [dispatch, page]);
+  const handleDuplicate = useCallback(
+    (withContent: boolean) => {
+      duplicatePage({ dispatch, page, withContent });
+    },
+    [dispatch, page]
+  );
+
+  const handleMoveTo = useCallback(
+    (parentId: string | null) => {
+      reposition({
+        appendPageLinkOnParent: false,
+        insertBeforePageId: null,
+        pageId: page.id,
+        parentId,
+      });
+    },
+    [page.id, reposition]
+  );
+
+  const handleToggleFavorite = useCallback(() => {
+    toggleFavorite(page.id);
+  }, [page.id, toggleFavorite]);
 
   const handleDelete = useCallback(() => {
     dispatch({ type: "page.delete", pageId: page.id });
@@ -577,84 +541,6 @@ export function PageListItem({
       });
     }
   }, [activePage, dispatch, navigate, page.id, page.slug, pages]);
-
-  const startRenaming = useCallback(() => {
-    isRenamingRef.current = true;
-    setIsRenaming(true);
-  }, []);
-
-  const openChangeIcon = useCallback(() => {
-    const openPicker = (seed?: PageMetadataSeed) => {
-      if (seed) {
-        setIconPickerSeed(seed);
-      }
-      setIconPickerOpen(true);
-    };
-
-    if (localPage) {
-      openPicker();
-      return;
-    }
-
-    ensureSeed()
-      .then((seed) => {
-        openPicker(seed ?? undefined);
-      })
-      .catch(() => openPicker());
-  }, [ensureSeed, localPage]);
-
-  useEffect(() => {
-    if (!isRenaming) {
-      return;
-    }
-
-    const input = renameInputRef.current;
-    if (!input) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      input.focus();
-      const end = input.value.length;
-      input.setSelectionRange(end, end);
-    });
-  }, [isRenaming]);
-
-  const stopRenaming = useCallback(() => {
-    isRenamingRef.current = false;
-    setIsRenaming(false);
-
-    const resolvedTitle = title.trim() === "" ? DEFAULT_PAGE_TITLE : title;
-
-    if (title.trim() === "") {
-      setTitle(DEFAULT_PAGE_TITLE);
-    }
-
-    const applyPersist = (seed?: PageMetadataSeed) => {
-      const { slug } = persistPageMetadata({
-        pageId: page.id,
-        previousSlug: previousSlugRef.current,
-        title: resolvedTitle,
-        pages,
-        seed,
-        syncUrl: true,
-      });
-      previousSlugRef.current = slug;
-    };
-
-    if (localPage) {
-      applyPersist();
-      return;
-    }
-
-    ensureSeed()
-      .then((seed) => {
-        if (seed) {
-          applyPersist(seed);
-        }
-      })
-      .catch(() => undefined);
-  }, [ensureSeed, localPage, page.id, pages, title]);
 
   const rowContent = isRenaming ? (
     <PageListRowRename
@@ -677,15 +563,19 @@ export function PageListItem({
       hasChildren={hasChildren}
       icon={page.icon}
       isExpanded={isExpanded}
+      isFavorite={isFavorite}
       isNestTarget={isNestTarget}
       menuActionRef={menuActionRef}
       navTarget={navTarget}
       onChangeIcon={openChangeIcon}
       onDelete={() => setDeleteOpen(true)}
       onDuplicate={handleDuplicate}
+      onMoveTo={handleMoveTo}
       onRename={startRenaming}
       onResetToRemote={handleResetToRemote}
+      onSaveAsTemplate={saveAsTemplate.request}
       onToggleExpand={onToggleExpand}
+      onToggleFavorite={handleToggleFavorite}
       pageId={page.id}
       pages={pages}
       row={row}
@@ -703,13 +593,37 @@ export function PageListItem({
       <ContextMenuTrigger className="block w-full">
         {rowContent}
       </ContextMenuTrigger>
-      <ContextMenuContent className="[--accent-foreground:var(--sidebar-accent-foreground)] [--accent:var(--sidebar-accent)]">
+      <ContextMenuContent>
         <ContextMenuGroup>
           <ContextMenuLabel>Page</ContextMenuLabel>
-          <ContextMenuItem onClick={handleDuplicate}>
-            <IconCopy />
-            Duplicate page
+          <ContextMenuItem onClick={handleToggleFavorite}>
+            {isFavorite ? <IconStarOff /> : <IconStar />}
+            {isFavorite ? "Remove from favorites" : "Add to favorites"}
           </ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <IconCopy />
+              Duplicate page
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="min-w-48">
+              <ContextMenuItem
+                onClick={() => {
+                  handleDuplicate(true);
+                }}
+              >
+                <IconCopy />
+                With content
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => {
+                  handleDuplicate(false);
+                }}
+              >
+                <IconCopyOff />
+                Without content
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
           <ContextMenuItem onClick={startRenaming}>
             <IconPencil />
             Rename
@@ -717,6 +631,16 @@ export function PageListItem({
           <ContextMenuItem onClick={openChangeIcon}>
             <IconPhoto />
             Change icon
+          </ContextMenuItem>
+          <PageMenuMoveSubmenu
+            onMoveTo={handleMoveTo}
+            pageId={page.id}
+            pages={pages}
+            variant="context"
+          />
+          <ContextMenuItem onClick={saveAsTemplate.request}>
+            <IconLayoutGrid />
+            Save as template
           </ContextMenuItem>
           {canResetToRemote ? (
             <ContextMenuItem onClick={handleResetToRemote}>
@@ -733,6 +657,8 @@ export function PageListItem({
             Delete
           </ContextMenuItem>
         </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <PageActivityPanel pageId={page.id} />
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -765,34 +691,64 @@ export function PageListItem({
       ) : null}
 
       {isClient ? (
-        <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
-          <DialogContent showCloseButton={false}>
-            <DialogHeader>
-              <DialogTitle>Delete page?</DialogTitle>
-              <DialogDescription>
-                {localPage && localPage.serverBaselineHash === null
-                  ? "This page and its blocks will be removed. This cannot be undone."
-                  : "This page will be hidden locally. The published version will remain."}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                onClick={() => setDeleteOpen(false)}
-                type="button"
-                variant="outline"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDelete}
-                type="button"
-                variant="destructive"
-              >
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <>
+          <Dialog
+            onOpenChange={saveAsTemplate.setConfirmOpen}
+            open={saveAsTemplate.confirmOpen}
+          >
+            <DialogContent showCloseButton={false}>
+              <DialogHeader>
+                <DialogTitle>Replace existing template?</DialogTitle>
+                <DialogDescription>
+                  A page template already exists. Saving “{page.title}” as the
+                  template overwrites its content and settings. This cannot be
+                  undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  onClick={() => saveAsTemplate.setConfirmOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button onClick={saveAsTemplate.confirm} type="button">
+                  Replace template
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
+            <DialogContent showCloseButton={false}>
+              <DialogHeader>
+                <DialogTitle>Delete page?</DialogTitle>
+                <DialogDescription>
+                  {localPage && localPage.serverBaselineHash === null
+                    ? "This page and its blocks will be removed. This cannot be undone."
+                    : "This page will be hidden locally. The published version will remain."}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  onClick={() => setDeleteOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  type="button"
+                  variant="destructive"
+                >
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
       ) : null}
     </>
   );

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { buildPageActivitySummary } from "@/lib/pages/page-activity-summary.ts";
+import { SITE_AUTHOR_NAME } from "@/lib/site/site-author.ts";
 import { cn } from "@/lib/utils.ts";
 
 function formatTimestamp(iso: string): string {
@@ -65,8 +66,6 @@ export function PageActivityPanel({
 
   return (
     <div className={cn("space-y-1.5 px-2 py-2", className)}>
-      <StatRow label="Total blocks" value={String(summary.blockCount)} />
-      <StatRow label="Total words" value={String(summary.wordCount)} />
       <StatRow
         label="Created at"
         value={
@@ -81,6 +80,7 @@ export function PageActivityPanel({
             : "Unknown"
         }
       />
+      <StatRow label="Last edited by" value={SITE_AUTHOR_NAME} />
     </div>
   );
 }
