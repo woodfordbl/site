@@ -40,7 +40,7 @@ sites stay readable. The `HapticMoment` union is the **allowlist** — go throug
 | `press` | `medium` | 25 ms @ 0.7 — confirming buzz | A long-press arming a block (the actions menu is now ready) |
 | `pickUp` | `rigid` | 10 ms @ 1.0 — sharp tick | An armed block / grip lifting into a reorder drag |
 | `drop` | `soft` | 40 ms @ 0.5 — settle | A dragged block committing to its new slot |
-| `disabled` | `warning` | warning buzz | A tapped command that can't run because it's at a boundary (move up on the top block, outdent at indent 0) — the action is a no-op, so the buzz stands in for the change that didn't happen |
+| `disabled` | `warning` | warning buzz | A tapped command that can't run because it's at a boundary (move up on the top block, outdent at indent 0, indent at the max) — the action is a no-op, so the buzz stands in for the change that didn't happen |
 | `success` | `success` | 30 + 40 ms two-stage | A completed, consequential action — **reserved, no call site yet** |
 
 `web-haptics` also ships `light`, `heavy`, `error`, `nudge`, and `buzz`. These
@@ -75,7 +75,7 @@ state change it confirms, it doesn't get a haptic.
 | A committed value change on a form control — checkbox, switch, radio | `selection` |
 | A discrete selection inside a touch drawer/menu | `selection` |
 | Mobile editor toolbar command taps (bounded exception — a coarse-only surface above the keyboard) | `selection` |
-| A toolbar command tapped at a boundary where it can't run (move up on the top block, outdent at indent 0) | `disabled` |
+| A toolbar command tapped at a boundary where it can't run (move up on the top block, outdent at indent 0, indent at the max) | `disabled` |
 | A completed, consequential action (when one exists) | `success` |
 
 **Do NOT use a haptic for** (anti-patterns — these are why the surface stays small):
@@ -112,7 +112,7 @@ Current confirmed sites (the audit of record):
 | [`radio-group.tsx`](../../src/components/ui/radio-group.tsx) | `selection` | `onValueChange` (wired at the group level — ticks once per selection) |
 | [`menu-presentation.tsx`](../../src/components/ui/menu-presentation.tsx) | `selection` | Drawer menu row tap |
 | [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `selection` | Toolbar command button tap |
-| [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `disabled` | Move up/down or indent/outdent tapped at a boundary (no neighbor / clamped indent) — `ToolbarButton`'s `canRun` predicate |
+| [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `disabled` | Move up or indent/outdent tapped at a boundary (no neighbor up / clamped indent) — `ToolbarButton`'s `canRun` predicate. Move down has no boundary: at the bottom it inserts an empty block above instead, so it always fires `selection`. |
 
 ## Adding a call site
 

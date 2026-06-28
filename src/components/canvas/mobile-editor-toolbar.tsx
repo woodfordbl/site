@@ -104,7 +104,7 @@ function ToolbarButton({
  */
 export function MobileEditorToolbar() {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
-  const { deleteRow, dispatch, getRows, insertAfter } =
+  const { deleteRow, dispatch, getRows, insertAfter, insertBefore } =
     useCanvasEditorContext();
 
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -170,26 +170,38 @@ export function MobileEditorToolbar() {
   const handleMove = useCallback(
     (direction: "up" | "down") => {
       const rowId = resolveTargetRowId();
-      if (rowId) {
-        dispatch({ type: "row.moveAdjacent", rowId, direction });
+      if (!rowId) {
+        return;
       }
+      if (
+        direction === "down" &&
+        findFocusableAdjacentRowId(getRows(), rowId, "down") === null
+      ) {
+        // Already the last block — "move down" keeps working by inserting an
+        // empty block above, which shifts this row down a slot. The insert would
+        // focus the new block, so re-focus this row (matching a normal move's
+        // `placement: "start"`) to keep the keyboard up and let repeated taps
+        // push it down further.
+        insertBefore(rowId);
+        dispatch({ type: "focus.set", rowId, placement: "start" });
+        return;
+      }
+      dispatch({ type: "row.moveAdjacent", rowId, direction });
     },
-    [dispatch, resolveTargetRowId]
+    [dispatch, getRows, insertBefore, resolveTargetRowId]
   );
 
-  // Whether `row.moveAdjacent(direction)` has a focusable neighbor to swap with —
-  // false at the top (move up) or bottom (move down) of the document. Mirrors the
-  // reducer's own boundary check so the button feels the boundary the action hits.
-  const canMove = useCallback(
-    (direction: "up" | "down") => {
-      const rowId = resolveTargetRowId();
-      return (
-        rowId !== null &&
-        findFocusableAdjacentRowId(getRows(), rowId, direction) !== null
-      );
-    },
-    [getRows, resolveTargetRowId]
-  );
+  // Whether `row.moveAdjacent("up")` has a focusable neighbor to swap with —
+  // false at the top of the document. Mirrors the reducer's own boundary check so
+  // the button feels the boundary the action hits. (Move down has no boundary: at
+  // the bottom it inserts an empty block above instead — see `handleMove`.)
+  const canMoveUp = useCallback(() => {
+    const rowId = resolveTargetRowId();
+    return (
+      rowId !== null &&
+      findFocusableAdjacentRowId(getRows(), rowId, "up") !== null
+    );
+  }, [getRows, resolveTargetRowId]);
 
   const handleDelete = useCallback(() => {
     const rowId = resolveTargetRowId();
@@ -316,14 +328,13 @@ export function MobileEditorToolbar() {
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
               <ToolbarButton
-                canRun={() => canMove("up")}
+                canRun={canMoveUp}
                 label="Move up"
                 onPress={() => handleMove("up")}
               >
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
               <ToolbarButton
-                canRun={() => canMove("down")}
                 label="Move down"
                 onPress={() => handleMove("down")}
               >
