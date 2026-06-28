@@ -16,9 +16,9 @@ import { cn } from "@/lib/utils.ts";
  * glyph. Its body is real child blocks (a `text` child by default), so almost
  * any block can be nested inside. The icon picker lives here (not a leaf `Edit`)
  * because container specs have no leaf surface; mirrors how `ToggleHeadingView`
- * edits its own container props. When `props.icon` is absent the glyph slot is
- * hidden and the body sits flush-left — re-add via the inline picker (shown
- * only while an icon is set) or the block actions menu's "Add icon".
+ * edits its own container props. When `props.icon` is absent no glyph slot is
+ * rendered at all (no placeholder) and the body sits flush-left — re-add via
+ * the block actions menu's "Add icon".
  */
 export function CalloutView({ row, mode }: BlockContainerProps) {
   const { dispatch } = useCanvasEditorContext();
@@ -40,8 +40,10 @@ export function CalloutView({ row, mode }: BlockContainerProps) {
       block: { ...block, props: { ...block.props, icon: next } },
     });
 
+  // No icon → render nothing (no placeholder) so the body stays flush-left.
+  // Re-add via the block actions menu's "Add icon".
   let iconSlot: ReactNode = null;
-  if (mode === "edit") {
+  if (icon && mode === "edit") {
     iconSlot = (
       <div className={listMarkerCellClassName}>
         <GlyphIconPicker
