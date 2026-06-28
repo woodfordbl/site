@@ -15,7 +15,10 @@ import {
   resolveTheme,
 } from "@/lib/appearance/resolve-theme.ts";
 import { writeSiteAppearanceToDocument } from "@/lib/appearance/site-appearance-cookie.ts";
-import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
+import type {
+  ChartDitherMode,
+  ChartPaletteId,
+} from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type {
   ResolvedTheme,
@@ -23,8 +26,12 @@ import type {
 } from "@/lib/schemas/site-appearance.ts";
 
 interface ThemeContextValue {
+  chartDither: ChartDitherMode;
+  /** Resolved from `chartDither` + the active theme: should charts dither right now? */
+  chartDitherEnabled: boolean;
   chartPalette: ChartPaletteId;
   resolvedTheme: ResolvedTheme;
+  setChartDither: (chartDither: ChartDitherMode) => void;
   setChartPalette: (chartPalette: ChartPaletteId) => void;
   setTextScale: (textScale: PageTextScale) => void;
   setTheme: (theme: ThemePreference) => void;
@@ -46,6 +53,10 @@ function applyChartPalette(chartPalette: ChartPaletteId): void {
   document.documentElement.dataset.chartPalette = chartPalette;
 }
 
+function applyChartDither(chartDither: ChartDitherMode): void {
+  document.documentElement.dataset.chartDither = chartDither;
+}
+
 interface ThemeProviderProps {
   children: ReactNode;
   initialHints: SiteAppearanceHints;
@@ -62,6 +73,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   const [chartPalette, setChartPaletteState] = useState<ChartPaletteId>(
     initialHints.appearance.chartPalette
   );
+  const [chartDither, setChartDitherState] = useState<ChartDitherMode>(
+    initialHints.appearance.chartDither
+  );
   const [prefersDark, setPrefersDark] = useState(() =>
     initialHints.appearance.theme === "system"
       ? readSystemPrefersDark()
@@ -72,6 +86,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     () => resolveTheme(theme, prefersDark),
     [prefersDark, theme]
   );
+
+  const chartDitherEnabled =
+    chartDither === "on" ||
+    (chartDither === "dark" && resolvedTheme === "dark");
 
   useEffect(() => {
     applyResolvedTheme(resolvedTheme);
@@ -84,6 +102,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   useEffect(() => {
     applyChartPalette(chartPalette);
   }, [chartPalette]);
+
+  useEffect(() => {
+    applyChartDither(chartDither);
+  }, [chartDither]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -103,9 +125,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
         theme: nextTheme,
         textScale,
         chartPalette,
+        chartDither,
       });
     },
-    [textScale, chartPalette]
+    [textScale, chartPalette, chartDither]
   );
 
   const setTextScale = useCallback(
@@ -115,9 +138,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
         theme,
         textScale: nextTextScale,
         chartPalette,
+        chartDither,
       });
     },
-    [theme, chartPalette]
+    [theme, chartPalette, chartDither]
   );
 
   const setChartPalette = useCallback(
@@ -127,15 +151,32 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
         theme,
         textScale,
         chartPalette: nextChartPalette,
+        chartDither,
       });
     },
-    [theme, textScale]
+    [theme, textScale, chartDither]
+  );
+
+  const setChartDither = useCallback(
+    (nextChartDither: ChartDitherMode) => {
+      setChartDitherState(nextChartDither);
+      writeSiteAppearanceToDocument({
+        theme,
+        textScale,
+        chartPalette,
+        chartDither: nextChartDither,
+      });
+    },
+    [theme, textScale, chartPalette]
   );
 
   const value = useMemo<ThemeContextValue>(
     () => ({
+      chartDither,
+      chartDitherEnabled,
       chartPalette,
       resolvedTheme,
+      setChartDither,
       setChartPalette,
       setTextScale,
       setTheme,
@@ -143,8 +184,11 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
       theme,
     }),
     [
+      chartDither,
+      chartDitherEnabled,
       chartPalette,
       resolvedTheme,
+      setChartDither,
       setChartPalette,
       setTextScale,
       setTheme,
@@ -173,11 +217,16 @@ export function useSiteAppearance(): ThemeContextValue {
 
 /** Persists appearance preferences cookie after client changes. */
 export function SyncSiteAppearanceCookieEffect() {
-  const { chartPalette, textScale, theme } = useSiteAppearance();
+  const { chartDither, chartPalette, textScale, theme } = useSiteAppearance();
 
   useEffect(() => {
-    writeSiteAppearanceToDocument({ theme, textScale, chartPalette });
-  }, [chartPalette, textScale, theme]);
+    writeSiteAppearanceToDocument({
+      theme,
+      textScale,
+      chartPalette,
+      chartDither,
+    });
+  }, [chartDither, chartPalette, textScale, theme]);
 
   return null;
 }

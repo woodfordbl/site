@@ -11,8 +11,11 @@ import {
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
 import {
+  CHART_DITHER_MODE_LABELS,
+  CHART_DITHER_MODES,
   CHART_PALETTE_IDS,
   CHART_PALETTES,
+  type ChartDitherMode,
   type ChartPaletteId,
 } from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
@@ -64,13 +67,21 @@ const CHART_PALETTE_OPTIONS: Array<{
   leading: <PaletteSwatch palette={id} />,
 }));
 
+const CHART_DITHER_OPTIONS: Array<{ label: string; value: ChartDitherMode }> =
+  CHART_DITHER_MODES.map((value) => ({
+    value,
+    label: CHART_DITHER_MODE_LABELS[value],
+  }));
+
 interface AppearancePanelProps {
   search: SettingsSearch;
 }
 
 export function AppearancePanel({ search }: AppearancePanelProps) {
   const {
+    chartDither,
     chartPalette,
+    setChartDither,
     setChartPalette,
     setTextScale,
     setTheme,
@@ -118,6 +129,17 @@ export function AppearancePanel({ search }: AppearancePanelProps) {
           }
           description="Default color palette for analytics charts across the workspace."
           title="Chart palette"
+        />
+        <SettingsItemField
+          action={
+            <SettingsItemSelect
+              onValueChange={setChartDither}
+              options={CHART_DITHER_OPTIONS}
+              value={chartDither}
+            />
+          }
+          description="Render charts with a dithered texture. Dark mode only applies it when the dark theme is active."
+          title="Chart dither"
         />
       </SettingsItemCard>
     </SettingsPanelShell>

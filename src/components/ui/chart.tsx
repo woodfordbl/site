@@ -5,6 +5,10 @@ import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
+import {
+  createDitherGradient,
+  cssColorToRgb,
+} from "@/lib/charts/dither-texture.ts";
 import { cn } from "@/lib/utils.ts";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
@@ -47,6 +51,7 @@ function ChartContainer({
   config,
   palette,
   initialDimension = INITIAL_DIMENSION,
+  ref,
   ...props
 }: React.ComponentProps<"div"> & {
   config: ChartConfig;
@@ -78,6 +83,7 @@ function ChartContainer({
         data-chart={chartId}
         data-chart-palette={resolvedPalette}
         data-slot="chart"
+        ref={ref}
         {...props}
       >
         <ChartStyle config={config} id={chartId} />
@@ -144,6 +150,270 @@ ${colorConfig
     />
   );
 };
+
+/**
+ * Ordered (Bayer) dither textures for chart fills.
+ *
+ * Recharts renders SVG, so we can swap a solid `fill` for an SVG `<pattern>`
+ * that tiles inside the bar/area shape and clips for free. Each pattern bakes
+ * in the series' `var(--color-KEY)` token, so the texture follows light/dark
+ * mode and every chart palette automatically.
+ */
+const BAYER_4X4 = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+] as const;
+
+const DITHER_COVERAGE = { light: 0.25, medium: 0.5, heavy: 0.75 } as const;
+export type ChartDitherDensity = keyof typeof DITHER_COVERAGE;
+
+type ChartDitherOptions = {
+  /** Pixel coverage of the dither grid. */
+  density?: ChartDitherDensity;
+  /** Size in px of each dither pixel (tile is 4× this). */
+  pixelSize?: number;
+  /** Faint solid wash behind the dots so low-coverage fills still read as the series color. */
+  baseOpacity?: number;
+  /**
+   * Force dither on/off. When omitted, follows the workspace Chart dither
+   * setting (Settings → Appearance). When disabled, `fill` returns solid colors.
+   */
+  enabled?: boolean;
+};
+
+function ChartDitherPattern({
+  id,
+  color,
+  density = "medium",
+  pixelSize = 2,
+  baseOpacity = 0.18,
+}: { id: string; color: string } & ChartDitherOptions) {
+  const tile = 4 * pixelSize;
+  const threshold = DITHER_COVERAGE[density] * 16;
+  const cells: React.ReactNode[] = [];
+
+  for (let y = 0; y < 4; y++) {
+    for (let x = 0; x < 4; x++) {
+      if (BAYER_4X4[y][x] < threshold) {
+        cells.push(
+          <rect
+            fill={color}
+            height={pixelSize}
+            key={`${x}-${y}`}
+            width={pixelSize}
+            x={x * pixelSize}
+            y={y * pixelSize}
+          />
+        );
+      }
+    }
+  }
+
+  return (
+    <pattern height={tile} id={id} patternUnits="userSpaceOnUse" width={tile}>
+      {baseOpacity > 0 && (
+        <rect fill={color} height={tile} opacity={baseOpacity} width={tile} />
+      )}
+      {cells}
+    </pattern>
+  );
+}
+
+/**
+ * Returns dither `<defs>` (drop them inside the Recharts chart) and a `fill`
+ * helper that resolves a config key to its `url(#…)` pattern reference.
+ *
+ *   const dither = useChartDither(config);
+ *   <BarChart>
+ *     {dither.defs}
+ *     <Bar dataKey="desktop" fill={dither.fill("desktop")} />
+ *   </BarChart>
+ */
+export function useChartDither(
+  config: ChartConfig,
+  options?: ChartDitherOptions
+) {
+  const { chartDitherEnabled } = useSiteAppearance();
+  const enabled = options?.enabled ?? chartDitherEnabled;
+  const prefix = `dither-${React.useId().replace(/:/g, "")}`;
+  const fill = React.useCallback(
+    (key: string) =>
+      enabled ? `url(#${prefix}-${key})` : `var(--color-${key})`,
+    [prefix, enabled]
+  );
+  const defs = enabled ? (
+    <defs>
+      {Object.keys(config).map((key) => (
+        <ChartDitherPattern
+          baseOpacity={options?.baseOpacity}
+          color={`var(--color-${key})`}
+          density={options?.density}
+          id={`${prefix}-${key}`}
+          key={key}
+          pixelSize={options?.pixelSize}
+        />
+      ))}
+    </defs>
+  ) : null;
+
+  return { defs, fill };
+}
+
+const GRADIENT_TILE_PERIODS = 4;
+
+type ChartGradientDitherOptions = {
+  /** Bayer matrix size. 8 = finer, 4 = chunkier. Default 8. */
+  matrix?: 4 | 8;
+  /** Size of each dither cell in px (pixelation/chunkiness). Default 3. */
+  pixelSize?: number;
+  /** Max density at the top, 0..1. Default 0.92. */
+  peak?: number;
+  /** Fade curve exponent. >1 holds density longer then drops fast. Default 1.35. */
+  gamma?: number;
+  /**
+   * Force dither on/off. When omitted, follows the workspace Chart dither
+   * setting (Settings → Appearance). When disabled, `fill` returns solid colors.
+   */
+  enabled?: boolean;
+};
+
+/**
+ * Composable dithered-gradient fills for Recharts area/bar charts.
+ *
+ * Returns `{ ref, defs, fill }`:
+ * - attach `ref` to the `<ChartContainer>` so the texture can resolve theme
+ *   colors and measure the chart height,
+ * - render `{defs}` inside the chart,
+ * - set `fill={fill("seriesKey")}` on an `<Area>`/`<Bar>`.
+ *
+ * Each series' color is resolved from `--color-KEY` (so it follows palettes +
+ * dark mode), then ordered-dithered into a vertical gradient that fades toward
+ * the baseline — regenerated on resize and on theme/palette changes.
+ */
+export function useChartGradientDither(
+  config: ChartConfig,
+  options?: ChartGradientDitherOptions
+) {
+  const { matrix = 8, pixelSize = 3, peak, gamma } = options ?? {};
+  const { chartDitherEnabled } = useSiteAppearance();
+  const enabled = options?.enabled ?? chartDitherEnabled;
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const rawId = React.useId().replace(/:/g, "");
+  const [height, setHeight] = React.useState(0);
+  const [urls, setUrls] = React.useState<Record<string, string>>({});
+
+  const tileWidth = matrix * pixelSize * GRADIENT_TILE_PERIODS;
+  const keySig = Object.keys(config).join(",");
+
+  // Re-resolve each series' color from the DOM and rebuild its texture. Called
+  // on mount and whenever the chart resizes, its palette changes, the dither
+  // setting changes, or dark mode toggles — so the output is always current.
+  const regenerate = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    if (!enabled) {
+      setUrls((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+    const measured = Math.round(el.getBoundingClientRect().height);
+    if (measured <= 0) {
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const key of keySig.split(",").filter(Boolean)) {
+      const rgb = cssColorToRgb(el, `var(--color-${key})`);
+      if (!rgb) {
+        continue;
+      }
+      next[key] = createDitherGradient({
+        bottomColor: rgb,
+        gamma,
+        height: measured,
+        matrix,
+        peak,
+        pixelSize,
+        topColor: rgb,
+        width: tileWidth,
+      });
+    }
+    setHeight(measured);
+    setUrls(next);
+  }, [enabled, keySig, tileWidth, matrix, pixelSize, peak, gamma]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    regenerate();
+    const resizeObserver = new ResizeObserver(regenerate);
+    resizeObserver.observe(el);
+    const paletteObserver = new MutationObserver(regenerate);
+    paletteObserver.observe(el, { attributeFilter: ["data-chart-palette"] });
+    const themeObserver = new MutationObserver(regenerate);
+    themeObserver.observe(document.documentElement, {
+      attributeFilter: ["class", "data-chart-dither"],
+    });
+    return () => {
+      resizeObserver.disconnect();
+      paletteObserver.disconnect();
+      themeObserver.disconnect();
+    };
+  }, [regenerate]);
+
+  const defs = enabled ? (
+    <defs>
+      {Object.keys(config).map((key) =>
+        urls[key] ? (
+          <pattern
+            height={height}
+            id={`grad-${rawId}-${key}`}
+            key={key}
+            patternUnits="userSpaceOnUse"
+            width={tileWidth}
+          >
+            <image
+              height={height}
+              href={urls[key]}
+              preserveAspectRatio="none"
+              width={tileWidth}
+            />
+          </pattern>
+        ) : null
+      )}
+    </defs>
+  ) : null;
+
+  const fill = React.useCallback(
+    (key: string) =>
+      enabled && urls[key]
+        ? `url(#grad-${rawId}-${key})`
+        : `var(--color-${key})`,
+    [enabled, urls, rawId]
+  );
+
+  return { defs, fill, ref };
+}
+
+/**
+ * Recharts hands tooltip/legend items their raw `fill`/`color`, which for a
+ * dithered series is an SVG `url(#…)` pattern reference — invalid as a CSS
+ * color, so swatches render blank. Fall back to the resolved config color in
+ * that case (the raw pattern fill is unusable as a swatch background).
+ */
+function resolveSwatchColor(
+  raw: unknown,
+  fallback: string | undefined
+): string | undefined {
+  if (typeof raw === "string" && raw.length > 0 && !raw.startsWith("url(")) {
+    return raw;
+  }
+  return fallback;
+}
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
@@ -233,7 +503,12 @@ function ChartTooltipContent({
           .map((item, index) => {
             const key = `${nameKey ?? item.name ?? item.dataKey ?? "value"}`;
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
-            const indicatorColor = color ?? item.payload?.fill ?? item.color;
+            const indicatorColor =
+              color ??
+              resolveSwatchColor(
+                item.payload?.fill ?? item.color,
+                itemConfig?.color ?? `var(--color-${key})`
+              );
 
             return (
               <div
@@ -346,7 +621,10 @@ function ChartLegendContent({
                 <div
                   className="h-2 w-2 shrink-0 rounded-[2px]"
                   style={{
-                    backgroundColor: item.color,
+                    backgroundColor: resolveSwatchColor(
+                      item.color,
+                      itemConfig?.color ?? `var(--color-${key})`
+                    ),
                   }}
                 />
               )}

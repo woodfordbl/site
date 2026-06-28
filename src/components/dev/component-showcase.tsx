@@ -52,6 +52,7 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  useChartDither,
 } from "@/components/ui/chart.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import {
@@ -869,6 +870,43 @@ const pageViewsConfig = {
   },
 } satisfies ChartConfig;
 
+/** Experiment: the Page views bar chart with ordered-dither textured fills. */
+function DitheredPageViewsCard() {
+  const dither = useChartDither(pageViewsConfig, { density: "medium" });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Page views — dithered</CardTitle>
+        <CardDescription>
+          Same data, Bayer-dither textured fills
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer
+          className="aspect-auto h-[240px] w-full"
+          config={pageViewsConfig}
+          palette="colorful"
+        >
+          <BarChart accessibilityLayer data={PAGE_VIEWS}>
+            {dither.defs}
+            <CartesianGrid vertical={false} />
+            <XAxis
+              axisLine={false}
+              dataKey="month"
+              tickLine={false}
+              tickMargin={8}
+            />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Bar dataKey="desktop" fill={dither.fill("desktop")} radius={4} />
+            <Bar dataKey="mobile" fill={dither.fill("mobile")} radius={4} />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
 const TRAFFIC_TREND = [
   { month: "Jan", visitors: 1200, signups: 240 },
   { month: "Feb", visitors: 1450, signups: 310 },
@@ -1011,6 +1049,8 @@ function ChartsSection() {
               </ChartContainer>
             </CardContent>
           </Card>
+
+          <DitheredPageViewsCard />
 
           <Card>
             <CardHeader>
