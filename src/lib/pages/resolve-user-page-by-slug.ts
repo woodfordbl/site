@@ -1,5 +1,6 @@
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { normalizePageSlug } from "@/lib/pages/slugify.ts";
+import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
   isLocallyDeletedPage,
   isUserCreatedPage,
@@ -22,6 +23,7 @@ export function resolveActiveUserPageBySlug(
       (page) =>
         page.slug === normalized &&
         isUserCreatedPage(page) &&
+        !isTemplatePageId(page.id) &&
         !isLocallyDeletedPage(page)
     ) ?? null
   );
