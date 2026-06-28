@@ -55,9 +55,10 @@ function TemplatePageSidebarContent() {
         </SidebarMenuItem>
       </SidebarMenu>
       <SidebarGroupContent>
-        <p className="px-2 py-1.5 text-sidebar-foreground/60 text-sm">
-          You're editing the page template. New pages start from this page.
-        </p>
+        <div className="flex flex-col gap-1 px-2 py-1.5 text-sidebar-foreground/60 text-sm">
+          <p>You're editing the page template.</p>
+          <p>New pages start from this page.</p>
+        </div>
       </SidebarGroupContent>
     </SidebarGroup>
   );
