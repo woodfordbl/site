@@ -134,10 +134,10 @@ function resolveCreatePage(
 /**
  * Maps `PageCommand` to `PageEffect` (create, update, delete, reposition).
  * `page.create` purges same-scope slug tombstones before insert, then adds `navigate`
- * with `userPage: true` unless `navigate: false`.
+ * with `userPage: true` unless `navigate: false`. Optional `insertAfterPageId` sets
+ * `sidebarOrder` immediately after that sibling (duplicate page).
  * @see docs/reference/page-commands.md
  * Invalid `page.reposition` plans return `{ effects: [] }`.
- * @see docs/reference/page-commands.md
  */
 export function pageReducer(
   command: PageCommand,

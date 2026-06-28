@@ -1,3 +1,7 @@
+/**
+ * Workspace `.zip` export (full workspace or single page).
+ * @see docs/architecture/local-first-persistence.md#workspace-backup
+ */
 import { getAsset } from "@/db/assets/asset-store.ts";
 import {
   collectWorkspacePage,

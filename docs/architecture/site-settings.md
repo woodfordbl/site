@@ -25,6 +25,7 @@ Search params ([`settings-search.ts`](../../src/lib/settings/settings-search.ts)
 | Appearance | [`AppearancePanel`](../../src/components/settings/panels/appearance-panel.tsx) | Interface theme dropdown + **Text size** (Small / Default / Large) — the site-wide default page text size (`SettingsItemField` + `SettingsItemSelect`) |
 | Keyboard shortcuts | [`KeyboardShortcutsPanel`](../../src/components/settings/panels/keyboard-shortcuts-panel.tsx) | Data from [`keyboard-shortcuts.ts`](../../src/lib/settings/keyboard-shortcuts.ts) |
 | Analytics | [`AnalyticsPanel`](../../src/components/settings/panels/analytics-panel.tsx) | Greyscale charts (`palette="grey"`) from IndexedDB activity log |
+| Backup | [`BackupPanel`](../../src/components/settings/panels/backup-panel.tsx) | Export the full local workspace to `.zip` or import an archive (**Replace** clears local state first; **Merge** overlays by page id) via [`useWorkspaceArchive`](../../src/hooks/use-workspace-archive.ts) — see [local-first-persistence — Workspace backup](./local-first-persistence.md#workspace-backup) |
 | Development | [`DevelopmentPanel`](../../src/components/settings/panels/development-panel.tsx) | Save all, reset, refresh — shown only when [`usePageCanvasFooterActions`](../../src/hooks/use-page-canvas-footer-actions.ts) reports `visible` |
 
 Dev/sync actions were removed from [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx) (footer strip removed from workspace) and from the header menu.
