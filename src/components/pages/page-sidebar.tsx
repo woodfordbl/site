@@ -44,14 +44,14 @@ function SidebarCollapsibleSection({
     <SidebarGroup className="gap-y-px">
       <Collapsible onOpenChange={setOpen} open={open}>
         <div className="flex h-8 shrink-0 items-center justify-between pr-1">
-          <CollapsibleTrigger className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md px-2 text-left font-medium text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2">
+          <CollapsibleTrigger className="group/label flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md px-2 text-left font-medium text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2">
+            <span className="min-w-0 flex-1 truncate">{label}</span>
             <IconChevronRight
               className={cn(
-                "size-3.5 shrink-0 text-sidebar-foreground/50 transition-transform duration-100 ease-out",
+                "size-3.5 shrink-0 text-sidebar-foreground/50 opacity-0 transition-[transform,opacity] duration-100 ease-out hover-none:opacity-100 group-hover/label:opacity-100 group-focus-visible/label:opacity-100",
                 open && "rotate-90"
               )}
             />
-            <span className="truncate">{label}</span>
           </CollapsibleTrigger>
           {action}
         </div>
