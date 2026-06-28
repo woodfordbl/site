@@ -331,6 +331,25 @@ export function PageSidebarSwipeReveal({
   const translateX = dragOffset ?? (openMobile ? sidebarWidth : 0);
   const isDragging = dragOffset !== null;
   const isRevealed = translateX > 0;
+
+  // The content layer is the *document-tall* scroller, so its `border-radius`
+  // corners sit at the document top/bottom — off-screen unless scrolled to an
+  // edge. Clip it to the visible viewport band instead, with rounded corners, so
+  // the inset "card" reads at the viewport edges at any scroll position. Vertical
+  // scroll is frozen for the duration of the reveal (the gesture locks to the
+  // horizontal axis, and an open sidebar locks the document), so reading
+  // `scrollY` once per render is stable. `100%` is the element's own height, so
+  // we don't have to measure it; `max(0px, …)` guards short pages.
+  let revealClipPath: string | undefined;
+  let revealFrameHeight: number | undefined;
+  if (isRevealed && typeof window !== "undefined") {
+    const top = window.scrollY;
+    revealFrameHeight = window.innerHeight;
+    // `var(--radius-3xl)` keeps the clip radius identical to the ring frame's
+    // `rounded-3xl` (the two must match, or the corners read doubled).
+    revealClipPath = `inset(${top}px 0px max(0px, calc(100% - ${top + revealFrameHeight}px)) 0px round var(--radius-3xl))`;
+  }
+
   const overlayProgress = Math.min(translateX / sidebarWidth, 1);
   // Front-load the sidebar-color fade (ease-out quadratic) so the bars/safe
   // areas read as sidebar-gray early in the swipe rather than only near the end.
@@ -420,12 +439,15 @@ export function PageSidebarSwipeReveal({
           // layer — owns the scroll; desktop keeps `h-full` inside the fixed shell.
           "relative z-10 w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none max-md:min-h-svh md:h-full",
           isDragging && "transition-none",
-          // Keep the rounded inset + ring when revealed, but never clamp the
-          // vertical document scroll on mobile (`overflow-x-clip`, not hidden).
-          isRevealed &&
-            "rounded-3xl ring-1 ring-border max-md:overflow-x-clip md:overflow-hidden"
+          // `revealClipPath` rounds the inset card at the viewport edges; never
+          // clamp the vertical document scroll on mobile (`overflow-x-clip`, not
+          // hidden).
+          isRevealed && "max-md:overflow-x-clip md:overflow-hidden"
         )}
-        style={{ transform: `translateX(${translateX}px)` }}
+        style={{
+          transform: `translateX(${translateX}px)`,
+          clipPath: revealClipPath,
+        }}
       >
         <div className="w-full max-md:min-h-svh md:h-full" inert={openMobile}>
           {children}
@@ -445,6 +467,24 @@ export function PageSidebarSwipeReveal({
           }}
           {...(openMobile ? gestureHandlers : {})}
         />
+
+        {/* Border outline for the inset card. The content layer's own `ring`
+            would draw at the document-tall box edges (off-screen); a viewport-
+            sticky frame keeps the ring at the visible card edges. The wrapper is
+            `absolute` so it adds no flow height; the inner element is `sticky` so
+            it pins to the viewport as the (frozen) scroll position dictates. Both
+            are clipped to the same rounded band by `revealClipPath` above. */}
+        {isRevealed ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+          >
+            <div
+              className="sticky top-0 rounded-3xl ring-1 ring-border ring-inset"
+              style={{ height: revealFrameHeight }}
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* Fill the top/bottom safe areas as the sidebar is revealed so the
