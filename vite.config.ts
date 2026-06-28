@@ -85,6 +85,11 @@ const config = defineConfig({
   define: {
     "import.meta.env.VITE_SITE_ORIGIN": JSON.stringify(SITE_ORIGIN),
   },
+  server: {
+    // Honor an externally-assigned port (e.g. a preview harness sets PORT);
+    // otherwise default to 3000. Vite auto-increments if the port is taken.
+    port: Number(process.env.PORT) || 3000,
+  },
   resolve: {
     tsconfigPaths: true,
   },
