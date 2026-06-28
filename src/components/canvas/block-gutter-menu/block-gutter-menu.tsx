@@ -1,4 +1,5 @@
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
+import { BlockGutterMenuCalloutActions } from "@/components/canvas/block-gutter-menu/block-gutter-menu-callout-actions.tsx";
 import {
   type BlockGutterMenuProps,
   BlockGutterMenuProvider,
@@ -26,6 +27,7 @@ function BlockGutterMenuContent() {
       >
         <BlockGutterMenuLabel />
         <BlockGutterMenuTurnInto />
+        <BlockGutterMenuCalloutActions />
         <BlockGutterMenuEmbedActions />
         <BlockGutterMenuTableActions />
         <BlockGutterMenuRowActions />

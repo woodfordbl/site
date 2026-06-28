@@ -15,7 +15,6 @@ export function canSplitBlock(block: Block): boolean {
     block.type === "heading" ||
     block.type === "text" ||
     block.type === "quote" ||
-    block.type === "callout" ||
     block.type === "checklistItem"
   );
 }
