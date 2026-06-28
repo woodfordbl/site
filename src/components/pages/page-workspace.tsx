@@ -271,29 +271,31 @@ function PageWorkspaceBody({
           serverPage={serverPage}
         />
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <div
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-visible border border-border bg-background max-md:border-0 md:rounded-xl"
-            data-page-main-panel=""
-          >
-            {previewDescriptor ? (
-              <PageVersionPreview
-                descriptor={previewDescriptor}
-                onExit={exitPreview}
-                onRestored={handleRestored}
-                pageId={page.id}
-              />
-            ) : (
-              <>
-                {showSidebarRail ? <PageSidebarRail /> : null}
-                {/* Desktop with no cover: header is a fixed bar above the scroll
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {showSidebarRail ? <PageSidebarRail /> : null}
+            <div
+              className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-border bg-background max-md:border-0 md:rounded-xl"
+              data-page-main-panel=""
+            >
+              {previewDescriptor ? (
+                <PageVersionPreview
+                  descriptor={previewDescriptor}
+                  onExit={exitPreview}
+                  onRestored={handleRestored}
+                  pageId={page.id}
+                />
+              ) : (
+                <>
+                  {/* Desktop with no cover: header is a fixed bar above the scroll
                     region. Mobile, or desktop with a cover: it lives inside the
                     scroll region (as headerSlot). */}
-                {isNarrowViewport || hasCover ? null : header}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                  {canvasContent}
-                </div>
-              </>
-            )}
+                  {isNarrowViewport || hasCover ? null : header}
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    {canvasContent}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end gap-1 px-2 max-md:hidden md:px-0">
             <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />

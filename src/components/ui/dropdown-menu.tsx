@@ -277,6 +277,7 @@ function DropdownMenuSubTrigger({
   highlighted,
   inset,
   children,
+  disabled,
   ...props
 }: MenuPrimitive.SubmenuTrigger.Props & {
   highlighted?: boolean;
@@ -291,7 +292,12 @@ function DropdownMenuSubTrigger({
     }
     return (
       <DrawerMenuRow
-        onClick={() => sub?.setOpen(true)}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) {
+            sub?.setOpen(true);
+          }
+        }}
         trailing={
           <IconChevronRight className="size-5 shrink-0 text-muted-foreground" />
         }
@@ -304,12 +310,13 @@ function DropdownMenuSubTrigger({
   return (
     <MenuPrimitive.SubmenuTrigger
       className={cn(
-        "flex cursor-default select-none items-center gap-2 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-highlighted:bg-accent data-open:bg-accent data-popup-open:bg-accent data-inset:pl-7 data-highlighted:text-accent-foreground data-open:text-accent-foreground data-popup-open:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "flex cursor-default select-none items-center gap-2 rounded-md px-1.5 py-1 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-highlighted:bg-accent data-open:bg-accent data-popup-open:bg-accent data-inset:pl-7 data-highlighted:text-accent-foreground data-open:text-accent-foreground data-popup-open:text-accent-foreground data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       data-highlighted={highlighted ? "" : undefined}
       data-inset={inset}
       data-slot="dropdown-menu-sub-trigger"
+      disabled={disabled}
       openOnHover
       {...props}
     >

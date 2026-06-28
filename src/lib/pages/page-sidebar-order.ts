@@ -163,3 +163,28 @@ export function computeSidebarOrderForInsert(options: {
 
   return appendSidebarOrder(siblings);
 }
+
+/** Picks a `sidebarOrder` for a page inserted immediately after `insertAfterPageId`. */
+export function computeSidebarOrderForInsertAfter(options: {
+  siblings: PageSummary[];
+  insertAfterPageId: string;
+}): number {
+  const { siblings, insertAfterPageId } = options;
+  const afterIndex = siblings.findIndex(
+    (page) => page.id === insertAfterPageId
+  );
+
+  if (afterIndex < 0) {
+    return computeSidebarOrderForInsert({ siblings });
+  }
+
+  const nextSibling = siblings[afterIndex + 1];
+  if (!nextSibling) {
+    return computeSidebarOrderForInsert({ siblings });
+  }
+
+  return computeSidebarOrderForInsert({
+    siblings,
+    insertBeforePageId: nextSibling.id,
+  });
+}

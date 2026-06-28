@@ -150,6 +150,16 @@ Guard this behavior with `src/db/queries/block-collection-ops.test.ts`; it verif
 
 The workspace bumps a canvas remount key (`onAfterReset`) after these actions so the open page re-reads fresh data without a flash. Orphan overlays (local row for a removed shipped id) are detected by [`findOrphanLocalPages`](../../src/lib/pages/resolve-page-state.ts); [`OrphanLocalPagesEffect`](../../src/components/pages/orphan-local-pages-effect.tsx) prompts to discard.
 
+## Workspace backup
+
+Settings **Backup** ([`BackupPanel`](../../src/components/settings/panels/backup-panel.tsx)) exports or imports the local workspace as a versioned `.zip` archive (`WORKSPACE_ARCHIVE_APP` = `personal-site`, `WORKSPACE_ARCHIVE_VERSION` = 1 in [`workspace-archive.ts`](../../src/lib/content/workspace-archive.ts)). Layout: `manifest.json`, `pages/{pageId}.json` (full `pageSchema` documents + block shards inlined at export), and `media/{assetId}.{ext}` for referenced IndexedDB blobs. Zipping/unzipping uses `fflate` (async worker).
+
+| Action | UI | Behavior |
+|--------|-----|----------|
+| Export workspace | **Export** in Backup | [`exportWorkspaceArchive`](../../src/lib/content/workspace-export.ts) → [`collectWorkspacePages`](../../src/lib/content/collect-workspace-pages.ts) gathers every visible page + asset ids, downloads `personal-site-workspace-{date}.zip`. Referenced blobs missing from IndexedDB are skipped and reported. |
+| Export page | Header ⋯ **Export page** | [`exportPageArchive`](../../src/lib/content/workspace-export.ts) — same archive format for one page + its media via [`collectWorkspacePage`](../../src/lib/content/collect-workspace-pages.ts) (`personal-site-page-{slug}.zip`). Re-importable via merge. |
+| Import | [`DropUpload`](../../src/components/ui/drop-upload.tsx) or file picker → [`WorkspaceImportDialog`](../../src/components/settings/workspace-import-dialog.tsx) | [`importWorkspaceArchive`](../../src/lib/content/workspace-import.ts): **Replace** runs [`resetAllToRemote`](../../src/lib/pages/reset-all-to-remote.ts) first; **Merge** overlays pages by id. Fatal validation throws [`WorkspaceImportError`](../../src/lib/content/workspace-import.ts) before any write; per-page issues are listed. Restores media with [`putAsset`](../../src/db/assets/asset-store.ts), writes page metadata + block shards, then [`syncPageListLocalPreviewFromCollection`](../../src/lib/pages/page-list-local-preview-cookie.ts). Import completion can bump the canvas remount key via `onAfterImport`. |
+
 ## Server baseline hash
 
 When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale ([`computePageStaleState`](../../src/lib/pages/resolve-page-state.ts), used for per-open detection). The global settings pull is content-only (`contentHash` vs `serverBaselineHash`); resolving a stale page is a full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) that drops the local overlay (metadata + blocks) so the next read restores the shipped baseline.

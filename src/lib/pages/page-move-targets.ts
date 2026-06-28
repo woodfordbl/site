@@ -61,6 +61,7 @@ export function getPageMoveTargetItems(
   const items: PageMoveTargetItem[] = [];
 
   if (
+    page.parentId !== null &&
     page.slug !== "/" &&
     canRepositionToParent(pageId, null, pages) &&
     !isNoOpMove(page, null, pages)

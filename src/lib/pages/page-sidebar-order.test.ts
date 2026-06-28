@@ -3,6 +3,7 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
 import {
   comparePageSiblings,
   computeSidebarOrderForInsert,
+  computeSidebarOrderForInsertAfter,
   sortPagesInScope,
 } from "@/lib/pages/page-sidebar-order.ts";
 
@@ -49,6 +50,31 @@ describe("computeSidebarOrderForInsert", () => {
     });
     expect(order).toBeGreaterThan(0);
     expect(order).toBeLessThan(1000);
+  });
+});
+
+describe("computeSidebarOrderForInsertAfter", () => {
+  it("inserts between the anchor and the next sibling", () => {
+    const siblings = [
+      page("a", "A", 0),
+      page("b", "B", 1000),
+      page("c", "C", 2000),
+    ];
+    const order = computeSidebarOrderForInsertAfter({
+      siblings,
+      insertAfterPageId: "a",
+    });
+    expect(order).toBeGreaterThan(0);
+    expect(order).toBeLessThan(1000);
+  });
+
+  it("appends when the anchor is the last sibling", () => {
+    const siblings = [page("a", "A", 0), page("b", "B", 1000)];
+    const order = computeSidebarOrderForInsertAfter({
+      siblings,
+      insertAfterPageId: "b",
+    });
+    expect(order).toBe(2000);
   });
 });
 

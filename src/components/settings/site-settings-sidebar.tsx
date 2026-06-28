@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  IconArchive,
   IconChartBar,
   IconChevronLeft,
   IconCode,
@@ -10,6 +11,7 @@ import {
 import { Link, useParams } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { SidebarPinAction } from "@/components/pages/sidebar-pin-action.tsx";
 import {
   type SettingsSectionDefinition,
   type SettingsSectionId,
@@ -20,7 +22,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -33,6 +34,7 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 const SECTION_ICONS: Record<SettingsSectionDefinition["icon"], ReactNode> = {
+  archive: <IconArchive />,
   chart: <IconChartBar />,
   code: <IconCode />,
   keyboard: <IconKeyboard />,
@@ -69,18 +71,22 @@ export function SiteSettingsSidebar({
       data-state="expanded"
       id="settings-sidebar"
     >
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<Link to={returnTo} />}>
-              <IconChevronLeft />
-              <span>Back to app</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-
       <SidebarContent>
+        <div className="flex shrink-0 items-center justify-between gap-1 px-2 pt-2 pr-3 pb-0">
+          <SidebarMenu className="w-fit">
+            <SidebarMenuItem className="w-fit">
+              <SidebarMenuButton
+                className="w-fit"
+                render={<Link to={returnTo} />}
+              >
+                <IconChevronLeft />
+                <span>Back to app</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarPinAction />
+        </div>
+
         {NAV_GROUPS.map((group) => {
           const groupSections = sections.filter(
             (section) => section.group === group

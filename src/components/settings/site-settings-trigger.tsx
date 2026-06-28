@@ -4,11 +4,6 @@ import { IconSettings } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button.tsx";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip.tsx";
 
 interface SiteSettingsTriggerProps {
   pageId: string;
@@ -20,23 +15,14 @@ export function SiteSettingsTrigger({ pageId }: SiteSettingsTriggerProps) {
   });
 
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            aria-label="Settings"
-            className="pointer-events-auto text-muted-foreground"
-            render={
-              <Link search={{ pageId, returnTo: pathname }} to="/settings" />
-            }
-            size="icon-sm"
-            variant="ghost"
-          />
-        }
-      >
-        <IconSettings />
-      </TooltipTrigger>
-      <TooltipContent command="open-settings">Settings</TooltipContent>
-    </Tooltip>
+    <Button
+      className="pointer-events-auto"
+      render={<Link search={{ pageId, returnTo: pathname }} to="/settings" />}
+      size="xs"
+      variant="outline"
+    >
+      <IconSettings />
+      Settings
+    </Button>
   );
 }

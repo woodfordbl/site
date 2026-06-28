@@ -5,12 +5,14 @@ import {
   IconCopy,
   IconDeviceFloppy,
   IconDots,
+  IconFileExport,
   IconLink,
   IconPhoto,
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
@@ -46,6 +48,7 @@ import {
 } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
+import { exportPageArchive } from "@/lib/content/workspace-export.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
@@ -79,6 +82,20 @@ export function PageHeaderMenu({
     usePageActions(pageId);
   const footerActions = usePageCanvasFooterActions({ onAfterReset, pageId });
 
+  const runExportPage = useCallback(() => {
+    exportPageArchive(pageId)
+      .then((result) => {
+        toast.success(
+          result.assetCount > 0
+            ? `Page exported with ${result.assetCount} media file${result.assetCount === 1 ? "" : "s"}.`
+            : "Page exported."
+        );
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Export failed.");
+      });
+  }, [pageId]);
+
   const searchableEntries = useMemo((): ActionMenuEntry[] => {
     const entries: ActionMenuEntry[] = [
       {
@@ -105,6 +122,13 @@ export function PageHeaderMenu({
         icon: <IconCopy />,
         keywords: ["duplicate", "copy", "clone"],
         onSelect: duplicate,
+      },
+      {
+        id: "export-page",
+        label: "Export page",
+        icon: <IconFileExport />,
+        keywords: ["export", "download", "backup", "zip", "save"],
+        onSelect: runExportPage,
       },
       {
         id: "delete",
@@ -173,6 +197,7 @@ export function PageHeaderMenu({
     footerActions,
     headerImage,
     isNarrowViewport,
+    runExportPage,
   ]);
 
   const handleDelete = () => {
@@ -256,6 +281,14 @@ export function PageHeaderMenu({
               >
                 <IconCopy />
                 Duplicate page
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  runAfterClose(runExportPage);
+                }}
+              >
+                <IconFileExport />
+                Export page
               </DropdownMenuItem>
               <PageVersionHistorySubmenu pageId={pageId} />
               <PageHeaderMenuMoveSubmenu

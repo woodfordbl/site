@@ -243,7 +243,7 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
     return (
       <div
         className={cn(
-          "h-[26svh] max-h-72 min-h-32 w-full animate-pulse bg-muted",
+          "h-[26svh] max-h-72 min-h-32 w-full shrink-0 animate-pulse bg-muted",
           className
         )}
       />
@@ -257,7 +257,7 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
     <ContextMenu>
       <ContextMenuTrigger
         className={cn(
-          "group/cover relative block h-[26svh] max-h-72 min-h-32 w-full select-none overflow-hidden bg-muted [-webkit-touch-callout:none]",
+          "group/cover relative block h-[26svh] max-h-72 min-h-32 w-full shrink-0 select-none overflow-hidden bg-muted [-webkit-touch-callout:none]",
           className
         )}
         data-page-cover=""

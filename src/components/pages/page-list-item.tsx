@@ -557,6 +557,7 @@ export function PageListItem({
           type: "page.create",
           title: `Copy of ${page.title}`,
           parentId: page.parentId,
+          insertAfterPageId: page.id,
           initialBlocks: clonePageBlocks(sourceBlocks),
         });
       })
