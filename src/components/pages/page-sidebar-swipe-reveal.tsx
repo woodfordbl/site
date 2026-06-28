@@ -60,10 +60,14 @@ export function PageSidebarSwipeReveal({
   const didDragRef = useRef(false);
   const captureElRef = useRef<HTMLElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  // The nav holds the actual sidebar width; the layer around it is a full-width
+  // bg-sidebar backdrop, so we measure the nav (not the layer) for the slide.
+  const navRef = useRef<HTMLDivElement>(null);
 
-  // Measure the real sidebar width so the drag tracks the finger 1:1.
+  // Measure the real nav width so the drag tracks the finger 1:1 and the content
+  // slides exactly the sidebar's width.
   useEffect(() => {
-    const node = sidebarRef.current;
+    const node = navRef.current;
     if (!node) {
       return;
     }
@@ -403,28 +407,33 @@ export function PageSidebarSwipeReveal({
 
   return (
     <div className="relative w-full bg-background max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
-      {/* Sidebar layer — fixed behind the content, revealed as content slides.
-          On mobile the document is the scroller, so this is `fixed` (pinned to
-          the viewport) rather than `absolute` against a now document-tall
-          container, which would scroll away with the body. */}
+      {/* Sidebar layer — a FULL-WIDTH bg-sidebar backdrop fixed behind the
+          content, revealed as the content slides. Full width (not just the nav
+          width) so the sliding content always sits on bg-sidebar: any mismatch
+          between the slide distance and the nav width — or the card's rounded
+          corners — reveals bg-sidebar, never the bg-background swipe-outer. The
+          nav itself is constrained to its real width by `navRef` (which also
+          drives the slide distance). `visibility: hidden` when fully closed (not
+          display:none — keep `navRef` measurable) so the fixed bg-sidebar can't
+          bleed behind the content on iOS. */}
       <div
         aria-hidden={!openMobile}
         aria-label="Sidebar"
         aria-modal={openMobile}
-        className="z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none max-md:fixed max-md:inset-y-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
+        className="z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
         inert={!openMobile}
         ref={sidebarRef}
         role="dialog"
-        // `visibility: hidden` (not display:none — keep it measurable for the
-        // width ResizeObserver) when fully closed so the fixed bg-sidebar layer
-        // can't bleed behind the content on iOS.
-        style={{
-          width: SIDEBAR_WIDTH_MOBILE,
-          visibility: revealActive ? undefined : "hidden",
-        }}
+        style={{ visibility: revealActive ? undefined : "hidden" }}
         tabIndex={-1}
       >
-        {sidebar}
+        <div
+          className="flex h-full flex-col"
+          ref={navRef}
+          style={{ width: SIDEBAR_WIDTH_MOBILE }}
+        >
+          {sidebar}
+        </div>
       </div>
 
       {/* Content layer — slides right to reveal the sidebar; rounded inset when
