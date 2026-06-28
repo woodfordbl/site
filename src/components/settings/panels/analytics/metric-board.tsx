@@ -63,7 +63,7 @@ function PagesBoard({ data }: { data: PageCreationDay[] }) {
 
   return (
     <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
+      className={`aspect-auto ${BOARD_HEIGHT} w-full ${dither.crispClassName}`}
       config={pagesConfig}
       ref={dither.ref}
     >
@@ -97,7 +97,7 @@ function PagesBoard({ data }: { data: PageCreationDay[] }) {
         <Bar
           dataKey="created"
           fill={dither.fill("created")}
-          radius={[4, 4, 0, 0]}
+          radius={dither.barRadius ?? [4, 4, 0, 0]}
           yAxisId="left"
         />
         <Line
@@ -105,7 +105,7 @@ function PagesBoard({ data }: { data: PageCreationDay[] }) {
           dot={false}
           stroke="var(--color-cumulative)"
           strokeWidth={2}
-          type="monotone"
+          type={dither.lineType}
           yAxisId="right"
         />
         <ChartLegend content={<ChartLegendContent />} />
@@ -119,7 +119,7 @@ function WordsBoard({ data }: { data: ContentTimelineDay[] }) {
 
   return (
     <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
+      className={`aspect-auto ${BOARD_HEIGHT} w-full ${dither.crispClassName}`}
       config={wordsConfig}
       ref={dither.ref}
     >
@@ -153,7 +153,7 @@ function WordsBoard({ data }: { data: ContentTimelineDay[] }) {
         <Bar
           dataKey="wordsAdded"
           fill={dither.fill("wordsAdded")}
-          radius={[4, 4, 0, 0]}
+          radius={dither.barRadius ?? [4, 4, 0, 0]}
           yAxisId="left"
         />
         <Line
@@ -161,7 +161,7 @@ function WordsBoard({ data }: { data: ContentTimelineDay[] }) {
           dot={false}
           stroke="var(--color-cumulativeWords)"
           strokeWidth={2}
-          type="monotone"
+          type={dither.lineType}
           yAxisId="right"
         />
         <ChartLegend content={<ChartLegendContent />} />
@@ -175,7 +175,7 @@ function EditsBoard({ data }: { data: ActivityDayDetail[] }) {
 
   return (
     <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
+      className={`aspect-auto ${BOARD_HEIGHT} w-full ${dither.crispClassName}`}
       config={editsConfig}
       ref={dither.ref}
     >
@@ -221,7 +221,7 @@ function EditsBoard({ data }: { data: ActivityDayDetail[] }) {
         <Bar
           dataKey="lifecycle"
           fill={dither.fill("lifecycle")}
-          radius={[4, 4, 0, 0]}
+          radius={dither.barRadius ?? [4, 4, 0, 0]}
           stackId="activity"
           yAxisId="left"
         />
@@ -230,7 +230,7 @@ function EditsBoard({ data }: { data: ActivityDayDetail[] }) {
           dot={false}
           stroke="var(--color-activePages)"
           strokeWidth={2}
-          type="monotone"
+          type={dither.lineType}
           yAxisId="right"
         />
         <ChartLegend content={<ChartLegendContent />} />
