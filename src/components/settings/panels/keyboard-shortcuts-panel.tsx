@@ -9,16 +9,9 @@ import {
   COMMAND_GROUPS,
   getCommandsInGroup,
 } from "@/lib/settings/keyboard-commands.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 import { useResolvedKeybindings } from "@/lib/settings/use-keybindings.ts";
 
-interface KeyboardShortcutsPanelProps {
-  search: SettingsSearch;
-}
-
-export function KeyboardShortcutsPanel({
-  search,
-}: KeyboardShortcutsPanelProps) {
+export function KeyboardShortcutsPanel() {
   const section = getSettingsSection("shortcuts");
   const resolved = useResolvedKeybindings();
   const isCoarsePointer = useIsCoarsePrimaryPointer();
@@ -27,7 +20,6 @@ export function KeyboardShortcutsPanel({
     return (
       <SettingsPanelShell
         description="Keyboard shortcuts apply to devices with a keyboard."
-        search={search}
         section={section}
       >
         <p className="text-muted-foreground text-sm">
@@ -40,7 +32,6 @@ export function KeyboardShortcutsPanel({
   return (
     <SettingsPanelShell
       description="Rebind any shortcut below — record a new combo or reset it to the default."
-      search={search}
       section={section}
     >
       {COMMAND_GROUPS.map((group) => {
