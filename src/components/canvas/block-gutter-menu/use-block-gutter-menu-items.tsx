@@ -4,6 +4,8 @@ import {
   IconCopy,
   IconExternalLink,
   IconLink,
+  IconMoodOff,
+  IconMoodSmile,
   IconRefresh,
   IconRowInsertBottom,
   IconTableColumn,
@@ -20,8 +22,11 @@ export function useBlockGutterMenuItems(
   context: BlockGutterMenuItemsInput
 ): ActionMenuEntry[] {
   const {
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleRemoveCalloutIcon,
     handleDuplicate,
     handleDelete,
     handleEmbedCopyLink,
@@ -90,6 +95,26 @@ export function useBlockGutterMenuItems(
       });
     }
 
+    if (calloutBlock) {
+      if (calloutBlock.props.icon) {
+        items.push({
+          id: "callout-remove-icon",
+          label: "Remove icon",
+          keywords: ["callout", "remove", "icon", "glyph", "emoji"],
+          icon: <IconMoodOff />,
+          onSelect: handleRemoveCalloutIcon,
+        });
+      } else {
+        items.push({
+          id: "callout-add-icon",
+          label: "Add icon",
+          keywords: ["callout", "add", "icon", "glyph", "emoji"],
+          icon: <IconMoodSmile />,
+          onSelect: handleAddCalloutIcon,
+        });
+      }
+    }
+
     if (tableBlock) {
       items.push({
         id: "table-fit-to-width",
@@ -153,8 +178,11 @@ export function useBlockGutterMenuItems(
 
     return items;
   }, [
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleRemoveCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,

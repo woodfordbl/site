@@ -1,4 +1,5 @@
 import { registerContainerLoader } from "@/components/blocks/container-loaders.ts";
+import { CalloutView } from "@/components/blocks/types/callout/callout-view.tsx";
 import { ChecklistView } from "@/components/blocks/types/checklist/checklist-view.tsx";
 import { ColumnContainer } from "@/components/blocks/types/columns/column-container.tsx";
 import { ColumnsView } from "@/components/blocks/types/columns/columns-view.tsx";
@@ -18,3 +19,4 @@ registerContainerLoader("tab", () => TabContainer);
 registerContainerLoader("table", () => TableView);
 registerContainerLoader("tableRow", () => TableRowView);
 registerContainerLoader("toggleHeading", () => ToggleHeadingView);
+registerContainerLoader("callout", () => CalloutView);

@@ -21,6 +21,7 @@ import {
   useCanvasEditorContext,
   useCanvasEditorState,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
 import {
   copyEmbedLink,
@@ -67,6 +68,8 @@ export function BlockGutterMenuProvider({
 
   const tableBlock =
     row?.effectiveBlock.type === "table" ? row.effectiveBlock : null;
+  const calloutBlock =
+    row?.effectiveBlock.type === "callout" ? row.effectiveBlock : null;
   const lastTableRowId = row?.children.at(-1)?.rowId;
   const tableColumnCount = row?.children[0]?.children.length ?? 0;
 
@@ -228,6 +231,30 @@ export function BlockGutterMenuProvider({
     });
   }, [dispatch, tableBlock, tableColumnCount]);
 
+  const setCalloutIcon = useCallback(
+    (icon: string | undefined) => {
+      const currentRow = rows.find((entry) => entry.rowId === rowId);
+      const block = currentRow?.effectiveBlock;
+      if (block?.type !== "callout") {
+        return;
+      }
+      dispatch({
+        type: "row.update",
+        rowId,
+        block: { ...block, props: { ...block.props, icon } },
+      });
+    },
+    [dispatch, rowId, rows]
+  );
+
+  const handleAddCalloutIcon = useCallback(() => {
+    setCalloutIcon(DEFAULT_CALLOUT_ICON);
+  }, [setCalloutIcon]);
+
+  const handleRemoveCalloutIcon = useCallback(() => {
+    setCalloutIcon(undefined);
+  }, [setCalloutIcon]);
+
   const handleDuplicate = useCallback(() => {
     onDuplicate?.();
   }, [onDuplicate]);
@@ -237,8 +264,11 @@ export function BlockGutterMenuProvider({
   }, [onDelete]);
 
   const actionItems = useBlockGutterMenuItems({
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleRemoveCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,
@@ -260,9 +290,12 @@ export function BlockGutterMenuProvider({
     () => ({
       actionItems,
       blockTypeLabel,
+      calloutBlock,
       canTurnInto,
       effectiveBlockId,
       embedBlock,
+      handleAddCalloutIcon,
+      handleRemoveCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
@@ -287,9 +320,12 @@ export function BlockGutterMenuProvider({
     [
       actionItems,
       blockTypeLabel,
+      calloutBlock,
       canTurnInto,
       effectiveBlockId,
       embedBlock,
+      handleAddCalloutIcon,
+      handleRemoveCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,

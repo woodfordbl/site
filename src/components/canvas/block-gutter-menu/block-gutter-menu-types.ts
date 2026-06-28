@@ -6,9 +6,11 @@ import type { Block } from "@/lib/schemas/block.ts";
 export interface BlockGutterMenuContextValue {
   actionItems: ActionMenuEntry[];
   blockTypeLabel: string | undefined;
+  calloutBlock: Extract<Block, { type: "callout" }> | null;
   canTurnInto: boolean;
   effectiveBlockId: string | undefined;
   embedBlock: Extract<Block, { type: "embed" }> | null;
+  handleAddCalloutIcon: () => void;
   handleAddColumn: () => void;
   handleAddRow: () => void;
   handleDelete: () => void;
@@ -18,6 +20,7 @@ export interface BlockGutterMenuContextValue {
   handleEmbedReplace: () => void;
   handleEmbedToggleCaption: (enabled: boolean) => void;
   handleFitToWidth: () => void;
+  handleRemoveCalloutIcon: () => void;
   handleToggleHeaderColumn: (enabled: boolean) => void;
   handleToggleHeaderRow: (enabled: boolean) => void;
   handleTurnInto: (key: string) => void;
@@ -46,8 +49,11 @@ export type BlockGutterMenuProps = Omit<
 
 export type BlockGutterMenuItemsInput = Pick<
   BlockGutterMenuContextValue,
+  | "calloutBlock"
   | "canTurnInto"
   | "embedBlock"
+  | "handleAddCalloutIcon"
+  | "handleRemoveCalloutIcon"
   | "handleDuplicate"
   | "handleDelete"
   | "handleEmbedCopyLink"

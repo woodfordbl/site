@@ -169,9 +169,9 @@ function renderRows(
         break;
       case "callout": {
         const icon = emojiIcon(block.props.icon);
-        chunks.push(
-          blockquote(icon ? `${icon} ${block.props.text}` : block.props.text)
-        );
+        const body = renderRows(row.children, options).join("\n\n");
+        const content = icon && body ? `${icon} ${body}` : (icon ?? body);
+        chunks.push(blockquote(content));
         break;
       }
       case "code":
