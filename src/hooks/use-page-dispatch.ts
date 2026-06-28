@@ -164,6 +164,8 @@ export function pageReducer(
             sidebarOrder,
             create: true,
             initialBlocks: command.initialBlocks,
+            icon: command.icon,
+            headerImage: command.headerImage,
           },
           ...(command.navigate === false
             ? []
@@ -274,6 +276,8 @@ function applyPagePersistEffect(
       slug,
       title: effect.title,
       parentId: effect.parentId ?? null,
+      icon: effect.icon,
+      headerImage: effect.headerImage,
       ...(effect.sidebarOrder === undefined
         ? {}
         : { sidebarOrder: effect.sidebarOrder }),

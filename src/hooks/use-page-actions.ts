@@ -43,13 +43,15 @@ export function usePageActions(pageId: string) {
     // a live query here would abort server rendering (no getServerSnapshot).
     const localBlocks = readBootstrapPageBlocks(pageId).blocks;
     resolveSourceBlocksForPage(page, localBlocks)
-      .then((sourceBlocks) => {
+      .then((source) => {
         dispatch({
           type: "page.create",
           title: `Copy of ${page.title}`,
           parentId: page.parentId,
           insertAfterPageId: pageId,
-          initialBlocks: clonePageBlocks(sourceBlocks),
+          initialBlocks: clonePageBlocks(source.blocks),
+          icon: source.icon,
+          headerImage: source.headerImage,
         });
       })
       .catch(() => undefined);

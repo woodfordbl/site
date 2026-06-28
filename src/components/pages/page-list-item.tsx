@@ -552,13 +552,15 @@ export function PageListItem({
     // SSR-safe — a live query here would abort server rendering.
     const localBlocks = readBootstrapPageBlocks(page.id).blocks;
     resolveSourceBlocksForPage(page, localBlocks)
-      .then((sourceBlocks) => {
+      .then((source) => {
         dispatch({
           type: "page.create",
           title: `Copy of ${page.title}`,
           parentId: page.parentId,
           insertAfterPageId: page.id,
-          initialBlocks: clonePageBlocks(sourceBlocks),
+          initialBlocks: clonePageBlocks(source.blocks),
+          icon: source.icon,
+          headerImage: source.headerImage,
         });
       })
       .catch(() => undefined);
