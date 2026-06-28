@@ -1,6 +1,7 @@
 import {
   IconChevronRight,
   IconCopy,
+  IconLayoutGrid,
   IconPencil,
   IconPhoto,
   IconRefresh,
@@ -49,6 +50,7 @@ import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
+import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { loadPage } from "@/lib/content/load-page.ts";
@@ -123,6 +125,7 @@ interface PageListRowLinkProps {
   onDuplicate: () => void;
   onRename: () => void;
   onResetToRemote: () => void;
+  onSaveAsTemplate: () => void;
   onToggleExpand: (pageId: string) => void;
   pageId: string;
   pages: PageSummary[];
@@ -148,6 +151,7 @@ function PageListRowLink({
   onDuplicate,
   onRename,
   onResetToRemote,
+  onSaveAsTemplate,
   onToggleExpand,
   pageId,
   pages,
@@ -263,6 +267,7 @@ function PageListRowLink({
           onDuplicate={onDuplicate}
           onRename={onRename}
           onResetToRemote={onResetToRemote}
+          onSaveAsTemplate={onSaveAsTemplate}
           title={title}
         />
       )}
@@ -408,6 +413,7 @@ export function PageListItem({
   const dispatch = usePageDispatch(pages);
   const navigate = useNavigate();
   const activePage = useActivePageRef();
+  const saveAsTemplate = useSavePageAsTemplate(page);
   const localPage = useLocalPageById(page.id);
   // The row body (and its context menu) render identically on SSR and client so
   // hydration reconciles in place with no remount. The closed-by-default portal
@@ -685,6 +691,7 @@ export function PageListItem({
       onDuplicate={handleDuplicate}
       onRename={startRenaming}
       onResetToRemote={handleResetToRemote}
+      onSaveAsTemplate={saveAsTemplate.request}
       onToggleExpand={onToggleExpand}
       pageId={page.id}
       pages={pages}
@@ -709,6 +716,10 @@ export function PageListItem({
           <ContextMenuItem onClick={handleDuplicate}>
             <IconCopy />
             Duplicate page
+          </ContextMenuItem>
+          <ContextMenuItem onClick={saveAsTemplate.request}>
+            <IconLayoutGrid />
+            Save as template
           </ContextMenuItem>
           <ContextMenuItem onClick={startRenaming}>
             <IconPencil />
@@ -765,34 +776,64 @@ export function PageListItem({
       ) : null}
 
       {isClient ? (
-        <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
-          <DialogContent showCloseButton={false}>
-            <DialogHeader>
-              <DialogTitle>Delete page?</DialogTitle>
-              <DialogDescription>
-                {localPage && localPage.serverBaselineHash === null
-                  ? "This page and its blocks will be removed. This cannot be undone."
-                  : "This page will be hidden locally. The published version will remain."}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                onClick={() => setDeleteOpen(false)}
-                type="button"
-                variant="outline"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDelete}
-                type="button"
-                variant="destructive"
-              >
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <>
+          <Dialog
+            onOpenChange={saveAsTemplate.setConfirmOpen}
+            open={saveAsTemplate.confirmOpen}
+          >
+            <DialogContent showCloseButton={false}>
+              <DialogHeader>
+                <DialogTitle>Replace existing template?</DialogTitle>
+                <DialogDescription>
+                  A page template already exists. Saving “{page.title}” as the
+                  template overwrites its content and settings. This cannot be
+                  undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  onClick={() => saveAsTemplate.setConfirmOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button onClick={saveAsTemplate.confirm} type="button">
+                  Replace template
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
+            <DialogContent showCloseButton={false}>
+              <DialogHeader>
+                <DialogTitle>Delete page?</DialogTitle>
+                <DialogDescription>
+                  {localPage && localPage.serverBaselineHash === null
+                    ? "This page and its blocks will be removed. This cannot be undone."
+                    : "This page will be hidden locally. The published version will remain."}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  onClick={() => setDeleteOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  type="button"
+                  variant="destructive"
+                >
+                  Delete
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
       ) : null}
     </>
   );

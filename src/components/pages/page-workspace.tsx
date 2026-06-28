@@ -1,5 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
@@ -48,6 +54,8 @@ import { cn } from "@/lib/utils.ts";
 
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
+  /** Overrides the default page sidebar (e.g. the template editor's chrome). */
+  sidebar?: ReactNode;
 } & (
   | {
       kind: "server";
@@ -134,7 +142,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
   const initialBlocks = serverPage?.blocks ?? [];
 
   return (
-    <PageSidebarChromeProvider sidebar={<PageSidebar />}>
+    <PageSidebarChromeProvider sidebar={props.sidebar ?? <PageSidebar />}>
       <PageWorkspaceBody
         initialBlocks={initialBlocks}
         page={page}
