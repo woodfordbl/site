@@ -1,7 +1,10 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { BlockTreeNode } from "@/components/canvas/block-tree-node.tsx";
-import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
+import {
+  useCanvasEditorContext,
+  useCanvasFocus,
+} from "@/components/canvas/canvas-editor-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
@@ -29,11 +32,23 @@ const CALLOUT_FLUSH_CHILD_GUTTER_PULL = "-ml-5 md:-ml-7";
  * the block actions menu's "Add icon".
  */
 export function CalloutView({ row, mode }: BlockContainerProps) {
-  const { dispatch } = useCanvasEditorContext();
+  const { clearFocus, dispatch } = useCanvasEditorContext();
+  const focus = useCanvasFocus();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const showScopeStart = useDropTarget(
     (target: DropTarget | null) =>
       target?.rowId === row.rowId && target.atScopeStart === true
   );
+
+  // The gutter menu's "Edit icon" hands off via focus to open the inline picker.
+  const editIconRequested =
+    focus?.rowId === row.rowId && focus?.calloutAction === "editIcon";
+  useEffect(() => {
+    if (editIconRequested) {
+      setPickerOpen(true);
+      clearFocus();
+    }
+  }, [editIconRequested, clearFocus]);
 
   const block = row.effectiveBlock;
   if (block.type !== "callout") {
@@ -57,8 +72,10 @@ export function CalloutView({ row, mode }: BlockContainerProps) {
         <GlyphIconPicker
           ariaLabel="Change callout icon"
           icon={icon}
+          onOpenChange={setPickerOpen}
           onRemove={() => setIcon(undefined)}
           onSelect={(next) => setIcon(next)}
+          open={pickerOpen}
           triggerButtonSize="icon-sm"
         />
       </div>

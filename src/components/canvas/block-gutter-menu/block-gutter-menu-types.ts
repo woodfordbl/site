@@ -15,12 +15,12 @@ export interface BlockGutterMenuContextValue {
   handleAddRow: () => void;
   handleDelete: () => void;
   handleDuplicate: () => void;
+  handleEditCalloutIcon: () => void;
   handleEmbedCopyLink: () => void;
   handleEmbedOpenInBrowser: () => void;
   handleEmbedReplace: () => void;
   handleEmbedToggleCaption: (enabled: boolean) => void;
   handleFitToWidth: () => void;
-  handleRemoveCalloutIcon: () => void;
   handleToggleHeaderColumn: (enabled: boolean) => void;
   handleToggleHeaderRow: (enabled: boolean) => void;
   handleTurnInto: (key: string) => void;
@@ -53,7 +53,7 @@ export type BlockGutterMenuItemsInput = Pick<
   | "canTurnInto"
   | "embedBlock"
   | "handleAddCalloutIcon"
-  | "handleRemoveCalloutIcon"
+  | "handleEditCalloutIcon"
   | "handleDuplicate"
   | "handleDelete"
   | "handleEmbedCopyLink"

@@ -4,8 +4,7 @@ import {
   IconCopy,
   IconExternalLink,
   IconLink,
-  IconMoodOff,
-  IconMoodSmile,
+  IconPencil,
   IconRefresh,
   IconRowInsertBottom,
   IconTableColumn,
@@ -16,6 +15,8 @@ import {
 import { useMemo } from "react";
 
 import type { BlockGutterMenuItemsInput } from "@/components/canvas/block-gutter-menu/block-gutter-menu-types.ts";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
+import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 
 export function useBlockGutterMenuItems(
@@ -26,7 +27,7 @@ export function useBlockGutterMenuItems(
     canTurnInto,
     embedBlock,
     handleAddCalloutIcon,
-    handleRemoveCalloutIcon,
+    handleEditCalloutIcon,
     handleDuplicate,
     handleDelete,
     handleEmbedCopyLink,
@@ -98,18 +99,18 @@ export function useBlockGutterMenuItems(
     if (calloutBlock) {
       if (calloutBlock.props.icon) {
         items.push({
-          id: "callout-remove-icon",
-          label: "Remove icon",
-          keywords: ["callout", "remove", "icon", "glyph", "emoji"],
-          icon: <IconMoodOff />,
-          onSelect: handleRemoveCalloutIcon,
+          id: "callout-edit-icon",
+          label: "Edit icon",
+          keywords: ["callout", "edit", "change", "icon", "glyph", "emoji"],
+          icon: <IconPencil />,
+          onSelect: handleEditCalloutIcon,
         });
       } else {
         items.push({
           id: "callout-add-icon",
           label: "Add icon",
           keywords: ["callout", "add", "icon", "glyph", "emoji"],
-          icon: <IconMoodSmile />,
+          icon: <PageIconDisplay icon={DEFAULT_CALLOUT_ICON} />,
           onSelect: handleAddCalloutIcon,
         });
       }
@@ -182,7 +183,7 @@ export function useBlockGutterMenuItems(
     canTurnInto,
     embedBlock,
     handleAddCalloutIcon,
-    handleRemoveCalloutIcon,
+    handleEditCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,

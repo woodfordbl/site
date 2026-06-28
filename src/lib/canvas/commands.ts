@@ -144,6 +144,7 @@ export type CanvasCommand =
       placement?: "start" | "end";
       offset?: number;
       embedAction?: "replace" | "caption";
+      calloutAction?: "editIcon";
     }
   | { type: "row.focusAdjacent"; rowId: string; direction: "up" | "down" }
   | { type: "row.moveAdjacent"; rowId: string; direction: "up" | "down" }

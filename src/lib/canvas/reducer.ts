@@ -1089,6 +1089,7 @@ export function canvasReducer(
         placement: command.placement,
         offset: command.offset,
         embedAction: command.embedAction,
+        calloutAction: command.calloutAction,
       });
       return { state, effects };
     }

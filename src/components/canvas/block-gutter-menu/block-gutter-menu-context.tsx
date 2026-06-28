@@ -231,29 +231,29 @@ export function BlockGutterMenuProvider({
     });
   }, [dispatch, tableBlock, tableColumnCount]);
 
-  const setCalloutIcon = useCallback(
-    (icon: string | undefined) => {
-      const currentRow = rows.find((entry) => entry.rowId === rowId);
-      const block = currentRow?.effectiveBlock;
-      if (block?.type !== "callout") {
-        return;
-      }
-      dispatch({
-        type: "row.update",
-        rowId,
-        block: { ...block, props: { ...block.props, icon } },
-      });
-    },
-    [dispatch, rowId, rows]
-  );
-
   const handleAddCalloutIcon = useCallback(() => {
-    setCalloutIcon(DEFAULT_CALLOUT_ICON);
-  }, [setCalloutIcon]);
+    const currentRow = rows.find((entry) => entry.rowId === rowId);
+    const block = currentRow?.effectiveBlock;
+    if (block?.type !== "callout") {
+      return;
+    }
+    dispatch({
+      type: "row.update",
+      rowId,
+      block: {
+        ...block,
+        props: { ...block.props, icon: DEFAULT_CALLOUT_ICON },
+      },
+    });
+  }, [dispatch, rowId, rows]);
 
-  const handleRemoveCalloutIcon = useCallback(() => {
-    setCalloutIcon(undefined);
-  }, [setCalloutIcon]);
+  // Open the callout's inline icon picker (dropdown / drawer) so the icon can be
+  // changed or removed there; mirrors how embed "replace" hands off via focus.
+  const handleEditCalloutIcon = useCallback(() => {
+    runAfterMenuClose(() => {
+      dispatch({ type: "focus.set", rowId, calloutAction: "editIcon" });
+    });
+  }, [dispatch, rowId, runAfterMenuClose]);
 
   const handleDuplicate = useCallback(() => {
     onDuplicate?.();
@@ -268,7 +268,7 @@ export function BlockGutterMenuProvider({
     canTurnInto,
     embedBlock,
     handleAddCalloutIcon,
-    handleRemoveCalloutIcon,
+    handleEditCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,
@@ -295,7 +295,7 @@ export function BlockGutterMenuProvider({
       effectiveBlockId,
       embedBlock,
       handleAddCalloutIcon,
-      handleRemoveCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
@@ -325,7 +325,7 @@ export function BlockGutterMenuProvider({
       effectiveBlockId,
       embedBlock,
       handleAddCalloutIcon,
-      handleRemoveCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
