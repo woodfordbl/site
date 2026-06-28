@@ -47,7 +47,9 @@ describe("pageReducer page.create", () => {
         type: "page.create",
         title: "New Page",
         pageId: "user-new",
-        pageSettings: { font: "serif", fullWidth: true },
+        font: "serif",
+        fullWidth: true,
+        textScale: "large",
       },
       shippedPages
     );
@@ -55,7 +57,9 @@ describe("pageReducer page.create", () => {
     const persist = effects.find((effect) => effect.type === "page.persist");
     expect(persist?.type).toBe("page.persist");
     if (persist?.type === "page.persist") {
-      expect(persist.pageSettings).toEqual({ font: "serif", fullWidth: true });
+      expect(persist.font).toBe("serif");
+      expect(persist.fullWidth).toBe(true);
+      expect(persist.textScale).toBe("large");
     }
   });
 
@@ -103,6 +107,31 @@ describe("pageReducer page.create", () => {
     if (persist?.type === "page.persist") {
       expect(persist.sidebarOrder).toBeGreaterThan(1000);
       expect(persist.sidebarOrder).toBeLessThan(2000);
+    }
+  });
+
+  it("carries the source icon and cover image onto the duplicate", () => {
+    const headerImage = {
+      source: "url" as const,
+      src: "https://example.com/cover.jpg",
+    };
+    const { effects } = pageReducer(
+      {
+        type: "page.create",
+        title: "Copy of Notes",
+        pageId: "copy-notes",
+        insertAfterPageId: "notes",
+        icon: "tabler:notebook",
+        headerImage,
+      },
+      shippedPages
+    );
+
+    const persist = effects.find((effect) => effect.type === "page.persist");
+    expect(persist?.type).toBe("page.persist");
+    if (persist?.type === "page.persist") {
+      expect(persist.icon).toBe("tabler:notebook");
+      expect(persist.headerImage).toEqual(headerImage);
     }
   });
 });

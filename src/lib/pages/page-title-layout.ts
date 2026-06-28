@@ -102,11 +102,11 @@ export const pageCoverDesktopHeaderSlotClassName =
  * desktop `px-12` = 6rem.
  */
 export const pageCoverMobileClassName =
-  "-mr-4 -ml-7 mb-3 w-[calc(100%+2.75rem)] md:-mx-12 md:-mt-16 md:mb-0 md:w-[calc(100%+6rem)] md:rounded-t-xl";
+  "-mr-4 -ml-7 w-[calc(100%+2.75rem)] md:-mx-12 md:-mt-16 md:w-[calc(100%+6rem)] md:rounded-t-xl";
 
 /** Touch cover bleed — `pl-3` (0.75rem) + `pr-4` (1rem) = 1.75rem; desktop 6rem. */
 export const pageCoverTouchClassName =
-  "-mr-4 -ml-3 mb-3 w-[calc(100%+1.75rem)] md:-mx-12 md:-mt-16 md:mb-0 md:w-[calc(100%+6rem)] md:rounded-t-xl";
+  "-mr-4 -ml-3 w-[calc(100%+1.75rem)] md:-mx-12 md:-mt-16 md:w-[calc(100%+6rem)] md:rounded-t-xl";
 
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";

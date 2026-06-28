@@ -9,31 +9,24 @@ import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { resolveSourceBlocksForPage } from "@/lib/pages/resolve-source-page-blocks.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
-import type { PageSettings } from "@/lib/schemas/page-settings.ts";
 
-/** Picks only the defined page-level settings from a local page record. */
-function pageSettingsFromLocalPage(page: LocalPage): PageSettings {
-  const settings: PageSettings = {};
-  if (page.font !== undefined) {
-    settings.font = page.font;
-  }
-  if (page.fullWidth !== undefined) {
-    settings.fullWidth = page.fullWidth;
-  }
-  if (page.headerImage !== undefined) {
-    settings.headerImage = page.headerImage;
-  }
-  if (page.textScale !== undefined) {
-    settings.textScale = page.textScale;
-  }
-  return settings;
+/** The template's appearance fields to seed onto a new page (icon, cover, font, …). */
+function templateAppearance(page: LocalPage | null) {
+  return {
+    icon: page?.icon,
+    headerImage: page?.headerImage,
+    font: page?.font,
+    fullWidth: page?.fullWidth,
+    textScale: page?.textScale,
+  };
 }
 
 /**
  * Returns a `createPage` action used by every "New page" entry point. When a
  * template page is configured (Settings → Template), the new page is seeded with
- * a clone of that page's blocks and its page-level settings; otherwise it falls
- * back to a blank page. Mirrors the duplicate-page flow in `usePageActions`.
+ * a clone of that page's blocks and its appearance (icon, cover, font, width,
+ * text size); otherwise it falls back to a blank page. Mirrors the duplicate-page
+ * flow in `usePageActions`.
  */
 export function useCreatePage(pages: PageSummary[] = []) {
   const dispatch = usePageDispatch(pages);
@@ -52,20 +45,21 @@ export function useCreatePage(pages: PageSummary[] = []) {
     const localTemplate =
       localPagesCollection.toArray.find((page) => page.id === templatePageId) ??
       null;
-    const pageSettings = localTemplate
-      ? pageSettingsFromLocalPage(localTemplate)
-      : undefined;
+    const appearance = templateAppearance(localTemplate);
 
     // Read local blocks lazily (non-reactively) so this hook stays SSR-safe —
     // a live query here would abort server rendering (no getServerSnapshot).
     const localBlocks = readBootstrapPageBlocks(templatePageId).blocks;
     resolveSourceBlocksForPage(templatePage, localBlocks)
-      .then((sourceBlocks) => {
+      .then((source) => {
         dispatch({
           type: "page.create",
           title: DEFAULT_PAGE_TITLE,
-          initialBlocks: clonePageBlocks(sourceBlocks),
-          pageSettings,
+          initialBlocks: clonePageBlocks(source.blocks),
+          // Prefer the template's own resolved icon/cover, else its local record.
+          ...appearance,
+          icon: appearance.icon ?? source.icon,
+          headerImage: appearance.headerImage ?? source.headerImage,
         });
       })
       .catch(() => {

@@ -84,6 +84,8 @@ Shipped page content is **bundled at build time** via [`page-store.server.ts`](.
 
 **Delete cleanup.** Deleting a page (and its descendants) removes every `pageLink` block that targets a deleted page from every *other* page's content via [`deletePageLinkReferences`](../../src/lib/pages/delete-page-link-references.ts), dispatched from [`usePageDispatch`](../../src/hooks/use-page-dispatch.ts) against the full delete-target set. Locally-seeded host pages are rewritten in place with [`applyPageBlockDiff`](../../src/db/queries/block-collection-ops.ts) (preserving `blockOrder`); never-edited shipped host pages are loaded with [`loadPage`](../../src/lib/content/load-page.ts), seeded into `localPagesCollection` with their cleaned content (baseline = the original shipped blocks' hash so **Reset to site version** still works), and only when they actually referenced the deleted page. Host pages that are themselves being deleted are skipped — their shards are removed wholesale by `deleteAllBlocksForPage`.
 
+**Deleting a subpage link deletes the page.** A `pageLink` block is a real subpage only when it lives in its target's parent canvas (the same relational rule as the external icon), so deleting that block deletes the page itself rather than orphaning the link. The canvas single-row delete (gutter menu, mobile actions drawer, mobile toolbar) runs [`resolveNestedSubpageDeletion`](../../src/lib/pages/resolve-nested-subpage-deletion.ts) in [`PageCanvasEditor`](../../src/components/canvas/page-canvas-editor.tsx): when the row is a subpage link it opens the same **"Delete page?"** confirmation as the sidebar ([`PageLinkDeleteDialog`](../../src/components/canvas/page-link-delete-dialog.tsx)) and, on confirm, dispatches `page.delete` for the target page. The host's own link is then removed by the `deletePageLinkReferences` cleanup above (the canvas drops the row reactively), so no separate block delete is issued. Plain links to pages nested elsewhere keep the normal block delete with no confirmation.
+
 ## Page icons
 
 Pages may store an optional `icon` string on shipped JSON (`pageSchema`) and on `localPageSchema`. Encoding lives in [`page-icon.ts`](../../src/lib/pages/page-icon.ts):
@@ -186,7 +188,7 @@ Parent rows with children show a chevron on the row (`CollapsibleTrigger`) that 
 
 | Action | Behavior |
 |--------|----------|
-| Duplicate page | Clones blocks (remapped ids) into a new sibling page titled `Copy of …`, inserts it directly below the source row (`page.create` + `insertAfterPageId`), and navigates there |
+| Duplicate page | Clones blocks (remapped ids) plus the source page's icon and [cover](#page-cover) into a new sibling page titled `Copy of …`, inserts it directly below the source row (`page.create` + `insertAfterPageId` + `icon`/`headerImage`), and navigates there. Blocks, icon, and cover are resolved from the local page document/shard when edited, else the shipped JSON ([`resolveSourceBlocksForPage`](../../src/lib/pages/resolve-source-page-blocks.ts)) |
 | Rename | Inline title field; persists on each change via `persistPageMetadata` (lazy-seeds shipped pages like the canvas title) |
 | Change icon | Opens the anchored `PageIconPicker` popover (lazy-seeds shipped pages like title/icon edits) |
 | Reset to site version | `page.resetToRemote` — full restore of shipped title, icon, and blocks; hidden for user-created pages |
