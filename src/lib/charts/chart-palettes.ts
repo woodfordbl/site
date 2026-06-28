@@ -46,7 +46,7 @@ export const CHART_DITHER_MODES = ["off", "on", "dark"] as const;
 
 export type ChartDitherMode = (typeof CHART_DITHER_MODES)[number];
 
-export const defaultChartDitherMode: ChartDitherMode = "off";
+export const defaultChartDitherMode: ChartDitherMode = "dark";
 
 export const CHART_DITHER_MODE_LABELS: Record<ChartDitherMode, string> = {
   off: "Off",
