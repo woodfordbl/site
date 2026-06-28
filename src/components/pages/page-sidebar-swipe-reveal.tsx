@@ -313,6 +313,12 @@ export function PageSidebarSwipeReveal({
   const translateX = dragOffset ?? (openMobile ? sidebarWidth : 0);
   const isDragging = dragOffset !== null;
   const isRevealed = translateX > 0;
+  // `isRevealed` flips to false the instant a close commits (translateX → 0 in
+  // state), while the transform keeps animating home for ~200ms. `revealActive`
+  // stays true through that close slide (bridged by `isClosingReveal`, set in the
+  // effect below) so the rounding, ring, and scrim animate out *with* the slide
+  // instead of snapping off at frame 0.
+  const revealActive = isRevealed || isClosingReveal;
 
   // The content layer is the document-tall page; plain `border-radius` would put
   // its corners at the document top/bottom (off-screen mid-scroll). So clip it to
@@ -329,7 +335,7 @@ export function PageSidebarSwipeReveal({
   // content layer's own clip-path rounds the (non-composited) page content fine.
   let revealClipPath: string | undefined;
   let viewportHeight: number | undefined;
-  if (isRevealed && typeof window !== "undefined") {
+  if (revealActive && typeof window !== "undefined") {
     const top = window.scrollY;
     viewportHeight = window.innerHeight;
     revealClipPath = `inset(${top}px 0px max(0px, calc(100% - ${top + viewportHeight}px)) 0px round var(--radius-3xl))`;
@@ -394,7 +400,6 @@ export function PageSidebarSwipeReveal({
     const timer = window.setTimeout(() => setIsClosingReveal(false), 240);
     return () => window.clearTimeout(timer);
   }, [isRevealed]);
-  const paintSidebar = isRevealed || isClosingReveal;
 
   return (
     <div className="relative w-full bg-background max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
@@ -415,7 +420,7 @@ export function PageSidebarSwipeReveal({
         // can't bleed behind the content on iOS.
         style={{
           width: SIDEBAR_WIDTH_MOBILE,
-          visibility: paintSidebar ? undefined : "hidden",
+          visibility: revealActive ? undefined : "hidden",
         }}
         tabIndex={-1}
       >
@@ -431,7 +436,7 @@ export function PageSidebarSwipeReveal({
           // layer — owns the scroll; desktop keeps `h-full` inside the fixed shell.
           "relative z-10 w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none max-md:min-h-svh md:h-full",
           isDragging && "transition-none",
-          isRevealed && "max-md:overflow-x-clip md:overflow-hidden"
+          revealActive && "max-md:overflow-x-clip md:overflow-hidden"
         )}
         style={{
           transform: `translateX(${translateX}px)`,
@@ -468,15 +473,20 @@ export function PageSidebarSwipeReveal({
 
         {/* Border outline. The content layer's own `ring` would draw at the
             document-tall box edges (off-screen); a viewport-sticky frame keeps
-            the ring at the visible card edges, rounded with `border-radius`. */}
-        {isRevealed ? (
+            the ring at the visible card edges, rounded with `border-radius`.
+            Opacity tracks swipe progress (with a CSS transition) so it fades in/
+            out with the slide instead of snapping off when a close commits. */}
+        {revealActive ? (
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 z-20"
           >
             <div
-              className="sticky top-0 rounded-3xl ring-1 ring-border ring-inset"
-              style={{ height: viewportHeight }}
+              className={cn(
+                "sticky top-0 rounded-3xl ring-1 ring-border ring-inset transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+                isDragging && "transition-none"
+              )}
+              style={{ height: viewportHeight, opacity: overlayProgress }}
             />
           </div>
         ) : null}
