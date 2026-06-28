@@ -310,22 +310,25 @@ export function PageSidebarSwipeReveal({
   const isDragging = dragOffset !== null;
   const isRevealed = translateX > 0;
 
-  // The content layer is the *document-tall* scroller, so its `border-radius`
-  // corners sit at the document top/bottom — off-screen unless scrolled to an
-  // edge. Clip it to the visible viewport band instead, with rounded corners, so
-  // the inset "card" reads at the viewport edges at any scroll position. Vertical
-  // scroll is frozen for the duration of the reveal (the gesture locks to the
-  // horizontal axis, and an open sidebar locks the document), so reading
-  // `scrollY` once per render is stable. `100%` is the element's own height, so
-  // we don't have to measure it; `max(0px, …)` guards short pages.
+  // The content layer is the document-tall page; plain `border-radius` would put
+  // its corners at the document top/bottom (off-screen mid-scroll). So clip it to
+  // the visible viewport band with rounded corners via `clip-path`. The content
+  // layer stays in normal flow (so the document keeps its scroll height — going
+  // `position: fixed` collapses it and resets scrollY). Scroll is frozen during
+  // the reveal (the gesture locks to the horizontal axis; an open sidebar locks
+  // the document), so `window.scrollY` is a stable constant.
+  //
+  // CRUCIAL: the dim scrim and the ring are rounded with `border-radius`, NOT
+  // their own `clip-path`. iOS WebKit drops the corner radius of a `clip-path:
+  // inset(round)` on an *opacity-composited* layer (older Safari) — that was the
+  // square-corner artifact (the scrim's square corner punched through). The
+  // content layer's own clip-path rounds the (non-composited) page content fine.
   let revealClipPath: string | undefined;
-  let revealFrameHeight: number | undefined;
+  let viewportHeight: number | undefined;
   if (isRevealed && typeof window !== "undefined") {
     const top = window.scrollY;
-    revealFrameHeight = window.innerHeight;
-    // `var(--radius-3xl)` keeps the clip radius identical to the ring frame's
-    // `rounded-3xl` (the two must match, or the corners read doubled).
-    revealClipPath = `inset(${top}px 0px max(0px, calc(100% - ${top + revealFrameHeight}px)) 0px round var(--radius-3xl))`;
+    viewportHeight = window.innerHeight;
+    revealClipPath = `inset(${top}px 0px max(0px, calc(100% - ${top + viewportHeight}px)) 0px round var(--radius-3xl))`;
   }
 
   const overlayProgress = Math.min(translateX / sidebarWidth, 1);
@@ -387,16 +390,15 @@ export function PageSidebarSwipeReveal({
         {sidebar}
       </div>
 
-      {/* Content layer — slides right to reveal the sidebar; rounded inset when open. */}
+      {/* Content layer — slides right to reveal the sidebar; rounded inset when
+          open. Stays in normal flow (document keeps its scroll height); rounded
+          at the viewport band by `revealClipPath`. */}
       <div
         className={cn(
           // Mobile: natural height (`min-h-svh`) so the document — not this
           // layer — owns the scroll; desktop keeps `h-full` inside the fixed shell.
           "relative z-10 w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none max-md:min-h-svh md:h-full",
           isDragging && "transition-none",
-          // `revealClipPath` rounds the inset card at the viewport edges; never
-          // clamp the vertical document scroll on mobile (`overflow-x-clip`, not
-          // hidden).
           isRevealed && "max-md:overflow-x-clip md:overflow-hidden"
         )}
         style={{
@@ -408,39 +410,33 @@ export function PageSidebarSwipeReveal({
           {children}
         </div>
 
-        {/* Scrim over the content; opacity tracks swipe progress. White in light
-            mode (content recedes by washing out); near-black in dark mode (a
-            white wash there reads as a jarring brighten — dark dims instead).
-            Clipped *directly* (not just by the parent): its opacity transition
-            promotes it to a composited layer, and iOS WebKit does not apply an
-            ancestor's clip-path to composited descendants — so without its own
-            clip the scrim's square corners punch through the rounded card. */}
-        <div
-          aria-hidden
-          className={cn(
-            "absolute inset-0 z-10 bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none dark:bg-black",
-            isDragging && "transition-none",
-            openMobile ? "pointer-events-auto" : "pointer-events-none"
-          )}
-          style={{
-            opacity: overlayProgress * OVERLAY_MAX_OPACITY,
-            touchAction: "none",
-            // Defensive: clip the scrim itself, not just via the parent. Modern
-            // iOS (26.x) clips composited descendants by the ancestor clip-path
-            // fine, but older WebKit does not — there the scrim's square corners
-            // would punch through the rounded card. Same region, so it's a no-op
-            // where the parent clip already applies.
-            clipPath: revealClipPath,
-          }}
-          {...(openMobile ? gestureHandlers : {})}
-        />
+        {/* Dim scrim over the content; opacity tracks swipe progress. White in
+            light mode (content recedes by washing out); near-black in dark mode
+            (a white wash reads as a jarring brighten — dark dims instead). Pinned
+            to the viewport band with `sticky top-0 height=viewport` and rounded
+            with `border-radius` (NOT clip-path): the scrim's opacity transition
+            composites it, and older iOS WebKit drops a composited layer's own
+            `clip-path` corner radius — `border-radius` is honored there (the ring
+            frame below uses the same technique and renders round on-device). */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
+          <div
+            className={cn(
+              "sticky top-0 w-full rounded-3xl bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none dark:bg-black",
+              isDragging && "transition-none",
+              openMobile ? "pointer-events-auto" : "pointer-events-none"
+            )}
+            style={{
+              height: viewportHeight,
+              opacity: overlayProgress * OVERLAY_MAX_OPACITY,
+              touchAction: "none",
+            }}
+            {...(openMobile ? gestureHandlers : {})}
+          />
+        </div>
 
-        {/* Border outline for the inset card. The content layer's own `ring`
-            would draw at the document-tall box edges (off-screen); a viewport-
-            sticky frame keeps the ring at the visible card edges. The wrapper is
-            `absolute` so it adds no flow height; the inner element is `sticky` so
-            it pins to the viewport as the (frozen) scroll position dictates. Both
-            are clipped to the same rounded band by `revealClipPath` above. */}
+        {/* Border outline. The content layer's own `ring` would draw at the
+            document-tall box edges (off-screen); a viewport-sticky frame keeps
+            the ring at the visible card edges, rounded with `border-radius`. */}
         {isRevealed ? (
           <div
             aria-hidden
@@ -448,7 +444,7 @@ export function PageSidebarSwipeReveal({
           >
             <div
               className="sticky top-0 rounded-3xl ring-1 ring-border ring-inset"
-              style={{ height: revealFrameHeight }}
+              style={{ height: viewportHeight }}
             />
           </div>
         ) : null}
