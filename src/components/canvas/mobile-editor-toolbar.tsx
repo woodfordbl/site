@@ -27,22 +27,32 @@ import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useHaptics } from "@/hooks/haptics.ts";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
+import { clampBlockIndent, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import { getActiveCanvasRowId } from "@/lib/canvas/block-selection.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
+import { findFocusableAdjacentRowId } from "@/lib/canvas/focusable-rows.ts";
 import { cn } from "@/lib/utils.ts";
 
 type PickerMode = "add" | "turnInto";
 
 /** Button that runs its action without stealing focus from the editor field, so
- *  the on-screen keyboard stays open (same pattern as the slash-menu rows). */
+ *  the on-screen keyboard stays open (same pattern as the slash-menu rows).
+ *
+ *  `canRun` is an optional availability predicate evaluated lazily at tap time
+ *  (rows are read live, so the toolbar never re-renders on edits — see
+ *  `useCanvasEditorContext`). When it returns false the action is at a boundary
+ *  (e.g. "move up" on the top block): fire the `disabled` warning buzz and skip
+ *  `onPress` instead of dispatching a no-op. */
 function ToolbarButton({
+  canRun,
   children,
   className,
   label,
   onPress,
 }: {
+  canRun?: () => boolean;
   children: ReactNode;
   className?: string;
   label: string;
@@ -54,6 +64,12 @@ function ToolbarButton({
       aria-label={label}
       className={cn("text-muted-foreground", className)}
       onClick={() => {
+        if (canRun && !canRun()) {
+          // At a boundary — nothing will move/change. Signal "can't" with the
+          // warning buzz and don't delegate (the dispatch would be a no-op).
+          haptic("disabled");
+          return;
+        }
         // Each bar action is a discrete tap — fire a light selection tick before
         // delegating so the feedback lands immediately (no-op on desktop / fine
         // pointers via the provider). Mirrors the slash-menu / checkbox pattern.
@@ -88,7 +104,7 @@ function ToolbarButton({
  */
 export function MobileEditorToolbar() {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
-  const { deleteRow, dispatch, getRows, insertAfter } =
+  const { deleteRow, dispatch, getRows, insertAfter, insertBefore } =
     useCanvasEditorContext();
 
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -132,15 +148,60 @@ export function MobileEditorToolbar() {
     [dispatch, resolveTargetRowId]
   );
 
+  // Whether `indent.adjust(delta)` would change the target row's indent — false
+  // when already outdented to 0 or indented to the max (so the reducer clamps to
+  // a no-op). Evaluated at tap time against live rows.
+  const canIndent = useCallback(
+    (delta: -1 | 1) => {
+      const rowId = resolveTargetRowId();
+      if (!rowId) {
+        return false;
+      }
+      const row = findRowById(getRows(), rowId);
+      if (!row) {
+        return false;
+      }
+      const current = getBlockIndent(row.effectiveBlock);
+      return clampBlockIndent(current + delta) !== current;
+    },
+    [getRows, resolveTargetRowId]
+  );
+
   const handleMove = useCallback(
     (direction: "up" | "down") => {
       const rowId = resolveTargetRowId();
-      if (rowId) {
-        dispatch({ type: "row.moveAdjacent", rowId, direction });
+      if (!rowId) {
+        return;
       }
+      if (
+        direction === "down" &&
+        findFocusableAdjacentRowId(getRows(), rowId, "down") === null
+      ) {
+        // Already the last block — "move down" keeps working by inserting an
+        // empty block above, which shifts this row down a slot. The insert would
+        // focus the new block, so re-focus this row (matching a normal move's
+        // `placement: "start"`) to keep the keyboard up and let repeated taps
+        // push it down further.
+        insertBefore(rowId);
+        dispatch({ type: "focus.set", rowId, placement: "start" });
+        return;
+      }
+      dispatch({ type: "row.moveAdjacent", rowId, direction });
     },
-    [dispatch, resolveTargetRowId]
+    [dispatch, getRows, insertBefore, resolveTargetRowId]
   );
+
+  // Whether `row.moveAdjacent("up")` has a focusable neighbor to swap with —
+  // false at the top of the document. Mirrors the reducer's own boundary check so
+  // the button feels the boundary the action hits. (Move down has no boundary: at
+  // the bottom it inserts an empty block above instead — see `handleMove`.)
+  const canMoveUp = useCallback(() => {
+    const rowId = resolveTargetRowId();
+    return (
+      rowId !== null &&
+      findFocusableAdjacentRowId(getRows(), rowId, "up") !== null
+    );
+  }, [getRows, resolveTargetRowId]);
 
   const handleDelete = useCallback(() => {
     const rowId = resolveTargetRowId();
@@ -250,15 +311,27 @@ export function MobileEditorToolbar() {
               </ToolbarButton>
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
-              <ToolbarButton label="Outdent" onPress={() => handleIndent(-1)}>
+              <ToolbarButton
+                canRun={() => canIndent(-1)}
+                label="Outdent"
+                onPress={() => handleIndent(-1)}
+              >
                 <IconIndentDecrease aria-hidden />
               </ToolbarButton>
-              <ToolbarButton label="Indent" onPress={() => handleIndent(1)}>
+              <ToolbarButton
+                canRun={() => canIndent(1)}
+                label="Indent"
+                onPress={() => handleIndent(1)}
+              >
                 <IconIndentIncrease aria-hidden />
               </ToolbarButton>
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
-              <ToolbarButton label="Move up" onPress={() => handleMove("up")}>
+              <ToolbarButton
+                canRun={canMoveUp}
+                label="Move up"
+                onPress={() => handleMove("up")}
+              >
                 <IconArrowUp aria-hidden />
               </ToolbarButton>
               <ToolbarButton
