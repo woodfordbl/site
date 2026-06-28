@@ -42,7 +42,7 @@ export function StorageBreakdown({ categories, total }: StorageBreakdownProps) {
               width: `${(category.bytes / denominator) * 100}%`,
               ...fillStyle(CATEGORY_COLORS[category.key]),
             }}
-            title={`${category.label} — ${formatBytes(category.bytes)}`}
+            title={`${category.label}: ${formatBytes(category.bytes)}`}
           />
         ))}
       </div>

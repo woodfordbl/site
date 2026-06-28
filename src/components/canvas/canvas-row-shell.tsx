@@ -86,11 +86,6 @@ interface CanvasRowShellProps {
    * hover; children still reveal their own gutters independently.
    */
   keepGutterOnNestedHover?: boolean;
-  /**
-   * Keep the gutter column width without rendering gutter controls (e.g. table
-   * blocks render gutter inside their horizontal scroll area).
-   */
-  reserveGutterSpace?: boolean;
   row: CanvasRow;
 }
 
@@ -98,7 +93,6 @@ export function CanvasRowShell({
   row,
   gutter,
   gutterAlignCenter = false,
-  reserveGutterSpace = false,
   contentSpacingClassName,
   enableTouchGesture = false,
   keepGutterOnNestedHover = false,
@@ -200,19 +194,6 @@ export function CanvasRowShell({
           {gutter}
         </div>
       </div>
-    );
-  } else if (reserveGutterSpace) {
-    gutterHost = (
-      <div
-        aria-hidden
-        className={cn(
-          "shrink-0",
-          isNarrowViewport
-            ? "w-0"
-            : cn(pageCanvasGutterPullClassName, "w-8 md:w-12")
-        )}
-        data-canvas-row-gutter-host
-      />
     );
   }
 

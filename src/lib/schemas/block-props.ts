@@ -105,7 +105,10 @@ export const tablePropsSchema = z.object({
     ]),
 });
 
-export const tableRowPropsSchema = z.object({});
+export const tableRowPropsSchema = z.object({
+  /** Explicit row height in pixels; acts as a minimum (content can grow taller). */
+  height: z.number().positive().optional(),
+});
 
 export const tableCellPropsSchema = z.object({
   text: z.string(),

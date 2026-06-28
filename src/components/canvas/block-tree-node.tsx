@@ -76,10 +76,9 @@ function ContainerRowNode({
 }) {
   const { insertAfter, insertAtScopeStart, insertBefore } =
     useCanvasEditorContext();
-  const isTable = row.effectiveBlock.type === "table";
   const isCallout = row.effectiveBlock.type === "callout";
   const isTopLevel = !row.effectiveBlock.parentId;
-  const alignWithPageTitle = isTopLevel && !isTable;
+  const alignWithPageTitle = isTopLevel;
 
   return (
     <CanvasRowShell
@@ -90,7 +89,7 @@ function ContainerRowNode({
       )}
       enableTouchGesture={enableTouchGesture}
       gutter={
-        showGutter && !isTable ? (
+        showGutter ? (
           <RowGutter
             onInsert={(edge) => {
               handleContainerGutterInsert(row, edge, {
@@ -105,7 +104,6 @@ function ContainerRowNode({
       }
       gutterPullClassName={gutterPullClassName}
       keepGutterOnNestedHover={isCallout}
-      reserveGutterSpace={showGutter && isTable}
       row={row}
     >
       <Container mode={mode} row={row} />

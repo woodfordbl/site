@@ -1,6 +1,8 @@
 import { useCallback } from "react";
+import { handleTableCellShortcut } from "@/components/blocks/types/table/table-cell-shortcuts.ts";
 import {
   useCanvasEditorContext,
+  useCanvasEditorState,
   useCanvasFocus,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
@@ -22,13 +24,28 @@ export function TableCellEdit({
   onAutoFocusHandled,
   onCellFocus,
 }: TableCellEditProps) {
-  const { dispatch, clearSelection } = useCanvasEditorContext();
+  const { dispatch, clearSelection, moveAfter, moveBefore } =
+    useCanvasEditorContext();
+  const { rows } = useCanvasEditorState();
   const focus = useCanvasFocus();
   const rowId = row?.rowId ?? "";
   const isFocusTarget = focus?.rowId === rowId;
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (
+        handleTableCellShortcut(event, {
+          cellRowId: rowId,
+          dispatch,
+          moveAfter,
+          moveBefore,
+          rows,
+        })
+      ) {
+        event.preventDefault();
+        return true;
+      }
+
       if (event.key === "Tab") {
         event.preventDefault();
         dispatch({
@@ -51,7 +68,7 @@ export function TableCellEdit({
 
       return false;
     },
-    [dispatch, rowId]
+    [dispatch, moveAfter, moveBefore, rowId, rows]
   );
 
   return (

@@ -125,6 +125,12 @@ export type CanvasCommand =
       columnWidths: number[];
     }
   | {
+      type: "table.updateRowHeight";
+      tableRowId: string;
+      height: number;
+    }
+  | { type: "table.resetRowHeight"; tableRowId: string }
+  | {
       type: "table.focusCell";
       cellRowId: string;
       direction: "next" | "previous" | "down" | "up";

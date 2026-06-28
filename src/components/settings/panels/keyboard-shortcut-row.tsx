@@ -13,6 +13,7 @@ import { formatHotkeyTokens } from "@/lib/settings/format-hotkey.ts";
 import {
   getCommand,
   type KeyboardCommand,
+  type SequenceCommand,
 } from "@/lib/settings/keyboard-commands.ts";
 import {
   clearKeybindingOverride,
@@ -26,6 +27,54 @@ import {
 interface KeyboardShortcutRowProps {
   command: KeyboardCommand;
   resolved: ResolvedKeybindings;
+}
+
+/**
+ * Read-only row for a fixed (non-customizable) shortcut — shows the label and
+ * its binding without the recorder/Edit affordances. Used for caret-coupled and
+ * native editor keys that can't be rebound but should still be discoverable.
+ */
+export function KeyboardShortcutStaticRow({
+  command,
+}: {
+  command: KeyboardCommand;
+}) {
+  return (
+    <SettingsItemRow>
+      <ItemContent>
+        <ItemTitle>{command.label}</ItemTitle>
+      </ItemContent>
+      <ItemActions>
+        <Shortcut command={command.id} />
+      </ItemActions>
+    </SettingsItemRow>
+  );
+}
+
+/**
+ * Read-only row for a multi-step chord (e.g. press G then H). Each step renders
+ * as its own keycap so the sequence reads left-to-right.
+ */
+export function KeyboardSequenceRow({
+  sequence,
+}: {
+  sequence: SequenceCommand;
+}) {
+  return (
+    <SettingsItemRow>
+      <ItemContent>
+        <ItemTitle>{sequence.label}</ItemTitle>
+      </ItemContent>
+      <ItemActions>
+        <KbdGroup>
+          {sequence.sequence.map((step, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: positional chord steps
+            <Kbd key={index}>{formatHotkeyTokens(step)[0] ?? step}</Kbd>
+          ))}
+        </KbdGroup>
+      </ItemActions>
+    </SettingsItemRow>
+  );
 }
 
 /**
