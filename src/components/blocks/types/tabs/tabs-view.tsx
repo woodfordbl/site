@@ -30,7 +30,11 @@ function TabTriggerLabel({
   const icon = tabIcon(tabRow);
   return (
     <span className="inline-flex items-center gap-1.5">
-      {icon ? <PageIconDisplay className="size-3.5" icon={icon} /> : null}
+      {icon ? (
+        // `text-current` overrides PageIconDisplay's muted default so the glyph
+        // tracks the trigger's color (active/hover/inactive) like the label.
+        <PageIconDisplay className="size-3.5 text-current" icon={icon} />
+      ) : null}
       {tabLabel(tabRow, index)}
     </span>
   );
@@ -164,7 +168,6 @@ function TabsEditView({ row }: { row: CanvasRow }) {
           {tabRows.map((tabRow, index) => (
             <TabContextMenu
               containerRow={row}
-              index={index}
               isFirst={index === 0}
               isLast={index === tabRows.length - 1}
               key={tabRow.rowId}

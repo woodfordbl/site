@@ -27,7 +27,7 @@ import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { MAX_TABS_COUNT } from "@/lib/canvas/tabs-layout.ts";
 import type { TabsSize, TabsVariant } from "@/lib/schemas/block-props.ts";
 
-import { tabIcon, tabLabel } from "./tab-labels.ts";
+import { tabIcon } from "./tab-labels.ts";
 
 const SIZE_OPTIONS: { label: string; value: TabsSize }[] = [
   { label: "Small", value: "sm" },
@@ -46,7 +46,6 @@ interface TabContextMenuProps {
   children: ReactNode;
   /** The enclosing `tabs` container row (for appearance + tab count). */
   containerRow: CanvasRow;
-  index: number;
   isFirst: boolean;
   isLast: boolean;
   size: TabsSize;
@@ -63,7 +62,6 @@ interface TabContextMenuProps {
 export function TabContextMenu({
   containerRow,
   tabRow,
-  index,
   isFirst,
   isLast,
   size,
@@ -73,14 +71,17 @@ export function TabContextMenu({
   const { dispatch } = useCanvasEditorContext();
   const tabCount = containerRow.children.length;
   const canDelete = tabCount > 1;
-  const label = tabLabel(tabRow, index);
+  const tabBlock = tabRow.effectiveBlock;
+  // Raw stored label (may be empty) — not the "Tab N" display fallback, so the
+  // input can be cleared without snapping back to a placeholder name.
+  const storedLabel = tabBlock.type === "tab" ? tabBlock.props.label : "";
   const icon = tabIcon(tabRow);
-  const [draft, setDraft] = useState(label);
+  const [draft, setDraft] = useState(storedLabel);
 
-  // Re-sync when the committed label changes (rename, reorder, reopen).
+  // Re-sync when the stored label changes elsewhere (reorder, reopen, undo).
   useEffect(() => {
-    setDraft(label);
-  }, [label]);
+    setDraft(storedLabel);
+  }, [storedLabel]);
 
   const updateTabProps = (patch: { icon?: string; label?: string }) => {
     const block = tabRow.effectiveBlock;
@@ -109,10 +110,19 @@ export function TabContextMenu({
     });
   };
 
+  // Push every keystroke straight to the block so the tab bar renders the new
+  // name in real time as it's typed.
+  const handleNameChange = (value: string) => {
+    setDraft(value);
+    updateTabProps({ label: value });
+  };
+
+  // On blur, trim surrounding whitespace so a stray space doesn't persist.
   const commitName = () => {
-    const next = draft.trim();
-    if (next.length > 0 && next !== label) {
-      updateTabProps({ label: next });
+    const trimmed = draft.trim();
+    if (trimmed !== draft) {
+      setDraft(trimmed);
+      updateTabProps({ label: trimmed });
     }
   };
 
@@ -141,7 +151,7 @@ export function TabContextMenu({
             aria-label="Tab name"
             autoComplete="off"
             onBlur={commitName}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => handleNameChange(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Tab name"
             value={draft}
