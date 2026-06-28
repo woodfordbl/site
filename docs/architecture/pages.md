@@ -188,7 +188,7 @@ Parent rows with children show a chevron on the row (`CollapsibleTrigger`) that 
 
 | Action | Behavior |
 |--------|----------|
-| Duplicate page | Clones blocks (remapped ids) into a new sibling page titled `Copy of …`, inserts it directly below the source row (`page.create` + `insertAfterPageId`), and navigates there |
+| Duplicate page | Clones blocks (remapped ids) plus the source page's icon and [cover](#page-cover) into a new sibling page titled `Copy of …`, inserts it directly below the source row (`page.create` + `insertAfterPageId` + `icon`/`headerImage`), and navigates there. Blocks, icon, and cover are resolved from the local page document/shard when edited, else the shipped JSON ([`resolveSourceBlocksForPage`](../../src/lib/pages/resolve-source-page-blocks.ts)) |
 | Rename | Inline title field; persists on each change via `persistPageMetadata` (lazy-seeds shipped pages like the canvas title) |
 | Change icon | Opens the anchored `PageIconPicker` popover (lazy-seeds shipped pages like title/icon edits) |
 | Reset to site version | `page.resetToRemote` — full restore of shipped title, icon, and blocks; hidden for user-created pages |
