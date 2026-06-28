@@ -48,6 +48,10 @@ export function PageSidebarSwipeReveal({
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_WIDTH_FALLBACK_PX);
   // null = not dragging (CSS transition owns the transform); a number = live drag.
   const [dragOffset, setDragOffset] = useState<number | null>(null);
+  // Whether to paint the fixed sidebar layer — true while revealing/open and
+  // bridged through the close slide; false once fully closed (see effect below).
+  const [isClosingReveal, setIsClosingReveal] = useState(false);
+  const wasRevealedRef = useRef(false);
 
   // Gesture bookkeeping (refs so pointer handlers stay referentially stable).
   const originRef = useRef<{ x: number; y: number } | null>(null);
@@ -370,6 +374,28 @@ export function PageSidebarSwipeReveal({
     };
   }, [openMobile]);
 
+  // The sidebar layer is `position: fixed` and full viewport height. When fully
+  // closed it would stay painted behind the content — and on iOS, after a scroll,
+  // its bg-sidebar bleeds through the safe-area insets / overscroll that the
+  // scrolled (document-flow) content doesn't cover (gray strips above/below the
+  // content). So paint it only while it's actually being revealed. Bridge the
+  // ~200ms close slide via `isClosingReveal` so it doesn't pop away mid-animation.
+  useEffect(() => {
+    if (isRevealed) {
+      wasRevealedRef.current = true;
+      setIsClosingReveal(false);
+      return;
+    }
+    if (!wasRevealedRef.current) {
+      return;
+    }
+    wasRevealedRef.current = false;
+    setIsClosingReveal(true);
+    const timer = window.setTimeout(() => setIsClosingReveal(false), 240);
+    return () => window.clearTimeout(timer);
+  }, [isRevealed]);
+  const paintSidebar = isRevealed || isClosingReveal;
+
   return (
     <div className="relative w-full bg-background max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
       {/* Sidebar layer — fixed behind the content, revealed as content slides.
@@ -384,7 +410,13 @@ export function PageSidebarSwipeReveal({
         inert={!openMobile}
         ref={sidebarRef}
         role="dialog"
-        style={{ width: SIDEBAR_WIDTH_MOBILE }}
+        // `visibility: hidden` (not display:none — keep it measurable for the
+        // width ResizeObserver) when fully closed so the fixed bg-sidebar layer
+        // can't bleed behind the content on iOS.
+        style={{
+          width: SIDEBAR_WIDTH_MOBILE,
+          visibility: paintSidebar ? undefined : "hidden",
+        }}
         tabIndex={-1}
       >
         {sidebar}
