@@ -7,6 +7,7 @@ import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import type { PageSettings } from "@/lib/schemas/page-settings.ts";
 
 export type CanvasEffect =
   | { type: "persist"; rowId: string; block: Block }
@@ -59,6 +60,7 @@ export type PageEffect =
       create: boolean;
       previousSlug?: string;
       initialBlocks?: Block[];
+      pageSettings?: PageSettings;
     }
   | { type: "page.delete"; pageId: string }
   | { type: "page.resetToRemote"; pageId: string }

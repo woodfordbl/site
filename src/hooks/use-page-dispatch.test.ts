@@ -41,6 +41,24 @@ describe("pageReducer page.create", () => {
     });
   });
 
+  it("carries template page settings into the persist effect", () => {
+    const { effects } = pageReducer(
+      {
+        type: "page.create",
+        title: "New Page",
+        pageId: "user-new",
+        pageSettings: { font: "serif", fullWidth: true },
+      },
+      shippedPages
+    );
+
+    const persist = effects.find((effect) => effect.type === "page.persist");
+    expect(persist?.type).toBe("page.persist");
+    if (persist?.type === "page.persist") {
+      expect(persist.pageSettings).toEqual({ font: "serif", fullWidth: true });
+    }
+  });
+
   it("places a duplicate after the source page in the sidebar", () => {
     const pages: PageSummary[] = [
       {

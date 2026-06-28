@@ -1,6 +1,7 @@
 import type { ContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
+import type { PageSettings } from "@/lib/schemas/page-settings.ts";
 
 /** Discriminated union of canvas structural commands. @see docs/reference/canvas-commands.md */
 export type CanvasCommand =
@@ -156,6 +157,8 @@ export type PageCommand =
       pageId?: string;
       navigate?: boolean;
       initialBlocks?: Block[];
+      /** Page-level settings (font, width, text size, cover) copied onto the new page. */
+      pageSettings?: PageSettings;
     }
   | {
       type: "page.update";

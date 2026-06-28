@@ -4,24 +4,21 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
+import { useCreatePage } from "@/hooks/use-create-page.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
-import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
 import { cn } from "@/lib/utils.ts";
 
 function NewPageButtonLive() {
   const { pages } = useMergedPageListItems();
-  const dispatch = usePageDispatch(pages);
+  const createPage = useCreatePage(pages);
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         className={cn(pageListRowPaddingLeft(0), "text-sidebar-foreground/70")}
-        onClick={() =>
-          dispatch({ type: "page.create", title: DEFAULT_PAGE_TITLE })
-        }
+        onClick={() => createPage()}
         render={<button type="button" />}
         tooltip={{ children: "New page", command: "new-page" }}
       >

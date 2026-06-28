@@ -164,6 +164,7 @@ export function pageReducer(
             sidebarOrder,
             create: true,
             initialBlocks: command.initialBlocks,
+            pageSettings: command.pageSettings,
           },
           ...(command.navigate === false
             ? []
@@ -277,6 +278,7 @@ function applyPagePersistEffect(
       ...(effect.sidebarOrder === undefined
         ? {}
         : { sidebarOrder: effect.sidebarOrder }),
+      ...(effect.pageSettings ?? {}),
       serverBaselineHash: null,
       createdAt: now,
       updatedAt: now,
