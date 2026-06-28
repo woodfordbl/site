@@ -1,10 +1,13 @@
 import { PageList } from "@/components/pages/page-list.tsx";
+import { PageSidebarSettingsAction } from "@/components/pages/page-sidebar-settings-action.tsx";
 import { SidebarPinAction } from "@/components/pages/sidebar-pin-action.tsx";
 import {
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarMenu,
 } from "@/components/ui/sidebar.tsx";
 import { cn } from "@/lib/utils.ts";
 
@@ -33,6 +36,13 @@ function PageSidebarPanel({ className }: { className?: string }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {/* The canvas-footer settings button is hidden on mobile, so surface
+        settings from the sidebar bottom on narrow viewports only. */}
+      <SidebarFooter className="md:hidden">
+        <SidebarMenu>
+          <PageSidebarSettingsAction />
+        </SidebarMenu>
+      </SidebarFooter>
     </div>
   );
 }
