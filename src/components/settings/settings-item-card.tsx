@@ -96,6 +96,7 @@ export function SettingsItemButton({
 
 interface SettingsItemSelectOption<T extends string> {
   label: string;
+  leading?: ReactNode;
   value: T;
 }
 
@@ -110,20 +111,25 @@ export function SettingsItemSelect<T extends string>({
   options,
   value,
 }: SettingsItemSelectProps<T>) {
-  const selectedLabel =
-    options.find((option) => option.value === value)?.label ?? value;
+  const selectedOption = options.find((option) => option.value === value);
+  const selectedLabel = selectedOption?.label ?? value;
+  const hasLeading = options.some((option) => option.leading != null);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <Button size="sm" type="button" variant="outline">
+            {selectedOption?.leading}
             {selectedLabel}
             <IconChevronDown className="stroke-[1.5px]" />
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="min-w-36">
+      <DropdownMenuContent
+        align="end"
+        className={cn(hasLeading ? "min-w-44" : "min-w-36")}
+      >
         <DropdownMenuRadioGroup
           onValueChange={(nextValue) => {
             onValueChange(nextValue as T);
@@ -132,6 +138,7 @@ export function SettingsItemSelect<T extends string>({
         >
           {options.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.leading}
               {option.label}
             </DropdownMenuRadioItem>
           ))}

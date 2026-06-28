@@ -1,9 +1,9 @@
 "use client";
 
 import { KeyboardShortcutRow } from "@/components/settings/panels/keyboard-shortcut-row.tsx";
+import { SettingsItemCard } from "@/components/settings/settings-item-card.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
-import { ItemGroup } from "@/components/ui/item.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   COMMAND_GROUPS,
@@ -53,7 +53,7 @@ export function KeyboardShortcutsPanel({
         return (
           <section className="flex flex-col gap-3" key={group}>
             <h2 className="font-medium text-sm">{group}</h2>
-            <ItemGroup className="gap-2">
+            <SettingsItemCard>
               {commands.map((command) => (
                 <KeyboardShortcutRow
                   command={command}
@@ -61,7 +61,7 @@ export function KeyboardShortcutsPanel({
                   resolved={resolved}
                 />
               ))}
-            </ItemGroup>
+            </SettingsItemCard>
           </section>
         );
       })}

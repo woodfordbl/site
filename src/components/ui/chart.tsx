@@ -1,6 +1,9 @@
+"use client";
+
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
+import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -60,6 +63,8 @@ function ChartContainer({
     height: number;
   };
 }) {
+  const { chartPalette: workspacePalette } = useSiteAppearance();
+  const resolvedPalette = palette ?? workspacePalette;
   const uniqueId = React.useId();
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
 
@@ -71,7 +76,7 @@ function ChartContainer({
           className
         )}
         data-chart={chartId}
-        data-chart-palette={palette}
+        data-chart-palette={resolvedPalette}
         data-slot="chart"
         {...props}
       >
@@ -83,6 +88,27 @@ function ChartContainer({
         </RechartsPrimitive.ResponsiveContainer>
       </div>
     </ChartContext.Provider>
+  );
+}
+
+/** Applies the workspace chart palette to bar lists, heatmaps, and other non-Recharts visuals. */
+export function ChartPaletteScope({
+  children,
+  className,
+  palette,
+}: React.ComponentProps<"div"> & {
+  /** Local override. When omitted, inherits Settings → Appearance chart palette. */
+  palette?: ChartPaletteId;
+}) {
+  const { chartPalette: workspacePalette } = useSiteAppearance();
+
+  return (
+    <div
+      className={cn("contents", className)}
+      data-chart-palette={palette ?? workspacePalette}
+    >
+      {children}
+    </div>
   );
 }
 
