@@ -132,11 +132,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   shellComponent: RootDocument,
 });
 
-/** Hex equivalents of the `--sidebar` token (see styles.css) used for the
- *  iOS Safari bar tint, kept theme-aware so the chrome matches the canvas. */
+/** Hex equivalents of the `--background` token (see styles.css): the *rest* iOS
+ *  Safari bar tint, so the chrome matches the page content. PageSidebarSwipeReveal
+ *  fades this toward `--sidebar` (#efefeb / #15110a) live as the sidebar is
+ *  swiped open, mirroring the body bar-tint surface. */
 const THEME_COLOR_BY_APPEARANCE = {
-  dark: "#16130e",
-  light: "#efefeb",
+  dark: "#181611",
+  light: "#f9f9f5",
 } as const;
 
 function RootDocument({ children }: { children: React.ReactNode }) {
