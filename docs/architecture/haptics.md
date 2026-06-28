@@ -40,13 +40,14 @@ sites stay readable. The `HapticMoment` union is the **allowlist** — go throug
 | `press` | `medium` | 25 ms @ 0.7 — confirming buzz | A long-press arming a block (the actions menu is now ready) |
 | `pickUp` | `rigid` | 10 ms @ 1.0 — sharp tick | An armed block / grip lifting into a reorder drag |
 | `drop` | `soft` | 40 ms @ 0.5 — settle | A dragged block committing to its new slot |
+| `disabled` | `warning` | warning buzz | A tapped command that can't run because it's at a boundary (move up on the top block, outdent at indent 0, indent at the max) — the action is a no-op, so the buzz stands in for the change that didn't happen |
 | `success` | `success` | 30 + 40 ms two-stage | A completed, consequential action — **reserved, no call site yet** |
 
-`web-haptics` also ships `light`, `heavy`, `warning`, `error`, `nudge`, and
-`buzz`. These are intentionally **not** mapped: add a new `HapticMoment` (and a
-real call site) only when a genuine surface needs it — e.g. promote `error` /
-`warning` the day a destructive-confirm or failure UX exists. Don't pre-wire
-moments that nothing fires.
+`web-haptics` also ships `light`, `heavy`, `error`, `nudge`, and `buzz`. These
+are intentionally **not** mapped: add a new `HapticMoment` (and a real call
+site) only when a genuine surface needs it — e.g. promote `error` the day a
+destructive-confirm or hard-failure UX exists. Don't pre-wire moments that
+nothing fires.
 
 ## Device support ("what they work with")
 
@@ -74,6 +75,7 @@ state change it confirms, it doesn't get a haptic.
 | A committed value change on a form control — checkbox, switch, radio | `selection` |
 | A discrete selection inside a touch drawer/menu | `selection` |
 | Mobile editor toolbar command taps (bounded exception — a coarse-only surface above the keyboard) | `selection` |
+| A toolbar command tapped at a boundary where it can't run (move up on the top block, outdent at indent 0, indent at the max) | `disabled` |
 | A completed, consequential action (when one exists) | `success` |
 
 **Do NOT use a haptic for** (anti-patterns — these are why the surface stays small):
@@ -90,7 +92,7 @@ state change it confirms, it doesn't get a haptic.
 - **One haptic per user action** — never stack two moments on one gesture.
 - **Fire on the committing event** — `onClick` / `onCheckedChange` / gesture commit, not `pointerdown` for a tap that could still become a scroll.
 - **Fire before delegating** to the handler, so the feedback lands immediately regardless of handler latency.
-- **Always paired with a visible change** — haptics reinforce, never replace, a visual signal.
+- **Always paired with a visible change** — haptics reinforce, never replace, a visual signal. The one deliberate exception is `disabled`: the "visible" signal is the *absence* of the change the user asked for (the block doesn't move), so the buzz is what tells them the boundary was hit. Reserve it for that — don't use it as a generic error tone.
 
 > **Intentional non-coverage.** Tabs and collapsibles are *not* wired for haptics
 > by design (navigation / disclosure, not manipulation). The toolbar and
@@ -110,6 +112,7 @@ Current confirmed sites (the audit of record):
 | [`radio-group.tsx`](../../src/components/ui/radio-group.tsx) | `selection` | `onValueChange` (wired at the group level — ticks once per selection) |
 | [`menu-presentation.tsx`](../../src/components/ui/menu-presentation.tsx) | `selection` | Drawer menu row tap |
 | [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `selection` | Toolbar command button tap |
+| [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `disabled` | Move up or indent/outdent tapped at a boundary (no neighbor up / clamped indent) — `ToolbarButton`'s `canRun` predicate. Move down has no boundary: at the bottom it inserts an empty block above instead, so it always fires `selection`. |
 
 ## Adding a call site
 

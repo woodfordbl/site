@@ -193,6 +193,24 @@ the keyboard, not a precedent for ticking ordinary buttons. See
 [Haptics](./haptics.md) for the semantic moment vocabulary and the when-to-use
 rules.
 
+**Boundary feedback (`disabled`).** The move-up and indent buttons take an
+optional `canRun` predicate that `ToolbarButton` evaluates lazily at tap time
+(rows are read live via `getRows()`, so the toolbar never re-renders on edits).
+When the action is at a boundary — move up on the top block, outdent at indent 0,
+indent at the max — `canRun` returns false, the button fires the `disabled`
+warning buzz instead of `selection`, and skips the handler so no no-op command is
+dispatched. `canMoveUp` mirrors the reducer's own `findFocusableAdjacentRowId`
+check and `canIndent` mirrors its `clampBlockIndent`, so the buzz fires exactly
+when the action would have done nothing. This is the one place `disabled` is
+wired; the "nothing moved" is the visible counterpart the buzz stands in for.
+
+**Move down has no boundary.** Rather than dead-ending at the last block, move
+down keeps working there: `handleMove("down")` detects the missing focusable
+neighbor and `insertBefore`s an empty block, shifting the focused row down a slot
+(then re-focuses it with `placement: "start"`, matching a normal move, since the
+insert would otherwise focus the new block). So move down always acts — it fires
+the ordinary `selection` tick and never `disabled`.
+
 ## Browser support reference
 
 | Feature | Chrome/Edge | Firefox | iOS Safari |
