@@ -300,7 +300,55 @@ export function PageHeaderMenu({
                 pageId={pageId}
                 pages={pages}
               />
-              {isNarrowViewport ? <DropdownMenuSeparator /> : null}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              {isNarrowViewport && footerActions.visible ? (
+                <>
+                  {footerActions.hasUpdates ? (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        footerActions.setConfirmAction("refresh");
+                      }}
+                    >
+                      <IconRefresh />
+                      Refresh site content
+                    </DropdownMenuItem>
+                  ) : null}
+                  {footerActions.isDev ? (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        footerActions.setConfirmAction("saveAll");
+                      }}
+                    >
+                      <IconDeviceFloppy />
+                      Save all to source
+                    </DropdownMenuItem>
+                  ) : null}
+                  {footerActions.hasLocalChanges ? (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          footerActions.setConfirmAction("reset");
+                        }}
+                        variant="destructive"
+                      >
+                        <IconRefresh />
+                        Reset page
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          footerActions.setConfirmAction("resetAll");
+                        }}
+                        variant="destructive"
+                      >
+                        <IconRefresh />
+                        Reset all
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
               <DropdownMenuItem
                 disabled={!canDelete}
                 onClick={() => {
@@ -312,52 +360,6 @@ export function PageHeaderMenu({
                 Delete
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            {isNarrowViewport && footerActions.visible ? (
-              <>
-                {footerActions.hasUpdates ? (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      footerActions.setConfirmAction("refresh");
-                    }}
-                  >
-                    <IconRefresh />
-                    Refresh site content
-                  </DropdownMenuItem>
-                ) : null}
-                {footerActions.isDev ? (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      footerActions.setConfirmAction("saveAll");
-                    }}
-                  >
-                    <IconDeviceFloppy />
-                    Save all to source
-                  </DropdownMenuItem>
-                ) : null}
-                {footerActions.hasLocalChanges ? (
-                  <>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        footerActions.setConfirmAction("reset");
-                      }}
-                      variant="destructive"
-                    >
-                      <IconRefresh />
-                      Reset page
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        footerActions.setConfirmAction("resetAll");
-                      }}
-                      variant="destructive"
-                    >
-                      <IconRefresh />
-                      Reset all
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-              </>
-            ) : null}
             <DropdownMenuSeparator />
             <PageActivityPanel pageId={pageId} />
           </ActionMenuSearchSection>

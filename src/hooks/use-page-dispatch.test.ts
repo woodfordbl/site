@@ -87,4 +87,29 @@ describe("pageReducer page.create", () => {
       expect(persist.sidebarOrder).toBeLessThan(2000);
     }
   });
+
+  it("carries the source icon and cover image onto the duplicate", () => {
+    const headerImage = {
+      source: "url" as const,
+      src: "https://example.com/cover.jpg",
+    };
+    const { effects } = pageReducer(
+      {
+        type: "page.create",
+        title: "Copy of Notes",
+        pageId: "copy-notes",
+        insertAfterPageId: "notes",
+        icon: "tabler:notebook",
+        headerImage,
+      },
+      shippedPages
+    );
+
+    const persist = effects.find((effect) => effect.type === "page.persist");
+    expect(persist?.type).toBe("page.persist");
+    if (persist?.type === "page.persist") {
+      expect(persist.icon).toBe("tabler:notebook");
+      expect(persist.headerImage).toEqual(headerImage);
+    }
+  });
 });

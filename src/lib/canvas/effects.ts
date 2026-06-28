@@ -7,6 +7,7 @@ import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import type { PageHeaderImage } from "@/lib/schemas/page-settings.ts";
 
 export type CanvasEffect =
   | { type: "persist"; rowId: string; block: Block }
@@ -59,6 +60,10 @@ export type PageEffect =
       create: boolean;
       previousSlug?: string;
       initialBlocks?: Block[];
+      /** Emoji or `tabler:IconName` seeded on create (duplicate). */
+      icon?: string;
+      /** Cover ("header") image seeded on create (duplicate). */
+      headerImage?: PageHeaderImage;
     }
   | { type: "page.delete"; pageId: string }
   | { type: "page.resetToRemote"; pageId: string }
