@@ -413,7 +413,7 @@ export function PageSidebarSwipeReveal({
   }, [openMobile]);
 
   return (
-    <div className="relative w-full bg-sidebar max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
+    <div className="relative w-full bg-background max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
       {/* Sidebar layer — fixed behind the content, revealed as content slides.
           On mobile the document is the scroller, so this is `fixed` (pinned to
           the viewport) rather than `absolute` against a now document-tall
@@ -453,11 +453,13 @@ export function PageSidebarSwipeReveal({
           {children}
         </div>
 
-        {/* White wash over the content; opacity tracks swipe progress. */}
+        {/* Scrim over the content; opacity tracks swipe progress. White in light
+            mode (content recedes by washing out); near-black in dark mode (a
+            white wash there reads as a jarring brighten — dark dims instead). */}
         <div
           aria-hidden
           className={cn(
-            "absolute inset-0 z-10 bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+            "absolute inset-0 z-10 bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none dark:bg-black",
             isDragging && "transition-none",
             openMobile ? "pointer-events-auto" : "pointer-events-none"
           )}

@@ -433,29 +433,37 @@
     background: var(--selection);
   }
 
+  /* The root element is the surface iOS Safari samples for the areas *behind*
+     the top/bottom bars and the overscroll region (with `viewport-fit=cover`,
+     content does not reach into the safe-area insets, so an inner element's
+     background can't tint them — only the root can). Set it on `html`, not just
+     `body`: `body` is only as tall as its content, so on a short page it leaves
+     the bottom inset showing whatever is below it. Mix content background →
+     sidebar as the mobile sidebar is revealed (`--sidebar-reveal`, driven by
+     PageSidebarSwipeReveal) so the bars fade to the sidebar color *with the
+     swipe* rather than being permanently gray (var unset = 0 = bg-background). */
+  html,
   body {
     overscroll-behavior: none;
-    /* The page background is the surface iOS Safari samples for its top/bottom
-       bar tint. Mix from content background → sidebar as the mobile sidebar is
-       revealed (`--sidebar-reveal`, driven by PageSidebarSwipeReveal) so the
-       bars fade to the sidebar color *with the swipe* rather than being
-       permanently gray. Defaults to the content background (var unset = 0). */
     background-color: color-mix(
       in oklab,
       var(--background),
       var(--sidebar) calc(var(--sidebar-reveal, 0) * 100%)
     );
     transition: background-color 200ms var(--ease-drawer);
+  }
+
+  body {
     @apply text-foreground;
   }
 
   /* While dragging, the bar tint tracks the finger 1:1 (no settle animation). */
+  html[data-swipe-dragging],
   html[data-swipe-dragging] body {
     transition: none;
   }
 
   html {
-    overscroll-behavior: none;
     @apply font-sans;
   }
 
