@@ -2,12 +2,12 @@ import { type Hotkey, normalizeHotkey } from "@tanstack/react-hotkeys";
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { localKeybindingsCollection } from "@/db/collections/local-collections.ts";
+import type { LocalKeybinding } from "@/lib/schemas/local-keybinding.ts";
 import {
   type CommandId,
   getCommand,
   KEYBOARD_COMMANDS,
 } from "@/lib/settings/keyboard-commands.ts";
-import type { LocalKeybinding } from "@/lib/schemas/local-keybinding.ts";
 
 export type ResolvedKeybindings = Record<CommandId, Hotkey>;
 
