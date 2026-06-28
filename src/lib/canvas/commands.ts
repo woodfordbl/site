@@ -1,6 +1,7 @@
 import type { ContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
+import type { PageHeaderImage } from "@/lib/schemas/page-settings.ts";
 
 /** Discriminated union of canvas structural commands. @see docs/reference/canvas-commands.md */
 export type CanvasCommand =
@@ -156,6 +157,10 @@ export type PageCommand =
       pageId?: string;
       navigate?: boolean;
       initialBlocks?: Block[];
+      /** Emoji or `tabler:IconName` to seed on the new page (duplicate). */
+      icon?: string;
+      /** Cover ("header") image to seed on the new page (duplicate). */
+      headerImage?: PageHeaderImage;
     }
   | {
       type: "page.update";
