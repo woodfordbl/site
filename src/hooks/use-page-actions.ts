@@ -2,17 +2,15 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import { buildPageLinkUrl } from "@/lib/pages/copy-page-link.ts";
+import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { resolveDeleteRedirectTarget } from "@/lib/pages/resolve-page-nav-target.ts";
-import { resolveSourceBlocksForPage } from "@/lib/pages/resolve-source-page-blocks.ts";
 
 export function usePageActions(pageId: string) {
   const { pages } = useMergedPageListItems();
@@ -34,28 +32,16 @@ export function usePageActions(pageId: string) {
     }
   }, [pageId, pages]);
 
-  const duplicate = useCallback(() => {
-    if (!page) {
-      return;
-    }
+  const duplicate = useCallback(
+    (withContent = true) => {
+      if (!page) {
+        return;
+      }
 
-    // Read local blocks lazily (non-reactively) so this hook stays SSR-safe —
-    // a live query here would abort server rendering (no getServerSnapshot).
-    const localBlocks = readBootstrapPageBlocks(pageId).blocks;
-    resolveSourceBlocksForPage(page, localBlocks)
-      .then((source) => {
-        dispatch({
-          type: "page.create",
-          title: `Copy of ${page.title}`,
-          parentId: page.parentId,
-          insertAfterPageId: pageId,
-          initialBlocks: clonePageBlocks(source.blocks),
-          icon: source.icon,
-          headerImage: source.headerImage,
-        });
-      })
-      .catch(() => undefined);
-  }, [dispatch, page, pageId]);
+      duplicatePage({ dispatch, page, withContent });
+    },
+    [dispatch, page]
+  );
 
   const moveTo = useCallback(
     (parentId: string | null) => {
