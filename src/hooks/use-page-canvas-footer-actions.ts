@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useSiteContentUpdates } from "@/hooks/use-site-content-updates.ts";
@@ -61,8 +62,12 @@ export function usePageCanvasFooterActions({
   const dispatch = usePageDispatch();
   const localPage = useLocalPageById(pageId);
   const { hasUpdates, stalePageIds } = useSiteContentUpdates();
+  const { templatePageId } = useTemplatePage();
 
   const hasLocalChanges = localPage != null && !isLocallyDeletedPage(localPage);
+  // The template page is a user-owned config page with no shipped version, so
+  // "reset to site version" is meaningless there — callers hide reset on it.
+  const isTemplatePage = pageId === templatePageId;
   const visible = isDev || hasLocalChanges || hasUpdates;
 
   const handleSaveAll = async () => {
@@ -109,6 +114,7 @@ export function usePageCanvasFooterActions({
     hasLocalChanges,
     hasUpdates,
     isDev,
+    isTemplatePage,
     saveStatus,
     setConfirmAction,
     visible,

@@ -16,6 +16,7 @@ import {
   SyncSiteAppearanceCookieEffect,
   ThemeProvider,
 } from "@/components/layout/theme-provider.tsx";
+import { TemplatePageProvider } from "@/components/pages/template-page-provider.tsx";
 import { NotFoundPage } from "@/components/ui/not-found-page.tsx";
 import { AppProviders } from "@/db/provider.tsx";
 import { loadSiteAppearance } from "@/lib/appearance/load-site-appearance.ts";
@@ -26,6 +27,7 @@ import { loadDeviceLayoutHints } from "@/lib/device/load-device-layout-hints.ts"
 import { getSidebarTablerGlyphs } from "@/lib/pages/get-sidebar-tabler-glyphs.ts";
 import { loadPageListLocalPreview } from "@/lib/pages/load-page-list-local-preview.ts";
 import { loadPageSidebarPrefs } from "@/lib/pages/load-page-sidebar-prefs.ts";
+import { loadTemplatePageId } from "@/lib/pages/load-template-page.ts";
 import { mergePageList } from "@/lib/pages/merge-page-list.ts";
 import { tablerIconNamesForSSR } from "@/lib/pages/tabler-icon-names-from-pages.ts";
 import type { RouterContext } from "@/router-context.ts";
@@ -42,18 +44,25 @@ const AppDevtools = import.meta.env.DEV
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   beforeLoad: async () => {
-    const [localPagePreview, sidebarPrefs, deviceLayoutHints, siteAppearance] =
-      await Promise.all([
-        loadPageListLocalPreview(),
-        loadPageSidebarPrefs(),
-        loadDeviceLayoutHints(),
-        loadSiteAppearance(),
-      ]);
+    const [
+      localPagePreview,
+      sidebarPrefs,
+      deviceLayoutHints,
+      siteAppearance,
+      templatePageId,
+    ] = await Promise.all([
+      loadPageListLocalPreview(),
+      loadPageSidebarPrefs(),
+      loadDeviceLayoutHints(),
+      loadSiteAppearance(),
+      loadTemplatePageId(),
+    ]);
     return {
       deviceLayoutHints,
       localPagePreview,
       sidebarPrefs,
       siteAppearance,
+      templatePageId,
     };
   },
   loader: async ({ context }) => {
@@ -131,9 +140,11 @@ const THEME_COLOR_BY_APPEARANCE = {
 } as const;
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { deviceLayoutHints, siteAppearance } = useRouteContext({
-    from: "__root__",
-  });
+  const { deviceLayoutHints, siteAppearance, templatePageId } = useRouteContext(
+    {
+      from: "__root__",
+    }
+  );
   const isDark = siteAppearance.resolvedTheme === "dark";
 
   return (
@@ -160,8 +171,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <HapticsProvider>
               <HotkeysProvider>
                 <AppProviders>
-                  <GlobalCommandHotkeys />
-                  {children}
+                  <TemplatePageProvider initialTemplatePageId={templatePageId}>
+                    <GlobalCommandHotkeys />
+                    {children}
+                  </TemplatePageProvider>
                 </AppProviders>
               </HotkeysProvider>
               <SyncDeviceLayoutCookieEffect />

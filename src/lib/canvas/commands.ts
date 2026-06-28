@@ -1,7 +1,11 @@
 import type { ContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
-import type { PageHeaderImage } from "@/lib/schemas/page-settings.ts";
+import type {
+  PageFont,
+  PageHeaderImage,
+  PageTextScale,
+} from "@/lib/schemas/page-settings.ts";
 
 /** Discriminated union of canvas structural commands. @see docs/reference/canvas-commands.md */
 export type CanvasCommand =
@@ -157,10 +161,16 @@ export type PageCommand =
       pageId?: string;
       navigate?: boolean;
       initialBlocks?: Block[];
-      /** Emoji or `tabler:IconName` to seed on the new page (duplicate). */
+      /** Emoji or `tabler:IconName` to seed on the new page (duplicate, template). */
       icon?: string;
-      /** Cover ("header") image to seed on the new page (duplicate). */
+      /** Cover ("header") image to seed on the new page (duplicate, template). */
       headerImage?: PageHeaderImage;
+      /** Body font to seed on the new page (template). */
+      font?: PageFont;
+      /** Full-width layout to seed on the new page (template). */
+      fullWidth?: boolean;
+      /** Text size to seed on the new page (template). */
+      textScale?: PageTextScale;
     }
   | {
       type: "page.update";

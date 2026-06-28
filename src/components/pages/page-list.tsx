@@ -20,6 +20,7 @@ import {
   PageListDragPreview,
   type PageListDragPreviewState,
 } from "@/components/pages/page-list-drag-preview.tsx";
+import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.tsx";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
@@ -129,7 +130,18 @@ function PageListContent({
 }) {
   const activePage = useActivePageRef();
   const dispatch = usePageDispatch(pages);
-  const tree = useMemo(() => buildPageTree(pages), [pages]);
+  const { templatePageId } = useTemplatePage();
+  // The template page is configured in Settings and hidden from the sidebar; it
+  // stays in `pages` so dispatch/reposition still resolve it normally.
+  const tree = useMemo(
+    () =>
+      buildPageTree(
+        templatePageId
+          ? pages.filter((page) => page.id !== templatePageId)
+          : pages
+      ),
+    [pages, templatePageId]
+  );
   // Always seed from the SSR-known cookie prop so the server and first client
   // render match exactly; the live cookie is re-read on mount for cross-tab sync.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(

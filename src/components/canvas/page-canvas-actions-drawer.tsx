@@ -58,6 +58,7 @@ export function PageCanvasActionsDrawer({
     hasLocalChanges,
     hasUpdates,
     isDev,
+    isTemplatePage,
     saveStatus,
     setConfirmAction,
     visible,
@@ -125,7 +126,7 @@ export function PageCanvasActionsDrawer({
                 />
               </>
             ) : null}
-            {hasLocalChanges ? (
+            {hasLocalChanges && !isTemplatePage ? (
               <>
                 {hasUpdates || isDev ? (
                   <SectionLabel>Local changes</SectionLabel>

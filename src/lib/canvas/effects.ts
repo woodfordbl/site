@@ -7,7 +7,11 @@ import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
 import type { Block } from "@/lib/schemas/block.ts";
-import type { PageHeaderImage } from "@/lib/schemas/page-settings.ts";
+import type {
+  PageFont,
+  PageHeaderImage,
+  PageTextScale,
+} from "@/lib/schemas/page-settings.ts";
 
 export type CanvasEffect =
   | { type: "persist"; rowId: string; block: Block }
@@ -60,10 +64,16 @@ export type PageEffect =
       create: boolean;
       previousSlug?: string;
       initialBlocks?: Block[];
-      /** Emoji or `tabler:IconName` seeded on create (duplicate). */
+      /** Emoji or `tabler:IconName` seeded on create (duplicate, template). */
       icon?: string;
-      /** Cover ("header") image seeded on create (duplicate). */
+      /** Cover ("header") image seeded on create (duplicate, template). */
       headerImage?: PageHeaderImage;
+      /** Body font seeded on create (template). */
+      font?: PageFont;
+      /** Full-width layout seeded on create (template). */
+      fullWidth?: boolean;
+      /** Text size seeded on create (template). */
+      textScale?: PageTextScale;
     }
   | { type: "page.delete"; pageId: string }
   | { type: "page.resetToRemote"; pageId: string }

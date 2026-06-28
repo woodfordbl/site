@@ -5,10 +5,9 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
 import { useCommandSequences } from "@/components/keyboard/use-command-sequences.ts";
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
+import { useCreatePage } from "@/hooks/use-create-page.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
-import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 
 function GlobalCommandHotkeysLive() {
   const navigate = useNavigate();
@@ -17,7 +16,7 @@ function GlobalCommandHotkeysLive() {
   });
   const { resolvedTheme, setTheme } = useSiteAppearance();
   const { pages } = useMergedPageListItems();
-  const dispatch = usePageDispatch(pages);
+  const createPage = useCreatePage(pages);
 
   const openSettings = () =>
     navigate({ search: { returnTo: pathname }, to: "/settings" });
@@ -29,8 +28,7 @@ function GlobalCommandHotkeysLive() {
     });
 
   useCommandHotkeys({
-    "new-page": () =>
-      dispatch({ title: DEFAULT_PAGE_TITLE, type: "page.create" }),
+    "new-page": () => createPage(),
     "open-settings": openSettings,
     "show-shortcuts": openShortcuts,
     "toggle-theme": () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),

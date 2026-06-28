@@ -7,6 +7,7 @@ import {
   IconCode,
   IconKeyboard,
   IconPalette,
+  IconTemplate,
 } from "@tabler/icons-react";
 import { Link, useParams } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -39,6 +40,7 @@ const SECTION_ICONS: Record<SettingsSectionDefinition["icon"], ReactNode> = {
   code: <IconCode />,
   keyboard: <IconKeyboard />,
   palette: <IconPalette />,
+  template: <IconTemplate />,
 };
 
 const NAV_GROUPS = ["Preferences", "Workspace"] as const;

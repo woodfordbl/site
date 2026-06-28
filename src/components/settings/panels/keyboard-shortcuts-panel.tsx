@@ -1,20 +1,13 @@
 "use client";
 
 import { KeyboardShortcutRow } from "@/components/settings/panels/keyboard-shortcut-row.tsx";
-import {
-  SettingsItemCard,
-  SettingsItemRow,
-} from "@/components/settings/settings-item-card.tsx";
+import { SettingsItemCard } from "@/components/settings/settings-item-card.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
-import { ItemActions, ItemContent, ItemTitle } from "@/components/ui/item.tsx";
-import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   COMMAND_GROUPS,
   getCommandsInGroup,
-  KEYBOARD_SEQUENCES,
-  SEQUENCE_GROUP,
 } from "@/lib/settings/keyboard-commands.ts";
 import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 import { useResolvedKeybindings } from "@/lib/settings/use-keybindings.ts";
@@ -46,50 +39,32 @@ export function KeyboardShortcutsPanel({
 
   return (
     <SettingsPanelShell
-      description="Common shortcuts for navigation and canvas editing. Editable shortcuts can be rebound; structural editor keys are fixed."
+      description="Rebind any shortcut below — record a new combo or reset it to the default."
       search={search}
       section={section}
     >
-      {COMMAND_GROUPS.map((group) => (
-        <section className="flex flex-col gap-3" key={group}>
-          <h2 className="font-medium text-sm">{group}</h2>
-          <SettingsItemCard>
-            {getCommandsInGroup(group).map((command) =>
-              command.customizable ? (
+      {COMMAND_GROUPS.map((group) => {
+        const commands = getCommandsInGroup(group).filter(
+          (command) => command.customizable
+        );
+        if (commands.length === 0) {
+          return null;
+        }
+        return (
+          <section className="flex flex-col gap-3" key={group}>
+            <h2 className="font-medium text-sm">{group}</h2>
+            <SettingsItemCard>
+              {commands.map((command) => (
                 <KeyboardShortcutRow
                   command={command}
                   key={command.id}
                   resolved={resolved}
                 />
-              ) : (
-                <SettingsItemRow key={command.id}>
-                  <ItemContent>
-                    <ItemTitle>{command.label}</ItemTitle>
-                  </ItemContent>
-                  <ItemActions>
-                    <Shortcut command={command.id} />
-                  </ItemActions>
-                </SettingsItemRow>
-              )
-            )}
-          </SettingsItemCard>
-        </section>
-      ))}
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium text-sm">{SEQUENCE_GROUP}</h2>
-        <SettingsItemCard>
-          {KEYBOARD_SEQUENCES.map((command) => (
-            <SettingsItemRow key={command.id}>
-              <ItemContent>
-                <ItemTitle>{command.label}</ItemTitle>
-              </ItemContent>
-              <ItemActions>
-                <SequenceShortcut sequence={command.sequence} />
-              </ItemActions>
-            </SettingsItemRow>
-          ))}
-        </SettingsItemCard>
-      </section>
+              ))}
+            </SettingsItemCard>
+          </section>
+        );
+      })}
     </SettingsPanelShell>
   );
 }

@@ -68,7 +68,7 @@
   },
   "name": "site",
   "scripts": {
-    "dev": "pnpm sync && vite dev --port ${PORT:-3000}",
+    "dev": "pnpm sync && vite dev",
     "build": "pnpm sync && node scripts/generate-sitemap.mjs && vite build",
     "gen:icons": "node scripts/generate-icons.mjs",
     "sync:emojibase": "node scripts/sync-emojibase-public.mjs",

@@ -3,7 +3,8 @@ export type SettingsSectionId =
   | "analytics"
   | "backup"
   | "development"
-  | "shortcuts";
+  | "shortcuts"
+  | "template";
 
 export interface SettingsSectionDefinition {
   group: "Preferences" | "Workspace";
@@ -24,6 +25,12 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     label: "Keyboard shortcuts",
     group: "Preferences",
     icon: "keyboard",
+  },
+  {
+    id: "template",
+    label: "Template",
+    group: "Preferences",
+    icon: "template",
   },
   {
     id: "analytics",
