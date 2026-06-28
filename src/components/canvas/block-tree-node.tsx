@@ -73,6 +73,7 @@ function ContainerRowNode({
   const { insertAfter, insertAtScopeStart, insertBefore } =
     useCanvasEditorContext();
   const isTable = row.effectiveBlock.type === "table";
+  const isCallout = row.effectiveBlock.type === "callout";
   const isTopLevel = !row.effectiveBlock.parentId;
   const alignWithPageTitle = isTopLevel && !isTable;
 
@@ -98,6 +99,7 @@ function ContainerRowNode({
           />
         ) : null
       }
+      keepGutterOnNestedHover={isCallout}
       reserveGutterSpace={showGutter && isTable}
       row={row}
     >
