@@ -4,6 +4,7 @@ import {
   IconCopy,
   IconExternalLink,
   IconLink,
+  IconMoodSmile,
   IconPencil,
   IconRefresh,
   IconRowInsertBottom,
@@ -15,8 +16,6 @@ import {
 import { useMemo } from "react";
 
 import type { BlockGutterMenuItemsInput } from "@/components/canvas/block-gutter-menu/block-gutter-menu-types.ts";
-import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
-import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 
 export function useBlockGutterMenuItems(
@@ -110,7 +109,7 @@ export function useBlockGutterMenuItems(
           id: "callout-add-icon",
           label: "Add icon",
           keywords: ["callout", "add", "icon", "glyph", "emoji"],
-          icon: <PageIconDisplay icon={DEFAULT_CALLOUT_ICON} />,
+          icon: <IconMoodSmile />,
           onSelect: handleAddCalloutIcon,
         });
       }

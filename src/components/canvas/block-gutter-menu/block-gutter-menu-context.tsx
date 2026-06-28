@@ -21,6 +21,7 @@ import {
   useCanvasEditorContext,
   useCanvasEditorState,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { findRowById } from "@/lib/blocks/block-tree.ts";
 import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
 import {
@@ -58,7 +59,7 @@ export function BlockGutterMenuProvider({
   const { rows } = useCanvasEditorState();
   const { closeBlockActionsMenu, openRowId } = useBlockActionsMenu();
 
-  const row = rows.find((entry) => entry.rowId === rowId);
+  const row = findRowById(rows, rowId);
   const effectiveBlockId = row?.effectiveBlock.id;
   const canTurnInto = row ? canTurnIntoBlock(row) : false;
   const turnIntoValue = row
@@ -104,7 +105,7 @@ export function BlockGutterMenuProvider({
 
   const handleEmbedToggleCaption = useCallback(
     (enabled: boolean) => {
-      const currentRow = rows.find((entry) => entry.rowId === rowId);
+      const currentRow = findRowById(rows, rowId);
       const block = currentRow?.effectiveBlock;
       if (block?.type !== "embed") {
         return;
@@ -232,7 +233,7 @@ export function BlockGutterMenuProvider({
   }, [dispatch, tableBlock, tableColumnCount]);
 
   const handleAddCalloutIcon = useCallback(() => {
-    const currentRow = rows.find((entry) => entry.rowId === rowId);
+    const currentRow = findRowById(rows, rowId);
     const block = currentRow?.effectiveBlock;
     if (block?.type !== "callout") {
       return;
