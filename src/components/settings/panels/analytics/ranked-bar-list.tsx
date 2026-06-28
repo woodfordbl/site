@@ -28,8 +28,9 @@ export function RankedBarList({
   max,
   emptyLabel = "Nothing here yet.",
 }: RankedBarListProps) {
-  const { ref, fillStyle, enabled } =
-    useChartDitherFill<HTMLUListElement>([colorVar]);
+  const { ref, fillStyle, enabled } = useChartDitherFill<HTMLUListElement>([
+    colorVar,
+  ]);
 
   if (items.length === 0) {
     return (
@@ -66,7 +67,10 @@ export function RankedBarList({
               </span>
             </div>
             <div
-              className={cn("h-1.5 w-full overflow-hidden bg-muted", trackRadius)}
+              className={cn(
+                "h-1.5 w-full overflow-hidden bg-muted",
+                trackRadius
+              )}
             >
               <div
                 className={cn("h-full transition-[width]", trackRadius)}

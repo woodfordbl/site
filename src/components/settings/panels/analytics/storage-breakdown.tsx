@@ -29,7 +29,12 @@ export function StorageBreakdown({ categories, total }: StorageBreakdownProps) {
 
   return (
     <div className="flex flex-col gap-4" ref={ref}>
-      <div className={cn("flex h-2.5 w-full overflow-hidden bg-muted", trackRadius)}>
+      <div
+        className={cn(
+          "flex h-2.5 w-full overflow-hidden bg-muted",
+          trackRadius
+        )}
+      >
         {categories.map((category) => (
           <div
             key={category.key}

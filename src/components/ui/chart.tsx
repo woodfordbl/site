@@ -453,15 +453,17 @@ export function useChartDitherFill<T extends HTMLElement = HTMLDivElement>(
   options?: ChartDitherFillOptions
 ) {
   const { matrix = 4, pixelSize = 2, coverage = 0.72 } = options ?? {};
-  const { chartDitherEnabled, chartPalette, resolvedTheme } =
-    useSiteAppearance();
+  const { chartDitherEnabled } = useSiteAppearance();
   const enabled = options?.enabled ?? chartDitherEnabled;
   const ref = React.useRef<T | null>(null);
   const [tiles, setTiles] = React.useState<Record<string, string>>({});
   const tile = matrix * pixelSize;
   const sig = colorVars.join("|");
 
-  React.useEffect(() => {
+  // Re-resolve each color from the DOM and rebuild its tile. Runs on mount and
+  // whenever the palette, theme, or dither setting changes — same observer
+  // pattern as useChartGradientDither, so it also tracks local palette overrides.
+  const regenerate = React.useCallback(() => {
     const el = ref.current;
     if (!el) {
       return;
@@ -488,8 +490,30 @@ export function useChartDitherFill<T extends HTMLElement = HTMLDivElement>(
       });
     }
     setTiles(next);
-    // chartPalette/resolvedTheme re-resolve the colors when they change.
-  }, [enabled, sig, tile, matrix, pixelSize, coverage, chartPalette, resolvedTheme]);
+  }, [enabled, sig, tile, matrix, pixelSize, coverage]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    regenerate();
+    const paletteScope = el.closest("[data-chart-palette]");
+    const paletteObserver = new MutationObserver(regenerate);
+    if (paletteScope) {
+      paletteObserver.observe(paletteScope, {
+        attributeFilter: ["data-chart-palette"],
+      });
+    }
+    const themeObserver = new MutationObserver(regenerate);
+    themeObserver.observe(document.documentElement, {
+      attributeFilter: ["class", "data-chart-dither"],
+    });
+    return () => {
+      paletteObserver.disconnect();
+      themeObserver.disconnect();
+    };
+  }, [regenerate]);
 
   const fillStyle = React.useCallback(
     (colorVar: string): React.CSSProperties =>

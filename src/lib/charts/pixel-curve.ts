@@ -1,15 +1,15 @@
 /** Minimal slice of the d3/canvas path API the staircase actually calls. */
 interface PixelCurveContext {
-  moveTo(x: number, y: number): void;
   lineTo(x: number, y: number): void;
+  moveTo(x: number, y: number): void;
 }
 
 /** Structural match for d3-shape's `CurveGenerator` (avoids a transitive import). */
 interface CurveGenerator {
-  areaStart(): void;
   areaEnd(): void;
-  lineStart(): void;
+  areaStart(): void;
   lineEnd(): void;
+  lineStart(): void;
   point(x: number, y: number): void;
 }
 
