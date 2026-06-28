@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { mergePageList } from "@/lib/pages/merge-page-list.ts";
+import { TEMPLATE_PAGE_ID } from "@/lib/pages/template-page.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
 
 const serverPages: PageSummary[] = [
@@ -79,6 +80,23 @@ describe("mergePageList", () => {
     expect(merged.find((page) => page.id === "about")?.icon).toBe(
       "tabler:IconBook"
     );
+  });
+
+  it("excludes the template snapshot from the navigable list", () => {
+    const merged = mergePageList(serverPages, [
+      {
+        id: TEMPLATE_PAGE_ID,
+        slug: "/__template__",
+        title: "Page template",
+        parentId: null,
+        serverBaselineHash: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    expect(merged.some((page) => page.id === TEMPLATE_PAGE_ID)).toBe(false);
+    expect(merged.map((page) => page.id).sort()).toEqual(["about", "home"]);
   });
 
   it("prefers local icon over server icon", () => {

@@ -20,8 +20,6 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import { resolveRegisteredContainer } from "@/components/blocks/container-loaders.ts";
-import { CalloutEdit } from "@/components/blocks/types/callout/callout-edit.tsx";
-import { CalloutView } from "@/components/blocks/types/callout/callout-view.tsx";
 import { ChecklistItemEdit } from "@/components/blocks/types/checklist/checklist-item-edit.tsx";
 import { ChecklistItemView } from "@/components/blocks/types/checklist/checklist-item-view.tsx";
 import { CodeEdit } from "@/components/blocks/types/code/code-edit.tsx";
@@ -203,11 +201,11 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     icon: IconInfoCircle,
     createDefault: () => createEmptyBlock("callout"),
     behavior: {
-      editStrategy: "inline-text",
-      capabilities: INLINE_TEXT_CAPABILITIES,
+      editStrategy: "container",
+      capabilities: { ...CONTAINER_CAPABILITIES, slashMenu: true },
     },
-    View: CalloutView,
-    Edit: CalloutEdit,
+    Container: () => resolveRegisteredContainer("callout"),
+    container: BLOCK_CONTAINER_CONFIG.callout,
   },
   code: {
     type: "code",

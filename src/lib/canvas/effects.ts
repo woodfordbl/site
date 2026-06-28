@@ -33,6 +33,7 @@ export type CanvasEffect =
       placement?: "start" | "end";
       offset?: number;
       embedAction?: "replace" | "caption";
+      calloutAction?: "editIcon";
     }
   | {
       type: "columns.apply";
@@ -97,6 +98,7 @@ export type FocusState = {
   placement?: "start" | "end";
   offset?: number;
   embedAction?: "replace" | "caption";
+  calloutAction?: "editIcon";
 } | null;
 
 export interface CanvasPersistenceApi {

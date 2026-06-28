@@ -74,6 +74,19 @@ interface CanvasRowShellProps {
   /** Vertically centers gutter controls with short, non-text rows (e.g. divider). */
   gutterAlignCenter?: boolean;
   /**
+   * Override the gutter's leftward pull (default {@link pageCanvasGutterPullClassName}).
+   * Callout children use a smaller pull so their handles sit inset from the
+   * callout's own margin handle instead of colliding with it.
+   */
+  gutterPullClassName?: string;
+  /**
+   * Keep this row's gutter revealed while hovering its nested children, instead
+   * of handing the reveal off to the child shell. Used by the callout container
+   * so the whole-box drag handle / actions menu stays accessible on overall
+   * hover; children still reveal their own gutters independently.
+   */
+  keepGutterOnNestedHover?: boolean;
+  /**
    * Keep the gutter column width without rendering gutter controls (e.g. table
    * blocks render gutter inside their horizontal scroll area).
    */
@@ -88,6 +101,8 @@ export function CanvasRowShell({
   reserveGutterSpace = false,
   contentSpacingClassName,
   enableTouchGesture = false,
+  keepGutterOnNestedHover = false,
+  gutterPullClassName = pageCanvasGutterPullClassName,
   children,
   className,
   contentClassName,
@@ -120,7 +135,10 @@ export function CanvasRowShell({
     }
 
     const layout = rowLayoutRef.current;
-    if (!layout || isNestedRowShellTarget(layout, event.target)) {
+    if (
+      !layout ||
+      (!keepGutterOnNestedHover && isNestedRowShellTarget(layout, event.target))
+    ) {
       return;
     }
 
@@ -137,7 +155,7 @@ export function CanvasRowShell({
 
   const handleRowLayoutPointerOver = (event: PointerEvent<HTMLDivElement>) => {
     const layout = rowLayoutRef.current;
-    if (!(layout && gutter)) {
+    if (!(layout && gutter) || keepGutterOnNestedHover) {
       return;
     }
 
@@ -172,7 +190,7 @@ export function CanvasRowShell({
           "pointer-events-none z-10 w-auto [&_.canvas-block-gutter]:opacity-0",
           isNarrowViewport
             ? cn("absolute top-0", pageCanvasGutterMobileClassName)
-            : cn("shrink-0", pageCanvasGutterPullClassName, "w-auto")
+            : cn("shrink-0", gutterPullClassName, "w-auto")
         )}
         data-canvas-row-gutter-host
       >
@@ -216,6 +234,7 @@ export function CanvasRowShell({
           gutter && isNarrowViewport && "relative",
           gutterAlignCenter ? "items-center" : "items-start",
           gutter &&
+            !keepGutterOnNestedHover &&
             "[&:has([data-canvas-row-content]_[data-canvas-row-shell]:hover)>_[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-0!",
           gutter &&
             "[&[data-gutter-revealed]>[data-canvas-row-gutter-host]_.canvas-block-gutter]:opacity-100"

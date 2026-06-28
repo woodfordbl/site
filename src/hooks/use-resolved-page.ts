@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { resolveActiveLocalPageBySlug } from "@/lib/pages/resolve-active-local-page-by-slug.ts";
 import { resolveActiveUserPageBySlug } from "@/lib/pages/resolve-user-page-by-slug.ts";
 import { normalizePageSlug } from "@/lib/pages/slugify.ts";
+import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import { isUserCreatedPage, type LocalPage } from "@/lib/schemas/local-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
@@ -23,7 +24,7 @@ export function useResolvedUserPageById(
   const localPages = useLocalPages();
 
   return useMemo(() => {
-    if (!pageId) {
+    if (!pageId || isTemplatePageId(pageId)) {
       return null;
     }
 
@@ -65,7 +66,10 @@ export function useUserPages(): LocalPage[] {
   const localPages = useLocalPages();
 
   return useMemo(
-    () => localPages.filter((page) => isUserCreatedPage(page)),
+    () =>
+      localPages.filter(
+        (page) => isUserCreatedPage(page) && !isTemplatePageId(page.id)
+      ),
     [localPages]
   );
 }

@@ -14,9 +14,11 @@ const MIGRATION_FLAG_KEY = "site-local-storage-v2";
 const CREATED_AT_BACKFILL_FLAG_KEY = "site-local-pages-created-at-backfill";
 const BLOCK_CREATED_AT_BACKFILL_FLAG_KEY =
   "site-local-blocks-created-at-backfill";
+const CALLOUT_CONTAINER_FLAG_KEY = "site-callout-container-v1";
 
 export {
   BLOCK_CREATED_AT_BACKFILL_FLAG_KEY,
+  CALLOUT_CONTAINER_FLAG_KEY,
   CREATED_AT_BACKFILL_FLAG_KEY,
   LEGACY_PAGES_KEY,
 };
@@ -220,6 +222,99 @@ function backfillShardCreatedAt(key: string): void {
 
   if (changed) {
     localStorage.setItem(key, JSON.stringify(shard));
+  }
+}
+
+/**
+ * Migrates one shard's legacy callouts (leaf `{ text, icon }`) into the
+ * container model: the callout keeps only `{ icon }` and its text is moved into
+ * a new `text` child row. Runs before the schema strips the now-unknown `text`
+ * key on read, so existing callout content is preserved. The child is added
+ * without touching `blockOrder` — ids missing from the order still group under
+ * their parent (`orderBlocksByIds`), matching how `ensure*MinimumChildren`
+ * backfills already behave.
+ */
+function migrateCalloutsInShard(key: string): void {
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    return;
+  }
+
+  const shard = JSON.parse(raw) as Record<
+    string,
+    StoredItem<Record<string, unknown>>
+  >;
+  const now = new Date().toISOString();
+  const additions: Record<string, StoredItem<Record<string, unknown>>> = {};
+  let changed = false;
+
+  for (const [mapKey, stored] of Object.entries(shard)) {
+    const data = stored.data;
+    if (!data || typeof data !== "object" || data.type !== "callout") {
+      continue;
+    }
+    const props = data.props as Record<string, unknown> | undefined;
+    if (!props || typeof props.text !== "string") {
+      continue;
+    }
+
+    const text = props.text;
+    const icon = typeof props.icon === "string" ? props.icon : undefined;
+    data.props = icon === undefined ? {} : { icon };
+    changed = true;
+
+    // Shard map keys carry the collection's key prefix (e.g. `s:<id>`); derive
+    // it from this entry so the new child is keyed the same way and the
+    // collection recognizes it on read.
+    const calloutId = (data.id as string | undefined) ?? mapKey;
+    const keyPrefix = mapKey.endsWith(calloutId)
+      ? mapKey.slice(0, mapKey.length - calloutId.length)
+      : "";
+
+    const childId = crypto.randomUUID();
+    const child: Record<string, unknown> = {
+      id: childId,
+      type: "text",
+      parentId: calloutId,
+      props: { text },
+      pageId: data.pageId,
+      createdAt: typeof data.createdAt === "string" ? data.createdAt : now,
+      updatedAt: now,
+    };
+    additions[`${keyPrefix}${childId}`] = { data: child, versionKey: now };
+  }
+
+  if (changed) {
+    localStorage.setItem(key, JSON.stringify({ ...shard, ...additions }));
+  }
+}
+
+/** Converts legacy leaf callouts across all shards into the container model. */
+export function migrateCalloutsToContainers(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (localStorage.getItem(CALLOUT_CONTAINER_FLAG_KEY) === "done") {
+    return;
+  }
+
+  try {
+    const shardKeys: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(BLOCK_SHARD_PREFIX)) {
+        shardKeys.push(key);
+      }
+    }
+
+    for (const key of shardKeys) {
+      migrateCalloutsInShard(key);
+    }
+
+    localStorage.setItem(CALLOUT_CONTAINER_FLAG_KEY, "done");
+  } catch {
+    localStorage.setItem(CALLOUT_CONTAINER_FLAG_KEY, "done");
   }
 }
 
