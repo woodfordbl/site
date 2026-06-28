@@ -14,12 +14,10 @@ import { DropUpload } from "@/components/ui/drop-upload.tsx";
 import type { WorkspaceArchiveStatus } from "@/hooks/use-workspace-archive.ts";
 import { useWorkspaceArchive } from "@/hooks/use-workspace-archive.ts";
 import type { WorkspaceImportMode } from "@/lib/content/workspace-import.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface BackupPanelProps {
   onAfterImport?: () => void;
-  search: SettingsSearch;
 }
 
 const STATUS_TONE_CLASS: Record<WorkspaceArchiveStatus["tone"], string> = {
@@ -28,7 +26,7 @@ const STATUS_TONE_CLASS: Record<WorkspaceArchiveStatus["tone"], string> = {
   success: "text-foreground",
 };
 
-export function BackupPanel({ onAfterImport, search }: BackupPanelProps) {
+export function BackupPanel({ onAfterImport }: BackupPanelProps) {
   const section = getSettingsSection("backup");
   const { exportWorkspace, importWorkspace, isExporting, isImporting, status } =
     useWorkspaceArchive({ onAfterImport });
@@ -47,7 +45,6 @@ export function BackupPanel({ onAfterImport, search }: BackupPanelProps) {
   return (
     <SettingsPanelShell
       description="Export your whole workspace to a .zip backup, or open one to restore or move your content."
-      search={search}
       section={section}
     >
       {status ? (

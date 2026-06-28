@@ -95,9 +95,7 @@ describe("mergePageList", () => {
       },
     ]);
 
-    expect(
-      merged.some((page) => page.id === TEMPLATE_PAGE_ID)
-    ).toBe(false);
+    expect(merged.some((page) => page.id === TEMPLATE_PAGE_ID)).toBe(false);
     expect(merged.map((page) => page.id).sort()).toEqual(["about", "home"]);
   });
 

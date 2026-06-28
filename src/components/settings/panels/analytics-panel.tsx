@@ -55,7 +55,6 @@ import { BLOCK_TYPE_LABELS } from "@/lib/pages/content-stats.ts";
 import { buildContentTimeline } from "@/lib/pages/content-timeline.ts";
 import { bucketActivityByRange } from "@/lib/pages/page-activity-analytics.ts";
 import { bucketPagesCreatedByDay } from "@/lib/pages/page-lifecycle-analytics.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
 const BOARD_META: Record<
   BoardMetric,
@@ -77,11 +76,7 @@ function storageSummaryLabel(
   return `${formatBytes(storageTotal)} stored locally in your browser`;
 }
 
-interface AnalyticsPanelProps {
-  search: SettingsSearch;
-}
-
-export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
+export function AnalyticsPanel() {
   const section = getSettingsSection("analytics");
 
   const [metric, setMetric] = useState<BoardMetric>("edits");
@@ -225,7 +220,6 @@ export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
     return (
       <SettingsPanelShell
         description="Insights into your writing, activity, and local storage."
-        search={search}
         section={section}
       >
         <Empty className="min-h-[240px] border">
@@ -259,7 +253,6 @@ export function AnalyticsPanel({ search }: AnalyticsPanelProps) {
   return (
     <SettingsPanelShell
       description="Insights into your writing, activity, and local storage."
-      search={search}
       section={section}
     >
       <ChartPaletteScope>

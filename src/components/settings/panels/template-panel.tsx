@@ -15,13 +15,8 @@ import {
   createEmptyTemplate,
   deleteTemplate,
 } from "@/lib/pages/template-store.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
-interface TemplatePanelProps {
-  search: SettingsSearch;
-}
-
-export function TemplatePanel({ search }: TemplatePanelProps) {
+export function TemplatePanel() {
   const navigate = useNavigate();
   const { clearTemplatePage, setTemplatePageId, templatePageId } =
     useTemplatePage();
@@ -50,7 +45,6 @@ export function TemplatePanel({ search }: TemplatePanelProps) {
   return (
     <SettingsPanelShell
       description="Design a page that every new page starts from."
-      search={search}
       section={section}
     >
       <SettingsItemCard>
