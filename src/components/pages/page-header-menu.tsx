@@ -6,18 +6,21 @@ import {
   IconDeviceFloppy,
   IconDots,
   IconFileExport,
+  IconFileImport,
   IconLink,
+  IconMarkdown,
   IconPhoto,
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
+import { PageHeaderMenuExportSubmenu } from "@/components/pages/page-header-menu-export-submenu.tsx";
 import { PageHeaderMenuFontSubmenu } from "@/components/pages/page-header-menu-font-submenu.tsx";
 import { PageHeaderMenuMoveSubmenu } from "@/components/pages/page-header-menu-move-submenu.tsx";
 import { PageHeaderMenuTextSizeSubmenu } from "@/components/pages/page-header-menu-text-size-submenu.tsx";
@@ -41,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
 import { usePageActions } from "@/hooks/use-page-actions.ts";
 import {
   type PageCanvasFooterActionsInput,
@@ -49,6 +53,7 @@ import {
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import { exportPageArchive } from "@/lib/content/workspace-export.ts";
+import { exportPageMarkdown } from "@/lib/markdown/export-page-markdown.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
@@ -81,6 +86,8 @@ export function PageHeaderMenu({
   const { canDelete, copyLink, deletePage, duplicate, moveTo, pages } =
     usePageActions(pageId);
   const footerActions = usePageCanvasFooterActions({ onAfterReset, pageId });
+  const importMarkdownPage = useImportMarkdownPage();
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const runExportPage = useCallback(() => {
     exportPageArchive(pageId)
@@ -95,6 +102,40 @@ export function PageHeaderMenu({
         toast.error(error instanceof Error ? error.message : "Export failed.");
       });
   }, [pageId]);
+
+  const runExportMarkdown = useCallback(() => {
+    exportPageMarkdown(pageId, pages)
+      .then(() => {
+        toast.success("Page exported as Markdown.");
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Export failed.");
+      });
+  }, [pageId, pages]);
+
+  const runImportMarkdown = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) {
+        return;
+      }
+      importMarkdownPage(file)
+        .then(() => {
+          toast.success(`Imported “${file.name}”.`);
+        })
+        .catch((error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Import failed."
+          );
+        });
+    },
+    [importMarkdownPage]
+  );
 
   const searchableEntries = useMemo((): ActionMenuEntry[] => {
     const entries: ActionMenuEntry[] = [
@@ -124,11 +165,25 @@ export function PageHeaderMenu({
         onSelect: duplicate,
       },
       {
-        id: "export-page",
-        label: "Export page",
+        id: "export-zip",
+        label: "Export page (.zip)",
         icon: <IconFileExport />,
-        keywords: ["export", "download", "backup", "zip", "save"],
+        keywords: ["export", "download", "backup", "zip", "archive", "save"],
         onSelect: runExportPage,
+      },
+      {
+        id: "export-markdown",
+        label: "Export page (.md)",
+        icon: <IconMarkdown />,
+        keywords: ["export", "markdown", "md", "download", "text"],
+        onSelect: runExportMarkdown,
+      },
+      {
+        id: "import-markdown",
+        label: "Import Markdown",
+        icon: <IconFileImport />,
+        keywords: ["import", "markdown", "md", "upload", "new page"],
+        onSelect: runImportMarkdown,
       },
       {
         id: "delete",
@@ -197,7 +252,9 @@ export function PageHeaderMenu({
     footerActions,
     headerImage,
     isNarrowViewport,
+    runExportMarkdown,
     runExportPage,
+    runImportMarkdown,
   ]);
 
   const handleDelete = () => {
@@ -213,6 +270,13 @@ export function PageHeaderMenu({
 
   return (
     <>
+      <input
+        accept=".md,.markdown,.mdown,text/markdown"
+        className="hidden"
+        onChange={handleImportFile}
+        ref={importInputRef}
+        type="file"
+      />
       <DropdownMenu onOpenChange={setOpen} open={open}>
         <DropdownMenuTrigger
           nativeButton
@@ -282,13 +346,21 @@ export function PageHeaderMenu({
                 <IconCopy />
                 Duplicate page
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
+              <PageHeaderMenuExportSubmenu
+                onExportMarkdown={() => {
+                  runAfterClose(runExportMarkdown);
+                }}
+                onExportZip={() => {
                   runAfterClose(runExportPage);
                 }}
+              />
+              <DropdownMenuItem
+                onClick={() => {
+                  runAfterClose(runImportMarkdown);
+                }}
               >
-                <IconFileExport />
-                Export page
+                <IconFileImport />
+                Import Markdown
               </DropdownMenuItem>
               <PageVersionHistorySubmenu pageId={pageId} />
               <PageHeaderMenuMoveSubmenu
