@@ -20,6 +20,7 @@ import {
   TableAddRowButton,
 } from "@/components/blocks/types/table/table-controls.tsx";
 import { TableRowHandle } from "@/components/blocks/types/table/table-row-handle.tsx";
+import { TableRowResizeZone } from "@/components/blocks/types/table/table-row-resize-zone.tsx";
 import { TableStructureDropIndicators } from "@/components/blocks/types/table/table-structure-drop-indicators.tsx";
 import {
   getTableCellStructureSelectionClassName,
@@ -27,11 +28,11 @@ import {
   type TableStructureSelection,
 } from "@/components/blocks/types/table/table-structure-selection.ts";
 import { useTableColumnResize } from "@/components/blocks/types/table/use-table-column-resize.ts";
+import { useTableRowResize } from "@/components/blocks/types/table/use-table-row-resize.ts";
 import {
   useCanvasEditorContext,
   useCanvasFocus,
 } from "@/components/canvas/canvas-editor-context.tsx";
-import { RowGutter } from "@/components/canvas/row-gutter.tsx";
 import {
   DndSurface,
   type DndSurfaceConfig,
@@ -46,11 +47,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table.tsx";
-import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { BlockContainerProps } from "@/lib/canvas/block-spec.types.ts";
-import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import {
   deriveTableGrid,
+  type TableGrid,
   tableColumnWidthsTotalPx,
 } from "@/lib/canvas/table-layout.ts";
 import { collectTableColumnDropRects } from "@/lib/dnd/collect-table-column-rects.ts";
@@ -85,42 +85,8 @@ interface TableColumnDropTarget {
   tableId: string;
 }
 
-/** Matches {@link CANVAS_GUTTER_REVEAL_DELAY_MS} in canvas-row-shell. */
-const TABLE_GUTTER_REVEAL_DELAY_MS = 300;
 const TABLE_HEADER_CELL_CLASSNAME =
   "relative border border-border bg-muted/40 font-medium";
-
-function TableBlockGutter({
-  revealed,
-  row,
-}: {
-  revealed: boolean;
-  row: BlockContainerProps["row"];
-}) {
-  const { insertAfter, insertAtScopeStart, insertBefore } =
-    useCanvasEditorContext();
-
-  return (
-    <div
-      className={cn(
-        "pointer-events-auto w-auto shrink-0 pt-3 [&_.canvas-block-gutter]:opacity-0",
-        revealed && "[&_.canvas-block-gutter]:opacity-100"
-      )}
-      data-table-block-gutter
-    >
-      <RowGutter
-        onInsert={(edge) => {
-          handleContainerGutterInsert(row, edge, {
-            insertAfter,
-            insertAtScopeStart,
-            insertBefore,
-          });
-        }}
-        row={row}
-      />
-    </div>
-  );
-}
 
 function resolveTableColumnDropTarget(args: {
   pointer: { x: number; y: number };
@@ -277,14 +243,14 @@ function tableLayoutBleedClassNames(options: {
     };
   }
 
+  // The left edge stays aligned with page content (pl-12 cancels the -ml-12
+  // pull); only the right edge bleeds out to the panel so wide tables get more
+  // room. Edit and view differ only in the inner flow direction.
   return {
-    outerClassName:
-      mode === "edit"
-        ? "w-full md:-mx-12 md:w-[calc(100%+6rem)]"
-        : "w-full md:-mr-12 md:w-[calc(100%+3rem)]",
-    scrollPaddingClassName: mode === "edit" ? "px-12" : "pl-12",
+    outerClassName: "w-full md:-mr-12 md:w-[calc(100%+3rem)]",
+    scrollPaddingClassName: "pl-12",
     innerFlexClassName:
-      mode === "edit" ? "-mx-12 items-start gap-0" : "-ml-12 flex-col gap-0.5",
+      mode === "edit" ? "-ml-12 items-start gap-0" : "-ml-12 flex-col gap-0.5",
   };
 }
 
@@ -292,11 +258,18 @@ export function TableView({ row, mode }: BlockContainerProps) {
   const grid = deriveTableGrid(row);
   const { useFullPanelWidth } = usePageContentLayout();
   const focus = useCanvasFocus();
-  const { clearFocus } = useCanvasEditorContext();
+  const { clearFocus, dispatch } = useCanvasEditorContext();
   const { startResize, liveWidths } = useTableColumnResize({
     tableId: grid?.tableId ?? "",
     columnWidths: grid?.columnWidths ?? [1],
   });
+  const { startRowResize, liveRowHeight } = useTableRowResize();
+  const resetRowHeight = useCallback(
+    (tableRowId: string) => {
+      dispatch({ type: "table.resetRowHeight", tableRowId });
+    },
+    [dispatch]
+  );
   const [structureSelection, setStructureSelection] =
     useState<TableStructureSelection | null>(null);
   const clearStructureSelection = useCallback(() => {
@@ -353,23 +326,6 @@ export function TableView({ row, mode }: BlockContainerProps) {
     () => new Set(grid?.rows.map((tableRow) => tableRow.rowId) ?? []),
     [grid?.rows]
   );
-  const gutterOpenTimeout = useTimeout();
-  const [gutterRevealed, setGutterRevealed] = useState(false);
-
-  const handleTablePointerEnter = () => {
-    if (mode !== "edit") {
-      return;
-    }
-    gutterOpenTimeout.clear();
-    gutterOpenTimeout.start(TABLE_GUTTER_REVEAL_DELAY_MS, () => {
-      setGutterRevealed(true);
-    });
-  };
-
-  const handleTablePointerLeave = () => {
-    gutterOpenTimeout.clear();
-    setGutterRevealed(false);
-  };
 
   const tableBlock = row.effectiveBlock;
   if (!grid || tableBlock.type !== "table") {
@@ -381,6 +337,10 @@ export function TableView({ row, mode }: BlockContainerProps) {
   const lastRowId =
     grid.rows.at(-1)?.rowId ?? grid.rows[0]?.rowId ?? grid.tableId;
   const rowCount = grid.rows.length;
+
+  /** Live drag height overrides the persisted height for the row being resized. */
+  const resolveRowHeight = (tableRowId: string, persisted?: number) =>
+    liveRowHeight?.tableRowId === tableRowId ? liveRowHeight.height : persisted;
 
   const cellSelectionClassName = (
     rowIndex: number,
@@ -411,8 +371,6 @@ export function TableView({ row, mode }: BlockContainerProps) {
       )}
       data-table-id={grid.tableId}
       data-table-layout
-      onPointerEnter={handleTablePointerEnter}
-      onPointerLeave={handleTablePointerLeave}
     >
       <TableColumnDropZone>
         <ScrollArea className="w-full min-w-0 [&_[data-orientation=vertical]]:hidden">
@@ -423,11 +381,8 @@ export function TableView({ row, mode }: BlockContainerProps) {
             )}
           >
             <div className={cn("flex w-max", tableBleed.innerFlexClassName)}>
-              {mode === "edit" ? (
-                <TableBlockGutter revealed={gutterRevealed} row={row} />
-              ) : null}
               <div className="flex w-max flex-col gap-0.5">
-                <div className="relative pt-3 pr-8 pl-3">
+                <div className="relative pt-3 pr-8 pl-1.5" data-table-frame>
                   <div className="relative isolate">
                     <table
                       className={cn(
@@ -449,7 +404,16 @@ export function TableView({ row, mode }: BlockContainerProps) {
                       </colgroup>
                       {grid.hasHeaderRow && grid.rows[0] ? (
                         <TableHeader>
-                          <TableRow className="hover:!bg-transparent">
+                          <TableRow
+                            className="hover:!bg-transparent"
+                            data-table-row-id={grid.rows[0].rowId}
+                            style={{
+                              height: resolveRowHeight(
+                                grid.rows[0].rowId,
+                                grid.rows[0].height
+                              ),
+                            }}
+                          >
                             {grid.rows[0].cells.map((cell, columnIndex) => {
                               const headerRowId = grid.rows[0].rowId;
                               const selectionClassName = cellSelectionClassName(
@@ -486,6 +450,14 @@ export function TableView({ row, mode }: BlockContainerProps) {
                                       tableId={grid.tableId}
                                     />
                                   ) : null}
+                                  {mode === "edit" && columnIndex === 0 ? (
+                                    <TableRowResizeZone
+                                      onReset={resetRowHeight}
+                                      onResizeStart={startRowResize}
+                                      tableRowId={headerRowId}
+                                      tableWidthPx={tableWidthPx}
+                                    />
+                                  ) : null}
                                   {mode === "edit" ? (
                                     <TableCellEditor
                                       cellRow={findCellRow(row, cell.cellId)}
@@ -520,80 +492,41 @@ export function TableView({ row, mode }: BlockContainerProps) {
                                 data-table-last-row={isLastRow ? "" : undefined}
                                 data-table-row-id={tableRow.rowId}
                                 key={tableRow.rowId}
+                                style={{
+                                  height: resolveRowHeight(
+                                    tableRow.rowId,
+                                    tableRow.height
+                                  ),
+                                }}
                               >
-                                {tableRow.cells.map((cell, columnIndex) => {
-                                  const selectionClassName =
-                                    cellSelectionClassName(
+                                {tableRow.cells.map((cell, columnIndex) => (
+                                  <TableBodyCell
+                                    cellRow={findCellRow(row, cell.cellId)}
+                                    cellText={cell.text}
+                                    clearFocus={clearFocus}
+                                    columnIndex={columnIndex}
+                                    focus={focus}
+                                    grid={grid}
+                                    isColumnHandleRow={isColumnHandleRow}
+                                    key={cell.cellId}
+                                    mode={mode}
+                                    onColumnMenuOpenChange={
+                                      handleColumnStructureMenuOpenChange
+                                    }
+                                    onRowMenuOpenChange={
+                                      handleRowStructureMenuOpenChange
+                                    }
+                                    onRowResizeReset={resetRowHeight}
+                                    onRowResizeStart={startRowResize}
+                                    selectionClassName={cellSelectionClassName(
                                       rowIndex,
                                       columnIndex,
                                       tableRow.rowId
-                                    );
-                                  const isHeaderColumnCell =
-                                    grid.hasHeaderColumn && columnIndex === 0;
-
-                                  return (
-                                    <TableCell
-                                      className={cn(
-                                        "relative border border-border align-top",
-                                        isHeaderColumnCell &&
-                                          TABLE_HEADER_CELL_CLASSNAME,
-                                        selectionClassName,
-                                        selectionClassName && "z-[1]"
-                                      )}
-                                      data-table-column-drag-id={
-                                        isColumnHandleRow
-                                          ? `${grid.tableId}:${columnIndex}`
-                                          : undefined
-                                      }
-                                      data-table-column-index={columnIndex}
-                                      data-table-last-column={
-                                        columnIndex === grid.columnCount - 1
-                                          ? ""
-                                          : undefined
-                                      }
-                                      key={cell.cellId}
-                                    >
-                                      {mode === "edit" && columnIndex === 0 ? (
-                                        <TableRowHandle
-                                          onStructureMenuOpenChange={(open) => {
-                                            handleRowStructureMenuOpenChange(
-                                              tableRow.rowId,
-                                              open
-                                            );
-                                          }}
-                                          rowId={tableRow.rowId}
-                                          tableId={grid.tableId}
-                                        />
-                                      ) : null}
-                                      {mode === "edit" && isColumnHandleRow ? (
-                                        <TableColumnHandle
-                                          columnIndex={columnIndex}
-                                          onStructureMenuOpenChange={(open) => {
-                                            handleColumnStructureMenuOpenChange(
-                                              columnIndex,
-                                              open
-                                            );
-                                          }}
-                                          tableId={grid.tableId}
-                                        />
-                                      ) : null}
-                                      {mode === "edit" ? (
-                                        <TableCellEditor
-                                          cellRow={findCellRow(
-                                            row,
-                                            cell.cellId
-                                          )}
-                                          clearFocus={clearFocus}
-                                          focus={focus}
-                                        />
-                                      ) : (
-                                        <TableCellView
-                                          props={{ text: cell.text }}
-                                        />
-                                      )}
-                                    </TableCell>
-                                  );
-                                })}
+                                    )}
+                                    tableRowId={tableRow.rowId}
+                                    tableWidthPx={tableWidthPx}
+                                  />
+                                ))}
                               </TableRow>
                             );
                           })}
@@ -630,7 +563,7 @@ export function TableView({ row, mode }: BlockContainerProps) {
                 </div>
                 {mode === "edit" ? (
                   <div
-                    className="group/add-row-host pr-3 pl-3"
+                    className="group/add-row-host pr-3 pl-1.5"
                     data-table-add-row-host
                   >
                     <div style={{ width: tableWidthPx }}>
@@ -649,6 +582,100 @@ export function TableView({ row, mode }: BlockContainerProps) {
         </ScrollArea>
       </TableColumnDropZone>
     </TableColumnDnD>
+  );
+}
+
+interface TableBodyCellProps {
+  cellRow: BlockContainerProps["row"] | undefined;
+  cellText: string;
+  clearFocus: () => void;
+  columnIndex: number;
+  focus: ReturnType<typeof useCanvasFocus>;
+  grid: TableGrid;
+  isColumnHandleRow: boolean;
+  mode: BlockContainerProps["mode"];
+  onColumnMenuOpenChange: (columnIndex: number, open: boolean) => void;
+  onRowMenuOpenChange: (tableRowId: string, open: boolean) => void;
+  onRowResizeReset: ComponentProps<typeof TableRowResizeZone>["onReset"];
+  onRowResizeStart: ComponentProps<typeof TableRowResizeZone>["onResizeStart"];
+  selectionClassName: string | undefined;
+  tableRowId: string;
+  tableWidthPx: number;
+}
+
+function TableBodyCell({
+  cellRow,
+  cellText,
+  clearFocus,
+  columnIndex,
+  focus,
+  grid,
+  isColumnHandleRow,
+  mode,
+  onColumnMenuOpenChange,
+  onRowMenuOpenChange,
+  onRowResizeReset,
+  onRowResizeStart,
+  selectionClassName,
+  tableRowId,
+  tableWidthPx,
+}: TableBodyCellProps) {
+  const isHeaderColumnCell = grid.hasHeaderColumn && columnIndex === 0;
+  const isFirstColumn = columnIndex === 0;
+  const editable = mode === "edit";
+
+  return (
+    <TableCell
+      className={cn(
+        "relative border border-border align-top",
+        isHeaderColumnCell && TABLE_HEADER_CELL_CLASSNAME,
+        selectionClassName,
+        selectionClassName && "z-[1]"
+      )}
+      data-table-column-drag-id={
+        isColumnHandleRow ? `${grid.tableId}:${columnIndex}` : undefined
+      }
+      data-table-column-index={columnIndex}
+      data-table-last-column={
+        columnIndex === grid.columnCount - 1 ? "" : undefined
+      }
+    >
+      {editable && isFirstColumn ? (
+        <>
+          <TableRowHandle
+            onStructureMenuOpenChange={(open) => {
+              onRowMenuOpenChange(tableRowId, open);
+            }}
+            rowId={tableRowId}
+            tableId={grid.tableId}
+          />
+          <TableRowResizeZone
+            onReset={onRowResizeReset}
+            onResizeStart={onRowResizeStart}
+            tableRowId={tableRowId}
+            tableWidthPx={tableWidthPx}
+          />
+        </>
+      ) : null}
+      {editable && isColumnHandleRow ? (
+        <TableColumnHandle
+          columnIndex={columnIndex}
+          onStructureMenuOpenChange={(open) => {
+            onColumnMenuOpenChange(columnIndex, open);
+          }}
+          tableId={grid.tableId}
+        />
+      ) : null}
+      {editable ? (
+        <TableCellEditor
+          cellRow={cellRow}
+          clearFocus={clearFocus}
+          focus={focus}
+        />
+      ) : (
+        <TableCellView props={{ text: cellText }} />
+      )}
+    </TableCell>
   );
 }
 

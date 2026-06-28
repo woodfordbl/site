@@ -30,6 +30,23 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     expect(resolveCanvasRowDragPreviewNode("row-1")).toBe(content);
   });
 
+  it("prefers the table grid for a table block so the preview keeps its size", () => {
+    const shell = document.createElement("div");
+    shell.setAttribute("data-canvas-row-id", "table-1");
+    const content = document.createElement("div");
+    content.setAttribute("data-canvas-row-content", "");
+    const layout = document.createElement("div");
+    layout.setAttribute("data-table-layout", "");
+    layout.setAttribute("data-table-id", "table-1");
+    const table = document.createElement("table");
+    layout.appendChild(table);
+    content.appendChild(layout);
+    shell.appendChild(content);
+    document.body.appendChild(shell);
+
+    expect(resolveCanvasRowDragPreviewNode("table-1")).toBe(table);
+  });
+
   it("falls back to a table row element", () => {
     const row = document.createElement("tr");
     row.setAttribute("data-table-row-id", "row-2");
