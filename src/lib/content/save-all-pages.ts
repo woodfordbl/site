@@ -10,6 +10,7 @@ import { preparePageDocumentForAuthorSave } from "@/lib/content/prepare-page-doc
 import { saveMediaAssets } from "@/lib/content/save-media-assets.ts";
 import { savePage } from "@/lib/content/save-page.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
   isLocallyDeletedPage,
   type LocalPage,
@@ -53,7 +54,7 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
  */
 export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
   const pages = localPagesCollection.toArray.filter(
-    (page) => !isLocallyDeletedPage(page)
+    (page) => !(isLocallyDeletedPage(page) || isTemplatePageId(page.id))
   );
 
   const failed: SaveAllPagesResult["failed"] = [];

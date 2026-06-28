@@ -14,7 +14,6 @@ export function getBlockText(block: Block): string {
     case "quote":
     case "tableCell":
     case "checklistItem":
-    case "callout":
     case "code":
       return block.props.text;
     case "embed":
@@ -23,6 +22,7 @@ export function getBlockText(block: Block): string {
       return block.props.alt ?? "";
     case "list":
     case "checklist":
+    case "callout":
     case "columns":
     case "column":
     case "tabs":

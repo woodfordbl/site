@@ -20,7 +20,6 @@ import {
   PageListDragPreview,
   type PageListDragPreviewState,
 } from "@/components/pages/page-list-drag-preview.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.tsx";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
@@ -130,18 +129,9 @@ function PageListContent({
 }) {
   const activePage = useActivePageRef();
   const dispatch = usePageDispatch(pages);
-  const { templatePageId } = useTemplatePage();
-  // The template page is configured in Settings and hidden from the sidebar; it
-  // stays in `pages` so dispatch/reposition still resolve it normally.
-  const tree = useMemo(
-    () =>
-      buildPageTree(
-        templatePageId
-          ? pages.filter((page) => page.id !== templatePageId)
-          : pages
-      ),
-    [pages, templatePageId]
-  );
+  // The template snapshot is excluded from `pages` upstream (mergePageList), so
+  // the sidebar tree never needs to filter it here.
+  const tree = useMemo(() => buildPageTree(pages), [pages]);
   // Always seed from the SSR-known cookie prop so the server and first client
   // render match exactly; the live cookie is re-read on mount for cross-tab sync.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
@@ -300,7 +290,9 @@ function PageListContent({
         repositionFromDropTarget(sourceId, target),
       onDragStart: ({ sourceId, pointer }) => {
         const page = findPageById(pages, sourceId);
-        const rowEl = document.querySelector(
+        // Scope to this nav so a favorited page's mirror row (rendered in the
+        // sidebar Favorites section with the same id) can't be matched instead.
+        const rowEl = navRef.current?.querySelector(
           `[${PAGE_LIST_ROW_ATTRIBUTE}="${sourceId}"]`
         );
         const rowRect =
