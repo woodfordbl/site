@@ -16,6 +16,7 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  useChartGradientDither,
 } from "@/components/ui/chart.tsx";
 import { formatBytes, formatNumber } from "@/lib/format.ts";
 import type { ContentTimelineDay } from "@/lib/pages/content-timeline.ts";
@@ -54,6 +55,187 @@ function EmptyBoard({ message }: { message: string }) {
     <div className="flex h-[260px] items-center justify-center text-muted-foreground text-sm">
       {message}
     </div>
+  );
+}
+
+function PagesBoard({ data }: { data: PageCreationDay[] }) {
+  const dither = useChartGradientDither(pagesConfig);
+
+  return (
+    <ChartContainer
+      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
+      config={pagesConfig}
+      ref={dither.ref}
+    >
+      <ComposedChart accessibilityLayer data={data}>
+        {dither.defs}
+        <CartesianGrid vertical={false} />
+        <XAxis
+          axisLine={false}
+          dataKey="date"
+          interval="preserveStartEnd"
+          minTickGap={24}
+          tickLine={false}
+          tickMargin={8}
+        />
+        <YAxis
+          allowDecimals={false}
+          axisLine={false}
+          tickLine={false}
+          width={sharedAxes.left.width}
+          yAxisId="left"
+        />
+        <YAxis
+          allowDecimals={false}
+          axisLine={false}
+          orientation="right"
+          tickLine={false}
+          width={sharedAxes.right.width}
+          yAxisId="right"
+        />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Bar
+          dataKey="created"
+          fill={dither.fill("created")}
+          radius={[4, 4, 0, 0]}
+          yAxisId="left"
+        />
+        <Line
+          dataKey="cumulative"
+          dot={false}
+          stroke="var(--color-cumulative)"
+          strokeWidth={2}
+          type="monotone"
+          yAxisId="right"
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+      </ComposedChart>
+    </ChartContainer>
+  );
+}
+
+function WordsBoard({ data }: { data: ContentTimelineDay[] }) {
+  const dither = useChartGradientDither(wordsConfig);
+
+  return (
+    <ChartContainer
+      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
+      config={wordsConfig}
+      ref={dither.ref}
+    >
+      <ComposedChart accessibilityLayer data={data}>
+        {dither.defs}
+        <CartesianGrid vertical={false} />
+        <XAxis
+          axisLine={false}
+          dataKey="date"
+          interval="preserveStartEnd"
+          minTickGap={24}
+          tickLine={false}
+          tickMargin={8}
+        />
+        <YAxis
+          axisLine={false}
+          tickFormatter={(value: number) => formatNumber(value)}
+          tickLine={false}
+          width={sharedAxes.left.width}
+          yAxisId="left"
+        />
+        <YAxis
+          axisLine={false}
+          orientation="right"
+          tickFormatter={(value: number) => formatNumber(value)}
+          tickLine={false}
+          width={sharedAxes.right.width}
+          yAxisId="right"
+        />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Bar
+          dataKey="wordsAdded"
+          fill={dither.fill("wordsAdded")}
+          radius={[4, 4, 0, 0]}
+          yAxisId="left"
+        />
+        <Line
+          dataKey="cumulativeWords"
+          dot={false}
+          stroke="var(--color-cumulativeWords)"
+          strokeWidth={2}
+          type="monotone"
+          yAxisId="right"
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+      </ComposedChart>
+    </ChartContainer>
+  );
+}
+
+function EditsBoard({ data }: { data: ActivityDayDetail[] }) {
+  const dither = useChartGradientDither(editsConfig);
+
+  return (
+    <ChartContainer
+      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
+      config={editsConfig}
+      ref={dither.ref}
+    >
+      <ComposedChart accessibilityLayer data={data}>
+        {dither.defs}
+        <CartesianGrid vertical={false} />
+        <XAxis
+          axisLine={false}
+          dataKey="date"
+          interval="preserveStartEnd"
+          minTickGap={24}
+          tickLine={false}
+          tickMargin={8}
+        />
+        <YAxis
+          allowDecimals={false}
+          axisLine={false}
+          tickLine={false}
+          width={sharedAxes.left.width}
+          yAxisId="left"
+        />
+        <YAxis
+          allowDecimals={false}
+          axisLine={false}
+          orientation="right"
+          tickLine={false}
+          width={sharedAxes.right.width}
+          yAxisId="right"
+        />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Bar
+          dataKey="content"
+          fill={dither.fill("content")}
+          stackId="activity"
+          yAxisId="left"
+        />
+        <Bar
+          dataKey="structure"
+          fill={dither.fill("structure")}
+          stackId="activity"
+          yAxisId="left"
+        />
+        <Bar
+          dataKey="lifecycle"
+          fill={dither.fill("lifecycle")}
+          radius={[4, 4, 0, 0]}
+          stackId="activity"
+          yAxisId="left"
+        />
+        <Line
+          dataKey="activePages"
+          dot={false}
+          stroke="var(--color-activePages)"
+          strokeWidth={2}
+          type="monotone"
+          yAxisId="right"
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+      </ComposedChart>
+    </ChartContainer>
   );
 }
 
@@ -116,55 +298,7 @@ export function MetricBoard({
     if (!hasData) {
       return <EmptyBoard message="No pages created in this period." />;
     }
-    return (
-      <ChartContainer
-        className={`aspect-auto ${BOARD_HEIGHT} w-full`}
-        config={pagesConfig}
-      >
-        <ComposedChart accessibilityLayer data={pages}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            axisLine={false}
-            dataKey="date"
-            interval="preserveStartEnd"
-            minTickGap={24}
-            tickLine={false}
-            tickMargin={8}
-          />
-          <YAxis
-            allowDecimals={false}
-            axisLine={false}
-            tickLine={false}
-            width={sharedAxes.left.width}
-            yAxisId="left"
-          />
-          <YAxis
-            allowDecimals={false}
-            axisLine={false}
-            orientation="right"
-            tickLine={false}
-            width={sharedAxes.right.width}
-            yAxisId="right"
-          />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar
-            dataKey="created"
-            fill="var(--color-created)"
-            radius={[4, 4, 0, 0]}
-            yAxisId="left"
-          />
-          <Line
-            dataKey="cumulative"
-            dot={false}
-            stroke="var(--color-cumulative)"
-            strokeWidth={2}
-            type="monotone"
-            yAxisId="right"
-          />
-          <ChartLegend content={<ChartLegendContent />} />
-        </ComposedChart>
-      </ChartContainer>
-    );
+    return <PagesBoard data={pages} />;
   }
 
   if (metric === "words") {
@@ -179,55 +313,7 @@ export function MetricBoard({
     if (!hasData) {
       return <EmptyBoard message="No word activity in this period." />;
     }
-    return (
-      <ChartContainer
-        className={`aspect-auto ${BOARD_HEIGHT} w-full`}
-        config={wordsConfig}
-      >
-        <ComposedChart accessibilityLayer data={words}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            axisLine={false}
-            dataKey="date"
-            interval="preserveStartEnd"
-            minTickGap={24}
-            tickLine={false}
-            tickMargin={8}
-          />
-          <YAxis
-            axisLine={false}
-            tickFormatter={(value: number) => formatNumber(value)}
-            tickLine={false}
-            width={sharedAxes.left.width}
-            yAxisId="left"
-          />
-          <YAxis
-            axisLine={false}
-            orientation="right"
-            tickFormatter={(value: number) => formatNumber(value)}
-            tickLine={false}
-            width={sharedAxes.right.width}
-            yAxisId="right"
-          />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar
-            dataKey="wordsAdded"
-            fill="var(--color-wordsAdded)"
-            radius={[4, 4, 0, 0]}
-            yAxisId="left"
-          />
-          <Line
-            dataKey="cumulativeWords"
-            dot={false}
-            stroke="var(--color-cumulativeWords)"
-            strokeWidth={2}
-            type="monotone"
-            yAxisId="right"
-          />
-          <ChartLegend content={<ChartLegendContent />} />
-        </ComposedChart>
-      </ChartContainer>
-    );
+    return <WordsBoard data={words} />;
   }
 
   // metric === "edits"
@@ -235,66 +321,5 @@ export function MetricBoard({
   if (!hasData) {
     return <EmptyBoard message="No tracked edits in this period." />;
   }
-  return (
-    <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full`}
-      config={editsConfig}
-    >
-      <ComposedChart accessibilityLayer data={edits}>
-        <CartesianGrid vertical={false} />
-        <XAxis
-          axisLine={false}
-          dataKey="date"
-          interval="preserveStartEnd"
-          minTickGap={24}
-          tickLine={false}
-          tickMargin={8}
-        />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          tickLine={false}
-          width={sharedAxes.left.width}
-          yAxisId="left"
-        />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          orientation="right"
-          tickLine={false}
-          width={sharedAxes.right.width}
-          yAxisId="right"
-        />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar
-          dataKey="content"
-          fill="var(--color-content)"
-          stackId="activity"
-          yAxisId="left"
-        />
-        <Bar
-          dataKey="structure"
-          fill="var(--color-structure)"
-          stackId="activity"
-          yAxisId="left"
-        />
-        <Bar
-          dataKey="lifecycle"
-          fill="var(--color-lifecycle)"
-          radius={[4, 4, 0, 0]}
-          stackId="activity"
-          yAxisId="left"
-        />
-        <Line
-          dataKey="activePages"
-          dot={false}
-          stroke="var(--color-activePages)"
-          strokeWidth={2}
-          type="monotone"
-          yAxisId="right"
-        />
-        <ChartLegend content={<ChartLegendContent />} />
-      </ComposedChart>
-    </ChartContainer>
-  );
+  return <EditsBoard data={edits} />;
 }

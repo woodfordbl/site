@@ -35,3 +35,21 @@ export const defaultChartPaletteId: ChartPaletteId = "colorful";
 export function chartPaletteIds(): readonly ChartPaletteId[] {
   return CHART_PALETTE_IDS;
 }
+
+/**
+ * Workspace-wide dither toggle for charts:
+ * - `off`: solid fills (default),
+ * - `on`: dithered everywhere,
+ * - `dark`: dithered only in dark mode.
+ */
+export const CHART_DITHER_MODES = ["off", "on", "dark"] as const;
+
+export type ChartDitherMode = (typeof CHART_DITHER_MODES)[number];
+
+export const defaultChartDitherMode: ChartDitherMode = "off";
+
+export const CHART_DITHER_MODE_LABELS: Record<ChartDitherMode, string> = {
+  off: "Off",
+  on: "Always on",
+  dark: "Dark mode only",
+};
