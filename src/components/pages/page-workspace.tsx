@@ -228,7 +228,7 @@ function PageWorkspaceBody({
   const canvasContent = (
     <div
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col",
+        "flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none",
         typographyClassName
       )}
       {...typographyDataProps}
@@ -278,11 +278,11 @@ function PageWorkspaceBody({
           seed={titleSeed}
           serverPage={serverPage}
         />
-        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:h-auto md:h-full">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none">
             {showSidebarRail ? <PageSidebarRail /> : null}
             <div
-              className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-border bg-background max-md:border-0 md:rounded-xl"
+              className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
               data-page-main-panel=""
             >
               {previewDescriptor ? (
@@ -298,7 +298,7 @@ function PageWorkspaceBody({
                     region. Mobile, or desktop with a cover: it lives inside the
                     scroll region (as headerSlot). */}
                   {isNarrowViewport || hasCover ? null : header}
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden">
                     {canvasContent}
                   </div>
                 </>

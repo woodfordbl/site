@@ -41,6 +41,17 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Rest iOS Safari bar tint per theme — the `--background` token as hex (see
+ * styles.css). Rendered as `prefers-color-scheme` media metas in __root so iOS
+ * picks the right one natively; not set from JS (iOS doesn't reliably re-read a
+ * JS-updated `theme-color`, and a JS write would clobber the media variants).
+ */
+export const THEME_COLOR_BY_APPEARANCE = {
+  dark: "#181611",
+  light: "#f9f9f5",
+} as const;
+
 function applyResolvedTheme(resolvedTheme: ResolvedTheme): void {
   document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
 }

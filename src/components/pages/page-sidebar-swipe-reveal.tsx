@@ -48,6 +48,10 @@ export function PageSidebarSwipeReveal({
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_WIDTH_FALLBACK_PX);
   // null = not dragging (CSS transition owns the transform); a number = live drag.
   const [dragOffset, setDragOffset] = useState<number | null>(null);
+  // Whether to paint the fixed sidebar layer — true while revealing/open and
+  // bridged through the close slide; false once fully closed (see effect below).
+  const [isClosingReveal, setIsClosingReveal] = useState(false);
+  const wasRevealedRef = useRef(false);
 
   // Gesture bookkeeping (refs so pointer handlers stay referentially stable).
   const originRef = useRef<{ x: number; y: number } | null>(null);
@@ -56,10 +60,14 @@ export function PageSidebarSwipeReveal({
   const didDragRef = useRef(false);
   const captureElRef = useRef<HTMLElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  // The nav holds the actual sidebar width; the layer around it is a full-width
+  // bg-sidebar backdrop, so we measure the nav (not the layer) for the slide.
+  const navRef = useRef<HTMLDivElement>(null);
 
-  // Measure the real sidebar width so the drag tracks the finger 1:1.
+  // Measure the real nav width so the drag tracks the finger 1:1 and the content
+  // slides exactly the sidebar's width.
   useEffect(() => {
-    const node = sidebarRef.current;
+    const node = navRef.current;
     if (!node) {
       return;
     }
@@ -309,15 +317,46 @@ export function PageSidebarSwipeReveal({
   const translateX = dragOffset ?? (openMobile ? sidebarWidth : 0);
   const isDragging = dragOffset !== null;
   const isRevealed = translateX > 0;
+  // `isRevealed` flips to false the instant a close commits (translateX → 0 in
+  // state), while the transform keeps animating home for ~200ms. `revealActive`
+  // stays true through that close slide (bridged by `isClosingReveal`, set in the
+  // effect below) so the rounding, ring, and scrim animate out *with* the slide
+  // instead of snapping off at frame 0.
+  const revealActive = isRevealed || isClosingReveal;
+
+  // The content layer is the document-tall page; plain `border-radius` would put
+  // its corners at the document top/bottom (off-screen mid-scroll). So clip it to
+  // the visible viewport band with rounded corners via `clip-path`. The content
+  // layer stays in normal flow (so the document keeps its scroll height — going
+  // `position: fixed` collapses it and resets scrollY). Scroll is frozen during
+  // the reveal (the gesture locks to the horizontal axis; an open sidebar locks
+  // the document), so `window.scrollY` is a stable constant.
+  //
+  // CRUCIAL: the dim scrim and the ring are rounded with `border-radius`, NOT
+  // their own `clip-path`. iOS WebKit drops the corner radius of a `clip-path:
+  // inset(round)` on an *opacity-composited* layer (older Safari) — that was the
+  // square-corner artifact (the scrim's square corner punched through). The
+  // content layer's own clip-path rounds the (non-composited) page content fine.
+  let revealClipPath: string | undefined;
+  let viewportHeight: number | undefined;
+  if (revealActive && typeof window !== "undefined") {
+    const top = window.scrollY;
+    viewportHeight = window.innerHeight;
+    revealClipPath = `inset(${top}px 0px max(0px, calc(100% - ${top + viewportHeight}px)) 0px round var(--radius-3xl))`;
+  }
+
   const overlayProgress = Math.min(translateX / sidebarWidth, 1);
   // Front-load the sidebar-color fade (ease-out quadratic) so the bars/safe
   // areas read as sidebar-gray early in the swipe rather than only near the end.
   const revealProgress = overlayProgress * (2 - overlayProgress);
 
-  // Drive the page background (the surface iOS Safari samples for its top/bottom
-  // bar tint) toward the sidebar color as the sidebar is revealed, so the bars
-  // fade to sidebar-gray with the swipe instead of being permanently gray. The
-  // dragging flag drops the CSS transition so the tint tracks the finger 1:1.
+  // Drive the page background (the surface iOS Safari samples for the areas
+  // *behind* its top/bottom bars, via the `<html>` color-mix in styles.css)
+  // toward the sidebar color as the sidebar is revealed, so the insets fade to
+  // sidebar-gray with the swipe instead of staying bg-background. The dragging
+  // flag drops the CSS transition so the tint tracks the finger 1:1. (The top-bar
+  // `theme-color` tint itself is owned by the `prefers-color-scheme` metas in
+  // __root — iOS doesn't reliably honor a JS-updated `theme-color`.)
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--sidebar-reveal", String(revealProgress));
@@ -328,92 +367,153 @@ export function PageSidebarSwipeReveal({
     };
   }, [revealProgress, isDragging]);
 
+  // While the sidebar is open the document (the mobile scroller) must not scroll
+  // behind it — keeps the fixed sidebar / safe-area layers aligned and matches a
+  // native drawer. This component only renders on narrow viewports, so locking
+  // the document scroller (`<html>`) is mobile-only; on desktop the shell is
+  // already `overflow-hidden`, making this a no-op.
+  useEffect(() => {
+    if (!openMobile) {
+      return;
+    }
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = prevOverflow;
+    };
+  }, [openMobile]);
+
+  // The sidebar layer is `position: fixed` and full viewport height. When fully
+  // closed it would stay painted behind the content — and on iOS, after a scroll,
+  // its bg-sidebar bleeds through the safe-area insets / overscroll that the
+  // scrolled (document-flow) content doesn't cover (gray strips above/below the
+  // content). So paint it only while it's actually being revealed. Bridge the
+  // ~200ms close slide via `isClosingReveal` so it doesn't pop away mid-animation.
+  useEffect(() => {
+    if (isRevealed) {
+      wasRevealedRef.current = true;
+      setIsClosingReveal(false);
+      return;
+    }
+    if (!wasRevealedRef.current) {
+      return;
+    }
+    wasRevealedRef.current = false;
+    setIsClosingReveal(true);
+    const timer = window.setTimeout(() => setIsClosingReveal(false), 240);
+    return () => window.clearTimeout(timer);
+  }, [isRevealed]);
+
   return (
-    <div className="relative min-h-0 w-full flex-1 overflow-hidden bg-sidebar">
-      {/* Sidebar layer — fixed behind the content, revealed as content slides. */}
+    <div className="relative w-full bg-background max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
+      {/* Sidebar layer — a FULL-WIDTH bg-sidebar backdrop fixed behind the
+          content, revealed as the content slides. Full width (not just the nav
+          width) so the sliding content always sits on bg-sidebar: any mismatch
+          between the slide distance and the nav width — or the card's rounded
+          corners — reveals bg-sidebar, never the bg-background swipe-outer. The
+          nav itself is constrained to its real width by `navRef` (which also
+          drives the slide distance). `visibility: hidden` when fully closed (not
+          display:none — keep `navRef` measurable) so the fixed bg-sidebar can't
+          bleed behind the content on iOS. */}
       <div
         aria-hidden={!openMobile}
         aria-label="Sidebar"
         aria-modal={openMobile}
-        className="absolute inset-y-0 left-0 z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none"
+        className="z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
         inert={!openMobile}
         ref={sidebarRef}
         role="dialog"
-        style={{ width: SIDEBAR_WIDTH_MOBILE }}
+        style={{ visibility: revealActive ? undefined : "hidden" }}
         tabIndex={-1}
       >
-        {sidebar}
+        <div
+          className="flex h-full flex-col"
+          ref={navRef}
+          style={{ width: SIDEBAR_WIDTH_MOBILE }}
+        >
+          {sidebar}
+        </div>
       </div>
 
-      {/* Content layer — slides right to reveal the sidebar; rounded inset when open. */}
+      {/* Content layer — slides right to reveal the sidebar; rounded inset when
+          open. Stays in normal flow (document keeps its scroll height); rounded
+          at the viewport band by `revealClipPath`. */}
       <div
         className={cn(
-          "relative z-10 h-full w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none",
+          // Mobile: natural height (`min-h-svh`) so the document — not this
+          // layer — owns the scroll; desktop keeps `h-full` inside the fixed shell.
+          "relative z-10 w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none max-md:min-h-svh md:h-full",
           isDragging && "transition-none",
-          isRevealed && "overflow-hidden rounded-3xl ring-1 ring-border"
+          revealActive && "max-md:overflow-x-clip md:overflow-hidden"
         )}
-        style={{ transform: `translateX(${translateX}px)` }}
+        style={{
+          transform: `translateX(${translateX}px)`,
+          clipPath: revealClipPath,
+        }}
       >
-        <div className="h-full w-full" inert={openMobile}>
+        <div className="w-full max-md:min-h-svh md:h-full" inert={openMobile}>
           {children}
         </div>
 
-        {/* White wash over the content; opacity tracks swipe progress. */}
-        <div
-          aria-hidden
-          className={cn(
-            "absolute inset-0 z-10 bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
-            isDragging && "transition-none",
-            openMobile ? "pointer-events-auto" : "pointer-events-none"
-          )}
-          style={{
-            opacity: overlayProgress * OVERLAY_MAX_OPACITY,
-            touchAction: "none",
-          }}
-          {...(openMobile ? gestureHandlers : {})}
-        />
+        {/* Dim scrim over the content; opacity tracks swipe progress. White in
+            light mode (content recedes by washing out); near-black in dark mode
+            (a white wash reads as a jarring brighten — dark dims instead). Pinned
+            to the viewport band with `sticky top-0 height=viewport` and rounded
+            with `border-radius` (NOT clip-path): the scrim's opacity transition
+            composites it, and older iOS WebKit drops a composited layer's own
+            `clip-path` corner radius — `border-radius` is honored there (the ring
+            frame below uses the same technique and renders round on-device). */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
+          <div
+            className={cn(
+              "sticky top-0 w-full rounded-3xl bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none dark:bg-black",
+              isDragging && "transition-none",
+              openMobile ? "pointer-events-auto" : "pointer-events-none"
+            )}
+            style={{
+              height: viewportHeight,
+              opacity: overlayProgress * OVERLAY_MAX_OPACITY,
+              touchAction: "none",
+            }}
+            {...(openMobile ? gestureHandlers : {})}
+          />
+        </div>
+
+        {/* Border outline. The content layer's own `ring` would draw at the
+            document-tall box edges (off-screen); a viewport-sticky frame keeps
+            the ring at the visible card edges, rounded with `border-radius`.
+            Opacity tracks swipe progress (with a CSS transition) so it fades in/
+            out with the slide instead of snapping off when a close commits. */}
+        {revealActive ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+          >
+            <div
+              className={cn(
+                "sticky top-0 rounded-3xl ring-1 ring-border ring-inset transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+                isDragging && "transition-none"
+              )}
+              style={{ height: viewportHeight, opacity: overlayProgress }}
+            />
+          </div>
+        ) : null}
       </div>
 
-      {/* Fill the top/bottom safe areas as the sidebar is revealed so the
-          content's translate (and the white wash over it) doesn't leave the
-          insets showing a split/wrong surface. Heights are the safe-area insets
-          — non-zero only with notch / home indicator (and the top grows when
-          Safari's address bar collapses on scroll); opacity tracks the swipe so
-          they switch in with the gesture.
-
-          The top inset is filled with bg-background to match the page header
-          that lives directly beneath it: the header's safe-area padding is
-          bg-background, so the inset must stay bg-background through the swipe
-          rather than fading to sidebar-gray. The bottom (home indicator) keeps
-          the sidebar tint since no header anchors it. */}
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 z-30 bg-background transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
-          isDragging && "transition-none"
-        )}
-        style={{
-          height: "env(safe-area-inset-top)",
-          opacity: revealProgress,
-        }}
-      />
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-sidebar transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
-          isDragging && "transition-none"
-        )}
-        style={{
-          height: "env(safe-area-inset-bottom)",
-          opacity: revealProgress,
-        }}
-      />
+      {/* The top/bottom safe-area insets are tinted by the root `<html>`
+          background (styles.css): bg-background at rest, fading to sidebar with
+          the swipe. That covers the insets uniformly, so the old fixed fill bars
+          here are redundant — and being full-width with square corners at z-30,
+          they painted over the inset card's rounded corners during the reveal. */}
 
       {/* Left-edge hit strip — captures the opening swipe while closed. */}
       {openMobile ? null : (
         <div
           aria-hidden
-          className="absolute inset-y-0 left-0 z-20 w-5"
+          // `fixed` on mobile so the opening edge-swipe zone stays pinned to the
+          // viewport's left edge at any document scroll position.
+          className="z-20 w-5 max-md:fixed max-md:inset-y-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
           // touch-action: none + the non-passive preventDefault effect above
           // claim the left-edge horizontal swipe so iOS Safari's back-navigation
           // gesture doesn't fire from this strip. ~20px wide to cover Safari's
