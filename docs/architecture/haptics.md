@@ -74,6 +74,7 @@ state change it confirms, it doesn't get a haptic.
 | Physical manipulation — long-press arm, drag pick-up, drop (start/end only, never per move) | `press` / `pickUp` / `drop` |
 | A committed value change on a form control — checkbox, switch, radio | `selection` |
 | A discrete selection inside a touch drawer/menu | `selection` |
+| Each step crossed while scrubbing a stepper-style control — table add-row/column drag adds or removes one unit (a notch, not continuous motion: one tick per discrete count change, never per pointer-move frame) | `selection` |
 | Mobile editor toolbar command taps (bounded exception — a coarse-only surface above the keyboard) | `selection` |
 | A toolbar command tapped at a boundary where it can't run (move up on the top block, outdent at indent 0, indent at the max) | `disabled` |
 | A completed, consequential action (when one exists) | `success` |
@@ -107,6 +108,7 @@ Current confirmed sites (the audit of record):
 |---|---|---|
 | [`use-block-touch-gesture.ts`](../../src/hooks/use-block-touch-gesture.ts) | `press`, `pickUp`, `drop` | Long-press arm → drag lift → drop on a block row |
 | [`use-dnd.ts`](../../src/components/dnd/use-dnd.ts) | `pickUp`, `drop` | Touch drag of a grip/handle — opt-in via `useDragSource({ haptics: true })` (e.g. [`table-structure-handle.tsx`](../../src/components/blocks/types/table/table-structure-handle.tsx)) |
+| [`use-table-count-scrub.ts`](../../src/components/blocks/types/table/use-table-count-scrub.ts) | `selection` | Each step crossed while scrubbing the table add-row / add-column control to add or remove rows/columns (one tick per discrete count change, not per pointer move) |
 | [`checkbox.tsx`](../../src/components/ui/checkbox.tsx) | `selection` | `onCheckedChange` toggle |
 | [`switch.tsx`](../../src/components/ui/switch.tsx) | `selection` | `onCheckedChange` toggle |
 | [`radio-group.tsx`](../../src/components/ui/radio-group.tsx) | `selection` | `onValueChange` (wired at the group level — ticks once per selection) |
