@@ -2,6 +2,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useRef, useState } from "react";
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
+import { useHaptics } from "@/hooks/haptics.ts";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { type CanvasRow, findRowById } from "@/lib/blocks/block-tree.ts";
 import {
@@ -127,6 +128,7 @@ export function useTableCountScrub({
   tableId,
 }: UseTableCountScrubOptions) {
   const { dispatch, getRows } = useCanvasEditorContext();
+  const haptic = useHaptics();
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [previewDelta, setPreviewDelta] = useState(0);
 
@@ -254,11 +256,17 @@ export function useTableCountScrub({
         return;
       }
 
+      // Crossing a step adds or removes a row/column — a discrete, visible count
+      // change. Tick once per step (the guard above means this is per step, not
+      // per pointer move) so the scrub feels notched like a stepper. No-op on
+      // desktop via the provider.
+      haptic("selection");
+
       lastTargetCountRef.current = targetCount;
       setPreviewDelta(targetCount - baselineCountRef.current);
       applyTargetCount(targetCount);
     },
-    [applyTargetCount, axis]
+    [applyTargetCount, axis, haptic]
   );
 
   const handlePointerUp = useCallback(
