@@ -75,6 +75,7 @@ state change it confirms, it doesn't get a haptic.
 | A committed value change on a form control — checkbox, switch, radio | `selection` |
 | A discrete selection inside a touch drawer/menu | `selection` |
 | Mobile editor toolbar command taps (bounded exception — a coarse-only surface above the keyboard) | `selection` |
+| Mobile sidebar committed open or closed (bounded exception — a direct swipe/drag manipulation that snaps to a position, not a tap-opened disclosure; the hamburger tap mirrors it) | `selection` |
 | A toolbar command tapped at a boundary where it can't run (move up on the top block, outdent at indent 0, indent at the max) | `disabled` |
 | A completed, consequential action (when one exists) | `success` |
 
@@ -82,7 +83,7 @@ state change it confirms, it doesn't get a haptic.
 
 - Scroll, hover, focus, drag-*move*, or any per-frame / continuous motion.
 - Navigation — tabs, links, route changes.
-- Disclosure — collapsible / accordion, popover / drawer open-close (the animation already carries it).
+- Disclosure — collapsible / accordion, popover / drawer *opened by a tap* (the animation already carries it). The mobile sidebar swipe is the bounded exception: it's a direct finger manipulation that snaps to an open/closed position (like a drag settle), so its commit earns one tick — and the hamburger tap mirrors that single tick so both routes feel the same.
 - Ordinary action buttons outside the mobile-toolbar surface.
 - Auto-repeat / held-button repeats.
 - Desktop / fine pointers (already gated — don't try to force it).
@@ -111,6 +112,8 @@ Current confirmed sites (the audit of record):
 | [`switch.tsx`](../../src/components/ui/switch.tsx) | `selection` | `onCheckedChange` toggle |
 | [`radio-group.tsx`](../../src/components/ui/radio-group.tsx) | `selection` | `onValueChange` (wired at the group level — ticks once per selection) |
 | [`menu-presentation.tsx`](../../src/components/ui/menu-presentation.tsx) | `selection` | Drawer menu row tap |
+| [`sidebar.tsx`](../../src/components/ui/sidebar.tsx) | `selection` | Mobile sidebar toggled open/closed via the hamburger trigger (`toggleSidebar`, narrow viewport) — fired in-gesture in the click handler |
+| [`page-sidebar-swipe-reveal.tsx`](../../src/components/pages/page-sidebar-swipe-reveal.tsx) | `selection` | Mobile sidebar committed open/closed by a left-edge swipe or backdrop tap |
 | [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `selection` | Toolbar command button tap |
 | [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `disabled` | Move up or indent/outdent tapped at a boundary (no neighbor up / clamped indent) — `ToolbarButton`'s `canRun` predicate. Move down has no boundary: at the bottom it inserts an empty block above instead, so it always fires `selection`. |
 

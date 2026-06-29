@@ -34,8 +34,10 @@ interface PageSidebarSwipeRevealProps {
  * Shares `openMobile` from {@link useSidebar} so the hamburger trigger and the
  * left-edge swipe drive the same state. Gesture mechanics copy the
  * pointer-capture idiom from `page-sidebar-rail.tsx`; the transform/transition
- * idiom copies `page-sidebar-hover-reveal.tsx`. Haptics tick once per snap-line
- * crossing via {@link useHaptics} (already a no-op off coarse pointers).
+ * idiom copies `page-sidebar-hover-reveal.tsx`. A swipe/tap that commits the
+ * sidebar open or closed fires one selection tick via {@link useHaptics}
+ * (already a no-op off coarse pointers); the hamburger trigger fires its own
+ * tick in-gesture (see `toggleSidebar` in `sidebar.tsx`).
  */
 export function PageSidebarSwipeReveal({
   children,
@@ -124,33 +126,17 @@ export function PageSidebarSwipeReveal({
     };
   }, []);
 
-  // Haptic tick whenever the sidebar commits to open or closed. Gesture commits
-  // fire the haptic *synchronously* inside the pointer handler (iOS Safari's
-  // web-haptics switch trick needs to run within the user-gesture context) and
-  // set skipCommitHapticRef so this effect doesn't double-fire. The effect still
-  // covers non-gesture commits: hamburger, Escape, programmatic. Seeded with the
-  // current state to skip the initial mount.
-  const prevOpenRef = useRef(openMobile);
-  const skipCommitHapticRef = useRef(false);
-  useEffect(() => {
-    if (prevOpenRef.current === openMobile) {
-      return;
-    }
-    prevOpenRef.current = openMobile;
-    if (skipCommitHapticRef.current) {
-      skipCommitHapticRef.current = false;
-      return;
-    }
-    haptic("selection");
-  }, [openMobile, haptic]);
-
-  // Commit open/closed from a gesture: fire the haptic synchronously (within the
-  // gesture) when the state actually changes, then flag the effect to skip it.
+  // Commit open/closed from a gesture (swipe or backdrop tap). Fire the haptic
+  // *synchronously* inside the pointer handler when the state actually flips:
+  // iOS Safari's web-haptics switch trick only produces feedback within the
+  // user-gesture window, so an effect that runs after the state commit would
+  // land too late and silently do nothing. Non-gesture commits (the hamburger
+  // trigger) fire their own in-gesture tick from `toggleSidebar` in
+  // `sidebar.tsx`. See docs/architecture/haptics.md.
   const commitOpenFromGesture = useCallback(
     (next: boolean) => {
       if (next !== openMobile) {
         haptic("selection");
-        skipCommitHapticRef.current = true;
       }
       setDragOffset(null);
       setOpenMobile(next);
