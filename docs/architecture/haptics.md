@@ -113,7 +113,7 @@ Current confirmed sites (the audit of record):
 | [`radio-group.tsx`](../../src/components/ui/radio-group.tsx) | `selection` | `onValueChange` (wired at the group level — ticks once per selection) |
 | [`menu-presentation.tsx`](../../src/components/ui/menu-presentation.tsx) | `selection` | Drawer menu row tap |
 | [`sidebar.tsx`](../../src/components/ui/sidebar.tsx) | `selection` | Mobile sidebar toggled open/closed via the hamburger trigger (`toggleSidebar`, narrow viewport) — fired in-gesture in the click handler |
-| [`page-sidebar-swipe-reveal.tsx`](../../src/components/pages/page-sidebar-swipe-reveal.tsx) | `selection` | Mobile sidebar committed open/closed by a left-edge swipe or backdrop tap |
+| [`page-sidebar-swipe-reveal.tsx`](../../src/components/pages/page-sidebar-swipe-reveal.tsx) | `selection` | Mobile sidebar swipe crossing the open/closed snap line (fired mid-drag in `pointermove`, not on release — iOS produces no feedback from the pointerup that ends a captured drag), plus the backdrop tap that closes |
 | [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `selection` | Toolbar command button tap |
 | [`mobile-editor-toolbar.tsx`](../../src/components/canvas/mobile-editor-toolbar.tsx) | `disabled` | Move up or indent/outdent tapped at a boundary (no neighbor up / clamped indent) — `ToolbarButton`'s `canRun` predicate. Move down has no boundary: at the bottom it inserts an empty block above instead, so it always fires `selection`. |
 
