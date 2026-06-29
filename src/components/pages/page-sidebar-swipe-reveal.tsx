@@ -34,8 +34,10 @@ interface PageSidebarSwipeRevealProps {
  * Shares `openMobile` from {@link useSidebar} so the hamburger trigger and the
  * left-edge swipe drive the same state. Gesture mechanics copy the
  * pointer-capture idiom from `page-sidebar-rail.tsx`; the transform/transition
- * idiom copies `page-sidebar-hover-reveal.tsx`. Haptics tick once per snap-line
- * crossing via {@link useHaptics} (already a no-op off coarse pointers).
+ * idiom copies `page-sidebar-hover-reveal.tsx`. Haptics tick once via
+ * {@link useHaptics} (a no-op off coarse pointers) as a swipe crosses the snap
+ * line, and once when a backdrop tap closes; the hamburger trigger fires its
+ * own tick in-gesture (see `toggleSidebar` in `sidebar.tsx`).
  */
 export function PageSidebarSwipeReveal({
   children,
@@ -58,6 +60,10 @@ export function PageSidebarSwipeReveal({
   const lastRef = useRef<{ x: number; t: number } | null>(null);
   const axisRef = useRef<Axis>("undecided");
   const didDragRef = useRef(false);
+  // The open/closed state the current gesture has last fired a haptic for, so a
+  // drag ticks once each time it crosses the snap line (and a tap ticks once on
+  // release) without ever double-firing. Reset at pointer-down to the live state.
+  const hapticStateRef = useRef(openMobile);
   const captureElRef = useRef<HTMLElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
   // The nav holds the actual sidebar width; the layer around it is a full-width
@@ -124,38 +130,35 @@ export function PageSidebarSwipeReveal({
     };
   }, []);
 
-  // Haptic tick whenever the sidebar commits to open or closed. Gesture commits
-  // fire the haptic *synchronously* inside the pointer handler (iOS Safari's
-  // web-haptics switch trick needs to run within the user-gesture context) and
-  // set skipCommitHapticRef so this effect doesn't double-fire. The effect still
-  // covers non-gesture commits: hamburger, Escape, programmatic. Seeded with the
-  // current state to skip the initial mount.
-  const prevOpenRef = useRef(openMobile);
-  const skipCommitHapticRef = useRef(false);
-  useEffect(() => {
-    if (prevOpenRef.current === openMobile) {
-      return;
-    }
-    prevOpenRef.current = openMobile;
-    if (skipCommitHapticRef.current) {
-      skipCommitHapticRef.current = false;
-      return;
-    }
-    haptic("selection");
-  }, [openMobile, haptic]);
+  // Fire one selection tick whenever the gesture's projected open/closed state
+  // flips, tracked in `hapticStateRef` so it never double-fires.
+  //
+  // Crucially this is driven from `handlePointerMove` (the drag crossing the
+  // snap line), NOT only from the release: iOS Safari's web-haptics switch
+  // trick produces feedback during the *active* drag but not from the pointerup
+  // that ends a captured-pointer drag — firing only on release is why the swipe
+  // felt dead while the (no-drag) backdrop tap and hamburger worked. A tap still
+  // ticks fine on release, and a velocity flick that lands on a state the drag
+  // never crossed gets a best-effort tick at commit. See
+  // docs/architecture/haptics.md.
+  const tickHapticForState = useCallback(
+    (projectedOpen: boolean) => {
+      if (projectedOpen !== hapticStateRef.current) {
+        hapticStateRef.current = projectedOpen;
+        haptic("selection");
+      }
+    },
+    [haptic]
+  );
 
-  // Commit open/closed from a gesture: fire the haptic synchronously (within the
-  // gesture) when the state actually changes, then flag the effect to skip it.
+  // Commit open/closed from a gesture (swipe or backdrop tap).
   const commitOpenFromGesture = useCallback(
     (next: boolean) => {
-      if (next !== openMobile) {
-        haptic("selection");
-        skipCommitHapticRef.current = true;
-      }
+      tickHapticForState(next);
       setDragOffset(null);
       setOpenMobile(next);
     },
-    [haptic, openMobile, setOpenMobile]
+    [setOpenMobile, tickHapticForState]
   );
 
   const releaseCapture = useCallback((pointerId: number) => {
@@ -196,6 +199,7 @@ export function PageSidebarSwipeReveal({
       lastRef.current = { x: event.clientX, t: event.timeStamp };
       axisRef.current = "undecided";
       didDragRef.current = false;
+      hapticStateRef.current = openMobile;
       captureElRef.current = event.currentTarget;
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -204,7 +208,7 @@ export function PageSidebarSwipeReveal({
         // works without it, and releaseCapture guards on hasPointerCapture.
       }
     },
-    []
+    [openMobile]
   );
 
   const handlePointerMove = useCallback(
@@ -237,10 +241,21 @@ export function PageSidebarSwipeReveal({
       const base = openMobile ? sidebarWidth : 0;
       const offset = Math.min(Math.max(base + dx, 0), sidebarWidth);
       setDragOffset(offset);
+      // Tick as the drag crosses the snap line — the point that decides whether
+      // release will open or close. Firing here (mid-drag) is what makes the
+      // swipe haptic land on iOS; see `tickHapticForState`.
+      tickHapticForState(offset >= sidebarWidth / 2);
 
       lastRef.current = { x: event.clientX, t: event.timeStamp };
     },
-    [endGesture, lockAxis, openMobile, releaseCapture, sidebarWidth]
+    [
+      endGesture,
+      lockAxis,
+      openMobile,
+      releaseCapture,
+      sidebarWidth,
+      tickHapticForState,
+    ]
   );
 
   const handlePointerUp = useCallback(
