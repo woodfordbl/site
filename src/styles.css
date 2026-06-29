@@ -798,6 +798,26 @@
   }
 }
 
+/*
+ * Mobile (below md): center the toast card across the viewport instead of
+ * pinning it to the bottom-right. Selectors carry higher specificity than
+ * Sonner's runtime rules so they win without depending on source order.
+ */
+@media (max-width: 767.98px) {
+  [data-sonner-toaster][data-x-position="right"][data-y-position="bottom"] {
+    right: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  [data-sonner-toast].cn-toast[data-x-position="right"] {
+    right: 0;
+    left: 0;
+    width: min(var(--width), calc(100vw - 2rem));
+    margin-inline: auto;
+  }
+}
+
 [data-page-font="serif"] {
   font-family: var(--font-serif);
 }

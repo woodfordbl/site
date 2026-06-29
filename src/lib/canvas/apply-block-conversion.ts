@@ -70,6 +70,12 @@ export function applyBlockConversion(
       text: cleanedText,
       absorb: options?.absorb ?? false,
     });
+  } else if (item.id === "callout") {
+    dispatch({
+      type: "callout.create",
+      rowId: row.rowId,
+      text: cleanedText,
+    });
   } else if (item.id === "list" || item.id === "checklist") {
     dispatch({
       type: "container.wrap",

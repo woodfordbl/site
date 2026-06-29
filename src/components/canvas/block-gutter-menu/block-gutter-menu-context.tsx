@@ -21,6 +21,8 @@ import {
   useCanvasEditorContext,
   useCanvasEditorState,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { findRowById } from "@/lib/blocks/block-tree.ts";
+import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
 import {
   copyEmbedLink,
@@ -57,7 +59,7 @@ export function BlockGutterMenuProvider({
   const { rows } = useCanvasEditorState();
   const { closeBlockActionsMenu, openRowId } = useBlockActionsMenu();
 
-  const row = rows.find((entry) => entry.rowId === rowId);
+  const row = findRowById(rows, rowId);
   const effectiveBlockId = row?.effectiveBlock.id;
   const canTurnInto = row ? canTurnIntoBlock(row) : false;
   const turnIntoValue = row
@@ -67,6 +69,8 @@ export function BlockGutterMenuProvider({
 
   const tableBlock =
     row?.effectiveBlock.type === "table" ? row.effectiveBlock : null;
+  const calloutBlock =
+    row?.effectiveBlock.type === "callout" ? row.effectiveBlock : null;
   const lastTableRowId = row?.children.at(-1)?.rowId;
   const tableColumnCount = row?.children[0]?.children.length ?? 0;
 
@@ -101,7 +105,7 @@ export function BlockGutterMenuProvider({
 
   const handleEmbedToggleCaption = useCallback(
     (enabled: boolean) => {
-      const currentRow = rows.find((entry) => entry.rowId === rowId);
+      const currentRow = findRowById(rows, rowId);
       const block = currentRow?.effectiveBlock;
       if (block?.type !== "embed") {
         return;
@@ -228,6 +232,30 @@ export function BlockGutterMenuProvider({
     });
   }, [dispatch, tableBlock, tableColumnCount]);
 
+  const handleAddCalloutIcon = useCallback(() => {
+    const currentRow = findRowById(rows, rowId);
+    const block = currentRow?.effectiveBlock;
+    if (block?.type !== "callout") {
+      return;
+    }
+    dispatch({
+      type: "row.update",
+      rowId,
+      block: {
+        ...block,
+        props: { ...block.props, icon: DEFAULT_CALLOUT_ICON },
+      },
+    });
+  }, [dispatch, rowId, rows]);
+
+  // Open the callout's inline icon picker (dropdown / drawer) so the icon can be
+  // changed or removed there; mirrors how embed "replace" hands off via focus.
+  const handleEditCalloutIcon = useCallback(() => {
+    runAfterMenuClose(() => {
+      dispatch({ type: "focus.set", rowId, calloutAction: "editIcon" });
+    });
+  }, [dispatch, rowId, runAfterMenuClose]);
+
   const handleDuplicate = useCallback(() => {
     onDuplicate?.();
   }, [onDuplicate]);
@@ -237,8 +265,11 @@ export function BlockGutterMenuProvider({
   }, [onDelete]);
 
   const actionItems = useBlockGutterMenuItems({
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleEditCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,
@@ -260,9 +291,12 @@ export function BlockGutterMenuProvider({
     () => ({
       actionItems,
       blockTypeLabel,
+      calloutBlock,
       canTurnInto,
       effectiveBlockId,
       embedBlock,
+      handleAddCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
@@ -287,9 +321,12 @@ export function BlockGutterMenuProvider({
     [
       actionItems,
       blockTypeLabel,
+      calloutBlock,
       canTurnInto,
       effectiveBlockId,
       embedBlock,
+      handleAddCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,

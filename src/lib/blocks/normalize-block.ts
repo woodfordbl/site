@@ -144,6 +144,34 @@ export function ensureColumnMinimumChildren(blocks: Block[]): Block[] {
   return changed ? next : blocks;
 }
 
+/** Each `callout` block keeps at least one child (empty `text` row). */
+export function ensureCalloutMinimumChildren(blocks: Block[]): Block[] {
+  const calloutIds = blocks
+    .filter((block) => block.type === "callout")
+    .map((block) => block.id);
+
+  if (calloutIds.length === 0) {
+    return blocks;
+  }
+
+  const next = [...blocks];
+  let changed = false;
+
+  for (const calloutId of calloutIds) {
+    const hasChild = next.some(
+      (block) => (block.parentId ?? null) === calloutId
+    );
+    if (!hasChild) {
+      const text = createEmptyBlock("text");
+      text.parentId = calloutId;
+      next.push(text);
+      changed = true;
+    }
+  }
+
+  return changed ? next : blocks;
+}
+
 /** Each `tab` block keeps at least one child (empty `text` row). */
 export function ensureTabMinimumChildren(blocks: Block[]): Block[] {
   const tabIds = blocks

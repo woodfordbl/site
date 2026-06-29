@@ -16,6 +16,9 @@ import {
 import type { CanvasEffect } from "@/lib/canvas/effects.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
+/** Minimum height in pixels a row may be resized to. */
+export const MIN_TABLE_ROW_HEIGHT_PX = 36;
+
 /** Default / minimum column width in pixels. */
 export const MIN_TABLE_COLUMN_WIDTH_PX = 120;
 export const DEFAULT_TABLE_COLUMN_WIDTH = MIN_TABLE_COLUMN_WIDTH_PX;
@@ -31,8 +34,10 @@ export interface TableGrid {
   hasHeaderColumn: boolean;
   hasHeaderRow: boolean;
   rows: Array<{
-    rowId: string;
     cells: Array<{ cellId: string; text: string }>;
+    /** Explicit height in pixels when the row has been resized. */
+    height?: number;
+    rowId: string;
   }>;
   tableId: string;
 }
@@ -46,6 +51,10 @@ export function deriveTableGrid(tableRow: CanvasRow): TableGrid | null {
 
   const rows = tableRow.children.map((row) => ({
     rowId: row.rowId,
+    height:
+      row.effectiveBlock.type === "tableRow"
+        ? row.effectiveBlock.props.height
+        : undefined,
     cells: row.children.map((cell) => ({
       cellId: cell.rowId,
       text:
@@ -867,6 +876,99 @@ export function planTableUpdateColumnWidths(
         ...block,
         props: { ...block.props, columnWidths },
       },
+    },
+  ];
+}
+
+export function planTableUpdateRowHeight(
+  rows: CanvasRow[],
+  tableRowId: string,
+  height: number
+): CanvasEffect[] {
+  const row = findRowById(rows, tableRowId);
+  if (row?.effectiveBlock.type !== "tableRow") {
+    return [];
+  }
+
+  const block = row.effectiveBlock;
+  const clamped = Math.max(MIN_TABLE_ROW_HEIGHT_PX, Math.round(height));
+  return [
+    {
+      type: "persist",
+      rowId: tableRowId,
+      block: {
+        ...block,
+        props: { ...block.props, height: clamped },
+      },
+    },
+  ];
+}
+
+export interface TableCellPosition {
+  columnCount: number;
+  columnIndex: number;
+  nextRowId: string | null;
+  prevRowId: string | null;
+  rowCount: number;
+  rowIndex: number;
+  tableId: string;
+  tableRowId: string;
+}
+
+/** Resolve a focused table cell to its table/row/column coordinates. */
+export function resolveTableCellPosition(
+  rows: CanvasRow[],
+  cellRowId: string
+): TableCellPosition | null {
+  const cellCtx = findRowContext(rows, cellRowId);
+  if (cellCtx?.row.effectiveBlock.type !== "tableCell") {
+    return null;
+  }
+  const tableRowNode = cellCtx.parent;
+  if (tableRowNode?.effectiveBlock.type !== "tableRow") {
+    return null;
+  }
+  const tableCtx = findTableContext(rows, cellRowId);
+  if (!tableCtx) {
+    return null;
+  }
+
+  const tableChildren = tableCtx.tableRow.children;
+  const rowIndex = tableChildren.findIndex(
+    (child) => child.rowId === tableRowNode.rowId
+  );
+  if (rowIndex === -1) {
+    return null;
+  }
+
+  return {
+    tableId: tableCtx.tableRow.rowId,
+    tableRowId: tableRowNode.rowId,
+    rowIndex,
+    columnIndex: cellCtx.index,
+    rowCount: tableChildren.length,
+    columnCount: getTableColumnCount(tableCtx.tableRow),
+    prevRowId: tableChildren[rowIndex - 1]?.rowId ?? null,
+    nextRowId: tableChildren[rowIndex + 1]?.rowId ?? null,
+  };
+}
+
+export function planTableResetRowHeight(
+  rows: CanvasRow[],
+  tableRowId: string
+): CanvasEffect[] {
+  const row = findRowById(rows, tableRowId);
+  if (row?.effectiveBlock.type !== "tableRow") {
+    return [];
+  }
+
+  const block = row.effectiveBlock;
+  const { height: _height, ...rest } = block.props;
+  return [
+    {
+      type: "persist",
+      rowId: tableRowId,
+      block: { ...block, props: rest },
     },
   ];
 }

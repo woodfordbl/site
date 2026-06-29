@@ -290,7 +290,9 @@ function PageListContent({
         repositionFromDropTarget(sourceId, target),
       onDragStart: ({ sourceId, pointer }) => {
         const page = findPageById(pages, sourceId);
-        const rowEl = document.querySelector(
+        // Scope to this nav so a favorited page's mirror row (rendered in the
+        // sidebar Favorites section with the same id) can't be matched instead.
+        const rowEl = navRef.current?.querySelector(
           `[${PAGE_LIST_ROW_ATTRIBUTE}="${sourceId}"]`
         );
         const rowRect =

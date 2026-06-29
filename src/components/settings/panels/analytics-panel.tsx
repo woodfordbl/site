@@ -403,7 +403,7 @@ export function AnalyticsPanel() {
                     : undefined
                 }
                 label="Busiest day"
-                value={streak.busiestDay?.date ?? "—"}
+                value={streak.busiestDay?.date ?? "-"}
               />
               <InsightStat
                 label="Active days"
@@ -463,7 +463,7 @@ function MetricKpiRow({
       : `${formatNumber(streak.activeDays)} active days`;
   const storageHint = storage
     ? `${formatNumber(storage.assetCount)} media assets`
-    : "—";
+    : "-";
 
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

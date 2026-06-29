@@ -26,20 +26,29 @@ export type CommandId =
   | "toggle-theme"
   | "toggle-full-width"
   | "add-cover"
-  // Canvas — clipboard
+  // Canvas clipboard
   | "select-all-blocks"
   | "copy-blocks"
   | "paste-blocks"
-  // Canvas — blocks (dispatched)
+  // Canvas blocks (dispatched)
   | "move-row-up"
   | "move-row-down"
   | "extend-selection-up"
   | "extend-selection-down"
   | "clear-selection"
-  // Canvas — blocks (native / caret-coupled, locked)
+  // Canvas blocks (native / caret-coupled, locked)
   | "split-block"
   | "newline-in-block"
   | "delete-block"
+  // Canvas table (native, active in a focused cell)
+  | "table-add-row"
+  | "table-add-column"
+  | "table-delete-row"
+  | "table-delete-column"
+  | "table-move-row-up"
+  | "table-move-row-down"
+  | "table-move-column-left"
+  | "table-move-column-right"
   // Slash menu (native, locked)
   | "slash-open"
   | "slash-prev"
@@ -51,8 +60,9 @@ export type CommandGroup =
   | "Navigation"
   | "Pages"
   | "Appearance"
-  | "Canvas — blocks"
-  | "Canvas — clipboard"
+  | "Canvas blocks"
+  | "Canvas table"
+  | "Canvas clipboard"
   | "Slash menu";
 
 /**
@@ -102,8 +112,9 @@ export const COMMAND_GROUPS: CommandGroup[] = [
   "Navigation",
   "Pages",
   "Appearance",
-  "Canvas — blocks",
-  "Canvas — clipboard",
+  "Canvas blocks",
+  "Canvas table",
+  "Canvas clipboard",
   "Slash menu",
 ];
 
@@ -231,11 +242,11 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     scope: "global",
   },
 
-  // ── Canvas — blocks ──────────────────────────────────────────────────────
+  // ── Canvas blocks ──────────────────────────────────────────────────────
   {
     id: "split-block",
     label: "Split block at caret",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Enter",
     customizable: false,
     scope: "field",
@@ -243,7 +254,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "newline-in-block",
     label: "New line in multiline block",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Shift+Enter",
     customizable: false,
     scope: "field",
@@ -251,9 +262,80 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "delete-block",
     label: "Delete empty block or selected blocks",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Backspace",
     aliases: ["Delete"],
+    customizable: false,
+    scope: "field",
+  },
+
+  // ── Canvas table ───────────────────────────────────────────────────────
+  // Matched natively inside a focused table cell (see table-cell-shortcuts.ts);
+  // the registry pins them for the shortcuts panel. On the `=`/`-` insert/delete
+  // keys, Alt is the base and Mod flips the axis to column (Shift+punctuation is
+  // layout-dependent and rejected by the Hotkey type, and Mod+=/Mod+- collide
+  // with browser zoom). Moves use Alt+Shift+arrows.
+  {
+    id: "table-add-row",
+    label: "Add row below",
+    group: "Canvas table",
+    defaultHotkey: "Alt+=",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-add-column",
+    label: "Add column to the right",
+    group: "Canvas table",
+    defaultHotkey: "Mod+Alt+=",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-delete-row",
+    label: "Delete row",
+    group: "Canvas table",
+    defaultHotkey: "Alt+-",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-delete-column",
+    label: "Delete column",
+    group: "Canvas table",
+    defaultHotkey: "Mod+Alt+-",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-move-row-up",
+    label: "Move row up",
+    group: "Canvas table",
+    defaultHotkey: "Alt+Shift+ArrowUp",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-move-row-down",
+    label: "Move row down",
+    group: "Canvas table",
+    defaultHotkey: "Alt+Shift+ArrowDown",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-move-column-left",
+    label: "Move column left",
+    group: "Canvas table",
+    defaultHotkey: "Alt+Shift+ArrowLeft",
+    customizable: false,
+    scope: "field",
+  },
+  {
+    id: "table-move-column-right",
+    label: "Move column right",
+    group: "Canvas table",
+    defaultHotkey: "Alt+Shift+ArrowRight",
     customizable: false,
     scope: "field",
   },
@@ -262,7 +344,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "move-row-up",
     label: "Move focused row up",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Alt+ArrowUp",
     customizable: false,
     scope: "canvas",
@@ -270,7 +352,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "move-row-down",
     label: "Move focused row down",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Alt+ArrowDown",
     customizable: false,
     scope: "canvas",
@@ -278,7 +360,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "extend-selection-up",
     label: "Extend selection up",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Shift+ArrowUp",
     customizable: false,
     scope: "canvas",
@@ -286,7 +368,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "extend-selection-down",
     label: "Extend selection down",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Shift+ArrowDown",
     customizable: false,
     scope: "canvas",
@@ -294,7 +376,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "clear-selection",
     label: "Clear block selection",
-    group: "Canvas — blocks",
+    group: "Canvas blocks",
     defaultHotkey: "Escape",
     customizable: false,
     scope: "canvas",
@@ -303,11 +385,11 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     ignoreInputs: true,
   },
 
-  // ── Canvas — clipboard ───────────────────────────────────────────────────
+  // ── Canvas clipboard ───────────────────────────────────────────────────
   {
     id: "select-all-blocks",
     label: "Select all blocks",
-    group: "Canvas — clipboard",
+    group: "Canvas clipboard",
     defaultHotkey: "Mod+A",
     customizable: true,
     scope: "canvas",
@@ -317,7 +399,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   {
     id: "copy-blocks",
     label: "Copy selected blocks",
-    group: "Canvas — clipboard",
+    group: "Canvas clipboard",
     defaultHotkey: "Mod+C",
     customizable: true,
     scope: "canvas",
@@ -329,7 +411,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     // dispatched through useCommandHotkeys and cannot be rebound.
     id: "paste-blocks",
     label: "Paste blocks",
-    group: "Canvas — clipboard",
+    group: "Canvas clipboard",
     defaultHotkey: "Mod+V",
     customizable: false,
     scope: "canvas",

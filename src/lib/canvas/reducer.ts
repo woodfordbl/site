@@ -38,6 +38,10 @@ import {
   expandRowIdsForDelete,
   rowIdsInReverseDocumentOrder,
 } from "@/lib/canvas/block-selection.ts";
+import {
+  planCalloutCreate,
+  planCalloutUnwrap,
+} from "@/lib/canvas/callout-layout.ts";
 import { cloneBlocksForPaste } from "@/lib/canvas/clipboard.ts";
 import {
   buildBlocksForColumnsCreate,
@@ -61,9 +65,11 @@ import {
   planTableRemoveColumn,
   planTableRemoveRow,
   planTableReorderColumn,
+  planTableResetRowHeight,
   planTableToggleHeaderColumn,
   planTableToggleHeaderRow,
   planTableUpdateColumnWidths,
+  planTableUpdateRowHeight,
 } from "@/lib/canvas/table-layout.ts";
 import {
   buildBlocksForTabsCreate,
@@ -407,6 +413,30 @@ export function canvasReducer(
         return { state, effects };
       }
 
+      // Converting a leaf into a callout wraps its text as the callout's first
+      // child; converting a callout to anything else dissolves the box and
+      // hoists its children. The callout owns no text of its own.
+      if (
+        command.to === "callout" &&
+        ctx.row.effectiveBlock.type !== "callout"
+      ) {
+        return {
+          state,
+          effects: planCalloutCreate(state.rows, command.rowId, {
+            seedText: command.options?.text,
+          }),
+        };
+      }
+      if (
+        ctx.row.effectiveBlock.type === "callout" &&
+        command.to !== "callout"
+      ) {
+        return {
+          state,
+          effects: planCalloutUnwrap(state.rows, command.rowId),
+        };
+      }
+
       // Converting a toggle heading to a leaf (heading/text/…) lifts its
       // children out as following siblings, in order.
       if (
@@ -732,6 +762,15 @@ export function canvasReducer(
       };
     }
 
+    case "callout.create": {
+      return {
+        state,
+        effects: planCalloutCreate(state.rows, command.rowId, {
+          seedText: command.text,
+        }),
+      };
+    }
+
     case "tabs.addTab": {
       return {
         state,
@@ -892,6 +931,24 @@ export function canvasReducer(
       };
     }
 
+    case "table.updateRowHeight": {
+      return {
+        state,
+        effects: planTableUpdateRowHeight(
+          state.rows,
+          command.tableRowId,
+          command.height
+        ),
+      };
+    }
+
+    case "table.resetRowHeight": {
+      return {
+        state,
+        effects: planTableResetRowHeight(state.rows, command.tableRowId),
+      };
+    }
+
     case "table.focusCell": {
       return {
         state,
@@ -1024,6 +1081,14 @@ export function canvasReducer(
         });
       }
 
+      if (command.to === "callout") {
+        return canvasReducer(state, {
+          type: "callout.create",
+          rowId: command.rowId,
+          text: command.text,
+        });
+      }
+
       return canvasReducer(state, {
         type: "row.convert",
         rowId: command.rowId,
@@ -1044,6 +1109,7 @@ export function canvasReducer(
         placement: command.placement,
         offset: command.offset,
         embedAction: command.embedAction,
+        calloutAction: command.calloutAction,
       });
       return { state, effects };
     }

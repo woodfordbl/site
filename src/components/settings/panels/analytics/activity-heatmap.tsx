@@ -65,7 +65,7 @@ export function ActivityHeatmapGrid({ heatmap }: ActivityHeatmapGridProps) {
                             opacity: intensity,
                           }
                     }
-                    title={`${row.label} ${formatHour(cell.hour)} — ${cell.count} event${cell.count === 1 ? "" : "s"}`}
+                    title={`${row.label} ${formatHour(cell.hour)}: ${cell.count} event${cell.count === 1 ? "" : "s"}`}
                   />
                 );
               })}
