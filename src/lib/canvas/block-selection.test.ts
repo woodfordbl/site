@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import {
   emptyBlockSelection,
-  expandListContainerSelection,
   expandRowIdsForDelete,
+  expandUnitContainerSelection,
+  normalizeSelectedRowIds,
   rangeRowIdsBetween,
-  selectionIncludesAllListChildren,
+  selectionIncludesAllUnitChildren,
   toggleBlockSelection,
 } from "@/lib/canvas/block-selection.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
@@ -191,9 +192,9 @@ describe("block selection", () => {
 
     expect(selected.selectedRowIds).toEqual(["item1", "item2"]);
     expect(
-      selectionIncludesAllListChildren(rows, selected, listRow.rowId)
+      selectionIncludesAllUnitChildren(rows, selected, listRow.rowId)
     ).toBe(true);
-    expect(expandListContainerSelection(rows, listRow.rowId)).toEqual([
+    expect(expandUnitContainerSelection(rows, listRow.rowId)).toEqual([
       "item1",
       "item2",
     ]);
@@ -284,5 +285,76 @@ describe("selection commands", () => {
     }
     expect(inserted.block.id).not.toBe(sourceBlock.id);
     expect(inserted.block.props).toEqual(sourceBlock.props);
+  });
+});
+
+describe("unit containers and normalization", () => {
+  const checklistBlocks: Block[] = [
+    { id: "cl", type: "checklist", props: {} },
+    {
+      id: "i1",
+      type: "checklistItem",
+      parentId: "cl",
+      props: { checked: false, text: "First" },
+    },
+    {
+      id: "i2",
+      type: "checklistItem",
+      parentId: "cl",
+      props: { checked: true, text: "Second" },
+    },
+  ];
+
+  it("selecting a checklist container selects its item rows", () => {
+    const rows = buildBlockTree(checklistBlocks);
+    expect(expandUnitContainerSelection(rows, "cl")).toEqual(["i1", "i2"]);
+  });
+
+  it("reports a checklist selected once every item is selected", () => {
+    const rows = buildBlockTree(checklistBlocks);
+    expect(
+      selectionIncludesAllUnitChildren(
+        rows,
+        { anchorRowId: "i1", selectedRowIds: ["i1", "i2"] },
+        "cl"
+      )
+    ).toBe(true);
+  });
+
+  const nestedBlocks: Block[] = [
+    { id: "call", type: "callout", props: {} },
+    {
+      id: "c1",
+      type: "text",
+      parentId: "call",
+      props: { text: "Child one" },
+    },
+    {
+      id: "c2",
+      type: "text",
+      parentId: "call",
+      props: { text: "Child two" },
+    },
+    { id: "after", type: "text", props: { text: "After" } },
+  ];
+
+  it("normalizeSelectedRowIds drops descendants of a selected ancestor", () => {
+    const rows = buildBlockTree(nestedBlocks);
+    expect(normalizeSelectedRowIds(rows, ["c1", "call", "after"])).toEqual([
+      "call",
+      "after",
+    ]);
+  });
+
+  it("normalizeSelectedRowIds keeps sibling children when no ancestor is selected", () => {
+    const rows = buildBlockTree(nestedBlocks);
+    expect(normalizeSelectedRowIds(rows, ["c2", "c1"])).toEqual(["c1", "c2"]);
+  });
+
+  it("normalizeSelectedRowIds prunes ids missing from the tree", () => {
+    const rows = buildBlockTree(nestedBlocks);
+    expect(normalizeSelectedRowIds(rows, ["ghost", "after"])).toEqual([
+      "after",
+    ]);
   });
 });

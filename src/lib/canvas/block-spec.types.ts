@@ -44,6 +44,17 @@ export interface ContainerDefinition {
   onDisallowedChildConversion: "lift-out" | "prevent";
   onEmptyChildDelete: "lift-out" | "delete";
   onEmptyChildEnter: "lift-out" | "insert-sibling";
+  /**
+   * Children render inside a `data-canvas-scope={rowId}` content wrapper, so
+   * pointer features (marquee drill, overclick) can route into them. A
+   * container declaring this must add the attribute to its content element.
+   */
+  scopedContent?: boolean;
+  /**
+   * Clicking or marqueeing the container selects its child rows as a unit,
+   * and the shell highlights when every child is selected.
+   */
+  selectChildrenAsUnit?: boolean;
 }
 
 export interface BlockBehavior {

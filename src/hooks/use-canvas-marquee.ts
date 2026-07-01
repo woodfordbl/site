@@ -4,8 +4,8 @@ import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-contex
 import { useDragState } from "@/components/dnd/use-dnd.ts";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
+import { collectCanvasScopeRects } from "@/lib/canvas/canvas-scopes.ts";
 import {
-  collectCanvasScopeRects,
   type MarqueePoint,
   type MarqueeRect,
   marqueeRectFromPoints,

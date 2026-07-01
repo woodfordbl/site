@@ -4,6 +4,7 @@ import {
   findRowContext,
   flattenRows,
 } from "@/lib/blocks/block-tree.ts";
+import { selectsChildrenAsUnit } from "@/lib/canvas/block-container-config.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 export interface BlockSelectionState {
@@ -155,43 +156,44 @@ export function expandRowIdsForDelete(
   return rowIdsInDocumentOrder(rows, [...expanded]);
 }
 
-export function listContainerChildRowIds(row: CanvasRow): string[] {
-  if (row.effectiveBlock.type !== "list") {
+/** Child row ids of a unit-select container (list, checklist); [] otherwise. */
+export function unitContainerChildRowIds(row: CanvasRow): string[] {
+  if (!selectsChildrenAsUnit(row.effectiveBlock.type)) {
     return [];
   }
 
   return flattenRows(row.children).map((child) => child.rowId);
 }
 
-export function selectionIncludesAllListChildren(
+export function selectionIncludesAllUnitChildren(
   rows: CanvasRow[],
   selection: BlockSelectionState,
-  listRowId: string
+  containerRowId: string
 ): boolean {
-  const row = findRowById(rows, listRowId);
-  if (row?.effectiveBlock.type !== "list") {
+  const row = findRowById(rows, containerRowId);
+  if (!(row && selectsChildrenAsUnit(row.effectiveBlock.type))) {
     return false;
   }
 
-  const childIds = listContainerChildRowIds(row);
+  const childIds = unitContainerChildRowIds(row);
   if (childIds.length === 0) {
-    return selection.selectedRowIds.includes(listRowId);
+    return selection.selectedRowIds.includes(containerRowId);
   }
 
   const selected = new Set(selection.selectedRowIds);
   return childIds.every((id) => selected.has(id));
 }
 
-export function expandListContainerSelection(
+export function expandUnitContainerSelection(
   rows: CanvasRow[],
   rowId: string
 ): string[] {
   const row = findRowById(rows, rowId);
-  if (row?.effectiveBlock.type !== "list") {
+  if (!(row && selectsChildrenAsUnit(row.effectiveBlock.type))) {
     return [rowId];
   }
 
-  const childIds = listContainerChildRowIds(row);
+  const childIds = unitContainerChildRowIds(row);
   if (childIds.length === 0) {
     return [rowId];
   }
@@ -208,7 +210,37 @@ export function isRowSelectedInUi(
     return true;
   }
 
-  return selectionIncludesAllListChildren(rows, selection, rowId);
+  return selectionIncludesAllUnitChildren(rows, selection, rowId);
+}
+
+/**
+ * Canonical selection: descendants of a selected ancestor are dropped (the
+ * ancestor already owns its subtree for copy/delete/highlight) and unknown ids
+ * are pruned, in document order. Applied at the editor's setSelection choke
+ * points so no code path can persist an ancestor+descendant selection.
+ */
+export function normalizeSelectedRowIds(
+  rows: CanvasRow[],
+  rowIds: readonly string[]
+): string[] {
+  const selected = new Set(rowIds);
+  const kept: string[] = [];
+
+  const visit = (row: CanvasRow): void => {
+    if (selected.has(row.rowId)) {
+      kept.push(row.rowId);
+      return;
+    }
+    for (const child of row.children) {
+      visit(child);
+    }
+  };
+
+  for (const row of rows) {
+    visit(row);
+  }
+
+  return kept;
 }
 
 function toggleShiftBlockSelection(
@@ -227,7 +259,7 @@ function toggleShiftBlockSelection(
 
   return {
     anchorRowId: rowId,
-    selectedRowIds: expandListContainerSelection(rows, rowId),
+    selectedRowIds: expandUnitContainerSelection(rows, rowId),
   };
 }
 
@@ -236,12 +268,12 @@ function toggleMetaBlockSelection(
   selection: BlockSelectionState,
   rowId: string,
   row: CanvasRow | undefined,
-  isListContainer: boolean
+  isUnitContainer: boolean
 ): BlockSelectionState {
   const selected = new Set(selection.selectedRowIds);
 
-  if (isListContainer && row) {
-    const childIds = listContainerChildRowIds(row);
+  if (isUnitContainer && row) {
+    const childIds = unitContainerChildRowIds(row);
     if (childIds.length > 0) {
       const allSelected = childIds.every((id) => selected.has(id));
       for (const id of childIds) {
@@ -276,12 +308,12 @@ function togglePlainBlockSelection(
   selection: BlockSelectionState,
   rowId: string,
   row: CanvasRow | undefined,
-  isListContainer: boolean
+  isUnitContainer: boolean
 ): BlockSelectionState {
-  if (isListContainer && row) {
-    const childIds = listContainerChildRowIds(row);
+  if (isUnitContainer && row) {
+    const childIds = unitContainerChildRowIds(row);
     if (childIds.length > 0) {
-      if (selectionIncludesAllListChildren(rows, selection, rowId)) {
+      if (selectionIncludesAllUnitChildren(rows, selection, rowId)) {
         return emptyBlockSelection;
       }
 
@@ -315,8 +347,7 @@ export function toggleBlockSelection(
 ): BlockSelectionState {
   const row = findRowById(rows, rowId);
   const isChildSelectContainer =
-    row?.effectiveBlock.type === "list" ||
-    row?.effectiveBlock.type === "checklist";
+    row != null && selectsChildrenAsUnit(row.effectiveBlock.type);
 
   if (modifiers?.shiftKey) {
     return toggleShiftBlockSelection(rows, selection, rowId, focusRowId);

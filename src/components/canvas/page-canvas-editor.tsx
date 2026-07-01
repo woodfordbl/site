@@ -2,6 +2,7 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -53,6 +54,7 @@ import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
+import { publishCanvasDevtoolsState } from "@/lib/canvas/canvas-devtools-store.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
   collectCanvasRowRects,
@@ -141,6 +143,16 @@ function PageCanvasEditorBody({
   const dispatchPage = usePageDispatch(pages);
   const repositionPage = usePageReposition(pages, dispatchPage);
   const currentPageId = serverPage.id;
+
+  // Feed the dev-only Canvas devtools panel/overlay (no-op in production).
+  useEffect(() => {
+    publishCanvasDevtoolsState({
+      focus: editor.focus,
+      rows: editor.rows,
+      selection: editor.selection,
+    });
+    return () => publishCanvasDevtoolsState(null);
+  }, [editor.focus, editor.rows, editor.selection]);
 
   // Dragging a sidebar page onto the canvas inserts a child pageLink at the drop
   // position and re-nests the page under this one (cycle/depth guarded). The
