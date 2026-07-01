@@ -22,11 +22,7 @@ export function BlockGutterMenuTurnInto() {
         <IconExchange />
         Turn into
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent
-        align="center"
-        className="min-w-56"
-        data-canvas-row-menu
-      >
+      <DropdownMenuSubContent align="center" data-canvas-row-menu>
         <DropdownMenuRadioGroup
           onValueChange={handleTurnInto}
           value={turnIntoValue}

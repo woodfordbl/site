@@ -137,7 +137,7 @@ export function PageMenuMoveSubmenu({
           <IconFolderSymlink />
           Move to
         </ContextMenuSubTrigger>
-        <ContextMenuSubContent className="min-w-56">
+        <ContextMenuSubContent>
           <MoveSubmenuBody
             items={items}
             query={query}
@@ -165,7 +165,7 @@ export function PageMenuMoveSubmenu({
         <IconFolderSymlink />
         Move to
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-56">
+      <DropdownMenuSubContent>
         <MoveSubmenuBody
           items={items}
           query={query}

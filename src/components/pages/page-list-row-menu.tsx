@@ -93,11 +93,7 @@ export function PageListRowDropdown({
           </SidebarMenuAction>
         }
       />
-      <DropdownMenuContent
-        align="start"
-        className="w-56 min-w-56"
-        side="bottom"
-      >
+      <DropdownMenuContent align="start" side="bottom">
         <DropdownMenuGroup>
           <DropdownMenuLabel>Page</DropdownMenuLabel>
           <DropdownMenuItem onClick={onToggleFavorite}>
@@ -117,7 +113,7 @@ export function PageListRowDropdown({
               <IconCopy />
               Duplicate page
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-48">
+            <DropdownMenuSubContent>
               <DropdownMenuItem
                 onClick={() => {
                   onDuplicate(true);

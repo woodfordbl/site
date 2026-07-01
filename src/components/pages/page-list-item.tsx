@@ -605,7 +605,7 @@ export function PageListItem({
               <IconCopy />
               Duplicate page
             </ContextMenuSubTrigger>
-            <ContextMenuSubContent className="min-w-48">
+            <ContextMenuSubContent>
               <ContextMenuItem
                 onClick={() => {
                   handleDuplicate(true);

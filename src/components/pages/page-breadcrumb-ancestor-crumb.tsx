@@ -72,7 +72,7 @@ function PageBreadcrumbChildrenSubmenu({
       >
         <PageBreadcrumbMenuPageLabel page={page} />
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-56 min-w-56">
+      <DropdownMenuSubContent>
         {visibleChildren.map((child) => (
           <PageBreadcrumbSiblingItem
             activePageId={activePageId}
@@ -178,12 +178,7 @@ export function PageBreadcrumbAncestorCrumb({
         </span>
         <span className="min-w-0 truncate">{title || DEFAULT_PAGE_TITLE}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-56 min-w-56"
-        side="bottom"
-        sideOffset={4}
-      >
+      <DropdownMenuContent align="start" side="bottom" sideOffset={4}>
         <PageBreadcrumbSiblingMenu
           activePageId={activePageId}
           ancestorPageId={ancestor.id}

@@ -26,7 +26,7 @@ export function PageHeaderMenuExportSubmenu({
         <IconFileExport />
         Export
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-44">
+      <DropdownMenuSubContent>
         <DropdownMenuItem onClick={onExportZip}>
           <IconFileZip />
           ZIP (.zip)

@@ -324,7 +324,7 @@ export function PageHeaderMenu({
         >
           <IconDots aria-hidden />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-64">
+        <DropdownMenuContent align="end">
           <ActionMenuSearchSection
             activeKey={open ? pageId : null}
             items={searchableEntries}
@@ -385,7 +385,7 @@ export function PageHeaderMenu({
                   <IconCopy />
                   Duplicate page
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="min-w-48">
+                <DropdownMenuSubContent>
                   <DropdownMenuItem
                     onClick={() => {
                       runAfterClose(() => {

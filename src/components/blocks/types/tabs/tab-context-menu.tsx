@@ -138,7 +138,7 @@ export function TabContextMenu({
   return (
     <ContextMenu>
       <ContextMenuTrigger render={children as never} />
-      <ContextMenuContent className="min-w-60">
+      <ContextMenuContent>
         <div className="flex items-center gap-2 p-1 pb-2">
           <GlyphIconPicker
             ariaLabel="Change tab icon"
