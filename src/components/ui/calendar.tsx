@@ -38,11 +38,11 @@ function CalendarDayButton({
   return (
     <Button
       className={cn(
-        "flex size-9 p-0 font-normal text-foreground tabular-nums aria-selected:opacity-100",
+        "mx-auto flex size-9 p-0 font-normal text-foreground tabular-nums aria-selected:opacity-100",
         "data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground data-[range-end=true]:hover:bg-primary/80",
         "data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-transparent data-[range-middle=true]:text-accent-foreground data-[range-middle=true]:hover:bg-transparent",
         "data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-start=true]:hover:bg-primary/80",
-        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[selected-single=true]:hover:bg-primary/80",
+        "data-[selected-single=true]:rounded-md data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[selected-single=true]:hover:bg-primary/80",
         defaultClassNames.day_button,
         className
       )}
@@ -83,7 +83,7 @@ export function Calendar({
         className
       )}
       classNames={{
-        root: cn(defaults.root, "w-fit"),
+        root: cn(defaults.root, "in-data-[slot=drawer-content]:w-full w-fit"),
         months: cn(defaults.months, "relative flex flex-col gap-4"),
         month: cn(defaults.month, "flex flex-col gap-3"),
         month_caption: cn(

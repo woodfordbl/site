@@ -53,17 +53,19 @@ export function TableColumnResizeOverlay({
   columnWidths: number[];
   onResizeStart: TableColumnResizeZoneProps["onResizeStart"];
 }) {
-  if (columnCount <= 1) {
+  if (columnCount < 1) {
     return null;
   }
 
+  // One zone per column right-edge, including the last column's outer edge so it
+  // can be widened. Each zone resizes the column on its left (`columnIndex`).
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute inset-0 z-20"
       data-table-column-resize-overlay
     >
-      {Array.from({ length: columnCount - 1 }, (_, columnIndex) => {
+      {Array.from({ length: columnCount }, (_, columnIndex) => {
         const leftPx = tableColumnBoundaryLeftPx(columnWidths, columnIndex);
         return (
           <TableColumnResizeZone

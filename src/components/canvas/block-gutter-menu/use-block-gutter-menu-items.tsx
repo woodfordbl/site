@@ -4,8 +4,8 @@ import {
   IconCopy,
   IconExternalLink,
   IconLink,
-  IconMoodOff,
   IconMoodSmile,
+  IconPencil,
   IconRefresh,
   IconRowInsertBottom,
   IconTableColumn,
@@ -31,7 +31,7 @@ export function useBlockGutterMenuItems(
     canTurnInto,
     embedBlock,
     handleAddCalloutIcon,
-    handleRemoveCalloutIcon,
+    handleEditCalloutIcon,
     handleDuplicate,
     handleDelete,
     handleEmbedCopyLink,
@@ -106,11 +106,11 @@ export function useBlockGutterMenuItems(
     if (calloutBlock) {
       if (calloutBlock.props.icon) {
         items.push({
-          id: "callout-remove-icon",
-          label: "Remove icon",
-          keywords: ["callout", "remove", "icon", "glyph", "emoji"],
-          icon: <IconMoodOff />,
-          onSelect: handleRemoveCalloutIcon,
+          id: "callout-edit-icon",
+          label: "Edit icon",
+          keywords: ["callout", "edit", "change", "icon", "glyph", "emoji"],
+          icon: <IconPencil />,
+          onSelect: handleEditCalloutIcon,
         });
       } else {
         items.push({
@@ -232,7 +232,7 @@ export function useBlockGutterMenuItems(
     canTurnInto,
     embedBlock,
     handleAddCalloutIcon,
-    handleRemoveCalloutIcon,
+    handleEditCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,

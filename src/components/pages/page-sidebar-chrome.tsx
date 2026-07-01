@@ -226,7 +226,7 @@ export function PageSidebarChromeProvider({
 
   return (
     <PageSidebarChromeContext.Provider value={contextValue}>
-      <SidebarProvider className="relative flex h-full min-h-0 w-full flex-col">
+      <SidebarProvider className="relative flex min-h-0 w-full flex-col max-md:h-auto md:h-full">
         {chromeBody}
       </SidebarProvider>
     </PageSidebarChromeContext.Provider>

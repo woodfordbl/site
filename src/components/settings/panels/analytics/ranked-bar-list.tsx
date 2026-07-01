@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { useChartDitherFill } from "@/components/ui/chart.tsx";
 import { cn } from "@/lib/utils.ts";
 
 export interface RankedBarItem {
@@ -27,6 +28,10 @@ export function RankedBarList({
   max,
   emptyLabel = "Nothing here yet.",
 }: RankedBarListProps) {
+  const { ref, fillStyle, enabled } = useChartDitherFill<HTMLUListElement>([
+    colorVar,
+  ]);
+
   if (items.length === 0) {
     return (
       <p className="py-6 text-center text-muted-foreground text-sm">
@@ -39,9 +44,11 @@ export function RankedBarList({
     1,
     max ?? items.reduce((peak, item) => Math.max(peak, item.value), 0)
   );
+  // Square the track + fill when dithering so they snap to the pixel grid.
+  const trackRadius = enabled ? "rounded-[1px]" : "rounded-full";
 
   return (
-    <ul className="flex flex-col gap-2.5">
+    <ul className="flex flex-col gap-2.5" ref={ref}>
       {items.map((item) => {
         const ratio = Math.max(0, Math.min(1, item.value / denominator));
         return (
@@ -59,12 +66,17 @@ export function RankedBarList({
                 {item.display ?? item.value.toLocaleString()}
               </span>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-1.5 w-full overflow-hidden bg-muted",
+                trackRadius
+              )}
+            >
               <div
-                className={cn("h-full rounded-full transition-[width]")}
+                className={cn("h-full transition-[width]", trackRadius)}
                 style={{
                   width: `${Math.max(ratio * 100, item.value > 0 ? 2 : 0)}%`,
-                  backgroundColor: colorVar,
+                  ...fillStyle(colorVar),
                 }}
               />
             </div>

@@ -58,23 +58,17 @@ export function SiteSettingsSectionContent({
   const panel = (() => {
     switch (section) {
       case "appearance":
-        return <AppearancePanel search={search} />;
+        return <AppearancePanel />;
       case "analytics":
-        return <AnalyticsPanel search={search} />;
+        return <AnalyticsPanel />;
       case "backup":
-        return <BackupPanel search={search} />;
+        return <BackupPanel />;
       case "development":
-        return (
-          <DevelopmentPanel
-            onAfterReset={onAfterReset}
-            pageId={pageId}
-            search={search}
-          />
-        );
+        return <DevelopmentPanel onAfterReset={onAfterReset} pageId={pageId} />;
       case "shortcuts":
-        return <KeyboardShortcutsPanel search={search} />;
+        return <KeyboardShortcutsPanel />;
       case "template":
-        return <TemplatePanel search={search} />;
+        return <TemplatePanel />;
       default: {
         const _exhaustive: never = section;
         return _exhaustive;

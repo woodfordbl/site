@@ -138,11 +138,12 @@ function followAtRest(posGap: number, vel: number, targetVel: number): boolean {
  *   ({@link https://bugs.webkit.org/show_bug.cgi?id=297779}) can leave
  *   `offsetTop` stale after a keyboard cycle; we clamp it to `>= 0`.
  *
- * The remaining iOS jitter source — the page panning the visual viewport when
- * an inner scroller rubber-bands — is killed in CSS via `overscroll-behavior`
- * on the canvas scroll container + `html`/`body`, not here. The document itself
- * never scrolls (`site-shell` is `h-svh; overflow-hidden`), so once chaining is
- * contained `offsetTop` stays put and this loop has almost nothing to chase.
+ * The remaining iOS jitter source — the page panning the visual viewport when a
+ * scroller rubber-bands — is killed in CSS via `overscroll-behavior: none` on
+ * `html`/`body` (the desktop inner canvas scroller also sets `overscroll-contain`),
+ * not here. On mobile the document is the scroller (the shell is `max-md:min-h-svh`,
+ * not `overflow-hidden`), so `offsetTop` now tracks real document scroll; the rAF
+ * spring chases it the same way it already chased event-less iOS momentum scroll.
  *
  * Visibility is driven by the caller (focus state), NOT by a keyboard-height
  * threshold — that threshold collapses during scroll (offsetTop rises) and would

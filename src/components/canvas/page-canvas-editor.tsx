@@ -471,15 +471,17 @@ function PageCanvasEditorBody({
                     <PageContentLayoutProvider
                       useFullPanelWidth={useFullPanelWidth}
                     >
-                      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div className="relative flex flex-col max-md:flex-none md:min-h-0 md:flex-1 md:overflow-hidden">
                         <div
                           className={cn(
-                            // `overscroll-contain`: keep inner-scroll rubber-band
-                            // from chaining to the page and panning the visual
-                            // viewport, which is what makes the keyboard toolbar
-                            // jitter on iOS (see useKeyboardToolbarAnchor +
-                            // docs/architecture/keyboard-toolbar.md).
-                            "relative flex min-h-0 flex-1 flex-col overscroll-contain max-md:overflow-x-clip",
+                            // Desktop: this is the inner scroller — `overscroll-contain`
+                            // keeps its rubber-band from chaining to the page and
+                            // panning the visual viewport (keyboard-toolbar jitter on
+                            // iOS; see useKeyboardToolbarAnchor +
+                            // docs/architecture/keyboard-toolbar.md). On mobile the
+                            // document is the scroller, so this is normal flow and
+                            // body/html `overscroll-behavior: none` owns chain control.
+                            "relative flex flex-col max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overscroll-contain",
                             isCoarsePrimaryPointer
                               ? pageCanvasTouchScrollClassName
                               : pageCanvasMobileScrollClassName

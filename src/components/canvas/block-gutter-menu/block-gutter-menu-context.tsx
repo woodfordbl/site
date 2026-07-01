@@ -21,6 +21,7 @@ import {
   useCanvasEditorContext,
   useCanvasEditorState,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { findRowById } from "@/lib/blocks/block-tree.ts";
 import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
 import {
@@ -59,7 +60,7 @@ export function BlockGutterMenuProvider({
   const { rows } = useCanvasEditorState();
   const { closeBlockActionsMenu, openRowId } = useBlockActionsMenu();
 
-  const row = rows.find((entry) => entry.rowId === rowId);
+  const row = findRowById(rows, rowId);
   const effectiveBlockId = row?.effectiveBlock.id;
   const canTurnInto = row ? canTurnIntoBlock(row) : false;
   const turnIntoValue = row
@@ -105,7 +106,7 @@ export function BlockGutterMenuProvider({
 
   const handleEmbedToggleCaption = useCallback(
     (enabled: boolean) => {
-      const currentRow = rows.find((entry) => entry.rowId === rowId);
+      const currentRow = findRowById(rows, rowId);
       const block = currentRow?.effectiveBlock;
       if (block?.type !== "embed") {
         return;
@@ -232,29 +233,29 @@ export function BlockGutterMenuProvider({
     });
   }, [dispatch, tableBlock, tableColumnCount]);
 
-  const setCalloutIcon = useCallback(
-    (icon: string | undefined) => {
-      const currentRow = rows.find((entry) => entry.rowId === rowId);
-      const block = currentRow?.effectiveBlock;
-      if (block?.type !== "callout") {
-        return;
-      }
-      dispatch({
-        type: "row.update",
-        rowId,
-        block: { ...block, props: { ...block.props, icon } },
-      });
-    },
-    [dispatch, rowId, rows]
-  );
-
   const handleAddCalloutIcon = useCallback(() => {
-    setCalloutIcon(DEFAULT_CALLOUT_ICON);
-  }, [setCalloutIcon]);
+    const currentRow = findRowById(rows, rowId);
+    const block = currentRow?.effectiveBlock;
+    if (block?.type !== "callout") {
+      return;
+    }
+    dispatch({
+      type: "row.update",
+      rowId,
+      block: {
+        ...block,
+        props: { ...block.props, icon: DEFAULT_CALLOUT_ICON },
+      },
+    });
+  }, [dispatch, rowId, rows]);
 
-  const handleRemoveCalloutIcon = useCallback(() => {
-    setCalloutIcon(undefined);
-  }, [setCalloutIcon]);
+  // Open the callout's inline icon picker (dropdown / drawer) so the icon can be
+  // changed or removed there; mirrors how embed "replace" hands off via focus.
+  const handleEditCalloutIcon = useCallback(() => {
+    runAfterMenuClose(() => {
+      dispatch({ type: "focus.set", rowId, calloutAction: "editIcon" });
+    });
+  }, [dispatch, rowId, runAfterMenuClose]);
 
   const supportsBlockColor = row !== undefined;
   const blockColor = row?.effectiveBlock.color;
@@ -262,7 +263,7 @@ export function BlockGutterMenuProvider({
 
   const handleSetBlockColor = useCallback(
     (color: BlockColor | undefined) => {
-      const block = rows.find((entry) => entry.rowId === rowId)?.effectiveBlock;
+      const block = findRowById(rows, rowId)?.effectiveBlock;
       if (!block) {
         return;
       }
@@ -273,7 +274,7 @@ export function BlockGutterMenuProvider({
 
   const handleSetBlockBackground = useCallback(
     (color: BlockColor | undefined) => {
-      const block = rows.find((entry) => entry.rowId === rowId)?.effectiveBlock;
+      const block = findRowById(rows, rowId)?.effectiveBlock;
       if (!block) {
         return;
       }
@@ -301,7 +302,7 @@ export function BlockGutterMenuProvider({
     canTurnInto,
     embedBlock,
     handleAddCalloutIcon,
-    handleRemoveCalloutIcon,
+    handleEditCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,
@@ -333,7 +334,7 @@ export function BlockGutterMenuProvider({
       effectiveBlockId,
       embedBlock,
       handleAddCalloutIcon,
-      handleRemoveCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
@@ -368,7 +369,7 @@ export function BlockGutterMenuProvider({
       effectiveBlockId,
       embedBlock,
       handleAddCalloutIcon,
-      handleRemoveCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,

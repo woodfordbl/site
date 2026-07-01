@@ -78,20 +78,22 @@ Chase the keyboard on the main thread without dropping a frame:
 
 The deepest iOS jitter source is the page **panning the visual viewport** as you
 scroll — every pan moves `offsetTop`, and the main-thread bar lags it by a frame.
-We remove the pan rather than chase it faster:
 
-1. The document **never scrolls** — `site-shell` is `h-svh; overflow-hidden`
-   ([`site-shell.tsx`](../../src/components/layout/site-shell.tsx)); all scrolling
-   happens in inner containers.
-2. The canvas scroll container has **`overscroll-contain`**, and `html`/`body`
-   have **`overscroll-behavior: none`**, so an inner-scroll fling at a boundary
-   can't rubber-band the page.
+**Scroll model differs by breakpoint.** On **desktop** the document never scrolls
+(`site-shell` is `md:h-svh md:overflow-hidden`,
+[`site-shell.tsx`](../../src/components/layout/site-shell.tsx)) and all scrolling
+happens in the inner canvas container, which carries **`overscroll-contain`**; with
+no page scroll the bar is effectively static and the rAF loop has almost nothing to
+chase. On **mobile** (`max-md:min-h-svh`) the **document** is the scroller — so
+content can flow behind the iOS Safari bottom bar and collapse it on scroll — and
+`offsetTop` now tracks real document scroll. The rAF spring chases that the same way
+it already chased event-less iOS momentum scroll.
 
-With no page scroll and no rubber-band, `offsetTop` stays put while you scroll
-content, so the bar is effectively static while the keyboard is up and the rAF
-loop has almost nothing to chase. This CSS is the highest-leverage part of the
-fix — the rAF micro-optimizations above only matter for the keyboard show/hide
-transition and any residual viewport motion.
+The one invariant across both: **`html`/`body` carry `overscroll-behavior: none`**
+([`styles.css`](../../src/styles.css)), so a fling at a scroll boundary can't
+rubber-band/pan the visual viewport. This is the highest-leverage part of the fix —
+the rAF micro-optimizations above matter most for the keyboard show/hide transition
+and, on mobile, for tracking the document scroll smoothly.
 
 ## Follow motion (spring)
 

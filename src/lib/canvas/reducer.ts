@@ -71,9 +71,11 @@ import {
   planTableRemoveColumn,
   planTableRemoveRow,
   planTableReorderColumn,
+  planTableResetRowHeight,
   planTableToggleHeaderColumn,
   planTableToggleHeaderRow,
   planTableUpdateColumnWidths,
+  planTableUpdateRowHeight,
 } from "@/lib/canvas/table-layout.ts";
 import {
   buildBlocksForTabsCreate,
@@ -960,6 +962,24 @@ export function canvasReducer(
       };
     }
 
+    case "table.updateRowHeight": {
+      return {
+        state,
+        effects: planTableUpdateRowHeight(
+          state.rows,
+          command.tableRowId,
+          command.height
+        ),
+      };
+    }
+
+    case "table.resetRowHeight": {
+      return {
+        state,
+        effects: planTableResetRowHeight(state.rows, command.tableRowId),
+      };
+    }
+
     case "table.focusCell": {
       return {
         state,
@@ -1126,6 +1146,7 @@ export function canvasReducer(
         placement: command.placement,
         offset: command.offset,
         embedAction: command.embedAction,
+        calloutAction: command.calloutAction,
       });
       return { state, effects };
     }
