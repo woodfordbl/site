@@ -5,10 +5,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { RichTextArea } from "@/components/editor/rich-text-area.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
+import { toggleMarkInRange } from "@/lib/blocks/rich-text.ts";
 import { matchMarkdownShortcut } from "@/lib/canvas/markdown-shortcuts.ts";
 import {
+  type CanvasField,
   type FieldSelection,
   focusFieldAtPlacement,
   focusFieldAtSelection,
@@ -19,16 +22,27 @@ import {
   handleBlockIndentKeyDown,
   handleBlockModifierArrowKeyDown,
   handleSlashMenuKeyDown,
+  resolveFormattingShortcut,
   resolveStructuralDeleteKey,
 } from "@/lib/editor/field-keydown.ts";
+import type { RichTextDomSnapshot } from "@/lib/editor/rich-text-dom.ts";
+import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
-/** Canvas editor fields: no chrome, no focus ring. Textareas grow via field-sizing-content. */
+/**
+ * Canvas editor fields: no chrome, no focus ring. Textareas grow via
+ * field-sizing-content. Text color is inherited (not `text-foreground`) so
+ * block-level colors on the shell flow into the field.
+ */
 export const editorFieldClassName =
-  "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
+  "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 shadow-none outline-none placeholder:text-muted-foreground focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
 
 export const editorTextareaClassName =
   "field-sizing-content resize-none overflow-hidden";
+
+/** Placeholder for the rich-text surface (native fields use `placeholder=`). */
+const richPlaceholderClassName =
+  "empty:before:pointer-events-none empty:before:absolute empty:before:top-0 empty:before:left-1 empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]";
 
 interface EditableSurfaceProps {
   ariaLabel?: string;
@@ -37,17 +51,21 @@ interface EditableSurfaceProps {
   autoFocusPlacement?: "start" | "end";
   className?: string;
   indent?: number;
+  /**
+   * Inline marks over `value`. Passing marks (even `[]`) switches the surface
+   * to the rich-text contenteditable field and enables formatting shortcuts;
+   * `onChange` then reports the edited marks as its second argument.
+   */
+  marks?: InlineMark[];
   multiline?: boolean;
   onAutoFocusHandled?: () => void;
-  onChange: (value: string) => void;
+  onChange: (value: string, marks?: InlineMark[]) => void;
   onEnter?: (selection: FieldSelection) => void;
   onExtendSelectionDown?: () => void;
   onExtendSelectionUp?: () => void;
   onIndentChange?: (indent: number) => void;
   /** Return true when the key event is fully handled (skips default Enter/arrow/delete). */
-  onKeyDown?: (
-    event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => boolean;
+  onKeyDown?: (event: KeyboardEvent<CanvasField>) => boolean;
   onMarkdownShortcut?: () => boolean;
   onMoveRowDown?: () => void;
   onMoveRowUp?: () => void;
@@ -77,6 +95,7 @@ interface EditableSurfaceProps {
 
 export function EditableSurface({
   value,
+  marks,
   onChange,
   onSlash,
   onSlashClose,
@@ -114,6 +133,8 @@ export function EditableSurface({
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const richRef = useRef<HTMLDivElement>(null);
+  const isRich = marks !== undefined;
 
   const assignFieldRef = useCallback(
     (node: HTMLInputElement | HTMLTextAreaElement | null) => {
@@ -129,8 +150,15 @@ export function EditableSurface({
     []
   );
 
+  const getField = useCallback((): CanvasField | null => {
+    if (isRich) {
+      return richRef.current;
+    }
+    return multiline ? textareaRef.current : inputRef.current;
+  }, [isRich, multiline]);
+
   const applyAutoFocus = useCallback(() => {
-    const field = multiline ? textareaRef.current : inputRef.current;
+    const field = getField();
     if (!field) {
       return;
     }
@@ -143,7 +171,7 @@ export function EditableSurface({
         end: autoFocusOffset,
       });
     }
-  }, [autoFocusOffset, autoFocusPlacement, multiline]);
+  }, [autoFocusOffset, autoFocusPlacement, getField]);
 
   useAutoFocus({
     enabled: autoFocus,
@@ -152,7 +180,7 @@ export function EditableSurface({
   });
 
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (event: KeyboardEvent<CanvasField>) => {
       const absorbKeyEvent = () => {
         event.stopPropagation();
       };
@@ -160,6 +188,28 @@ export function EditableSurface({
       if (onKeyDownProp?.(event)) {
         absorbKeyEvent();
         return;
+      }
+
+      if (isRich) {
+        const formatting = resolveFormattingShortcut(event);
+        if (formatting) {
+          event.preventDefault();
+          const selection = getFieldSelection(event.currentTarget);
+          if (selection.start !== selection.end) {
+            onChange(
+              value,
+              toggleMarkInRange(
+                marks ?? [],
+                formatting,
+                selection.start,
+                selection.end,
+                value.length
+              )
+            );
+          }
+          absorbKeyEvent();
+          return;
+        }
       }
 
       if (
@@ -215,10 +265,8 @@ export function EditableSurface({
         !slashMenuOpen &&
         matchMarkdownShortcut(value)
       ) {
-        const field = event.currentTarget;
-        const caretStart = field.selectionStart ?? value.length;
-        const caretEnd = field.selectionEnd ?? caretStart;
-        if (caretStart === caretEnd && caretEnd === value.length) {
+        const caret = getFieldSelection(event.currentTarget);
+        if (caret.start === caret.end && caret.end === value.length) {
           event.preventDefault();
           if (onMarkdownShortcut()) {
             absorbKeyEvent();
@@ -229,9 +277,7 @@ export function EditableSurface({
 
       if (event.key === "Enter" && !event.shiftKey && onEnter) {
         event.preventDefault();
-        const start = event.currentTarget.selectionStart ?? value.length;
-        const end = event.currentTarget.selectionEnd ?? start;
-        onEnter({ start, end });
+        onEnter(getFieldSelection(event.currentTarget));
         absorbKeyEvent();
         return;
       }
@@ -257,6 +303,9 @@ export function EditableSurface({
       absorbKeyEvent();
     },
     [
+      isRich,
+      marks,
+      onChange,
       onEnter,
       onIndentChange,
       indent,
@@ -280,6 +329,20 @@ export function EditableSurface({
     ]
   );
 
+  const emitSlash = useCallback(
+    (nextValue: string, caret: FieldSelection) => {
+      if (!onSlash) {
+        return;
+      }
+      if (nextValue.startsWith("/")) {
+        onSlash(nextValue.slice(1), caret);
+      } else {
+        onSlashClose?.();
+      }
+    },
+    [onSlash, onSlashClose]
+  );
+
   const handleChange = useCallback(
     (
       nextValue: string,
@@ -290,16 +353,22 @@ export function EditableSurface({
         : { start: nextValue.length, end: nextValue.length };
 
       onChange(nextValue);
-
-      if (onSlash) {
-        if (nextValue.startsWith("/")) {
-          onSlash(nextValue.slice(1), caret);
-        } else {
-          onSlashClose?.();
-        }
-      }
+      emitSlash(nextValue, caret);
     },
-    [onChange, onSlash, onSlashClose]
+    [emitSlash, onChange]
+  );
+
+  const handleRichInput = useCallback(
+    (snapshot: RichTextDomSnapshot) => {
+      const field = richRef.current;
+      const caret = field
+        ? getFieldSelection(field)
+        : { start: snapshot.text.length, end: snapshot.text.length };
+
+      onChange(snapshot.text, snapshot.marks);
+      emitSlash(snapshot.text, caret);
+    },
+    [emitSlash, onChange]
   );
 
   useLayoutEffect(() => {
@@ -307,24 +376,54 @@ export function EditableSurface({
       return;
     }
 
-    const field = multiline ? textareaRef.current : inputRef.current;
+    const field = getField();
     if (!field) {
       return;
     }
 
-    const start = Math.min(slashCaret.start, field.value.length);
-    const end = Math.min(slashCaret.end, field.value.length);
+    const length = value.length;
+    const start = Math.min(slashCaret.start, length);
+    const end = Math.min(slashCaret.end, length);
 
-    if (field.selectionStart === start && field.selectionEnd === end) {
+    const current = getFieldSelection(field);
+    if (current.start === start && current.end === end) {
       return;
     }
 
-    field.setSelectionRange(start, end);
-  }, [multiline, slashCaret, slashMenuOpen]);
+    focusFieldAtSelection(field, { start, end });
+  }, [getField, slashCaret, slashMenuOpen, value.length]);
 
   const showPlaceholder =
     value.length === 0 && (placeholderVisibility === "when-empty" || isFocused);
   const fieldClassName = cn(editorFieldClassName, "relative z-10", className);
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    onTextFocus?.();
+  }, [onTextFocus]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    onTextBlur?.();
+  }, [onTextBlur]);
+
+  if (isRich) {
+    return (
+      <RichTextArea
+        ariaLabel={ariaLabel}
+        className={cn(fieldClassName, richPlaceholderClassName)}
+        fieldRef={richRef}
+        marks={marks}
+        multiline={multiline}
+        onBlur={handleBlur}
+        onFocus={handleFocus}
+        onInput={handleRichInput}
+        onKeyDown={handleKeyDown}
+        placeholder={showPlaceholder ? placeholder : undefined}
+        value={value}
+      />
+    );
+  }
 
   if (multiline) {
     return (
@@ -332,15 +431,9 @@ export function EditableSurface({
         aria-label={ariaLabel}
         className={cn(fieldClassName, editorTextareaClassName)}
         data-canvas-field
-        onBlur={() => {
-          setIsFocused(false);
-          onTextBlur?.();
-        }}
+        onBlur={handleBlur}
         onChange={(event) => handleChange(event.target.value, event.target)}
-        onFocus={() => {
-          setIsFocused(true);
-          onTextFocus?.();
-        }}
+        onFocus={handleFocus}
         onKeyDown={handleKeyDown}
         placeholder={showPlaceholder ? placeholder : undefined}
         ref={assignFieldRef}
@@ -355,15 +448,9 @@ export function EditableSurface({
       aria-label={ariaLabel}
       className={fieldClassName}
       data-canvas-field
-      onBlur={() => {
-        setIsFocused(false);
-        onTextBlur?.();
-      }}
+      onBlur={handleBlur}
       onChange={(event) => handleChange(event.target.value, event.target)}
-      onFocus={() => {
-        setIsFocused(true);
-        onTextFocus?.();
-      }}
+      onFocus={handleFocus}
       onKeyDown={handleKeyDown}
       placeholder={showPlaceholder ? placeholder : undefined}
       ref={assignFieldRef}

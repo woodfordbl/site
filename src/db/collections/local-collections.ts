@@ -7,6 +7,7 @@ import { createBlockShardStorageEventApi } from "@/db/collections/block-shard-st
 import {
   backfillBlockCreatedAt,
   backfillPageCreatedAt,
+  migrateCalloutsToContainers,
   migrateLocalStorageToV2,
 } from "@/db/collections/migrate-local-storage.ts";
 import {
@@ -128,6 +129,9 @@ function startLocalCollectionsSync(): void {
   backfillPageCreatedAt();
   backfillBlockCreatedAt();
   migrateLocalStorageToV2();
+  // After shards exist (post-V2), fold legacy leaf callouts into the container
+  // model so their text survives the schema strip on read.
+  migrateCalloutsToContainers();
   reconcileDirtyPagesCookie();
   localPagesCollection.startSyncImmediate();
   localBlocksCollection.startSyncImmediate();

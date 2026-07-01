@@ -4,9 +4,11 @@ import {
   getBlockDef,
 } from "@/lib/blocks/block-defs.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
+import { getBlockMarks, withBlockRichText } from "@/lib/blocks/rich-text.ts";
 import { defaultChildTypeForContainer } from "@/lib/canvas/block-container-config.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 import type { PageLinkProps } from "@/lib/schemas/block-props.ts";
+import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 
 function createId(): string {
   return crypto.randomUUID();
@@ -58,6 +60,14 @@ export function convertBlockType(
 ): Block {
   const indent = options?.indent ?? getBlockIndent(block);
   const parentId = block.parentId ?? null;
+  // Marks carry over only when the source text does (no text override).
+  const carriedMarks = options?.text === undefined ? getBlockMarks(block) : [];
+  const carriedStyle = {
+    ...(block.color ? { color: block.color } : {}),
+    ...(block.backgroundColor
+      ? { backgroundColor: block.backgroundColor }
+      : {}),
+  };
 
   if (type === "pageLink") {
     if (!options?.pageId) {
@@ -84,17 +94,23 @@ export function convertBlockType(
       block.type === "heading" || block.type === "toggleHeading"
         ? block.props.level
         : 1;
-    return {
-      ...next,
-      id: block.id,
-      parentId,
-      indent,
-      props: {
-        ...next.props,
-        text: options?.text ?? getTextFromBlock(block),
-        level: options?.headingLevel ?? sourceLevel,
+    const text = options?.text ?? getTextFromBlock(block);
+    return withBlockRichText(
+      {
+        ...next,
+        id: block.id,
+        parentId,
+        indent,
+        ...carriedStyle,
+        props: {
+          ...next.props,
+          text,
+          level: options?.headingLevel ?? sourceLevel,
+        },
       },
-    };
+      text,
+      carriedMarks
+    );
   }
 
   const next: Block = {
@@ -102,9 +118,10 @@ export function convertBlockType(
     id: block.id,
     parentId,
     indent,
+    ...carriedStyle,
   };
   const text = options?.text ?? getTextFromBlock(block);
-  return text ? withBlockText(next, text) : next;
+  return text ? withBlockRichText(next, text, carriedMarks) : next;
 }
 
 export function createPageLinkBlock(pageId: string): BlockFor<"pageLink"> {
@@ -143,12 +160,14 @@ export function buildWrappedContainerBlock(
 export function buildContainerChildBlock(
   containerType: ContainerBlockType,
   parentId: string,
-  options?: { text?: string }
+  options?: { text?: string; marks?: InlineMark[] }
 ): Block {
   const childType = defaultChildTypeForContainer(containerType);
   const child: Block = {
     ...createEmptyBlock(childType),
     parentId,
   };
-  return options?.text ? withBlockText(child, options.text) : child;
+  return options?.text
+    ? withBlockRichText(child, options.text, options.marks ?? [])
+    : child;
 }

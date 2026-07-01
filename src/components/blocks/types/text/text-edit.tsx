@@ -22,8 +22,9 @@ export function TextEdit({
     <EditableSurface
       ariaLabel="Text"
       className={isListItem ? canvasEditTextClassName : bodyTextClassName}
+      marks={props.marks ?? []}
       multiline
-      onChange={(text) => onChange({ ...props, text })}
+      onChange={(text, marks) => onChange({ ...props, text, marks })}
       placeholder={isListItem ? "List" : defaultTextPlaceholder}
       placeholderVisibility={isListItem ? "when-empty" : "when-focused"}
       value={props.text}

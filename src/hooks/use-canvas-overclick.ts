@@ -9,7 +9,7 @@ import { collectCanvasRowRects } from "@/lib/canvas/resolve-drop-target.ts";
 import { resolveOverclickRowFromPointer } from "@/lib/canvas/resolve-overclick-row.ts";
 
 const INTERACTIVE_SELECTOR =
-  "input, textarea, button, a, [role='button'], [data-canvas-row-select], [data-canvas-row-menu]";
+  "input, textarea, [contenteditable], button, a, [role='button'], [data-canvas-row-select], [data-canvas-row-menu]";
 
 /** True when `target` is inside a nested canvas row (list item, column child, etc.). */
 function isNestedRowShellTarget(

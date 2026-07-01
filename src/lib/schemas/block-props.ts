@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+import { inlineMarksSchema } from "./rich-text.ts";
+
 export const headingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 /**
@@ -14,11 +17,13 @@ export const headingPropsSchema = z.object({
 export const toggleHeadingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
   collapsed: z.boolean().optional(),
 });
 
 export const textPropsSchema = z.object({
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 export const listPropsSchema = z.object({
@@ -27,10 +32,11 @@ export const listPropsSchema = z.object({
 
 export const quotePropsSchema = z.object({
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
+/** `callout` is a container: no primary text, its body lives in child rows. */
 export const calloutPropsSchema = z.object({
-  text: z.string(),
   /** Emoji or `tabler:IconName` — same encoding as page icons. */
   icon: z.string().optional(),
 });
@@ -40,6 +46,7 @@ export const checklistPropsSchema = z.object({});
 export const checklistItemPropsSchema = z.object({
   checked: z.boolean(),
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 /** `pageLink` block props: target page id and optional slash-origin variant. */
@@ -105,6 +112,7 @@ export const tableRowPropsSchema = z.object({});
 
 export const tableCellPropsSchema = z.object({
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 /** `code` block props: source text plus a Shiki language id (defaults to plaintext). */

@@ -82,6 +82,7 @@ export type CanvasCommand =
       /** When true, absorb following same-scope siblings as children. */
       absorb?: boolean;
     }
+  | { type: "callout.create"; rowId: string; text?: string }
   | { type: "tabs.addTab"; tabsRowId: string }
   | { type: "tabs.removeTab"; tabRowId: string }
   | { type: "tabs.moveTab"; tabRowId: string; direction: "prev" | "next" }

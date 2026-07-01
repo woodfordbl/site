@@ -1,4 +1,5 @@
 import type { CanvasClipboardPayload } from "@/lib/canvas/clipboard.ts";
+import { isCanvasTextField } from "@/lib/editor/caret-navigation.ts";
 import { handleBlockModifierArrowKeyDown } from "@/lib/editor/field-keydown.ts";
 import { extractMediaFiles } from "@/lib/media/paste-media.ts";
 
@@ -26,7 +27,9 @@ export interface CanvasPasteHandlers extends CanvasKeyboardHandlers {
 function isBlockFieldFocused(event?: KeyboardEvent): boolean {
   const active = event?.target ?? document.activeElement;
   return (
-    active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLTextAreaElement ||
+    (active instanceof Element && isCanvasTextField(active))
   );
 }
 

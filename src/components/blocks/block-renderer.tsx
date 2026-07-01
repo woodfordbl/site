@@ -1,6 +1,7 @@
 import { BlockShell } from "@/components/blocks/block-shell.tsx";
 import { getBlockSpec, isLeafSpec } from "@/components/blocks/registry.ts";
 import { useBlockFieldActions } from "@/hooks/use-block-field-actions.ts";
+import { blockColorClassName } from "@/lib/blocks/block-colors.ts";
 import {
   isContainerBlockType,
   type LeafBlockType,
@@ -54,6 +55,7 @@ export function BlockRenderer({
 
   return (
     <BlockShell
+      className={blockColorClassName(block)}
       indent={isContainerChild ? 0 : indentLevel}
       spacingClassName={spacingClassName}
     >

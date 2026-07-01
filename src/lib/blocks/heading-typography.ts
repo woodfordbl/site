@@ -9,7 +9,8 @@ export const headingTypographyClassNames: Record<
   1: "text-[length:calc(1.5rem*var(--page-text-scale))] font-semibold tracking-tight sm:text-[length:calc(1.875rem*var(--page-text-scale))] sm:leading-[1.25]",
   2: "text-[length:calc(1.25rem*var(--page-text-scale))] font-semibold tracking-tight sm:text-[length:calc(1.5rem*var(--page-text-scale))]",
   3: "text-[length:calc(1.125rem*var(--page-text-scale))] font-semibold tracking-tight sm:text-[length:calc(1.25rem*var(--page-text-scale))]",
-  4: "text-[length:calc(1rem*var(--page-text-scale))] font-semibold tracking-tight text-foreground",
+  4: "text-[length:calc(1rem*var(--page-text-scale))] font-semibold tracking-tight",
 };
 
-export const headingSurfaceClassName = "text-balance text-foreground";
+// Color inherits from the block shell so block-level colors apply.
+export const headingSurfaceClassName = "text-balance";

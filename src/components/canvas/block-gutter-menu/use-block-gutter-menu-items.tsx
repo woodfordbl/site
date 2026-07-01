@@ -4,6 +4,8 @@ import {
   IconCopy,
   IconExternalLink,
   IconLink,
+  IconMoodOff,
+  IconMoodSmile,
   IconRefresh,
   IconRowInsertBottom,
   IconTableColumn,
@@ -13,15 +15,23 @@ import {
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 
+import { BlockColorSwatch } from "@/components/canvas/block-color-swatch.tsx";
 import type { BlockGutterMenuItemsInput } from "@/components/canvas/block-gutter-menu/block-gutter-menu-types.ts";
+import {
+  BLOCK_COLOR_DEFS,
+  BLOCK_COLOR_IDS,
+} from "@/lib/blocks/block-colors.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 
 export function useBlockGutterMenuItems(
   context: BlockGutterMenuItemsInput
 ): ActionMenuEntry[] {
   const {
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleRemoveCalloutIcon,
     handleDuplicate,
     handleDelete,
     handleEmbedCopyLink,
@@ -33,8 +43,11 @@ export function useBlockGutterMenuItems(
     handleToggleHeaderRow,
     handleAddRow,
     handleAddColumn,
+    handleSetBlockBackground,
+    handleSetBlockColor,
     handleTurnInto,
     lastTableRowId,
+    supportsBlockColor,
     tableBlock,
     turnIntoItems,
   } = context;
@@ -90,6 +103,26 @@ export function useBlockGutterMenuItems(
       });
     }
 
+    if (calloutBlock) {
+      if (calloutBlock.props.icon) {
+        items.push({
+          id: "callout-remove-icon",
+          label: "Remove icon",
+          keywords: ["callout", "remove", "icon", "glyph", "emoji"],
+          icon: <IconMoodOff />,
+          onSelect: handleRemoveCalloutIcon,
+        });
+      } else {
+        items.push({
+          id: "callout-add-icon",
+          label: "Add icon",
+          keywords: ["callout", "add", "icon", "glyph", "emoji"],
+          icon: <IconMoodSmile />,
+          onSelect: handleAddCalloutIcon,
+        });
+      }
+    }
+
     if (tableBlock) {
       items.push({
         id: "table-fit-to-width",
@@ -135,6 +168,48 @@ export function useBlockGutterMenuItems(
       }
     }
 
+    if (supportsBlockColor) {
+      for (const color of BLOCK_COLOR_IDS) {
+        const label = BLOCK_COLOR_DEFS[color].label;
+        items.push({
+          id: `color-text-${color}`,
+          label: `${label} text`,
+          keywords: ["color", "text color", color],
+          icon: <BlockColorSwatch color={color} variant="text" />,
+          onSelect: () => {
+            handleSetBlockColor(color);
+          },
+        });
+        items.push({
+          id: `color-bg-${color}`,
+          label: `${label} background`,
+          keywords: ["color", "background color", "highlight", color],
+          icon: <BlockColorSwatch color={color} variant="background" />,
+          onSelect: () => {
+            handleSetBlockBackground(color);
+          },
+        });
+      }
+      items.push({
+        id: "color-text-default",
+        label: "Default text",
+        keywords: ["color", "text color", "default", "reset"],
+        icon: <BlockColorSwatch color={undefined} variant="text" />,
+        onSelect: () => {
+          handleSetBlockColor(undefined);
+        },
+      });
+      items.push({
+        id: "color-bg-default",
+        label: "Default background",
+        keywords: ["color", "background color", "default", "reset"],
+        icon: <BlockColorSwatch color={undefined} variant="background" />,
+        onSelect: () => {
+          handleSetBlockBackground(undefined);
+        },
+      });
+    }
+
     items.push({
       id: "duplicate",
       label: "Duplicate",
@@ -153,8 +228,11 @@ export function useBlockGutterMenuItems(
 
     return items;
   }, [
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleRemoveCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,
@@ -164,10 +242,13 @@ export function useBlockGutterMenuItems(
     handleEmbedReplace,
     handleEmbedToggleCaption,
     handleFitToWidth,
+    handleSetBlockBackground,
+    handleSetBlockColor,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
     lastTableRowId,
+    supportsBlockColor,
     tableBlock,
     turnIntoItems,
   ]);

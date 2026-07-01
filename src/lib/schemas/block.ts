@@ -22,6 +22,7 @@ import {
   textPropsSchema,
   toggleHeadingPropsSchema,
 } from "./block-props.ts";
+import { blockColorSchema } from "./rich-text.ts";
 
 export const blockTypeSchema = z.enum([
   "heading",
@@ -53,6 +54,10 @@ const blockBaseSchema = z.object({
   parentId: z.string().nullable().optional(),
   indent: z.number().int().min(0).max(4).optional(),
   type: blockTypeSchema,
+  /** Block-level text color (Notion-style palette id). */
+  color: blockColorSchema.optional(),
+  /** Block-level background color (Notion-style palette id). */
+  backgroundColor: blockColorSchema.optional(),
 });
 
 export const blockSchema = z.discriminatedUnion("type", [

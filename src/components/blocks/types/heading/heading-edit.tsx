@@ -20,7 +20,8 @@ export function HeadingEdit({
         headingSurfaceClassName,
         headingTypographyClassNames[props.level]
       )}
-      onChange={(text) => onChange({ ...props, text })}
+      marks={props.marks ?? []}
+      onChange={(text, marks) => onChange({ ...props, text, marks })}
       placeholder={`Heading ${props.level}`}
       placeholderVisibility="when-empty"
       value={props.text}
