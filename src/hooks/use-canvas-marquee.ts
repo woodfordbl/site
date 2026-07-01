@@ -5,6 +5,7 @@ import { useDragState } from "@/components/dnd/use-dnd.ts";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import {
+  collectCanvasScopeRects,
   type MarqueePoint,
   type MarqueeRect,
   marqueeRectFromPoints,
@@ -115,7 +116,12 @@ export function useCanvasMarquee(
       });
       setRect(marquee);
       selectRows(
-        rowIdsIntersectingMarquee(getRows(), marquee, collectCanvasRowRects())
+        rowIdsIntersectingMarquee(
+          getRows(),
+          marquee,
+          collectCanvasRowRects(),
+          collectCanvasScopeRects()
+        )
       );
     };
 

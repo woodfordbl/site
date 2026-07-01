@@ -113,6 +113,7 @@ export function ToggleHeadingView({ row, mode }: BlockContainerProps) {
             "relative flex min-w-0 flex-col gap-0",
             row.children.length === 0 && "min-h-9"
           )}
+          data-canvas-scope={row.rowId}
           data-toggle-content
         >
           {showScopeStart ? (
