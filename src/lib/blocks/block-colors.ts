@@ -1,4 +1,4 @@
-import type { Block } from "@/lib/schemas/block.ts";
+import type { Block, BlockType } from "@/lib/schemas/block.ts";
 import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -63,14 +63,61 @@ export const BLOCK_COLOR_DEFS: Record<BlockColor, BlockColorDef> = {
 
 export const BLOCK_COLOR_IDS = Object.keys(BLOCK_COLOR_DEFS) as BlockColor[];
 
-/** Combined text + background classes for a block's stored colors. */
-export function blockColorClassName(block: Block): string | undefined {
-  const textClass = block.color
-    ? BLOCK_COLOR_DEFS[block.color].textClass
-    : undefined;
-  const bgClass = block.backgroundColor
-    ? BLOCK_COLOR_DEFS[block.backgroundColor].bgClass
-    : undefined;
+/** Which color controls a block offers (drives menus and rendering). */
+export interface BlockColorCapability {
+  background: boolean;
+  text: boolean;
+}
+
+const NO_COLOR: BlockColorCapability = { text: false, background: false };
+const BACKGROUND_ONLY: BlockColorCapability = { text: false, background: true };
+const FULL_COLOR: BlockColorCapability = { text: true, background: true };
+
+/**
+ * Per-type color limits. Callouts take a background only (the box tint) and own
+ * coloring for their children — direct children expose no color controls.
+ */
+export function resolveBlockColorCapability(
+  type: BlockType,
+  parentType?: BlockType | null
+): BlockColorCapability {
+  if (parentType === "callout") {
+    return NO_COLOR;
+  }
+  if (type === "callout") {
+    return BACKGROUND_ONLY;
+  }
+  return FULL_COLOR;
+}
+
+/** Background class for a stored color id (e.g. the callout box tint). */
+export function blockBackgroundClassName(
+  color: BlockColor | undefined
+): string | undefined {
+  return color ? BLOCK_COLOR_DEFS[color].bgClass : undefined;
+}
+
+/**
+ * Combined text + background classes for a block's stored colors, honoring the
+ * type's capability. Callouts return nothing here — `CalloutView` applies the
+ * background to its own box instead of the row shell.
+ */
+export function blockColorClassName(
+  block: Block,
+  parentType?: BlockType | null
+): string | undefined {
+  if (block.type === "callout") {
+    return;
+  }
+  const capability = resolveBlockColorCapability(block.type, parentType);
+  const textClass =
+    capability.text && block.color
+      ? BLOCK_COLOR_DEFS[block.color].textClass
+      : undefined;
+  const bgClass =
+    capability.background && block.backgroundColor
+      ? BLOCK_COLOR_DEFS[block.backgroundColor].bgClass
+      : undefined;
   if (!(textClass || bgClass)) {
     return;
   }

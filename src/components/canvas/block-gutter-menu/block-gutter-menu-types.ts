@@ -1,4 +1,5 @@
 import type { getSlashMenuItems } from "@/components/blocks/registry.ts";
+import type { BlockColorCapability } from "@/lib/blocks/block-colors.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -8,6 +9,7 @@ export interface BlockGutterMenuContextValue {
   actionItems: ActionMenuEntry[];
   blockBackgroundColor: BlockColor | undefined;
   blockColor: BlockColor | undefined;
+  blockColorCapability: BlockColorCapability;
   blockTypeLabel: string | undefined;
   calloutBlock: Extract<Block, { type: "callout" }> | null;
   canTurnInto: boolean;
@@ -33,7 +35,6 @@ export interface BlockGutterMenuContextValue {
   lastTableRowId: string | undefined;
   menuOpen: boolean;
   rowId: string;
-  supportsBlockColor: boolean;
   tableBlock: Extract<Block, { type: "table" }> | null;
   tableColumnCount: number;
   turnIntoItems: ReturnType<typeof getSlashMenuItems>;
@@ -77,7 +78,7 @@ export type BlockGutterMenuItemsInput = Pick<
   | "handleSetBlockColor"
   | "handleTurnInto"
   | "lastTableRowId"
-  | "supportsBlockColor"
+  | "blockColorCapability"
   | "tableBlock"
   | "turnIntoItems"
 >;

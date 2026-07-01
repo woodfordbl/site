@@ -9,6 +9,7 @@ import { useDropTarget } from "@/components/dnd/use-dnd.ts";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
+import { blockBackgroundClassName } from "@/lib/blocks/block-colors.ts";
 import { listMarkerCellClassName } from "@/lib/blocks/block-spacing.ts";
 import type { BlockContainerProps } from "@/lib/canvas/block-spec.types.ts";
 import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
@@ -91,7 +92,12 @@ export function CalloutView({ row, mode }: BlockContainerProps) {
   }
 
   return (
-    <div className="flex items-start gap-2 rounded-md bg-muted px-3 py-2">
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-md px-3 py-2",
+        blockBackgroundClassName(block.backgroundColor) ?? "bg-muted"
+      )}
+    >
       {iconSlot}
       <div
         className={cn(

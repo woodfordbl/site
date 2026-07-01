@@ -55,7 +55,7 @@ export function BlockRenderer({
 
   return (
     <BlockShell
-      className={blockColorClassName(block)}
+      className={blockColorClassName(block, parentType)}
       indent={isContainerChild ? 0 : indentLevel}
       spacingClassName={spacingClassName}
     >

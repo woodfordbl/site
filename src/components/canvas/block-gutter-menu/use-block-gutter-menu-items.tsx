@@ -23,6 +23,63 @@ import {
 } from "@/lib/blocks/block-colors.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 
+/** Searchable color entries, following the block's color capability. */
+function buildBlockColorItems(
+  capability: BlockGutterMenuItemsInput["blockColorCapability"],
+  handleSetBlockColor: BlockGutterMenuItemsInput["handleSetBlockColor"],
+  handleSetBlockBackground: BlockGutterMenuItemsInput["handleSetBlockBackground"]
+): ActionMenuEntry[] {
+  const items: ActionMenuEntry[] = [];
+
+  if (capability.text) {
+    for (const color of BLOCK_COLOR_IDS) {
+      items.push({
+        id: `color-text-${color}`,
+        label: `${BLOCK_COLOR_DEFS[color].label} text`,
+        keywords: ["color", "text color", color],
+        icon: <BlockColorSwatch color={color} variant="text" />,
+        onSelect: () => {
+          handleSetBlockColor(color);
+        },
+      });
+    }
+    items.push({
+      id: "color-text-default",
+      label: "Default text",
+      keywords: ["color", "text color", "default", "reset"],
+      icon: <BlockColorSwatch color={undefined} variant="text" />,
+      onSelect: () => {
+        handleSetBlockColor(undefined);
+      },
+    });
+  }
+
+  if (capability.background) {
+    for (const color of BLOCK_COLOR_IDS) {
+      items.push({
+        id: `color-bg-${color}`,
+        label: `${BLOCK_COLOR_DEFS[color].label} background`,
+        keywords: ["color", "background color", "highlight", color],
+        icon: <BlockColorSwatch color={color} variant="background" />,
+        onSelect: () => {
+          handleSetBlockBackground(color);
+        },
+      });
+    }
+    items.push({
+      id: "color-bg-default",
+      label: "Default background",
+      keywords: ["color", "background color", "default", "reset"],
+      icon: <BlockColorSwatch color={undefined} variant="background" />,
+      onSelect: () => {
+        handleSetBlockBackground(undefined);
+      },
+    });
+  }
+
+  return items;
+}
+
 export function useBlockGutterMenuItems(
   context: BlockGutterMenuItemsInput
 ): ActionMenuEntry[] {
@@ -43,11 +100,11 @@ export function useBlockGutterMenuItems(
     handleToggleHeaderRow,
     handleAddRow,
     handleAddColumn,
+    blockColorCapability,
     handleSetBlockBackground,
     handleSetBlockColor,
     handleTurnInto,
     lastTableRowId,
-    supportsBlockColor,
     tableBlock,
     turnIntoItems,
   } = context;
@@ -168,47 +225,13 @@ export function useBlockGutterMenuItems(
       }
     }
 
-    if (supportsBlockColor) {
-      for (const color of BLOCK_COLOR_IDS) {
-        const label = BLOCK_COLOR_DEFS[color].label;
-        items.push({
-          id: `color-text-${color}`,
-          label: `${label} text`,
-          keywords: ["color", "text color", color],
-          icon: <BlockColorSwatch color={color} variant="text" />,
-          onSelect: () => {
-            handleSetBlockColor(color);
-          },
-        });
-        items.push({
-          id: `color-bg-${color}`,
-          label: `${label} background`,
-          keywords: ["color", "background color", "highlight", color],
-          icon: <BlockColorSwatch color={color} variant="background" />,
-          onSelect: () => {
-            handleSetBlockBackground(color);
-          },
-        });
-      }
-      items.push({
-        id: "color-text-default",
-        label: "Default text",
-        keywords: ["color", "text color", "default", "reset"],
-        icon: <BlockColorSwatch color={undefined} variant="text" />,
-        onSelect: () => {
-          handleSetBlockColor(undefined);
-        },
-      });
-      items.push({
-        id: "color-bg-default",
-        label: "Default background",
-        keywords: ["color", "background color", "default", "reset"],
-        icon: <BlockColorSwatch color={undefined} variant="background" />,
-        onSelect: () => {
-          handleSetBlockBackground(undefined);
-        },
-      });
-    }
+    items.push(
+      ...buildBlockColorItems(
+        blockColorCapability,
+        handleSetBlockColor,
+        handleSetBlockBackground
+      )
+    );
 
     items.push({
       id: "duplicate",
@@ -247,8 +270,8 @@ export function useBlockGutterMenuItems(
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
+    blockColorCapability,
     lastTableRowId,
-    supportsBlockColor,
     tableBlock,
     turnIntoItems,
   ]);

@@ -68,12 +68,14 @@ function ContainerRowNode({
   gutterPullClassName,
   isMobile,
   mode,
+  parentType,
   row,
   showGutter,
 }: RowChromeProps & {
   Container: ComponentType<{ mode: BlockMode; row: CanvasRow }>;
   gutterPullClassName?: string;
   mode: BlockMode;
+  parentType?: BlockType;
   row: CanvasRow;
 }) {
   const { insertAfter, insertAtScopeStart, insertBefore } =
@@ -86,7 +88,7 @@ function ContainerRowNode({
     <CanvasRowShell
       contentClassName={cn(
         getTopLevelContentClassName(alignWithPageTitle, showGutter, isMobile),
-        blockColorClassName(row.effectiveBlock)
+        blockColorClassName(row.effectiveBlock, parentType)
       )}
       enableTouchGesture={enableTouchGesture}
       gutter={
@@ -198,6 +200,7 @@ function BlockTreeNodeImpl({
         Container={resolveContainerComponent(spec)}
         gutterPullClassName={gutterPullClassName}
         mode={mode}
+        parentType={parentType}
         row={row}
         {...chrome}
       />

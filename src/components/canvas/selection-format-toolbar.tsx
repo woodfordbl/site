@@ -28,7 +28,9 @@ import {
 import {
   BLOCK_COLOR_DEFS,
   BLOCK_COLOR_IDS,
+  resolveBlockColorCapability,
 } from "@/lib/blocks/block-colors.ts";
+import { findRowContext } from "@/lib/blocks/block-tree.ts";
 import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
 import {
   blockSupportsInlineMarks,
@@ -141,9 +143,18 @@ export function SelectionFormatToolbar() {
     };
   }, []);
 
-  const currentBlock = state
-    ? canvas.getRows().find((row) => row.rowId === state.rowId)?.effectiveBlock
-    : undefined;
+  // findRowContext resolves nested rows (list items, callout children) and
+  // exposes the parent, which scopes the color capability.
+  const rowContext = state
+    ? findRowContext(canvas.getRows(), state.rowId)
+    : null;
+  const currentBlock = rowContext?.row.effectiveBlock;
+  const colorCapability = currentBlock
+    ? resolveBlockColorCapability(
+        currentBlock.type,
+        rowContext?.parent?.effectiveBlock.type ?? null
+      )
+    : { text: false, background: false };
 
   const toggleMark = useCallback(
     (type: InlineMarkType) => {
@@ -235,64 +246,74 @@ export function SelectionFormatToolbar() {
           </button>
         );
       })}
-      <DropdownMenu onOpenChange={setColorMenuOpen} open={colorMenuOpen}>
-        <DropdownMenuTrigger
-          aria-label="Block color"
-          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground"
-          nativeButton
-          title="Block color"
-        >
-          <IconPaint className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Text color</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              onValueChange={(value) => {
-                setBlockColor(
-                  "color",
-                  value === DEFAULT_VALUE ? undefined : (value as BlockColor)
-                );
-              }}
-              value={currentBlock.color ?? DEFAULT_VALUE}
-            >
-              <DropdownMenuRadioItem value={DEFAULT_VALUE}>
-                <BlockColorSwatch color={undefined} variant="text" />
-                Default text
-              </DropdownMenuRadioItem>
-              {BLOCK_COLOR_IDS.map((color) => (
-                <DropdownMenuRadioItem key={color} value={color}>
-                  <BlockColorSwatch color={color} variant="text" />
-                  {BLOCK_COLOR_DEFS[color].label} text
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Background color</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              onValueChange={(value) => {
-                setBlockColor(
-                  "backgroundColor",
-                  value === DEFAULT_VALUE ? undefined : (value as BlockColor)
-                );
-              }}
-              value={currentBlock.backgroundColor ?? DEFAULT_VALUE}
-            >
-              <DropdownMenuRadioItem value={DEFAULT_VALUE}>
-                <BlockColorSwatch color={undefined} variant="background" />
-                Default background
-              </DropdownMenuRadioItem>
-              {BLOCK_COLOR_IDS.map((color) => (
-                <DropdownMenuRadioItem key={color} value={color}>
-                  <BlockColorSwatch color={color} variant="background" />
-                  {BLOCK_COLOR_DEFS[color].label} background
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {colorCapability.text || colorCapability.background ? (
+        <DropdownMenu onOpenChange={setColorMenuOpen} open={colorMenuOpen}>
+          <DropdownMenuTrigger
+            aria-label="Block color"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground"
+            nativeButton
+            title="Block color"
+          >
+            <IconPaint className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-56">
+            {colorCapability.text ? (
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Text color</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  onValueChange={(value) => {
+                    setBlockColor(
+                      "color",
+                      value === DEFAULT_VALUE
+                        ? undefined
+                        : (value as BlockColor)
+                    );
+                  }}
+                  value={currentBlock.color ?? DEFAULT_VALUE}
+                >
+                  <DropdownMenuRadioItem value={DEFAULT_VALUE}>
+                    <BlockColorSwatch color={undefined} variant="text" />
+                    Default text
+                  </DropdownMenuRadioItem>
+                  {BLOCK_COLOR_IDS.map((color) => (
+                    <DropdownMenuRadioItem key={color} value={color}>
+                      <BlockColorSwatch color={color} variant="text" />
+                      {BLOCK_COLOR_DEFS[color].label} text
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            ) : null}
+            {colorCapability.background ? (
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Background color</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  onValueChange={(value) => {
+                    setBlockColor(
+                      "backgroundColor",
+                      value === DEFAULT_VALUE
+                        ? undefined
+                        : (value as BlockColor)
+                    );
+                  }}
+                  value={currentBlock.backgroundColor ?? DEFAULT_VALUE}
+                >
+                  <DropdownMenuRadioItem value={DEFAULT_VALUE}>
+                    <BlockColorSwatch color={undefined} variant="background" />
+                    Default background
+                  </DropdownMenuRadioItem>
+                  {BLOCK_COLOR_IDS.map((color) => (
+                    <DropdownMenuRadioItem key={color} value={color}>
+                      <BlockColorSwatch color={color} variant="background" />
+                      {BLOCK_COLOR_DEFS[color].label} background
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }
