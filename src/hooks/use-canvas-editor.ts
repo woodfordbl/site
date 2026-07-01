@@ -157,6 +157,23 @@ export function useCanvasEditor(
     [getRows]
   );
 
+  // Replaces the whole selection (marquee drag-select). Bails on identical id
+  // lists so per-mousemove calls don't re-render every row.
+  const selectRows = useCallback((rowIds: string[]) => {
+    setSelection((current) => {
+      if (
+        current.selectedRowIds.length === rowIds.length &&
+        current.selectedRowIds.every((id, index) => id === rowIds[index])
+      ) {
+        return current;
+      }
+      if (rowIds.length === 0) {
+        return emptyBlockSelection;
+      }
+      return { anchorRowId: rowIds[0] ?? null, selectedRowIds: rowIds };
+    });
+  }, []);
+
   const applyCommandEffects = useCallback((command: CanvasCommand) => {
     const current = canvasRef.current;
     const result = canvasReducer({ rows: current.getPlacementRows() }, command);
@@ -442,6 +459,7 @@ export function useCanvasEditor(
       toggleRowSelection,
       selectAll,
       selectRow,
+      selectRows,
       clearSelection,
       isRowSelected,
       copySelection,
@@ -477,6 +495,7 @@ export function useCanvasEditor(
       toggleRowSelection,
       selectAll,
       selectRow,
+      selectRows,
       clearSelection,
       isRowSelected,
       copySelection,

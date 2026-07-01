@@ -24,6 +24,7 @@ import {
   CanvasFocusContext,
   CanvasSelectionContext,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { CanvasMarquee } from "@/components/canvas/canvas-marquee.tsx";
 import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx";
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
@@ -390,6 +391,7 @@ function PageCanvasEditorBody({
       saveRow: editor.saveRow,
       selectAll: editor.selectAll,
       selectRow: editor.selectRow,
+      selectRows: editor.selectRows,
       toggleRowSelection: editor.toggleRowSelection,
     }),
     [
@@ -414,6 +416,7 @@ function PageCanvasEditorBody({
       editor.saveRow,
       editor.selectAll,
       editor.selectRow,
+      editor.selectRows,
       editor.toggleRowSelection,
       serverPage.id,
     ]
@@ -517,6 +520,7 @@ function PageCanvasEditorBody({
                             </div>
                           </div>
                         </div>
+                        <CanvasMarquee scrollRootRef={scrollRootRef} />
                         <CanvasMenuRoot />
                         <MobileBlockActionsDrawer />
                         <MobileEditorToolbar />
