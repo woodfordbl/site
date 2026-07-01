@@ -17,6 +17,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsSectionRouteImport } from './routes/settings.$section'
 import { Route as PSplatRouteImport } from './routes/p.$'
+import { Route as DevCanvasRouteImport } from './routes/dev_.canvas'
 
 const TemplateRoute = TemplateRouteImport.update({
   id: '/template',
@@ -58,6 +59,11 @@ const PSplatRoute = PSplatRouteImport.update({
   path: '/p/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevCanvasRoute = DevCanvasRouteImport.update({
+  id: '/dev_/canvas',
+  path: '/dev/canvas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
   '/template': typeof TemplateRoute
+  '/dev/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
   '/template': typeof TemplateRoute
+  '/dev/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings': typeof SettingsIndexRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
   '/template': typeof TemplateRoute
+  '/dev_/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/settings'
     | '/template'
+    | '/dev/canvas'
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/dev'
     | '/template'
+    | '/dev/canvas'
     | '/p/$'
     | '/settings/$section'
     | '/settings'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/settings'
     | '/template'
+    | '/dev_/canvas'
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   DevRoute: typeof DevRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   TemplateRoute: typeof TemplateRoute
+  DevCanvasRoute: typeof DevCanvasRoute
   PSplatRoute: typeof PSplatRoute
 }
 
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev_/canvas': {
+      id: '/dev_/canvas'
+      path: '/dev/canvas'
+      fullPath: '/dev/canvas'
+      preLoaderRoute: typeof DevCanvasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -211,6 +231,7 @@ const rootRouteChildren: RootRouteChildren = {
   DevRoute: DevRoute,
   SettingsRoute: SettingsRouteWithChildren,
   TemplateRoute: TemplateRoute,
+  DevCanvasRoute: DevCanvasRoute,
   PSplatRoute: PSplatRoute,
 }
 export const routeTree = rootRouteImport

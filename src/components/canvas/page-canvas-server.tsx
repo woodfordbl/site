@@ -68,6 +68,7 @@ function createNoopCanvasEditorActions(
     saveRow: noop,
     selectAll: noop,
     selectRow: noop,
+    selectRows: noop,
     toggleRowSelection: noop,
   };
 }
