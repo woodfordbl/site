@@ -113,7 +113,6 @@ export function SettingsItemSelect<T extends string>({
 }: SettingsItemSelectProps<T>) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedLabel = selectedOption?.label ?? value;
-  const hasLeading = options.some((option) => option.leading != null);
 
   return (
     <DropdownMenu>
@@ -126,10 +125,7 @@ export function SettingsItemSelect<T extends string>({
           </Button>
         }
       />
-      <DropdownMenuContent
-        align="end"
-        className={cn(hasLeading ? "min-w-44" : "min-w-36")}
-      >
+      <DropdownMenuContent align="end">
         <DropdownMenuRadioGroup
           onValueChange={(nextValue) => {
             onValueChange(nextValue as T);
