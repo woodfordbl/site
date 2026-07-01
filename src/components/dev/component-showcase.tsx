@@ -1118,7 +1118,7 @@ function OverlaysSection() {
               </Button>
             }
           />
-          <DropdownMenuContent className="w-56">
+          <DropdownMenuContent>
             <DropdownMenuGroup>
               <DropdownMenuLabel>My account</DropdownMenuLabel>
               <DropdownMenuItem>

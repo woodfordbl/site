@@ -110,7 +110,7 @@ function BlockActionsMenuContent({
     <DropdownMenuContent
       align={align}
       className={cn(
-        "min-w-64 duration-0 data-closed:animate-none data-closed:duration-0",
+        "duration-0 data-closed:animate-none data-closed:duration-0",
         className
       )}
       data-canvas-row-menu

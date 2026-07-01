@@ -139,7 +139,7 @@ function ContextMenuContent({
       >
         <ContextMenuPrimitive.Popup
           className={cn(
-            "overlay-popover-surface z-50 max-h-(--available-height) min-w-36 overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 data-closed:overflow-hidden",
+            "overlay-popover-surface z-50 max-h-(--available-height) w-56 min-w-56 overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 data-closed:overflow-hidden",
             className
           )}
           data-slot="context-menu-content"
