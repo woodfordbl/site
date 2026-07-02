@@ -14,8 +14,9 @@ export function ChecklistItemEdit({
     <EditableSurface
       ariaLabel="Checklist item"
       className={cn(canvasEditTextClassName, "min-w-0 flex-1")}
+      marks={props.marks ?? []}
       multiline
-      onChange={(text) => onChange({ ...props, text })}
+      onChange={(text, marks) => onChange({ ...props, text, marks })}
       placeholder="To-do"
       value={props.text}
       {...keyboard}

@@ -8,6 +8,7 @@ import {
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
 import { canvasEditTextClassName } from "@/lib/blocks/block-spacing.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
+import type { CanvasField } from "@/lib/editor/caret-navigation.ts";
 import { cn } from "@/lib/utils.ts";
 
 type TableCellEditProps = BlockEditProps<"tableCell"> & {
@@ -32,7 +33,7 @@ export function TableCellEdit({
   const isFocusTarget = focus?.rowId === rowId;
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (event: React.KeyboardEvent<CanvasField>) => {
       if (
         handleTableCellShortcut(event, {
           cellRowId: rowId,
@@ -85,9 +86,10 @@ export function TableCellEdit({
         canvasEditTextClassName,
         "w-full min-w-0 whitespace-pre-wrap"
       )}
+      marks={props.marks ?? []}
       multiline
       onAutoFocusHandled={onAutoFocusHandled}
-      onChange={(text) => onChange({ ...props, text })}
+      onChange={(text, marks) => onChange({ ...props, text, marks })}
       onKeyDown={handleKeyDown}
       onTextFocus={() => {
         clearSelection();

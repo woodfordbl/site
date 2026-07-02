@@ -106,6 +106,8 @@ function blocksEquivalent(a: Block, b: Block): boolean {
     a.type === b.type &&
     (a.parentId ?? null) === (b.parentId ?? null) &&
     (a.indent ?? 0) === (b.indent ?? 0) &&
+    a.color === b.color &&
+    a.backgroundColor === b.backgroundColor &&
     shallowPropsEqual(a.props, b.props)
   );
 }

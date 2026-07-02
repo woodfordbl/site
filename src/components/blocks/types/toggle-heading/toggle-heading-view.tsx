@@ -62,15 +62,19 @@ export function ToggleHeadingView({ row, mode }: BlockContainerProps) {
             className={cn(
               headingSurfaceClassName,
               headingTypographyClassNames[level],
-              // Shrink the field to its text so the chevron can sit right after it.
-              "field-sizing-content w-auto!"
+              // Shrink the field to its text so the chevron can sit right
+              // after it; hold room for the placeholder while empty.
+              "w-fit! max-w-full empty:min-w-52"
             )}
             onAutoFocusHandled={clearFocus}
             onChange={(next) =>
               dispatch({
                 type: "row.update",
                 rowId: row.rowId,
-                block: { ...block, props: { ...block.props, text: next } },
+                block: {
+                  ...block,
+                  props: { ...block.props, text: next, marks: undefined },
+                },
               })
             }
             onEnter={() => insertAtScopeStart(row.rowId)}

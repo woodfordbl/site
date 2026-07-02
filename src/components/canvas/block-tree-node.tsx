@@ -18,12 +18,14 @@ import {
   useIsNarrowViewport,
 } from "@/hooks/device-layout.ts";
 
+import { blockColorClassName } from "@/lib/blocks/block-colors.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import { pageTitleBlockAlignClassName } from "@/lib/pages/page-title-layout.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
+import { cn } from "@/lib/utils.ts";
 
 /** Minimal inset when the block gutter sits beside the row in edit mode. */
 const topLevelPageTitleGutterAlignClassName = "pl-1";
@@ -66,12 +68,14 @@ function ContainerRowNode({
   gutterPullClassName,
   isMobile,
   mode,
+  parentType,
   row,
   showGutter,
 }: RowChromeProps & {
   Container: ComponentType<{ mode: BlockMode; row: CanvasRow }>;
   gutterPullClassName?: string;
   mode: BlockMode;
+  parentType?: BlockType;
   row: CanvasRow;
 }) {
   const { insertAfter, insertAtScopeStart, insertBefore } =
@@ -82,10 +86,9 @@ function ContainerRowNode({
 
   return (
     <CanvasRowShell
-      contentClassName={getTopLevelContentClassName(
-        alignWithPageTitle,
-        showGutter,
-        isMobile
+      contentClassName={cn(
+        getTopLevelContentClassName(alignWithPageTitle, showGutter, isMobile),
+        blockColorClassName(row.effectiveBlock, parentType)
       )}
       enableTouchGesture={enableTouchGesture}
       gutter={
@@ -197,6 +200,7 @@ function BlockTreeNodeImpl({
         Container={resolveContainerComponent(spec)}
         gutterPullClassName={gutterPullClassName}
         mode={mode}
+        parentType={parentType}
         row={row}
         {...chrome}
       />

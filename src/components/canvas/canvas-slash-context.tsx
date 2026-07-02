@@ -23,7 +23,11 @@ import { findRowById } from "@/lib/blocks/block-tree.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import { buildRootSlashMenuItems } from "@/lib/canvas/slash-menu-list.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
+import {
+  type CanvasField,
+  type FieldSelection,
+  isCanvasTextField,
+} from "@/lib/editor/caret-navigation.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 
 /**
@@ -52,12 +56,9 @@ const CanvasSlashActionsContext = createContext<CanvasSlashActions | null>(
 );
 const CanvasSlashStateContext = createContext<CanvasSlashState | null>(null);
 
-function resolveAnchorField(): (HTMLInputElement | HTMLTextAreaElement) | null {
+function resolveAnchorField(): CanvasField | null {
   const active = document.activeElement;
-  return active instanceof HTMLInputElement ||
-    active instanceof HTMLTextAreaElement
-    ? active
-    : null;
+  return isCanvasTextField(active) ? active : null;
 }
 
 export function CanvasSlashProvider({

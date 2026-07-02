@@ -17,6 +17,12 @@ import {
 import { coerceContainerChildBlock } from "@/lib/blocks/normalize-block.ts";
 import { blocksFromRows } from "@/lib/blocks/page-block-mutations.ts";
 import {
+  concatInlineMarks,
+  getBlockMarks,
+  sliceInlineMarks,
+  withBlockRichText,
+} from "@/lib/blocks/rich-text.ts";
+import {
   placementAfterRow,
   resolveRowMovePlan,
   resolveRowPlacementPlan,
@@ -339,11 +345,16 @@ export function canvasReducer(
 
       const before = text.slice(0, start);
       const after = text.slice(end);
+      const marks = getBlockMarks(block);
 
       effects.push({
         type: "persist",
         rowId: command.rowId,
-        block: withBlockText(block, before),
+        block: withBlockRichText(
+          block,
+          before,
+          sliceInlineMarks(marks, 0, start)
+        ),
       });
 
       const preferredNextType = after.length > 0 ? block.type : "text";
@@ -358,7 +369,11 @@ export function canvasReducer(
           props: { ...nextBlock.props, level: block.props.level },
         } as Block;
       }
-      nextBlock = withBlockText(nextBlock, after);
+      nextBlock = withBlockRichText(
+        nextBlock,
+        after,
+        sliceInlineMarks(marks, end, text.length)
+      );
       nextBlock.indent = indent;
       if (parentId) {
         nextBlock.parentId = parentId;
@@ -563,9 +578,17 @@ export function canvasReducer(
         return { state, effects };
       }
       const previousText = getTextFromBlock(previous.effectiveBlock);
-      const merged = withBlockText(
+      const mergedText =
+        previousText + getTextFromBlock(ctx.row.effectiveBlock);
+      const merged = withBlockRichText(
         previous.effectiveBlock,
-        previousText + getTextFromBlock(ctx.row.effectiveBlock)
+        mergedText,
+        concatInlineMarks(
+          getBlockMarks(previous.effectiveBlock),
+          previousText.length,
+          getBlockMarks(ctx.row.effectiveBlock),
+          mergedText.length
+        )
       );
       effects.push({
         type: "persist",
@@ -599,9 +622,17 @@ export function canvasReducer(
       const lastChild = containerRow.children.at(-1);
       if (lastChild) {
         const lastChildText = getTextFromBlock(lastChild.effectiveBlock);
-        const merged = withBlockText(
+        const mergedText =
+          lastChildText + getTextFromBlock(ctx.row.effectiveBlock);
+        const merged = withBlockRichText(
           lastChild.effectiveBlock,
-          lastChildText + getTextFromBlock(ctx.row.effectiveBlock)
+          mergedText,
+          concatInlineMarks(
+            getBlockMarks(lastChild.effectiveBlock),
+            lastChildText.length,
+            getBlockMarks(ctx.row.effectiveBlock),
+            mergedText.length
+          )
         );
         effects.push({
           type: "persist",
@@ -982,6 +1013,8 @@ export function canvasReducer(
         )
       ) {
         const childText = command.childText ?? getTextFromBlock(sourceBlock);
+        const childMarks =
+          command.childText === undefined ? getBlockMarks(sourceBlock) : [];
         const textBlock = convertBlockType(sourceBlock, "text", {
           text: childText,
         });
@@ -1013,6 +1046,7 @@ export function canvasReducer(
           containerId,
           {
             text: childText,
+            marks: childMarks,
           }
         );
         effects.push({
@@ -1031,6 +1065,8 @@ export function canvasReducer(
 
       const containerId = command.rowId;
       const childText = command.childText ?? getTextFromBlock(sourceBlock);
+      const childMarks =
+        command.childText === undefined ? getBlockMarks(sourceBlock) : [];
       const wrappedContainerBlock = buildWrappedContainerBlock(
         command.containerType,
         containerId,
@@ -1045,6 +1081,7 @@ export function canvasReducer(
         containerId,
         {
           text: childText,
+          marks: childMarks,
         }
       );
       effects.push({

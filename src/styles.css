@@ -102,6 +102,25 @@
   --chart-3: oklch(0.6744 0.1426 151.9);
   --chart-4: oklch(0.577 0.245 27.325);
   --chart-5: oklch(0.58 0.19 300);
+  /* Block-level text/background palette (see lib/blocks/block-colors.ts). */
+  --block-text-gray: oklch(0.55 0.005 106);
+  --block-text-brown: oklch(0.5 0.06 55);
+  --block-text-orange: oklch(0.62 0.14 55);
+  --block-text-yellow: oklch(0.6 0.11 90);
+  --block-text-green: oklch(0.55 0.11 150);
+  --block-text-blue: oklch(0.55 0.13 255);
+  --block-text-purple: oklch(0.55 0.15 300);
+  --block-text-pink: oklch(0.58 0.15 354);
+  --block-text-red: oklch(0.55 0.18 27);
+  --block-bg-gray: oklch(0.93 0.005 106);
+  --block-bg-brown: oklch(0.93 0.02 55);
+  --block-bg-orange: oklch(0.95 0.045 65);
+  --block-bg-yellow: oklch(0.96 0.055 95);
+  --block-bg-green: oklch(0.95 0.04 150);
+  --block-bg-blue: oklch(0.95 0.03 255);
+  --block-bg-purple: oklch(0.95 0.035 300);
+  --block-bg-pink: oklch(0.96 0.03 354);
+  --block-bg-red: oklch(0.95 0.035 27);
 }
 
 .dark {
@@ -142,6 +161,24 @@
   --chart-3: oklch(0.72 0.14 151.9);
   --chart-4: oklch(0.704 0.191 22.216);
   --chart-5: oklch(0.68 0.18 300);
+  --block-text-gray: oklch(0.72 0.01 95);
+  --block-text-brown: oklch(0.72 0.06 55);
+  --block-text-orange: oklch(0.75 0.13 55);
+  --block-text-yellow: oklch(0.8 0.11 95);
+  --block-text-green: oklch(0.75 0.11 150);
+  --block-text-blue: oklch(0.72 0.11 255);
+  --block-text-purple: oklch(0.75 0.12 300);
+  --block-text-pink: oklch(0.76 0.12 354);
+  --block-text-red: oklch(0.72 0.15 27);
+  --block-bg-gray: oklch(0.3 0.01 95);
+  --block-bg-brown: oklch(0.3 0.03 55);
+  --block-bg-orange: oklch(0.31 0.05 60);
+  --block-bg-yellow: oklch(0.31 0.05 95);
+  --block-bg-green: oklch(0.29 0.04 150);
+  --block-bg-blue: oklch(0.29 0.04 255);
+  --block-bg-purple: oklch(0.3 0.05 300);
+  --block-bg-pink: oklch(0.3 0.04 354);
+  --block-bg-red: oklch(0.3 0.05 27);
 }
 
 @layer utilities {

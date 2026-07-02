@@ -34,6 +34,7 @@ import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-colla
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
 import { PageLinkDeleteDialog } from "@/components/canvas/page-link-delete-dialog.tsx";
+import { SelectionFormatToolbar } from "@/components/canvas/selection-format-toolbar.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
   CanvasRowDragPreview,
@@ -534,6 +535,7 @@ function PageCanvasEditorBody({
                         </div>
                         <CanvasMarquee scrollRootRef={scrollRootRef} />
                         <CanvasMenuRoot />
+                        <SelectionFormatToolbar />
                         <MobileBlockActionsDrawer />
                         <MobileEditorToolbar />
                         <PageLinkDeleteDialog

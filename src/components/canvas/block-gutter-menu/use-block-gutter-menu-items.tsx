@@ -15,8 +15,70 @@ import {
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 
+import { BlockColorSwatch } from "@/components/canvas/block-color-swatch.tsx";
 import type { BlockGutterMenuItemsInput } from "@/components/canvas/block-gutter-menu/block-gutter-menu-types.ts";
+import {
+  BLOCK_COLOR_DEFS,
+  BLOCK_COLOR_IDS,
+} from "@/lib/blocks/block-colors.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
+
+/** Searchable color entries, following the block's color capability. */
+function buildBlockColorItems(
+  capability: BlockGutterMenuItemsInput["blockColorCapability"],
+  handleSetBlockColor: BlockGutterMenuItemsInput["handleSetBlockColor"],
+  handleSetBlockBackground: BlockGutterMenuItemsInput["handleSetBlockBackground"]
+): ActionMenuEntry[] {
+  const items: ActionMenuEntry[] = [];
+
+  if (capability.text) {
+    for (const color of BLOCK_COLOR_IDS) {
+      items.push({
+        id: `color-text-${color}`,
+        label: `${BLOCK_COLOR_DEFS[color].label} text`,
+        keywords: ["color", "text color", color],
+        icon: <BlockColorSwatch color={color} variant="text" />,
+        onSelect: () => {
+          handleSetBlockColor(color);
+        },
+      });
+    }
+    items.push({
+      id: "color-text-default",
+      label: "Default text",
+      keywords: ["color", "text color", "default", "reset"],
+      icon: <BlockColorSwatch color={undefined} variant="text" />,
+      onSelect: () => {
+        handleSetBlockColor(undefined);
+      },
+    });
+  }
+
+  if (capability.background) {
+    for (const color of BLOCK_COLOR_IDS) {
+      items.push({
+        id: `color-bg-${color}`,
+        label: `${BLOCK_COLOR_DEFS[color].label} background`,
+        keywords: ["color", "background color", "highlight", color],
+        icon: <BlockColorSwatch color={color} variant="background" />,
+        onSelect: () => {
+          handleSetBlockBackground(color);
+        },
+      });
+    }
+    items.push({
+      id: "color-bg-default",
+      label: "Default background",
+      keywords: ["color", "background color", "default", "reset"],
+      icon: <BlockColorSwatch color={undefined} variant="background" />,
+      onSelect: () => {
+        handleSetBlockBackground(undefined);
+      },
+    });
+  }
+
+  return items;
+}
 
 export function useBlockGutterMenuItems(
   context: BlockGutterMenuItemsInput
@@ -38,6 +100,9 @@ export function useBlockGutterMenuItems(
     handleToggleHeaderRow,
     handleAddRow,
     handleAddColumn,
+    blockColorCapability,
+    handleSetBlockBackground,
+    handleSetBlockColor,
     handleTurnInto,
     lastTableRowId,
     tableBlock,
@@ -160,6 +225,14 @@ export function useBlockGutterMenuItems(
       }
     }
 
+    items.push(
+      ...buildBlockColorItems(
+        blockColorCapability,
+        handleSetBlockColor,
+        handleSetBlockBackground
+      )
+    );
+
     items.push({
       id: "duplicate",
       label: "Duplicate",
@@ -192,9 +265,12 @@ export function useBlockGutterMenuItems(
     handleEmbedReplace,
     handleEmbedToggleCaption,
     handleFitToWidth,
+    handleSetBlockBackground,
+    handleSetBlockColor,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
+    blockColorCapability,
     lastTableRowId,
     tableBlock,
     turnIntoItems,

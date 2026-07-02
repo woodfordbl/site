@@ -2,9 +2,12 @@ import type { KeyboardEvent } from "react";
 
 import { MAX_BLOCK_INDENT } from "@/lib/blocks/block-indent.ts";
 import {
+  type CanvasField,
+  getFieldSelection,
   shouldNavigateDownFromField,
   shouldNavigateUpFromField,
 } from "@/lib/editor/caret-navigation.ts";
+import type { InlineMarkType } from "@/lib/schemas/rich-text.ts";
 
 interface SlashMenuKeyHandlers {
   onClose?: () => void;
@@ -16,7 +19,7 @@ interface SlashMenuKeyHandlers {
 }
 
 export function handleSlashMenuKeyDown(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  event: KeyboardEvent<CanvasField>,
   handlers: SlashMenuKeyHandlers
 ): boolean {
   if (handlers.phase === "link") {
@@ -111,7 +114,7 @@ export function handleBlockModifierArrowKeyDown(
 }
 
 export function handleBlockArrowKeyDown(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  event: KeyboardEvent<CanvasField>,
   handlers: {
     onNavigateDown?: () => void;
     onNavigateUp?: () => void;
@@ -146,7 +149,7 @@ interface BlockIndentKeyHandlers {
 }
 
 export function handleBlockIndentKeyDown(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  event: KeyboardEvent<CanvasField>,
   handlers: BlockIndentKeyHandlers
 ): boolean {
   if (!handlers.onIndentChange) {
@@ -164,10 +167,11 @@ export function handleBlockIndentKeyDown(
     return true;
   }
 
+  const selection = getFieldSelection(field);
   if (
     event.key === "Backspace" &&
-    field.selectionStart === 0 &&
-    field.selectionEnd === 0 &&
+    selection.start === 0 &&
+    selection.end === 0 &&
     handlers.indent > 0
   ) {
     event.preventDefault();
@@ -184,15 +188,15 @@ export type StructuralDeleteKeyResult =
 
 /** Backspace/Delete becomes a structural command when the caret is at start or the block is empty. */
 export function resolveStructuralDeleteKey(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  event: KeyboardEvent<CanvasField>,
   isEmpty: boolean
 ): StructuralDeleteKeyResult {
   if (event.key !== "Backspace" && event.key !== "Delete") {
     return { handled: false };
   }
 
-  const field = event.currentTarget;
-  const caretAtStart = field.selectionStart === 0 && field.selectionEnd === 0;
+  const selection = getFieldSelection(event.currentTarget);
+  const caretAtStart = selection.start === 0 && selection.end === 0;
 
   if (!(caretAtStart || isEmpty)) {
     return { handled: false };
@@ -201,8 +205,42 @@ export function resolveStructuralDeleteKey(
   return { handled: true, caretAtStart, key: event.key };
 }
 
+/**
+ * Notion-style inline formatting shortcuts: Mod+B/I/U, Mod+E (inline code),
+ * and Mod+Shift+S or Mod+Shift+X (strikethrough).
+ */
+export function resolveFormattingShortcut(event: {
+  altKey: boolean;
+  ctrlKey: boolean;
+  key: string;
+  metaKey: boolean;
+  shiftKey: boolean;
+}): InlineMarkType | null {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) {
+    return null;
+  }
+
+  const key = event.key.toLowerCase();
+  if (event.shiftKey) {
+    return key === "s" || key === "x" ? "strikethrough" : null;
+  }
+
+  switch (key) {
+    case "b":
+      return "bold";
+    case "i":
+      return "italic";
+    case "u":
+      return "underline";
+    case "e":
+      return "code";
+    default:
+      return null;
+  }
+}
+
 export function handleEmptyDeleteKeyDown(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  event: KeyboardEvent<CanvasField>,
   isEmpty: boolean,
   onDeleteWhenEmpty?: () => void
 ): boolean {

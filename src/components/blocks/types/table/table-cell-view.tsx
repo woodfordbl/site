@@ -1,3 +1,4 @@
+import { RichTextContent } from "@/components/editor/rich-text.tsx";
 import type { BlockViewProps } from "@/lib/canvas/block-spec.types.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -6,7 +7,11 @@ type TableCellViewProps = BlockViewProps<"tableCell">;
 export function TableCellView({ props }: TableCellViewProps) {
   return (
     <span className={cn("block min-w-0 whitespace-pre-wrap break-words")}>
-      {props.text || "\u00a0"}
+      {props.text ? (
+        <RichTextContent marks={props.marks} text={props.text} />
+      ) : (
+        "\u00a0"
+      )}
     </span>
   );
 }

@@ -6,6 +6,7 @@ import {
   createEmptyBlock,
   getTextFromBlock,
 } from "@/lib/blocks/create-block.ts";
+import { getBlockMarks } from "@/lib/blocks/rich-text.ts";
 import { resolveRowPlacementPlan } from "@/lib/blocks/row-placement.ts";
 import type { CanvasEffect } from "@/lib/canvas/effects.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -53,7 +54,8 @@ export function planCalloutCreate(
   }
 
   const text = options?.seedText ?? getTextFromBlock(source);
-  const childText = buildContainerChildBlock("callout", rowId, { text });
+  const marks = options?.seedText === undefined ? getBlockMarks(source) : [];
+  const childText = buildContainerChildBlock("callout", rowId, { text, marks });
   effects.push({
     type: "insert",
     position: { parentId: rowId, atScopeStart: true },
