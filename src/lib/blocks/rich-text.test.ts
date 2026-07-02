@@ -150,15 +150,15 @@ describe("link marks", () => {
   });
 
   it("keeps adjacent links with different hrefs separate", () => {
-    expect(
-      normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "b")], 6)
-    ).toEqual([link(0, 3, "a"), link(3, 6, "b")]);
+    expect(normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "b")], 6)).toEqual(
+      [link(0, 3, "a"), link(3, 6, "b")]
+    );
   });
 
   it("merges adjacent links sharing an href", () => {
-    expect(
-      normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "a")], 6)
-    ).toEqual([link(0, 6, "a")]);
+    expect(normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "a")], 6)).toEqual(
+      [link(0, 6, "a")]
+    );
   });
 
   it("setLinkInRange replaces any link already covering the range", () => {

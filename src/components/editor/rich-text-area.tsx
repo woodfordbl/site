@@ -197,11 +197,7 @@ export function RichTextArea({
           root.contains(domSelection.getRangeAt(0).startContainer)
       );
       if (hasSelection && isLikelyUrl(raw)) {
-        insertLinkOverSelection(
-          root,
-          raw.trim(),
-          classNameForMarks(["link"])
-        );
+        insertLinkOverSelection(root, raw.trim(), classNameForMarks(["link"]));
         emitSnapshot();
         return;
       }
@@ -243,7 +239,11 @@ export function RichTextArea({
       return;
     }
     event.preventDefault();
-    anchor.ownerDocument.defaultView?.open(href, "_blank", "noopener,noreferrer");
+    anchor.ownerDocument.defaultView?.open(
+      href,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }, []);
 
   return (

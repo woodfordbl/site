@@ -55,8 +55,7 @@ function marksForNode(node: Node, root: HTMLElement): NodeMarks {
       collected.add("link");
       // Prefer the raw stored href; `getAttribute` avoids the browser's
       // absolute-URL resolution of the `href` property.
-      href =
-        element.dataset.href ?? element.getAttribute("href") ?? href;
+      href = element.dataset.href ?? element.getAttribute("href") ?? href;
     }
     element = element.parentElement;
   }

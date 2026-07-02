@@ -202,8 +202,7 @@ export function getLinkHrefInRange(
   end: number
 ): string | undefined {
   return marks.find(
-    (mark) =>
-      mark.type === "link" && mark.start <= start && mark.end >= end
+    (mark) => mark.type === "link" && mark.start <= start && mark.end >= end
   )?.href;
 }
 
@@ -251,8 +250,7 @@ export function segmentRichText(
       )
     );
     const linkMark = normalized.find(
-      (mark) =>
-        mark.type === "link" && mark.start <= start && mark.end >= end
+      (mark) => mark.type === "link" && mark.start <= start && mark.end >= end
     );
     segments.push({
       text: text.slice(start, end),

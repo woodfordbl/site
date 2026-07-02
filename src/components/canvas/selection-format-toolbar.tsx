@@ -35,9 +35,10 @@ import {
 import {
   BLOCK_COLOR_DEFS,
   BLOCK_COLOR_IDS,
+  type BlockColorCapability,
   resolveBlockColorCapability,
 } from "@/lib/blocks/block-colors.ts";
-import { findRowContext } from "@/lib/blocks/block-tree.ts";
+import { type CanvasRow, findRowContext } from "@/lib/blocks/block-tree.ts";
 import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
 import {
   getLastUsedBlockColors,
@@ -58,6 +59,7 @@ import {
   isRichTextField,
 } from "@/lib/editor/caret-navigation.ts";
 import { getRichTextSelection } from "@/lib/editor/rich-text-dom.ts";
+import type { Block, BlockType } from "@/lib/schemas/block.ts";
 import type { BlockColor, InlineMarkType } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -102,6 +104,73 @@ const COLOR_SWATCHES: Array<BlockColor | undefined> = [
   ...BLOCK_COLOR_IDS,
 ];
 
+/** True for Mod+<key> with the exact shift requirement and no Alt. */
+function isModCombo(
+  event: KeyboardEvent,
+  key: string,
+  { shift }: { shift: boolean }
+): boolean {
+  return (
+    event.key.toLowerCase() === key &&
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    event.shiftKey === shift
+  );
+}
+
+interface FocusedRichTextRow {
+  block: Block;
+  parentType: BlockType | null;
+  rowId: string;
+}
+
+/** The rich-text row that owns the focused field, with its parent for capability checks. */
+function resolveFocusedRichTextRow(
+  rows: CanvasRow[]
+): FocusedRichTextRow | null {
+  const active = document.activeElement;
+  const field =
+    active instanceof Element ? active.closest("[data-canvas-field]") : null;
+  if (!(field instanceof HTMLElement && isRichTextField(field))) {
+    return null;
+  }
+  const rowId = field
+    .closest("[data-canvas-row-id]")
+    ?.getAttribute("data-canvas-row-id");
+  if (!rowId) {
+    return null;
+  }
+  const context = findRowContext(rows, rowId);
+  const block = context?.row.effectiveBlock;
+  if (!block) {
+    return null;
+  }
+  return {
+    block,
+    parentType: context?.parent?.effectiveBlock.type ?? null,
+    rowId,
+  };
+}
+
+/**
+ * The last-used colors that this block may take. Only colors we actually
+ * remember and only where the capability allows them — never clears a color
+ * the block already carries. Null when nothing applies.
+ */
+function buildLastUsedColorPatch(
+  capability: BlockColorCapability
+): { backgroundColor?: BlockColor; color?: BlockColor } | null {
+  const lastUsed = getLastUsedBlockColors();
+  const patch: { backgroundColor?: BlockColor; color?: BlockColor } = {};
+  if (capability.text && lastUsed.color) {
+    patch.color = lastUsed.color;
+  }
+  if (capability.background && lastUsed.backgroundColor) {
+    patch.backgroundColor = lastUsed.backgroundColor;
+  }
+  return patch.color || patch.backgroundColor ? patch : null;
+}
+
 function readToolbarState(): ToolbarState | null {
   const selection = document.getSelection();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -142,6 +211,100 @@ function readToolbarState(): ToolbarState | null {
     rowId,
     selection: offsets,
   };
+}
+
+/** Inline URL editor swapped into the toolbar; Enter applies, Escape cancels. */
+function ToolbarLinkEditor({
+  hasLink,
+  initialHref,
+  onApply,
+  onCancel,
+}: {
+  hasLink: boolean;
+  initialHref: string;
+  onApply: (href: string) => void;
+  onCancel: () => void;
+}) {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      onApply(event.currentTarget.value);
+    } else if (event.key === "Escape") {
+      // Stop here so Escape only dismisses the editor (not other Escape
+      // handlers), and preventDefault the browser's input-clear behavior.
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      {/* The link editor opens on demand and should take focus immediately. */}
+      <input
+        autoFocus
+        className="h-7 w-56 rounded-md bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
+        defaultValue={initialHref}
+        onKeyDown={handleKeyDown}
+        onMouseDown={(event) => event.stopPropagation()}
+        placeholder="Paste or type a link, then Enter"
+        type="url"
+      />
+      {hasLink ? (
+        <button
+          aria-label="Remove link"
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          onClick={() => onApply("")}
+          onMouseDown={(event) => event.stopPropagation()}
+          title="Remove link"
+          type="button"
+        >
+          <IconLink className="size-4" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** One labeled 5-column swatch grid inside the toolbar color menu. */
+function ColorSwatchGrid({
+  activeColor,
+  label,
+  onSelect,
+  variant,
+}: {
+  activeColor: BlockColor | undefined;
+  label: string;
+  onSelect: (color: BlockColor | undefined) => void;
+  variant: "text" | "background";
+}) {
+  return (
+    <div className="px-1 pb-1">
+      <div className="px-1 py-1.5 text-muted-foreground text-xs">{label}</div>
+      <div className="grid grid-cols-5 gap-1">
+        {COLOR_SWATCHES.map((color) => (
+          <button
+            aria-label={
+              color
+                ? `${BLOCK_COLOR_DEFS[color].label} ${variant}`
+                : `Default ${variant}`
+            }
+            aria-pressed={(activeColor ?? null) === (color ?? null)}
+            className={cn(
+              "flex size-8 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-accent",
+              (activeColor ?? null) === (color ?? null) && "border-ring"
+            )}
+            key={color ?? "default"}
+            onClick={() => onSelect(color)}
+            type="button"
+          >
+            <BlockColorSwatch color={color} variant={variant} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -188,56 +351,25 @@ export function SelectionFormatToolbar() {
   // there is a no-op). Shift avoids macOS Cmd+H (Hide app).
   useEffect(() => {
     const applyLastColor = (event: KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() !== "h" ||
-        !(event.metaKey || event.ctrlKey) ||
-        event.altKey ||
-        !event.shiftKey
-      ) {
+      if (!isModCombo(event, "h", { shift: true })) {
         return;
       }
-      const active = document.activeElement;
-      const field =
-        active instanceof Element
-          ? active.closest("[data-canvas-field]")
-          : null;
-      if (!(field instanceof HTMLElement && isRichTextField(field))) {
+      const target = resolveFocusedRichTextRow(canvas.getRows());
+      if (!target) {
         return;
       }
-      const rowId = field
-        .closest("[data-canvas-row-id]")
-        ?.getAttribute("data-canvas-row-id");
-      if (!rowId) {
-        return;
-      }
-      const context = findRowContext(canvas.getRows(), rowId);
-      const block = context?.row.effectiveBlock;
-      if (!block) {
-        return;
-      }
-      const capability = resolveBlockColorCapability(
-        block.type,
-        context?.parent?.effectiveBlock.type ?? null
+      const patch = buildLastUsedColorPatch(
+        resolveBlockColorCapability(target.block.type, target.parentType)
       );
-      const lastUsed = getLastUsedBlockColors();
-      // Only reapply colors we actually remember, and only where the block
-      // allows them — never clear a color the block already carries.
-      const patch: { backgroundColor?: BlockColor; color?: BlockColor } = {};
-      if (capability.text && lastUsed.color) {
-        patch.color = lastUsed.color;
-      }
-      if (capability.background && lastUsed.backgroundColor) {
-        patch.backgroundColor = lastUsed.backgroundColor;
-      }
-      if (!(patch.color || patch.backgroundColor)) {
+      if (!patch) {
         return;
       }
       event.preventDefault();
       event.stopImmediatePropagation();
       canvas.dispatch({
         type: "row.update",
-        rowId,
-        block: { ...block, ...patch },
+        rowId: target.rowId,
+        block: { ...target.block, ...patch },
       });
     };
 
@@ -249,12 +381,7 @@ export function SelectionFormatToolbar() {
   // same reason as Mod+Shift+H above).
   useEffect(() => {
     const openLinkEditor = (event: KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() !== "k" ||
-        !(event.metaKey || event.ctrlKey) ||
-        event.altKey ||
-        event.shiftKey
-      ) {
+      if (!isModCombo(event, "k", { shift: false })) {
         return;
       }
       const next = readToolbarState();
@@ -337,15 +464,8 @@ export function SelectionFormatToolbar() {
     if (!(state && currentBlock)) {
       return;
     }
-    const lastUsed = getLastUsedBlockColors();
-    const patch: { backgroundColor?: BlockColor; color?: BlockColor } = {};
-    if (colorCapability.text && lastUsed.color) {
-      patch.color = lastUsed.color;
-    }
-    if (colorCapability.background && lastUsed.backgroundColor) {
-      patch.backgroundColor = lastUsed.backgroundColor;
-    }
-    if (!(patch.color || patch.backgroundColor)) {
+    const patch = buildLastUsedColorPatch(colorCapability);
+    if (!patch) {
       return;
     }
     canvas.dispatch({
@@ -407,20 +527,6 @@ export function SelectionFormatToolbar() {
     Math.max(state.rect.left, 150),
     window.innerWidth - 150
   );
-
-  const handleLinkKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      event.stopPropagation();
-      applyLink(event.currentTarget.value);
-    } else if (event.key === "Escape") {
-      // Stop here so Escape only dismisses the editor (not other Escape
-      // handlers), and preventDefault the browser's input-clear behavior.
-      event.preventDefault();
-      event.stopPropagation();
-      setLinkDraft(null);
-    }
-  };
 
   return (
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: mousedown is prevented only to preserve the text selection.
@@ -515,102 +621,42 @@ export function SelectionFormatToolbar() {
               </Tooltip>
               <DropdownMenuContent align="start" className="w-auto min-w-0">
                 {colorCapability.text ? (
-                  <div className="px-1 pb-1">
-                    <div className="px-1 py-1.5 text-muted-foreground text-xs">
-                      Text color
-                    </div>
-                    <div className="grid grid-cols-5 gap-1">
-                      {COLOR_SWATCHES.map((color) => (
-                        <button
-                          aria-label={
-                            color
-                              ? `${BLOCK_COLOR_DEFS[color].label} text`
-                              : "Default text"
-                          }
-                          aria-pressed={(currentBlock.color ?? null) === (color ?? null)}
-                          className={cn(
-                            "flex size-8 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-accent",
-                            (currentBlock.color ?? null) === (color ?? null) &&
-                              "border-ring"
-                          )}
-                          key={color ?? "default"}
-                          onClick={() => setBlockColor("color", color)}
-                          type="button"
-                        >
-                          <BlockColorSwatch color={color} variant="text" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <ColorSwatchGrid
+                    activeColor={currentBlock.color}
+                    label="Text color"
+                    onSelect={(color) => setBlockColor("color", color)}
+                    variant="text"
+                  />
                 ) : null}
                 {colorCapability.background ? (
-                  <div className="px-1 pb-1">
-                    <div className="px-1 py-1.5 text-muted-foreground text-xs">
-                      Background color
-                    </div>
-                    <div className="grid grid-cols-5 gap-1">
-                      {COLOR_SWATCHES.map((color) => (
-                        <button
-                          aria-label={
-                            color
-                              ? `${BLOCK_COLOR_DEFS[color].label} background`
-                              : "Default background"
-                          }
-                          aria-pressed={
-                            (currentBlock.backgroundColor ?? null) ===
-                            (color ?? null)
-                          }
-                          className={cn(
-                            "flex size-8 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-accent",
-                            (currentBlock.backgroundColor ?? null) ===
-                              (color ?? null) && "border-ring"
-                          )}
-                          key={color ?? "default"}
-                          onClick={() =>
-                            setBlockColor("backgroundColor", color)
-                          }
-                          type="button"
-                        >
-                          <BlockColorSwatch color={color} variant="background" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <ColorSwatchGrid
+                    activeColor={currentBlock.backgroundColor}
+                    label="Background color"
+                    onSelect={(color) =>
+                      setBlockColor("backgroundColor", color)
+                    }
+                    variant="background"
+                  />
                 ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={applyLastUsedColors}>
                   Use most recent
-                  <Shortcut className="ml-auto" keys={APPLY_LAST_COLOR_HOTKEY} />
+                  <Shortcut
+                    className="ml-auto"
+                    keys={APPLY_LAST_COLOR_HOTKEY}
+                  />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
         </TooltipProvider>
       ) : (
-        <div className="flex items-center gap-1">
-          {/* biome-ignore lint/a11y/noAutofocus: the link editor opens on demand and should take focus immediately. */}
-          <input
-            autoFocus
-            className="h-7 w-56 rounded-md bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
-            defaultValue={linkDraft}
-            onKeyDown={handleLinkKeyDown}
-            onMouseDown={(event) => event.stopPropagation()}
-            placeholder="Paste or type a link, then Enter"
-            type="url"
-          />
-          {activeLinkHref !== undefined ? (
-            <button
-              aria-label="Remove link"
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              onClick={() => applyLink("")}
-              onMouseDown={(event) => event.stopPropagation()}
-              title="Remove link"
-              type="button"
-            >
-              <IconLink className="size-4" />
-            </button>
-          ) : null}
-        </div>
+        <ToolbarLinkEditor
+          hasLink={activeLinkHref !== undefined}
+          initialHref={linkDraft}
+          onApply={applyLink}
+          onCancel={() => setLinkDraft(null)}
+        />
       )}
     </div>
   );
