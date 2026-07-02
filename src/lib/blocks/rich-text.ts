@@ -22,6 +22,7 @@ export function normalizeInlineMarks(
       type: mark.type,
       start: Math.max(0, Math.min(mark.start, textLength)),
       end: Math.max(0, Math.min(mark.end, textLength)),
+      ...(mark.href === undefined ? {} : { href: mark.href }),
     }))
     .filter((mark) => mark.start < mark.end)
     .sort((a, b) => a.start - b.start || a.end - b.end);
@@ -30,7 +31,9 @@ export function normalizeInlineMarks(
   for (const mark of clamped) {
     let previous: InlineMark | undefined;
     for (let i = merged.length - 1; i >= 0; i -= 1) {
-      if (merged[i]?.type === mark.type) {
+      // Links only merge with an adjoining link of the *same* href — two
+      // different destinations must stay distinct runs.
+      if (merged[i]?.type === mark.type && merged[i]?.href === mark.href) {
         previous = merged[i];
         break;
       }
@@ -57,6 +60,7 @@ export function sliceInlineMarks(
         type: mark.type,
         start: Math.max(mark.start, start) - start,
         end: Math.min(mark.end, end) - start,
+        ...(mark.href === undefined ? {} : { href: mark.href }),
       })),
     end - start
   );
@@ -76,6 +80,7 @@ export function concatInlineMarks(
         type: mark.type,
         start: mark.start + aLength,
         end: mark.end + aLength,
+        ...(mark.href === undefined ? {} : { href: mark.href }),
       })),
     ],
     totalLength
@@ -122,16 +127,18 @@ export function removeMarkFromRange(
   textLength: number
 ): InlineMark[] {
   const next: InlineMark[] = [];
+  const carryHref = (mark: InlineMark) =>
+    mark.href === undefined ? {} : { href: mark.href };
   for (const mark of marks) {
     if (mark.type !== type || mark.end <= start || mark.start >= end) {
       next.push(mark);
       continue;
     }
     if (mark.start < start) {
-      next.push({ type, start: mark.start, end: start });
+      next.push({ type, start: mark.start, end: start, ...carryHref(mark) });
     }
     if (mark.end > end) {
-      next.push({ type, start: end, end: mark.end });
+      next.push({ type, start: end, end: mark.end, ...carryHref(mark) });
     }
   }
   return normalizeInlineMarks(next, textLength);
@@ -157,7 +164,59 @@ export function toggleMarkInRange(
   return normalizeInlineMarks([...marks, { type, start, end }], textLength);
 }
 
+/**
+ * Apply a link over `[start, end)`, replacing any link already covering the
+ * range (a range carries at most one destination).
+ */
+export function setLinkInRange(
+  marks: readonly InlineMark[],
+  start: number,
+  end: number,
+  href: string,
+  textLength: number
+): InlineMark[] {
+  if (start >= end) {
+    return normalizeInlineMarks(marks, textLength);
+  }
+  const cleared = removeMarkFromRange(marks, "link", start, end, textLength);
+  return normalizeInlineMarks(
+    [...cleared, { type: "link", start, end, href }],
+    textLength
+  );
+}
+
+/** Strip any link marks from `[start, end)` (unlink). */
+export function removeLinkInRange(
+  marks: readonly InlineMark[],
+  start: number,
+  end: number,
+  textLength: number
+): InlineMark[] {
+  return removeMarkFromRange(marks, "link", start, end, textLength);
+}
+
+/** The href of a link covering the whole `[start, end)` range, if any. */
+export function getLinkHrefInRange(
+  marks: readonly InlineMark[],
+  start: number,
+  end: number
+): string | undefined {
+  return marks.find(
+    (mark) =>
+      mark.type === "link" && mark.start <= start && mark.end >= end
+  )?.href;
+}
+
+const URL_PATTERN = /^https?:\/\/\S+$/i;
+
+/** True for a bare http(s) URL — the paste-to-link trigger. */
+export function isLikelyUrl(text: string): boolean {
+  return URL_PATTERN.test(text.trim());
+}
+
 export interface RichTextSegment {
+  /** Destination when a `link` mark covers the segment. */
+  href?: string;
   marks: InlineMarkType[];
   text: string;
 }
@@ -191,15 +250,29 @@ export function segmentRichText(
         (mark) => mark.type === type && mark.start <= start && mark.end >= end
       )
     );
-    segments.push({ text: text.slice(start, end), marks: segmentMarks });
+    const linkMark = normalized.find(
+      (mark) =>
+        mark.type === "link" && mark.start <= start && mark.end >= end
+    );
+    segments.push({
+      text: text.slice(start, end),
+      marks: segmentMarks,
+      ...(linkMark?.href === undefined ? {} : { href: linkMark.href }),
+    });
   }
   return segments;
 }
 
-/** True when the block's type supports inline marks on its primary text. */
+/**
+ * True when the block's type supports inline marks on its primary text.
+ * Headings carry no formatting (no marks, no color) — they stay structural.
+ */
 export function blockSupportsInlineMarks(block: Block): boolean {
   return (
-    Boolean(getBlockDef(block.type).hasPrimaryText) && block.type !== "code"
+    Boolean(getBlockDef(block.type).hasPrimaryText) &&
+    block.type !== "code" &&
+    block.type !== "heading" &&
+    block.type !== "toggleHeading"
   );
 }
 

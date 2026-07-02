@@ -76,12 +76,16 @@ const FULL_COLOR: BlockColorCapability = { text: true, background: true };
 /**
  * Per-type color limits. Callouts take a background only (the box tint) and own
  * coloring for their children — direct children expose no color controls.
+ * Headings carry no formatting at all: no color, no inline marks.
  */
 export function resolveBlockColorCapability(
   type: BlockType,
   parentType?: BlockType | null
 ): BlockColorCapability {
   if (parentType === "callout") {
+    return NO_COLOR;
+  }
+  if (type === "heading" || type === "toggleHeading") {
     return NO_COLOR;
   }
   if (type === "callout") {

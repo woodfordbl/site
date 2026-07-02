@@ -95,13 +95,14 @@ export function convertBlockType(
         ? block.props.level
         : 1;
     const text = options?.text ?? getTextFromBlock(block);
+    // Headings carry no formatting (no color, no marks) — drop both so
+    // conversion never leaves dead color fields on a heading.
     return withBlockRichText(
       {
         ...next,
         id: block.id,
         parentId,
         indent,
-        ...carriedStyle,
         props: {
           ...next.props,
           text,

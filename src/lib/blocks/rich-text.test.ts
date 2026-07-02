@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   concatInlineMarks,
+  getLinkHrefInRange,
+  isLikelyUrl,
   isMarkActive,
   normalizeInlineMarks,
+  removeLinkInRange,
   segmentRichText,
+  setLinkInRange,
   sliceInlineMarks,
   toggleMarkInRange,
 } from "@/lib/blocks/rich-text.ts";
@@ -123,5 +127,64 @@ describe("segmentRichText", () => {
     expect(segmentRichText("plain", [])).toEqual([
       { text: "plain", marks: [] },
     ]);
+  });
+
+  it("carries the href onto link segments", () => {
+    expect(
+      segmentRichText("go home", [
+        { type: "link", start: 0, end: 2, href: "https://x.dev" },
+      ])
+    ).toEqual([
+      { text: "go", marks: ["link"], href: "https://x.dev" },
+      { text: " home", marks: [] },
+    ]);
+  });
+});
+
+describe("link marks", () => {
+  const link = (start: number, end: number, href: string) => ({
+    type: "link" as const,
+    start,
+    end,
+    href,
+  });
+
+  it("keeps adjacent links with different hrefs separate", () => {
+    expect(
+      normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "b")], 6)
+    ).toEqual([link(0, 3, "a"), link(3, 6, "b")]);
+  });
+
+  it("merges adjacent links sharing an href", () => {
+    expect(
+      normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "a")], 6)
+    ).toEqual([link(0, 6, "a")]);
+  });
+
+  it("setLinkInRange replaces any link already covering the range", () => {
+    expect(setLinkInRange([link(0, 6, "old")], 0, 6, "new", 6)).toEqual([
+      link(0, 6, "new"),
+    ]);
+  });
+
+  it("removeLinkInRange drops the link and keeps its href off the rest", () => {
+    expect(removeLinkInRange([link(0, 6, "a")], 2, 4, 6)).toEqual([
+      link(0, 2, "a"),
+      link(4, 6, "a"),
+    ]);
+  });
+
+  it("getLinkHrefInRange finds a covering link", () => {
+    expect(getLinkHrefInRange([link(0, 6, "a")], 1, 3)).toBe("a");
+    expect(getLinkHrefInRange([link(0, 2, "a")], 1, 5)).toBeUndefined();
+  });
+});
+
+describe("isLikelyUrl", () => {
+  it("accepts bare http(s) urls and rejects prose", () => {
+    expect(isLikelyUrl("https://example.com/x")).toBe(true);
+    expect(isLikelyUrl("  http://a.b  ")).toBe(true);
+    expect(isLikelyUrl("example.com")).toBe(false);
+    expect(isLikelyUrl("see https://a.b now")).toBe(false);
   });
 });

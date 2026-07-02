@@ -1,6 +1,7 @@
 import {
   type ClipboardEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type RefObject,
   type SyntheticEvent,
   useCallback,
@@ -10,11 +11,13 @@ import {
 
 import { classNameForMarks } from "@/components/editor/rich-text.tsx";
 import {
+  isLikelyUrl,
   normalizeInlineMarks,
   segmentRichText,
 } from "@/lib/blocks/rich-text.ts";
 import { getFieldSelection } from "@/lib/editor/caret-navigation.ts";
 import {
+  insertLinkOverSelection,
   insertPlainTextAtSelection,
   type RichTextDomSnapshot,
   richTextToHtml,
@@ -56,7 +59,8 @@ function snapshotEquals(
       other !== undefined &&
       mark.type === other.type &&
       mark.start === other.start &&
-      mark.end === other.end
+      mark.end === other.end &&
+      mark.href === other.href
     );
   });
 }
@@ -67,13 +71,17 @@ function buildContent(root: HTMLElement, value: string, marks: InlineMark[]) {
   for (const segment of segmentRichText(value, marks)) {
     if (segment.marks.length === 0) {
       fragment.append(doc.createTextNode(segment.text));
-    } else {
-      const span = doc.createElement("span");
-      span.dataset.marks = segment.marks.join(" ");
-      span.className = classNameForMarks(segment.marks);
-      span.textContent = segment.text;
-      fragment.append(span);
+      continue;
     }
+    const element = doc.createElement(segment.href ? "a" : "span");
+    element.dataset.marks = segment.marks.join(" ");
+    element.className = classNameForMarks(segment.marks);
+    if (segment.href) {
+      element.setAttribute("href", segment.href);
+      element.dataset.href = segment.href;
+    }
+    element.textContent = segment.text;
+    fragment.append(element);
   }
   root.replaceChildren(fragment);
 }
@@ -178,7 +186,26 @@ export function RichTextArea({
       if (!root) {
         return;
       }
-      let pasted = event.clipboardData.getData("text/plain");
+      const raw = event.clipboardData.getData("text/plain");
+      // Pasting a URL over a selection turns the selected text into a link
+      // instead of replacing it.
+      const domSelection = root.ownerDocument.getSelection();
+      const hasSelection = Boolean(
+        domSelection &&
+          domSelection.rangeCount > 0 &&
+          !domSelection.isCollapsed &&
+          root.contains(domSelection.getRangeAt(0).startContainer)
+      );
+      if (hasSelection && isLikelyUrl(raw)) {
+        insertLinkOverSelection(
+          root,
+          raw.trim(),
+          classNameForMarks(["link"])
+        );
+        emitSnapshot();
+        return;
+      }
+      let pasted = raw;
       if (!multiline) {
         pasted = pasted.replace(/\n/g, " ");
       }
@@ -195,6 +222,29 @@ export function RichTextArea({
     composingRef.current = false;
     emitSnapshot();
   }, [emitSnapshot]);
+
+  // Links are just links: a plain click (no selection) opens the destination;
+  // highlighting the text instead leaves it editable and raises the toolbar.
+  const handleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.defaultPrevented) {
+      return;
+    }
+    const target = event.target as Element | null;
+    const anchor = target?.closest?.("a[data-href],a[href]");
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return;
+    }
+    const selection = anchor.ownerDocument.getSelection();
+    if (selection && !selection.isCollapsed) {
+      return;
+    }
+    const href = anchor.dataset.href ?? anchor.getAttribute("href");
+    if (!href) {
+      return;
+    }
+    event.preventDefault();
+    anchor.ownerDocument.defaultView?.open(href, "_blank", "noopener,noreferrer");
+  }, []);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: contenteditable field — native inputs cannot render styled inline spans.
@@ -213,6 +263,7 @@ export function RichTextArea({
       data-rich-text-field
       onBeforeInput={handleBeforeInput}
       onBlur={onBlur}
+      onClick={handleClick}
       onCompositionEnd={handleCompositionEnd}
       onCompositionStart={() => {
         composingRef.current = true;

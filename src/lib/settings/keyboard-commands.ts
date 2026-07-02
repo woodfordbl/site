@@ -127,6 +127,9 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     defaultHotkey: "Mod+B",
     customizable: true,
     scope: "global",
+    // Mod+B is Bold inside a text field — let the editor own it while typing so
+    // toggling the sidebar never fights the inline formatting shortcut.
+    ignoreInputs: true,
   },
   {
     id: "open-settings",

@@ -14,6 +14,7 @@ export const inlineMarkTypeSchema = z.enum([
   "underline",
   "strikethrough",
   "code",
+  "link",
 ]);
 
 export type InlineMarkType = z.infer<typeof inlineMarkTypeSchema>;
@@ -22,6 +23,8 @@ export const inlineMarkSchema = z.object({
   type: inlineMarkTypeSchema,
   start: z.number().int().min(0),
   end: z.number().int().min(0),
+  /** Destination for `type: "link"` marks; unused by the styling marks. */
+  href: z.string().optional(),
 });
 
 export type InlineMark = z.infer<typeof inlineMarkSchema>;

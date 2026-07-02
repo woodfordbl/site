@@ -31,8 +31,14 @@ const TAG_MARKS: Record<string, InlineMarkType> = {
   CODE: "code",
 };
 
-function marksForNode(node: Node, root: HTMLElement): InlineMarkType[] {
+interface NodeMarks {
+  href?: string;
+  types: InlineMarkType[];
+}
+
+function marksForNode(node: Node, root: HTMLElement): NodeMarks {
   const collected = new Set<InlineMarkType>();
+  let href: string | undefined;
   let element = node.parentElement;
   while (element && element !== root) {
     const tokens = element.dataset.marks;
@@ -45,9 +51,16 @@ function marksForNode(node: Node, root: HTMLElement): InlineMarkType[] {
     if (tagMark) {
       collected.add(tagMark);
     }
+    if (element.tagName === "A") {
+      collected.add("link");
+      // Prefer the raw stored href; `getAttribute` avoids the browser's
+      // absolute-URL resolution of the `href` property.
+      href =
+        element.dataset.href ?? element.getAttribute("href") ?? href;
+    }
     element = element.parentElement;
   }
-  return [...collected];
+  return { types: [...collected], href };
 }
 
 function walkTextAndBreaks(
@@ -92,13 +105,21 @@ export function richTextToHtml(
   classForMarks: (types: readonly InlineMarkType[]) => string
 ): string {
   return segmentRichText(text, marks)
-    .map((segment) =>
-      segment.marks.length === 0
-        ? escapeHtml(segment.text)
-        : `<span data-marks="${segment.marks.join(" ")}" class="${classForMarks(
-            segment.marks
-          )}">${escapeHtml(segment.text)}</span>`
-    )
+    .map((segment) => {
+      if (segment.marks.length === 0) {
+        return escapeHtml(segment.text);
+      }
+      const attrs = `data-marks="${segment.marks.join(
+        " "
+      )}" class="${classForMarks(segment.marks)}"`;
+      if (segment.href) {
+        const url = escapeHtml(segment.href);
+        return `<a href="${url}" data-href="${url}" ${attrs}>${escapeHtml(
+          segment.text
+        )}</a>`;
+      }
+      return `<span ${attrs}>${escapeHtml(segment.text)}</span>`;
+    })
     .join("");
 }
 
@@ -111,8 +132,14 @@ export function serializeRichTextDom(root: HTMLElement): RichTextDomSnapshot {
     const start = text.length;
     if (node.nodeType === Node.TEXT_NODE) {
       text += node.textContent ?? "";
-      for (const type of marksForNode(node, root)) {
-        marks.push({ type, start, end: start + length });
+      const { types, href } = marksForNode(node, root);
+      for (const type of types) {
+        marks.push({
+          type,
+          start,
+          end: start + length,
+          ...(type === "link" && href !== undefined ? { href } : {}),
+        });
       }
     } else {
       text += "\n";
@@ -242,6 +269,37 @@ export function insertPlainTextAtSelection(
   range.insertNode(node);
   range.setStartAfter(node);
   range.setEndAfter(node);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/**
+ * Wrap the current (non-collapsed) selection in a link to `url`, keeping the
+ * selected text as the label. `linkClassName` must match what the model rebuild
+ * would produce so the freshly-inserted anchor is styled without a reflow.
+ */
+export function insertLinkOverSelection(
+  root: HTMLElement,
+  url: string,
+  linkClassName: string
+): void {
+  const selection = root.ownerDocument.getSelection();
+  if (!selection || selection.rangeCount === 0) {
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer) || range.collapsed) {
+    return;
+  }
+  const anchor = root.ownerDocument.createElement("a");
+  anchor.setAttribute("href", url);
+  anchor.dataset.href = url;
+  anchor.dataset.marks = "link";
+  anchor.className = linkClassName;
+  anchor.append(range.extractContents());
+  range.insertNode(anchor);
+  range.setStartAfter(anchor);
+  range.setEndAfter(anchor);
   selection.removeAllRanges();
   selection.addRange(range);
 }

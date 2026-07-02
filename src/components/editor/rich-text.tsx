@@ -9,6 +9,7 @@ export const inlineMarkClassNames: Record<InlineMarkType, string> = {
   underline: "underline underline-offset-2",
   strikethrough: "line-through",
   code: "rounded bg-muted px-1 py-px font-mono text-[0.85em]",
+  link: "cursor-pointer text-primary underline underline-offset-2 hover:text-primary/80",
 };
 
 export function classNameForMarks(marks: readonly InlineMarkType[]): string {
@@ -33,15 +34,23 @@ export function RichTextContent({ text, marks }: RichTextContentProps) {
   return segmentRichText(text, marks).map((segment) => {
     const key = `${offset}:${segment.marks.join("-")}`;
     offset += segment.text.length;
+    const className =
+      segment.marks.length > 0 ? classNameForMarks(segment.marks) : undefined;
+    if (segment.href) {
+      return (
+        <a
+          className={className}
+          href={segment.href}
+          key={key}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {segment.text}
+        </a>
+      );
+    }
     return (
-      <span
-        className={
-          segment.marks.length > 0
-            ? classNameForMarks(segment.marks)
-            : undefined
-        }
-        key={key}
-      >
+      <span className={className} key={key}>
         {segment.text}
       </span>
     );

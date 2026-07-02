@@ -27,6 +27,7 @@ import {
 } from "@/lib/blocks/block-colors.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
 import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
+import { recordLastUsedBlockColor } from "@/lib/blocks/last-used-block-color.ts";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
 import {
   copyEmbedLink,
@@ -275,6 +276,7 @@ export function BlockGutterMenuProvider({
       if (!block) {
         return;
       }
+      recordLastUsedBlockColor("color", color);
       dispatch({ type: "row.update", rowId, block: { ...block, color } });
     },
     [dispatch, rowId, rows]
@@ -286,6 +288,7 @@ export function BlockGutterMenuProvider({
       if (!block) {
         return;
       }
+      recordLastUsedBlockColor("backgroundColor", color);
       dispatch({
         type: "row.update",
         rowId,

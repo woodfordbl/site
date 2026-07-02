@@ -1,4 +1,3 @@
-import { RichTextContent } from "@/components/editor/rich-text.tsx";
 import {
   headingSurfaceClassName,
   headingTypographyClassNames,
@@ -18,11 +17,7 @@ export function HeadingView({ props }: HeadingViewProps) {
         headingTypographyClassNames[props.level]
       )}
     >
-      {props.text ? (
-        <RichTextContent marks={props.marks} text={props.text} />
-      ) : (
-        " "
-      )}
+      {props.text || " "}
     </Tag>
   );
 }
