@@ -22,6 +22,7 @@ export function ColumnView({ columnRow, mode }: ColumnViewProps) {
         "relative flex min-h-0 w-full min-w-0 flex-1 flex-col gap-0",
         columnRow.children.length === 0 && "min-h-16"
       )}
+      data-canvas-scope={columnRow.rowId}
       data-column-content
     >
       {showScopeStart ? (

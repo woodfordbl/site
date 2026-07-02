@@ -18,6 +18,7 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     onCaretStartChildEnter: "lift-out",
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
+    selectChildrenAsUnit: true,
   },
   checklist: {
     allowedChildTypes: ["checklistItem"],
@@ -28,6 +29,7 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     onCaretStartChildEnter: "lift-out",
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
+    selectChildrenAsUnit: true,
   },
   columns: {
     allowedChildTypes: ["column"],
@@ -48,6 +50,7 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     onCaretStartChildEnter: "insert-sibling",
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
+    scopedContent: true,
   },
   tabs: {
     allowedChildTypes: ["tab"],
@@ -68,6 +71,7 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     onCaretStartChildEnter: "insert-sibling",
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
+    scopedContent: true,
   },
   table: {
     allowedChildTypes: ["tableRow"],
@@ -101,6 +105,7 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     onCaretStartChildEnter: "insert-sibling",
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
+    scopedContent: true,
   },
   callout: {
     // Generic-scope container (like `toggleHeading`) holding the callout body
@@ -114,6 +119,7 @@ export const BLOCK_CONTAINER_CONFIG: Record<
     onCaretStartChildEnter: "insert-sibling",
     insertSiblingOnEnter: true,
     acceptEmptyMergeFromAfter: true,
+    scopedContent: true,
   },
 };
 
@@ -155,6 +161,16 @@ export function shouldLiftDisallowedChildConversion(type: BlockType): boolean {
   return (
     getContainerDefinition(type)?.onDisallowedChildConversion === "lift-out"
   );
+}
+
+/** True when `type` renders its children inside a `data-canvas-scope` wrapper. */
+export function hasScopedContent(type: BlockType): boolean {
+  return getContainerDefinition(type)?.scopedContent === true;
+}
+
+/** True when clicking/marqueeing `type` selects its child rows as a unit. */
+export function selectsChildrenAsUnit(type: BlockType): boolean {
+  return getContainerDefinition(type)?.selectChildrenAsUnit === true;
 }
 
 export function isAllowedChild(

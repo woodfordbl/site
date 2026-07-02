@@ -47,6 +47,8 @@ export interface CanvasEditorActions {
   saveRow: (row: CanvasRow, block: Block) => void;
   selectAll: () => void;
   selectRow: (rowId: string) => void;
+  /** Replace the whole selection (marquee drag-select), document-order ids. */
+  selectRows: (rowIds: string[]) => void;
   toggleRowSelection: (
     rowId: string,
     modifiers?: { metaKey?: boolean; shiftKey?: boolean }

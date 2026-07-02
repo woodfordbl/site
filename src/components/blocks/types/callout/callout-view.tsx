@@ -105,6 +105,7 @@ export function CalloutView({ row, mode }: BlockContainerProps) {
           row.children.length === 0 && "min-h-9"
         )}
         data-callout-content
+        data-canvas-scope={row.rowId}
       >
         {showScopeStart ? (
           <div
