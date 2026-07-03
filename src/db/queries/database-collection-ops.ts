@@ -439,7 +439,9 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.fields = draft.fields.filter((field) => field.id !== fieldId);
       draft.views = draft.views.map((view) =>
-        stripFieldFromView(view, fieldId)
+        // The draft's view type keeps `config` optional (schema input side of
+        // the `.default({})`); normalize before stripping references.
+        stripFieldFromView({ ...view, config: view.config ?? {} }, fieldId)
       );
       draft.updatedAt = timestamp;
     });

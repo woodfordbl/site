@@ -1,3 +1,4 @@
+import { BTreeIndex } from "@tanstack/db";
 import {
   createCollection,
   localStorageCollectionOptions,
@@ -183,7 +184,8 @@ export const localDatabaseRowsCollection = getOrCreateHotCollection(
 
     // Rows are almost always queried per database; the index turns those
     // `eq(row.databaseId, id)` live queries into constant-time lookups.
-    collection.createIndex((row) => row.databaseId);
+    // BTree over Basic: cell edits make this a write-heavy collection.
+    collection.createIndex((row) => row.databaseId, { indexType: BTreeIndex });
 
     return collection;
   }
