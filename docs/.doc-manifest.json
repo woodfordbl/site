@@ -19,7 +19,10 @@
   },
   "mappings": [
     {
-      "globs": ["src/lib/canvas/**", "src/components/canvas/**"],
+      "globs": [
+        "src/lib/canvas/**",
+        "src/components/canvas/**"
+      ],
       "docs": [
         "docs/architecture/canvas-editor.md",
         "docs/architecture/drag-and-drop.md",
@@ -51,7 +54,9 @@
         "src/components/dnd/**",
         "src/hooks/use-pointer-click-vs-drag.ts"
       ],
-      "docs": ["docs/architecture/drag-and-drop.md"],
+      "docs": [
+        "docs/architecture/drag-and-drop.md"
+      ],
       "majorGlobs": [
         "src/components/dnd/dnd-surface.tsx",
         "src/components/dnd/use-dnd.ts",
@@ -79,7 +84,10 @@
       ]
     },
     {
-      "globs": ["src/lib/pages/**", "src/components/pages/**"],
+      "globs": [
+        "src/lib/pages/**",
+        "src/components/pages/**"
+      ],
       "docs": [
         "docs/architecture/pages.md",
         "docs/architecture/drag-and-drop.md",
@@ -157,12 +165,17 @@
       ]
     },
     {
-      "globs": ["src/lib/schemas/block*.ts", "src/lib/blocks/**"],
+      "globs": [
+        "src/lib/schemas/block*.ts",
+        "src/lib/blocks/**"
+      ],
       "docs": [
         "docs/architecture/block-model.md",
         "docs/architecture/block-types.md"
       ],
-      "majorGlobs": ["src/lib/blocks/block-defs.ts"]
+      "majorGlobs": [
+        "src/lib/blocks/block-defs.ts"
+      ]
     },
     {
       "globs": [
@@ -174,7 +187,9 @@
         "docs/architecture/block-types.md",
         "docs/architecture/canvas-editor.md"
       ],
-      "majorGlobs": ["src/components/blocks/registry.ts"]
+      "majorGlobs": [
+        "src/components/blocks/registry.ts"
+      ]
     },
     {
       "globs": [
@@ -182,7 +197,9 @@
         "src/hooks/use-asset-object-url.ts",
         "src/hooks/use-unfurl-embed-url.ts"
       ],
-      "docs": ["docs/architecture/block-types.md"]
+      "docs": [
+        "docs/architecture/block-types.md"
+      ]
     },
     {
       "globs": [
@@ -211,7 +228,9 @@
         "src/lib/pages/thin-page-snapshots.ts",
         "src/db/snapshots/**"
       ],
-      "docs": ["docs/architecture/pages.md"],
+      "docs": [
+        "docs/architecture/pages.md"
+      ],
       "majorGlobs": [
         "src/components/pages/page-header-menu.tsx",
         "src/lib/schemas/page-settings.ts",
@@ -223,7 +242,9 @@
         "src/hooks/use-inline-custom-block-keys.ts",
         "src/hooks/use-auto-focus.ts"
       ],
-      "docs": ["docs/architecture/canvas-editor.md"]
+      "docs": [
+        "docs/architecture/canvas-editor.md"
+      ]
     },
     {
       "globs": [
@@ -233,7 +254,9 @@
         "src/lib/cookies/**",
         "src/lib/schemas/local-*.ts"
       ],
-      "docs": ["docs/architecture/local-first-persistence.md"],
+      "docs": [
+        "docs/architecture/local-first-persistence.md"
+      ],
       "majorGlobs": [
         "src/db/provider.tsx",
         "src/db/assets/**",
@@ -252,7 +275,9 @@
         "src/lib/canvas/resolve-structural-action.ts",
         "src/lib/canvas/structural-context.ts"
       ],
-      "docs": ["docs/reference/structural-actions.md"]
+      "docs": [
+        "docs/reference/structural-actions.md"
+      ]
     },
     {
       "globs": [
@@ -263,26 +288,59 @@
         "src/lib/content/save-all-pages.ts",
         "src/lib/pages/refresh-site-content.ts"
       ],
-      "docs": ["docs/architecture/author-dev-mode.md"]
+      "docs": [
+        "docs/architecture/author-dev-mode.md"
+      ]
     },
     {
       "globs": [
         "src/hooks/use-visual-viewport-keyboard.ts",
         "src/components/canvas/mobile-editor-toolbar.tsx"
       ],
-      "docs": ["docs/architecture/keyboard-toolbar.md"]
+      "docs": [
+        "docs/architecture/keyboard-toolbar.md"
+      ]
     },
     {
-      "globs": ["src/styles.css"],
-      "docs": ["docs/architecture/motion.md"]
+      "globs": [
+        "src/styles.css"
+      ],
+      "docs": [
+        "docs/architecture/motion.md"
+      ]
     },
     {
       "globs": [
         "src/hooks/haptics.ts",
         "src/components/layout/haptics-provider.tsx"
       ],
-      "docs": ["docs/architecture/haptics.md"],
-      "majorGlobs": ["src/components/layout/haptics-provider.tsx"]
+      "docs": [
+        "docs/architecture/haptics.md"
+      ],
+      "majorGlobs": [
+        "src/components/layout/haptics-provider.tsx"
+      ]
+    },
+    {
+      "globs": [
+        "src/components/database/**",
+        "src/components/blocks/types/database/**",
+        "src/lib/databases/**",
+        "src/lib/schemas/database.ts",
+        "src/db/collections/database-sharded-row-storage.ts",
+        "src/db/queries/database-collection-ops.ts",
+        "src/db/queries/use-database.ts"
+      ],
+      "docs": [
+        "docs/architecture/databases.md"
+      ],
+      "majorGlobs": [
+        "src/lib/schemas/database.ts",
+        "src/db/queries/database-collection-ops.ts",
+        "src/components/database/database-table-grid.tsx",
+        "src/components/database/database-filter-bar.tsx",
+        "src/components/database/database-column-menu.tsx"
+      ]
     }
   ]
 }
