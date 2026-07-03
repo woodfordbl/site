@@ -14,6 +14,7 @@
 - **Table** blocks are containers (`hasHeaderRow`, `columnWidths[]`); children are **tableRow** only. Trailing row/column count can be adjusted via plus-control pointer scrub — [table-blocks](./table-blocks.md#trailing-plus-controls).
 - **Table row** blocks are containers (empty props); children are **tableCell** only (sibling order = column index)
 - **Table cell** blocks are leaves with `props.text` (plain text only in v1)
+- **Database** blocks are leaves (`props.databaseId`, optional `props.viewId`) referencing a workspace database entity; rows never enter the block tree — see [databases](./databases.md)
 - List items are normal **text** blocks with `parentId = list.id`
 - Checklist items are **checklistItem** blocks with `parentId = checklist.id` and `props.checked`
 - Indent is only on `block.indent`, never embedded in list props
@@ -64,6 +65,7 @@ page (canvas)
 │   └── tableRow …
 ├── media (parentId: null | column, props.kind: image | video, props.source: url | asset, props.src, optional props.widthPercent 25–100)
 ├── embed (parentId: null | column, props.url; optional title/description/imageUrl; showCaption + caption below preview)
+├── database (parentId: null | column, props.databaseId → workspace database entity, optional props.viewId; rows live outside the block tree)
 └── divider (parentId: null, horizontal rule)
 ```
 
