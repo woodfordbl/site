@@ -31,6 +31,7 @@ export function getBlockText(block: Block): string {
     case "pageLink":
     case "table":
     case "tableRow":
+    case "database":
       return "";
     default: {
       const neverBlock: never = block;
