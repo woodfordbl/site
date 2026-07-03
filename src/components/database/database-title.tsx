@@ -49,25 +49,32 @@ export function DatabaseTitle({
 
   const countLabel = `${rowCount} ${rowCount === 1 ? "row" : "rows"}`;
 
+  let nameDisplay: ReactNode;
+  if (mode === "edit") {
+    nameDisplay = (
+      <button
+        className="min-w-0 truncate rounded-sm text-left font-medium text-foreground text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+        onClick={() => {
+          finishedRef.current = false;
+          setDraft(name);
+        }}
+        type="button"
+      >
+        {name}
+      </button>
+    );
+  } else {
+    nameDisplay = (
+      <span className="min-w-0 truncate font-medium text-foreground text-sm">
+        {name}
+      </span>
+    );
+  }
+
   return (
     <div className="flex min-w-0 items-baseline gap-2">
       {draft === null ? (
-        mode === "edit" ? (
-          <button
-            className="min-w-0 truncate rounded-sm text-left font-medium text-foreground text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
-            onClick={() => {
-              finishedRef.current = false;
-              setDraft(name);
-            }}
-            type="button"
-          >
-            {name}
-          </button>
-        ) : (
-          <span className="min-w-0 truncate font-medium text-foreground text-sm">
-            {name}
-          </span>
-        )
+        nameDisplay
       ) : (
         <input
           aria-label="Database name"

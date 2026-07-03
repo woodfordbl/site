@@ -64,12 +64,11 @@ export function DatabaseCellInlineEditor({
     if (draft === initial) {
       return;
     }
-    const next: DatabaseCellValue = isNumber
-      ? parseNumberCellInput(draft)
-      : draft === ""
-        ? null
-        : draft;
-    updateDatabaseCell(rowId, field.id, next);
+    if (isNumber) {
+      updateDatabaseCell(rowId, field.id, parseNumberCellInput(draft));
+      return;
+    }
+    updateDatabaseCell(rowId, field.id, draft === "" ? null : draft);
   };
 
   const finish = (move?: CellEditMove) => {
