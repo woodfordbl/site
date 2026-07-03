@@ -104,6 +104,8 @@ databaseRowSchema = {
   id: string,
   databaseId: string,
   values: Record<fieldId, CellValue>,   // validated per-field, sparse
+  order?: number,                       // sparse manual sort key (sidebarOrder pattern) —
+                                        // powers drag-reorder when a view has no sorts
   pageId: string | null,                // nested page, lazily created (§2.5)
   externalId?: string,                  // connector row identity (§4)
   createdAt / updatedAt: string,
@@ -119,6 +121,13 @@ Rules stolen deliberately:
 - Select options are `{id, name, color}` objects with the app's existing color tokens.
 - Relation values store target row ids; rollup/formula fields are **computed, never stored
   in `values`** (§3.3).
+- **Text cells are mini rich text, not plain strings.** The `text` cell value is a
+  constrained rich document — inline marks (bold, italic, code, links) plus flat bullet
+  list items — stored as a small span/line array, *not* canvas blocks (cells never enter
+  the block tree; §2.1's flat-storage rule holds). Filtering/sorting operate on a derived
+  `plainText` projection so text cells stay indexable. The editing surface reuses
+  `EditableSurface` conventions with a minimal mark toolbar; "turn into full page" (§2.5)
+  is the escape hatch when a cell wants real blocks.
 
 ### 2.4 Views: first-class saved lenses on the definition
 
@@ -142,12 +151,17 @@ quick-filters/configuration objects); we adopt the schema without the server. Th
 trivial and the UI sane. Filters compile to TanStack DB `where` expressions (indexable);
 sorts to `orderBy`; groupBy to `groupBy` — all incrementally maintained.
 
-View components map onto existing furniture: table view reuses the `table` block's
-interaction patterns + TanStack Virtual (rows *and* columns) with windowed queries; board =
-group-by live query + existing DnD toolkit (`lib/dnd/`); gallery/list are simple layouts;
-chart view feeds a live query straight into Recharts with the existing `--chart-*` palettes.
-TanStack Table stays out (we already have our own headless table conventions); canvas grids
-(Glide) are rejected — they abandon the design system and still lack React 19 support.
+View components map onto existing furniture: the table view is a **ShadCN data table —
+TanStack Table (headless) + design-system cells — heavily modified** per §5.1, virtualized
+with TanStack Virtual (rows *and* columns) over windowed queries; board = group-by live
+query + existing DnD toolkit (`lib/dnd/`); gallery/list are simple layouts; chart view
+feeds a live query straight into Recharts with the existing `--chart-*` palettes. TanStack
+Table earns its seat for exactly the features we need built-in — column pinning, sizing,
+ordering, visibility, and footer aggregation state — while staying 100% headless so every
+cell is a design-system component; canvas grids (Glide) are rejected — they abandon the
+design system and still lack React 19 support. Sorting/filtering/pagination run in
+**manual mode**: TanStack Table owns *view state*, TanStack DB's indexed live queries own
+*data computation* — the grid never sorts or filters arrays itself.
 
 ### 2.5 Nested pages per row — optional and lazy
 
@@ -220,11 +234,14 @@ same-row fields; they are the highest-complexity/lowest-urgency item in the whol
 
 ### 3.4 Rendering
 
-Table view = DOM + TanStack Virtual (both axes), design-system cells, sticky header,
-`content-visibility` where cheap. DOM-with-virtualization is fully sufficient below ~50k
-*loaded* rows with rich cells, and windowed queries mean we never load more than the
-viewport ± overscan anyway. Editing, selection, keyboard, and DnD reuse the `table` block's
-established patterns and the shared DnD toolkit.
+Table view = DOM + TanStack Table (headless, manual mode) + TanStack Virtual (both axes),
+design-system cells, sticky header + pinned columns, `content-visibility` where cheap
+(full spec in §5.1). DOM-with-virtualization is fully sufficient below ~50k *loaded* rows
+with rich cells, and windowed queries mean we never load more than the viewport ±
+overscan anyway. The grid never sorts/filters/aggregates arrays itself — TanStack Table
+holds view state only; computation stays in indexed live queries. Editing, selection,
+keyboard, and DnD reuse the `table` block's established patterns and the shared DnD
+toolkit.
 
 ## 4. External sync: client-side connectors
 
@@ -335,12 +352,96 @@ impossible (RSS) or a shared server-held key is preferable (stingy finance APIs)
 - **Shared keys** (if we ever want e.g. Alpha Vantage without user setup) live only in
   Vercel env vars behind the proxy.
 
-## 5. UX integration (sketch)
+## 5. UX specification
+
+### 5.1 Table view: ShadCN data table, heavily modified
+
+The grid is a ShadCN-style data table on **TanStack Table (headless) + TanStack Virtual**,
+with all data computation delegated to TanStack DB (manual sorting/filtering/pagination
+mode). TanStack Table contributes exactly the state machines we'd otherwise hand-roll —
+`columnPinning`, `columnOrder`, `columnSizing`, `columnVisibility`, row selection, footer
+aggregation — while every rendered element stays a design-system component.
+
+**Interaction spec:**
+
+- **Row drag-reorder.** Grip handle in the row gutter (same reveal/tooltip/cursor grammar
+  as canvas rows and the `table` block's structure handles); reorder writes the sparse
+  `row.order` key (sidebarOrder pattern — no full-table rewrites). Manual reorder is
+  available only when the active view has no sorts (Notion's rule); with sorts active the
+  grip offers "remove sorting to reorder". Powered by the shared DnD toolkit
+  (`lib/dnd/` + `components/dnd/`) with a full-width `bg-selection-primary` drop line,
+  matching the established table-block conventions.
+- **Column drag-reorder.** Header-mounted drag via the same toolkit writing per-view
+  column order (`view.config.columnOrder` ≙ TanStack `columnOrder` state); full-height
+  drop indicator; DnD wrapper stays outside the `<table>` element (hard-won rule from the
+  table block — see [table-blocks](../architecture/table-blocks.md)).
+- **Column pinning with scroll fades.** Freeze from the column menu or drag-into-pinned
+  zone; TanStack `columnPinning` state renders pinned columns `position: sticky` with the
+  scrolling region between them. The boundary uses the app's existing scroll-fade
+  primitive — the horizontal analogue of `.scroll-fade-y` driven by
+  `--scroll-area-overflow-*` custom properties (`components/ui/scroll-area.tsx`): content
+  fades under the pinned edge only once there is actual overflow, first column stays
+  opaque at rest, and the fade tracks scroll position exactly like our ScrollAreas. Pinned
+  state is per-view (`frozen_column_index` in Notion's view config — we store
+  `pinnedFieldIds`).
+- **Column header menu** (mirrors the Notion property menu): rename-in-place at top with
+  field-type icon; **Edit property** (config submenu per type); **Change type** (with
+  value coercion rules); **Filter** (seeds a filter chip for this field, §5.2); **Sort**
+  (asc/desc, appends to view sorts); **Calculate** (§ below); **Freeze** (pin through this
+  column); **Hide** (drops from `visibleFieldIds`); **Wrap content** (per-column wrap vs
+  truncate); **Insert left / Insert right**; **Duplicate property**; **Delete property**
+  (destructive styling). Built as a `DropdownMenu` following the block-gutter-menu
+  section-component pattern.
+- **Calculate row.** Per-column footer aggregate picker — none / count all / count values /
+  count unique / count empty / count not empty / percent empty / percent not empty, plus
+  sum / average / median / min / max / range for numbers and earliest / latest / range for
+  dates (Notion's aggregate taxonomy). Each active calculation is one TanStack DB
+  `groupBy`-free aggregate live query over the view's filtered row set — incrementally
+  maintained, so footer values update on cell edits without rescans. Selection is stored
+  per view (`view.config.calculations: Record<fieldId, fn>`).
+- **Inline cell editing.** Single click focuses (view mode), Enter/second click edits in
+  place; Escape reverts, Tab/Shift+Tab and arrow keys navigate (extending the `table`
+  block's `table.focusCell` grammar). Each field type gets a purpose-built inline editor:
+  text (mini rich text per §2.3 — bold/italic/code/links + bullet lists via a floating
+  mark toolbar), number (formatted input), select/multi-select (combobox popover with
+  option creation, `{id,name,color}` pills), date (existing `react-day-picker`), checkbox
+  (design-system checkbox), url, relation (searchable row picker popover). Edits commit
+  through `database.updateCell` as single-collection transactions — same
+  optimistic-write + `reportPersistenceError` path as canvas edits.
+- **Virtualization.** Rows and columns virtualized (TanStack Virtual); sticky header and
+  pinned columns excluded from the column virtualizer; overscan tuned so keyboard
+  navigation never lands on an unmounted cell.
+
+### 5.2 Linear-style filtering
+
+The filter experience is Linear's, not a form builder:
+
+- **Filter chip bar** above the grid: each filter renders as a compact chip —
+  `[icon field] [operator] [values] [×]` (e.g. `Status · is any of · ● Active, ● Paused`).
+  Clicking any segment edits it in place via popover; operator vocabulary comes from the
+  field type's operator set (§2.4 grammar). Multi-value conditions collapse to
+  `n selected` with avatars/pills exactly like Linear's `3 assignees`.
+- **Add-filter flow:** `+` chip (and `F` hotkey via TanStack hotkeys) opens a command-menu
+  style picker — type-ahead over fields, then operator, then value — optimized for
+  keyboard-only entry.
+- **Match all / any toggle** at the bar's right edge switches the root group `and`/`or`
+  (Linear's "Match all filters"); a per-chip overflow lets a chip move into a nested
+  `or`-group, which covers the grammar's full 2-level nesting without ever showing a
+  "query builder" UI.
+- **Quick filters** (Notion's `quick_filters`): a view can promote specific fields to
+  always-visible chips even when unset.
+- **Compilation:** the chip bar is pure UI over the `FilterGroup` schema; every change
+  recompiles to an indexed TanStack DB `where` expression. Ephemeral filter state (user
+  exploring) lives beside the view's saved filter, with a "Save to view / Reset" affordance
+  when they diverge — so shared/linked views aren't mutated by casual exploration.
+
+### 5.3 Surrounding UX
 
 - **Creation:** slash menu → "Database — Table" (local) and "Database — Sync" (connector
   gallery with config form → TanStack Form + zod, matching `SourceLinkPanel` conventions).
 - **Views UI:** view switcher tabs in the database block header (existing `TabsList`
-  indicator variant); per-view filter/sort/group popovers built from the field schema.
+  indicator variant); per-view sort/group controls beside the filter bar, built from the
+  field schema.
 - **Row page:** open-row affordance on the primary field (Notion's "open as page"),
   breadcrumb inherits the host page.
 - **Settings:** connector tokens + sync diagnostics panel under `/settings` (new
@@ -357,7 +458,7 @@ Each phase ships user-visible value and is independently mergeable.
 | Phase | Scope | Key deliverables |
 |---|---|---|
 | **0 — Foundations** | Schemas + collections + registry stub | `lib/schemas/database.ts`, `localDatabasesCollection`, per-DB sharded rows collections, `database` block registered (composite strategy), lookup façade with indexes |
-| **1 — Table view MVP** | Local databases usable end-to-end | Virtualized table view; field CRUD (text/number/checkbox/select/multiSelect/date/url); row CRUD; per-view sorts + filters compiled to indexed live queries; slash-menu creation; backup integration |
+| **1 — Table view MVP** | Local databases usable end-to-end | ShadCN data table on TanStack Table + Virtual (§5.1): inline cell editors, column header menu, row/column drag-reorder, column pinning with scroll fades, calculate row; field CRUD (text/number/checkbox/select/multiSelect/date/url) incl. mini-rich-text cells; Linear-style filter bar + sorts (§5.2) compiled to indexed live queries; slash-menu creation; backup integration |
 | **2 — Rows as pages + relations** | The Notion feel | Lazy `pageId` row pages; relation field + O(1) lookups; linked views (same DB on multiple pages); board/gallery/list views on group-by queries |
 | **3 — Connector engine + first connectors** | External sync, zero backend | Connector SDK; sync scheduler (Web Locks leader, visibility, ETag, budgeting); GitHub (repos/profile/events) with BYO PAT; CoinGecko + Frankfurter (keyless demos); local-fields overlay on synced DBs |
 | **4 — Real-time + proxy** | "Stock ticker in my page" | Finnhub connector (REST + free WebSocket via `realtime`); HN Firebase push connector; hardened `connector-proxy` route (RSS connector as its proving case); chart view on Recharts |
@@ -370,6 +471,9 @@ already a standalone win), with 3 close behind since it's the differentiating fe
 
 ## 7. Risks & open questions
 
+- **New dependency: `@tanstack/react-table`.** Adopt v8 (stable, React 19 compatible);
+  v9 is in beta (tree-shakable rewrite) — migrate when it stabilizes, the state-shape
+  surface we use (pinning/order/sizing/visibility) is carried over.
 - **TanStack DB pre-1.0.** APIs may shift (SSR support is the stated 1.0 blocker). We're
   already committed to the 0.6 line app-wide, and the collection-options surface has been
   stable across 0.5→0.6; pin + adapt.
