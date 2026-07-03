@@ -28,6 +28,8 @@ export interface GridColumn {
   left: number | null;
   pinned: boolean;
   width: number;
+  /** Cell content wraps (clamped to two lines) instead of truncating. */
+  wrap: boolean;
 }
 
 /** Column width from the view config, clamped to the grid minimum. */
@@ -40,13 +42,13 @@ export function resolveColumnWidthPx(
 }
 
 /**
- * Whether a field type gets the Milestone-1 inline text-input editor.
- * Checkbox toggles in place; select/multi-select/date wait on popover editors.
+ * Whether a field type routes through `DatabaseCellInlineEditor` when its
+ * cell is clicked in edit mode: text/url/number take the input overlay,
+ * select/multi-select/date open popover editors. Checkbox is the exception —
+ * it toggles in place with no editing state.
  */
 export function isInlineEditableField(field: DatabaseField): boolean {
-  return (
-    field.type === "text" || field.type === "url" || field.type === "number"
-  );
+  return field.type !== "checkbox";
 }
 
 /** One editing cell, addressed by stable row + field ids. */
@@ -105,6 +107,22 @@ export function parseNumberCellInput(raw: string): number | null {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+const ISO_DATE_INPUT_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Parse a `yyyy-mm-dd` date part into a local-time `Date` for the calendar
+ * editor (constructing from parts so the rendered day never shifts across
+ * timezones). Anything else returns `null`.
+ */
+export function isoDateToLocalDate(datePart: string): Date | null {
+  const match = ISO_DATE_INPUT_RE.exec(datePart);
+  if (!match) {
+    return null;
+  }
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
 const ABSOLUTE_URL_RE = /^[a-z][a-z0-9+.-]*:/i;

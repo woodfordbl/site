@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo } from "react";
 
+import { DatabaseFilterBar } from "@/components/database/database-filter-bar.tsx";
 import { DatabaseTableGrid } from "@/components/database/database-table-grid.tsx";
 import { DatabaseTitle } from "@/components/database/database-title.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
@@ -72,6 +73,13 @@ export function DatabaseTableView({
         name={database.name}
         rowCount={rows.length}
       />
+      {mode === "edit" ? (
+        <DatabaseFilterBar
+          databaseId={databaseId}
+          fields={database.fields}
+          view={view}
+        />
+      ) : null}
       <DatabaseTableGrid
         columns={columns}
         databaseId={databaseId}

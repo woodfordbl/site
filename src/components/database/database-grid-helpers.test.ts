@@ -4,6 +4,7 @@ import {
   aggregateFnLabel,
   DEFAULT_COLUMN_WIDTH_PX,
   isInlineEditableField,
+  isoDateToLocalDate,
   MIN_COLUMN_WIDTH_PX,
   nextEditTarget,
   parseNumberCellInput,
@@ -34,17 +35,17 @@ describe("isInlineEditableField", () => {
       ? { id: "f", name: "F", type, options: [] }
       : { id: "f", name: "F", type };
 
-  it("marks text, url, and number editable", () => {
+  it("marks every editor-backed type editable", () => {
     expect(isInlineEditableField(field("text"))).toBe(true);
     expect(isInlineEditableField(field("url"))).toBe(true);
     expect(isInlineEditableField(field("number"))).toBe(true);
+    expect(isInlineEditableField(field("select"))).toBe(true);
+    expect(isInlineEditableField(field("multiSelect"))).toBe(true);
+    expect(isInlineEditableField(field("date"))).toBe(true);
   });
 
-  it("excludes checkbox, select, multi-select, and date", () => {
+  it("excludes checkbox — it toggles in place", () => {
     expect(isInlineEditableField(field("checkbox"))).toBe(false);
-    expect(isInlineEditableField(field("select"))).toBe(false);
-    expect(isInlineEditableField(field("multiSelect"))).toBe(false);
-    expect(isInlineEditableField(field("date"))).toBe(false);
   });
 });
 
@@ -119,6 +120,21 @@ describe("parseNumberCellInput", () => {
     expect(parseNumberCellInput("   ")).toBeNull();
     expect(parseNumberCellInput("abc")).toBeNull();
     expect(parseNumberCellInput("Infinity")).toBeNull();
+  });
+});
+
+describe("isoDateToLocalDate", () => {
+  it("parses a yyyy-mm-dd part into a local date", () => {
+    const date = isoDateToLocalDate("2026-03-05");
+    expect(date?.getFullYear()).toBe(2026);
+    expect(date?.getMonth()).toBe(2);
+    expect(date?.getDate()).toBe(5);
+  });
+
+  it("rejects non-date input", () => {
+    expect(isoDateToLocalDate("")).toBeNull();
+    expect(isoDateToLocalDate("2026-03-05T10:00:00Z")).toBeNull();
+    expect(isoDateToLocalDate("not a date")).toBeNull();
   });
 });
 

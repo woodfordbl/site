@@ -24,16 +24,29 @@ import { cn } from "@/lib/utils.ts";
 /** Visible option pills before a multi-select cell collapses to "+n". */
 const MAX_VISIBLE_OPTION_PILLS = 3;
 
-function OptionPill({ option }: { option: DatabaseSelectOption }) {
+/**
+ * One select/multi-select option pill. Colored options reuse the block color
+ * tokens (`BLOCK_COLOR_DEFS`) for both the pill background and the leading
+ * dot; colorless options stay muted. Shared with the popover option editors.
+ */
+export function DatabaseOptionPill({
+  option,
+}: {
+  option: DatabaseSelectOption;
+}) {
+  const color = option.color ? BLOCK_COLOR_DEFS[option.color] : undefined;
   return (
-    <span className="inline-flex min-w-0 shrink-0 items-center gap-1.5 rounded-md bg-muted px-1.5 py-0.5 text-foreground text-xs">
+    <span
+      className={cn(
+        "inline-flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-foreground text-xs",
+        color ? color.bgClass : "bg-muted"
+      )}
+    >
       <span
         aria-hidden
         className={cn(
           "size-2 shrink-0 rounded-full bg-current",
-          option.color
-            ? BLOCK_COLOR_DEFS[option.color].textClass
-            : "text-muted-foreground"
+          color ? color.textClass : "text-muted-foreground"
         )}
       />
       <span className="truncate">{option.name}</span>
@@ -116,7 +129,7 @@ export function DatabaseCellValueView({
         typeof coerced === "string"
           ? selectedOptions(field.options, [coerced])[0]
           : undefined;
-      return option ? <OptionPill option={option} /> : null;
+      return option ? <DatabaseOptionPill option={option} /> : null;
     }
     case "multiSelect": {
       const options = Array.isArray(coerced)
@@ -130,7 +143,7 @@ export function DatabaseCellValueView({
       return (
         <span className="flex min-w-0 items-center gap-1 overflow-hidden">
           {visible.map((option) => (
-            <OptionPill key={option.id} option={option} />
+            <DatabaseOptionPill key={option.id} option={option} />
           ))}
           {overflow > 0 ? (
             <span className="shrink-0 text-muted-foreground text-xs">

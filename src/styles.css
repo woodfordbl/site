@@ -324,6 +324,19 @@
     mask-composite: intersect;
   }
 
+  /*
+   * Database grid: horizontal analogue of the .scroll-fade-y edge fade for
+   * the pinned-column boundary. The last left-pinned cell casts a soft
+   * shadow over content scrolled beneath it, driven by
+   * --database-grid-pinned-fade (0 at scrollLeft 0, ramping to 1; written by
+   * a rAF-throttled scroll listener in database-table-grid.tsx and only
+   * while real horizontal overflow exists).
+   */
+  .database-grid-pinned-edge {
+    box-shadow: 6px 0 8px -6px
+      rgb(0 0 0 / calc(var(--database-grid-pinned-fade, 0) * 0.35));
+  }
+
   /* Show scrollbars while scrolling that axis or when hovering the track. */
   [data-slot="scroll-area-scrollbar"]:not([data-scrolling]) {
     opacity: 0;
