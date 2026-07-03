@@ -289,15 +289,34 @@ defineConnector({
 ```
 
 A synced database = `source: { kind: "connector", connectorId, config, refreshMs }` on the
-database definition. Its rows collection is a `queryCollectionOptions` collection whose
-`queryFn` runs the connector; **incremental pushes (WebSocket ticks) write through
-`writeBatch`/`writeUpsert` utils** — the documented path for streaming updates that bypasses
-the optimistic pipeline.
+database definition. Its rows collection is a `queryCollectionOptions` collection, and the
+division of labor across the three layers is strict:
 
-**Row identity & diffing:** connectors emit rows keyed by `externalId` (repo id, ticker,
-story id). The sync layer snapshot-diffs against current state — upsert changed (hash of
-normalized row for O(1) change detection), insert new, tombstone missing with a
-seen-in-last-N-syncs grace period so paginated/truncated responses don't flap deletes.
+| Layer | Owns |
+|---|---|
+| **TanStack Query** | Fetch lifecycle: cadence (`refetchInterval`), focus/reconnect refetch, retry/backoff, `staleTime`/`gcTime`, dedup |
+| **TanStack DB query collection** | Synced row state: the `queryFn` result is treated as **complete state** and internally diffed into insert/update/delete deltas keyed by `getKey: (row) => row.externalId` |
+| **TanStack DB live queries** | Everything downstream: view filters/sorts/groupBy, footer aggregates, joins against local overlays and other databases — all incrementally maintained off the deltas |
+
+Consequences worth being precise about:
+
+- We do **not** hand-diff on the polling path — the query collection's complete-state
+  reconciliation does it. Our connector-level diff logic exists only where the
+  complete-state contract needs help: paginated/truncated fetches merge with prior rows
+  *before* returning from `queryFn`, and delete-tombstoning applies a
+  seen-in-last-N-syncs grace period (implemented by re-including recently-missing rows in
+  the returned snapshot) so partial responses don't flap deletes.
+- **Incremental pushes (WebSocket ticks, HN Firebase events) bypass Query** and write
+  straight into the synced store via the query collection's `writeBatch`/`writeUpsert`
+  utils — the documented path for streaming updates — so a price tick is one keyed upsert
+  flowing through differential dataflow to exactly the cells/aggregates that depend on it,
+  never a refetch.
+- UI components **never consume `useQuery` for synced rows** — they consume live queries
+  on the collection, same as local databases. One query surface everywhere.
+- Full-snapshot polling is right for v1 connector payloads (a repo list, a watchlist).
+  If a connector ever serves large server-filterable datasets, the query collection's
+  `syncMode: 'on-demand'` (predicate push-down into `queryFn`) is the designed escape
+  hatch — noted, not planned.
 
 **Synced + local composition:** synced fields are read-only, but users can add **local
 fields** to a synced database (notes, tags, checkboxes) stored in a local overlay collection
@@ -310,12 +329,17 @@ One new module under `src/db/` (proposed name: `sync/`) owning all polling:
 
 - **Leader election via Web Locks** (`navigator.locks`) so exactly one tab polls per
   connector regardless of open tabs — mandatory when limits are per-IP/per-key, and the
-  same primitive Notion uses for its SQLite writer. Followers receive rows via the existing
-  cross-tab storage/queryCache propagation.
+  same primitive Notion uses for its SQLite writer. **Cross-tab fan-out is explicit, not
+  assumed:** TanStack Query's cache is per-tab, so the leader broadcasts applied row
+  deltas over a `BroadcastChannel` and follower tabs apply them via `writeBatch` into
+  their own collections (plus one full-snapshot request/reply on follower boot). Leader
+  preference goes to a **visible** tab (re-elect on `visibilitychange`) so polling isn't
+  hostage to a backgrounded tab's clamped timers.
 - **Visibility-aware cadence:** TanStack Query defaults do the heavy lifting
   (`refetchInterval` pauses hidden, `refetchOnWindowFocus`, `refetchOnReconnect`); design is
   "catch up on focus," not "always-on background," since browsers throttle hidden timers
-  anyway.
+  anyway. `refetchInterval` is passed as a **function**, which is exactly where the
+  rate-budget arithmetic below plugs in.
 - **Conditional requests:** per-endpoint `{etag, lastModified, cursor, snapshotHash}`
   persisted in `idb-keyval` (alongside the existing asset store). On 304: nothing to do.
 - **Rate-limit budgeting:** adaptive interval from response headers —
@@ -496,7 +520,53 @@ already a standalone win), with 3 close behind since it's the differentiating fe
   per-database history is deferred (Grist's invertible action log is the model if we want
   it later).
 
-## 8. What we deliberately rejected
+## 8. Differentiation: what this does that Notion can't
+
+Raw speed is table stakes. The structural differentiators all fall out of one fact Notion
+can never replicate: **this is a deployed site where the visitor's browser is the runtime.**
+
+- **Published pages with *live* data and zero backend.** A Notion public page is a static
+  share. Here, a database view on a published page ships its static baseline for
+  SSR/SEO/OG — and then **each visitor's browser runs the sync engine** against public
+  CORS APIs. Your homepage's GitHub table or ticker board is live *for every visitor*,
+  served from a static deploy. No incumbent (Notion, Airtable, Glide) can do this; their
+  sync runs server-side on their infrastructure. Requires the author-dev-mode answer from
+  §7 (databases shipped in `content/` like pages) plus marking a connector
+  `publicSafe: true` (keyless/anonymous-tier APIs only — visitor browsers never see
+  tokens).
+- **Inline live tokens in prose.** The lookup facade (§3.2) makes any cell or aggregate
+  referenceable from a text block — "I maintain **{repos.count}** packages with
+  **{npm.totalDownloads}** monthly downloads" — as a live-updating inline token, not a
+  screenshot of a number. Notion has no cell references outside a database. This is the
+  feature that makes databases *compose with the canvas* instead of sitting beside it.
+- **Time-series capture: turn any polled field into history.** A connector field can opt
+  into `captureHistory` — each sync appends changed values to a compact local series
+  (IndexedDB), thinned with the same tiered-retention approach as page snapshots. Star
+  counts, prices, download numbers become **charts over time and sparkline cells** from
+  data no API hands out retroactively. Notion synced databases overwrite; we can remember.
+- **Value joins across databases — including across connectors.** TanStack DB equality
+  joins mean cross-database views need no hand-created relations: GitHub repos ⋈ npm
+  download counts on package name, a synced ticker table ⋈ a local "my positions" table
+  on symbol. Notion relations are manually-linked pages; we join on data.
+- **Writable synced databases** (local-column overlay, §4.2): annotate read-only external
+  rows with your own status/tags/notes. Notion synced databases are read-only, full stop.
+- **Client-side automations.** TanStack DB's `createEffect` fires on live-query
+  enter/update/exit — "when a row enters this filtered view, recolor the tile / append to
+  a log database / toast." Notion gates automations behind paid plans and runs them
+  server-side with minutes of latency; ours are free, instant, and offline-capable.
+- **Actual real time.** Tick-to-paint in milliseconds (Finnhub WebSocket → keyed upsert →
+  differential dataflow → one cell repaint). Notion's synced databases refresh "within
+  minutes."
+- **Ownership and portability.** Rows live in the user's browser (localStorage/OPFS),
+  export in the existing workspace zip, and BYO tokens never leave the device. There is no
+  vendor database. This is a *stance* Notion structurally cannot take.
+
+Priority within the plan: local-column overlays and value joins are free byproducts of the
+architecture (Phase 3); inline tokens and time-series capture are small, high-leverage
+additions (Phase 4–5 candidates); published-live-data is the headline act and lands with
+the author-dev-mode/content-shipping answer.
+
+## 9. What we deliberately rejected
 
 | Option | Why not |
 |---|---|
