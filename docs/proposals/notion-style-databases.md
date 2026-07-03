@@ -229,8 +229,10 @@ For rollups and formulas we follow the Grist/Excel/Salsa consensus rather than i
 - **No volatile functions in the graph.** `now()`-style formulas recompute on a visible
   clock tick, not as dependencies — Airtable's documented #1 self-inflicted perf wound.
 
-Formulas ship **late** (Phase 6) and start with a small typed expression language over
-same-row fields; they are the highest-complexity/lowest-urgency item in the whole plan.
+Formula *fields* ship **late** (Phase 6), but the expression language itself arrives
+earlier: inline tokens (§5.3) build the shared parser/typechecker/evaluator in Phase 4 and
+battle-test it on single values, so Phase 6 adds column semantics (per-row evaluation, the
+dependency DAG, materialization) to an engine that already works.
 
 ### 3.4 Rendering
 
@@ -459,7 +461,69 @@ The filter experience is Linear's, not a form builder:
   exploring) lives beside the view's saved filter, with a "Save to view / Reset" affordance
   when they diverge — so shared/linked views aren't mutated by casual exploration.
 
-### 5.3 Surrounding UX
+### 5.3 Inline query language — live tokens in text
+
+Any text-bearing block can embed a live expression that renders as a **chip** or as
+**plain live text** and updates through the same live-query machinery as everything else.
+
+**One expression engine, three consumers.** The language core — parser, type checker,
+evaluator, dependency tracking — is built once (`lib/expr/`, pure and React-free per the
+`lib/*` convention) and consumed by: inline tokens (this section), formula fields (§3.3 /
+Phase 6), and eventually computed view configs. Inline tokens are deliberately the *first*
+consumer: they exercise the whole engine on single values before formula columns raise the
+stakes.
+
+**Syntax.** `{{ … }}` inside any text block. Typed by hand or — the primary path — via
+autocomplete: typing `{{` opens a slash-menu-style popover (same filtering/keyboard
+conventions) that walks database → row/aggregate → field. Examples:
+
+```
+{{ Tickers["AAPL"].price }}
+{{ count(Tasks where Status = "Done") }}
+{{ sum(Positions.qty * Tickers[Positions.symbol].price) | currency }}
+{{ Repos.totalStars | compact }}          → "12.4k"
+{{ Tickers["AAPL"].price | delta(1d) }}   → "+1.2%" (needs history capture, §8)
+```
+
+- Expression-only, no statements; typed (number/string/boolean/date/row/rowset) with
+  errors surfaced in the chip, never thrown.
+- References: `Database.field` (single-row DBs / aggregate context), `Database["key"]`
+  (primary-field lookup → O(1) via §3.2), `where` clauses reusing the §2.4 filter
+  grammar's operator vocabulary.
+- Aggregates: the same taxonomy as the Calculate row (§5.1) — `count/sum/avg/min/max/…`
+  over a database or a `where`-filtered subset.
+- **Format pipes**, not format functions: `| currency | percent | compact | date("MMM d")
+  | ago | plain`. Pipes affect display only, never the value's type.
+- `now()`/`today()` are volatile → evaluated on the shared clock tick (§3.3 rule), never
+  graph edges.
+
+**Rename safety without ugly source.** Sources are human-readable names, but every
+reference binds to stable ids (`databaseId`/`fieldId`/row key) at parse time, and the
+workspace keeps a **reverse reference index** (token → referenced ids). `database.rename`
+/ `database.renameField` commands consult the index and rewrite affected token sources in
+the same transaction — the Grist approach, entirely tractable in a single-user local-first
+workspace. No Airtable-style silent breakage, no id-soup in the source text.
+
+**Rendering & editing mechanics** (fits the `EditableSurface` native-textarea reality —
+no contenteditable migration):
+
+- The **focused** row shows raw source (`{{ … }}`) — exactly like markdown conventions
+  elsewhere in the editor; syntax gets a subtle highlight.
+- **Unfocused rows and all read-only/view renders** parse the text and render tokens as
+  design-system chips (value + tiny source icon; click → popover showing the expression,
+  last-updated time, and "Open database") or, with the `| plain` pipe, as unstyled text
+  indistinguishable from prose — the "formulas as chips or just normal text" split.
+- Copy/paste carries raw source (plain-text portability); tokens survive round-trips
+  through any editor.
+- **Evaluation**: each distinct expression on a page compiles to one live-query
+  subscription; TanStack DB's identical-subquery deduplication means twenty
+  `{{ Repos.totalStars }}` chips cost one pipeline. Token updates re-render only the chip
+  (memoized span), never the block.
+- **SSR/publish**: shipped pages render tokens' last-captured values into the static
+  baseline (no layout shift, crawlers see real numbers), then hydrate live — the §8
+  published-live-data story applied at word granularity.
+
+### 5.4 Surrounding UX
 
 - **Creation:** slash menu → "Database — Table" (local) and "Database — Sync" (connector
   gallery with config form → TanStack Form + zod, matching `SourceLinkPanel` conventions).
@@ -485,9 +549,9 @@ Each phase ships user-visible value and is independently mergeable.
 | **1 — Table view MVP** | Local databases usable end-to-end | ShadCN data table on TanStack Table + Virtual (§5.1): inline cell editors, column header menu, row/column drag-reorder, column pinning with scroll fades, calculate row; field CRUD (text/number/checkbox/select/multiSelect/date/url) incl. mini-rich-text cells; Linear-style filter bar + sorts (§5.2) compiled to indexed live queries; slash-menu creation; backup integration |
 | **2 — Rows as pages + relations** | The Notion feel | Lazy `pageId` row pages; relation field + O(1) lookups; linked views (same DB on multiple pages); board/gallery/list views on group-by queries |
 | **3 — Connector engine + first connectors** | External sync, zero backend | Connector SDK; sync scheduler (Web Locks leader, visibility, ETag, budgeting); GitHub (repos/profile/events) with BYO PAT; CoinGecko + Frankfurter (keyless demos); local-fields overlay on synced DBs |
-| **4 — Real-time + proxy** | "Stock ticker in my page" | Finnhub connector (REST + free WebSocket via `realtime`); HN Firebase push connector; hardened `connector-proxy` route (RSS connector as its proving case); chart view on Recharts |
+| **4 — Real-time, proxy, inline tokens** | "Stock ticker in my page — and in my sentences" | Finnhub connector (REST + free WebSocket via `realtime`); HN Firebase push connector; hardened `connector-proxy` route (RSS connector as its proving case); chart view on Recharts; **expression engine core + inline token language v1** (§5.3: lookups, aggregates, format pipes, autocomplete, rename rewriting) |
 | **5 — Scale tier** | 100k-row comfort | `@tanstack/browser-db-sqlite-persistence` persisted collections for large local DBs (auto-suggested past a threshold); windowed-query hardening; perf test page under `/dev` |
-| **6 — Computed fields** | Rollups + formulas | Rollup fields (live-query-maintained aggregates); formula language v1 (same-row, typed, non-volatile); dependency DAG with materialization + cutoffs |
+| **6 — Computed fields** | Rollups + formulas | Rollup fields (live-query-maintained aggregates); formula fields on the **shared expression engine from Phase 4** (same-row references first, typed, non-volatile); dependency DAG with materialization + cutoffs |
 
 Dependency notes: 3 needs only 0–1; 4 needs 3; 5 and 6 are independent of each other.
 Suggested first milestone: **Phases 0–1 in one PR series** (a fast local table block is
@@ -534,11 +598,12 @@ can never replicate: **this is a deployed site where the visitor's browser is th
   §7 (databases shipped in `content/` like pages) plus marking a connector
   `publicSafe: true` (keyless/anonymous-tier APIs only — visitor browsers never see
   tokens).
-- **Inline live tokens in prose.** The lookup facade (§3.2) makes any cell or aggregate
-  referenceable from a text block — "I maintain **{repos.count}** packages with
-  **{npm.totalDownloads}** monthly downloads" — as a live-updating inline token, not a
-  screenshot of a number. Notion has no cell references outside a database. This is the
-  feature that makes databases *compose with the canvas* instead of sitting beside it.
+- **An inline query language.** Any cell, lookup, or aggregate is referenceable from
+  prose — "I maintain **{{ Repos.count }}** packages" — rendered as a live chip or as
+  plain live text, with format pipes and `where`-filtered aggregates (full spec §5.3).
+  Notion has no cell references outside a database. This is the feature that makes
+  databases *compose with the canvas* instead of sitting beside it — and its expression
+  engine is the same one formula fields use later, so the investment pays twice.
 - **Time-series capture: turn any polled field into history.** A connector field can opt
   into `captureHistory` — each sync appends changed values to a compact local series
   (IndexedDB), thinned with the same tiered-retention approach as page snapshots. Star
