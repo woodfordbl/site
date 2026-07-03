@@ -9,8 +9,12 @@
 | Server defaults | `content/pages/**/*.json` | Yes (git) |
 | Local page metadata | `localPagesCollection` (`site-local-pages`) | No (localStorage) |
 | Local blocks | `localBlocksCollection` (`site-local-blocks:<pageId>` shards) | No (localStorage) |
+| Local databases | `localDatabasesCollection` (`site-local-databases`) | No (localStorage) |
+| Local database rows | `localDatabaseRowsCollection` (`site-local-db-rows:<databaseId>` shards; quarantine `site-local-db-rows-quarantine`) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
 | Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
+
+The database collections sync in `startLocalCollectionsSync` ([`local-collections.ts`](../../src/db/collections/local-collections.ts)) like the others; the rows collection carries a BTree index on `databaseId`. Row sharding, quarantine, ops, and reads: [databases — Storage](./databases.md#storage).
 
 ## Local media assets (IndexedDB, not TanStack collections)
 

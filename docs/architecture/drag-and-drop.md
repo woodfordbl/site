@@ -116,6 +116,7 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 ## Out of scope
 
 - Column resize and sidebar rail resize (pointer gestures, not HTML5 DnD).
+- The database table grid ([databases](./databases.md)) — no `DndSurface`; row drag-reorder is deferred.
 - Keyboard-accessible reorder (would need a separate sensor).
 - Third-party DnD libraries.
 
