@@ -9,7 +9,17 @@ import {
   createDitherGradient,
   cssColorToRgb,
 } from "@/lib/charts/dither-texture.ts";
+import { makePixelCurve } from "@/lib/charts/pixel-curve.ts";
 import { cn } from "@/lib/utils.ts";
+
+/**
+ * Renders dithered chart shapes on the pixel grid: hard (non-antialiased) edges
+ * on lines/areas/bars and nearest-neighbor scaling on the texture image, so the
+ * dots and staircase read as crisp pixels. Apply to `<ChartContainer>` only when
+ * dither is on — `useChartGradientDither` hands it back as `crispClassName`.
+ */
+const CHART_CRISP_CLASS =
+  "[&_.recharts-area-area]:[shape-rendering:crispEdges] [&_.recharts-curve]:[shape-rendering:crispEdges] [&_.recharts-rectangle]:[shape-rendering:crispEdges] [&_image]:[image-rendering:pixelated]";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
@@ -396,7 +406,129 @@ export function useChartGradientDither(
     [enabled, urls, rawId]
   );
 
-  return { defs, fill, ref };
+  // When dithering, draw lines as a grid-snapped staircase (cell = pixelSize) so
+  // they read as pixels too; otherwise fall back to Recharts' smooth monotone.
+  const lineType = React.useMemo(
+    () => (enabled ? makePixelCurve(pixelSize) : ("monotone" as const)),
+    [enabled, pixelSize]
+  );
+
+  return {
+    defs,
+    fill,
+    ref,
+    enabled,
+    lineType,
+    /** Square off corners on `<Bar>` when dithering so bars snap to the grid. */
+    barRadius: enabled ? 0 : undefined,
+    /** Add to `<ChartContainer className>` so dithered shapes render crisp. */
+    crispClassName: enabled ? CHART_CRISP_CLASS : "",
+  };
+}
+
+type ChartDitherFillOptions = {
+  /** Bayer matrix size. 8 = finer, 4 = chunkier. Default 4. */
+  matrix?: 4 | 8;
+  /** Size of each dither cell in px. Default 2. */
+  pixelSize?: number;
+  /** Flat dot coverage, 0..1. Default 0.72. */
+  coverage?: number;
+  /** Force on/off; defaults to the global Chart dither setting. */
+  enabled?: boolean;
+};
+
+/**
+ * Dithered fills for plain CSS bars (ranked lists, the storage breakdown) — the
+ * non-Recharts visuals on the analytics page. Returns `{ ref, fillStyle }`:
+ * attach `ref` to a container inside the `ChartPaletteScope` so each `var(...)`
+ * color resolves against the active palette, then spread `fillStyle(colorVar)`
+ * onto a bar.
+ *
+ * The texture is colored dots on a transparent tile (no solid backing), so the
+ * track shows through the gaps — the same thinning-dots look as the charts.
+ * Regenerates when the palette, theme, or dither setting changes.
+ */
+export function useChartDitherFill<T extends HTMLElement = HTMLDivElement>(
+  colorVars: string[],
+  options?: ChartDitherFillOptions
+) {
+  const { matrix = 4, pixelSize = 2, coverage = 0.72 } = options ?? {};
+  const { chartDitherEnabled } = useSiteAppearance();
+  const enabled = options?.enabled ?? chartDitherEnabled;
+  const ref = React.useRef<T | null>(null);
+  const [tiles, setTiles] = React.useState<Record<string, string>>({});
+  const tile = matrix * pixelSize;
+  const sig = colorVars.join("|");
+
+  // Re-resolve each color from the DOM and rebuild its tile. Runs on mount and
+  // whenever the palette, theme, or dither setting changes — same observer
+  // pattern as useChartGradientDither, so it also tracks local palette overrides.
+  const regenerate = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    if (!enabled) {
+      setTiles((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const colorVar of sig.split("|").filter(Boolean)) {
+      const rgb = cssColorToRgb(el, colorVar);
+      if (!rgb) {
+        continue;
+      }
+      next[colorVar] = createDitherGradient({
+        bottomColor: rgb,
+        gamma: 0,
+        height: tile,
+        matrix,
+        peak: coverage,
+        pixelSize,
+        topColor: rgb,
+        width: tile,
+      });
+    }
+    setTiles(next);
+  }, [enabled, sig, tile, matrix, pixelSize, coverage]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    regenerate();
+    const paletteScope = el.closest("[data-chart-palette]");
+    const paletteObserver = new MutationObserver(regenerate);
+    if (paletteScope) {
+      paletteObserver.observe(paletteScope, {
+        attributeFilter: ["data-chart-palette"],
+      });
+    }
+    const themeObserver = new MutationObserver(regenerate);
+    themeObserver.observe(document.documentElement, {
+      attributeFilter: ["class", "data-chart-dither"],
+    });
+    return () => {
+      paletteObserver.disconnect();
+      themeObserver.disconnect();
+    };
+  }, [regenerate]);
+
+  const fillStyle = React.useCallback(
+    (colorVar: string): React.CSSProperties =>
+      enabled && tiles[colorVar]
+        ? {
+            backgroundImage: `url(${tiles[colorVar]})`,
+            backgroundRepeat: "repeat",
+            backgroundSize: `${tile}px ${tile}px`,
+            imageRendering: "pixelated",
+          }
+        : { backgroundColor: colorVar },
+    [enabled, tiles, tile]
+  );
+
+  return { ref, fillStyle, enabled };
 }
 
 /**

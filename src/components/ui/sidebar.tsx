@@ -30,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
 
 const SIDEBAR_WIDTH = "12rem";
@@ -71,6 +72,7 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void;
 }) {
   const isNarrowViewport = useIsNarrowViewport();
+  const haptic = useHaptics();
   const [openMobile, setOpenMobile] = useState(false);
 
   // This is the internal state of the sidebar.
@@ -90,13 +92,21 @@ function SidebarProvider({
   );
 
   // Helper to toggle the sidebar.
-  const toggleSidebar = useCallback(
-    () =>
-      isNarrowViewport
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open),
-    [isNarrowViewport, setOpen]
-  );
+  const toggleSidebar = useCallback(() => {
+    if (isNarrowViewport) {
+      // Mobile open/close is a committed, user-initiated state change, so it
+      // earns a selection tick. Fire it *synchronously* here — toggleSidebar
+      // runs inside the trigger's onClick (a user gesture), which is the only
+      // window iOS Safari's web-haptics switch trick works in. Firing from an
+      // effect after the state commit (as this component used to) lands outside
+      // that window and silently does nothing on iOS. See
+      // docs/architecture/haptics.md.
+      haptic("selection");
+      setOpenMobile((open) => !open);
+      return;
+    }
+    setOpen((open) => !open);
+  }, [haptic, isNarrowViewport, setOpen]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.

@@ -31,6 +31,7 @@ export const CONTAINER_BLOCK_TYPES = [
   "table",
   "tableRow",
   "toggleHeading",
+  "callout",
 ] as const satisfies readonly BlockType[];
 
 export type ContainerBlockType = (typeof CONTAINER_BLOCK_TYPES)[number];
@@ -95,9 +96,10 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
     hasPrimaryText: true,
   },
   callout: {
-    defaultProps: () => ({ text: "", icon: DEFAULT_CALLOUT_ICON }),
-    isEmpty: textIsEmpty,
-    hasPrimaryText: true,
+    // Container with no primary text; its body lives in child rows. Row-level
+    // emptiness accounting for children is `isRowEmpty` in `is-block-empty.ts`.
+    defaultProps: () => ({ icon: DEFAULT_CALLOUT_ICON }),
+    isEmpty: () => true,
   },
   code: {
     defaultProps: () => ({ text: "", language: DEFAULT_CODE_LANGUAGE }),

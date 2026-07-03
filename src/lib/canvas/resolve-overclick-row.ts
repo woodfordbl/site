@@ -1,6 +1,10 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
-import { findRowById } from "@/lib/blocks/block-tree.ts";
-import { resolveColumnRowAtY } from "@/lib/canvas/resolve-column-row-at-y.ts";
+import {
+  type CanvasContentScope,
+  collectCanvasScopeRects,
+  rowContentScopes,
+} from "@/lib/canvas/canvas-scopes.ts";
+import { resolveScopeRowAtY } from "@/lib/canvas/resolve-column-row-at-y.ts";
 import { collectCanvasRowRects } from "@/lib/canvas/resolve-drop-target.ts";
 
 /** Resolve which top-level row to select from pointer Y (page-level overclick). */
@@ -30,79 +34,123 @@ export function resolveTopLevelOverclickRow(
   return null;
 }
 
-function resolveColumnsLayoutOverclick(
-  rows: CanvasRow[],
+function rectContainsPoint(
+  rect: Pick<DOMRect, "bottom" | "left" | "right" | "top">,
   clientX: number,
-  clientY: number,
-  rowRects: Map<string, DOMRect>
-): string | null {
-  if (typeof document === "undefined") {
+  clientY: number
+): boolean {
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
+/**
+ * Scope under the pointer. Exact containment wins; otherwise a pointer inside
+ * the container row but between scopes (column gutters, callout padding)
+ * resolves to the horizontally nearest scope whose vertical band contains it.
+ */
+function scopeAtPoint(
+  scopes: CanvasContentScope[],
+  rowRect: DOMRect | undefined,
+  clientX: number,
+  clientY: number
+): CanvasContentScope | null {
+  const exact = scopes.find((scope) =>
+    rectContainsPoint(scope.rect, clientX, clientY)
+  );
+  if (exact) {
+    return exact;
+  }
+
+  if (!(rowRect && rectContainsPoint(rowRect, clientX, clientY))) {
     return null;
   }
 
-  for (const layout of document.querySelectorAll("[data-columns-layout]")) {
-    const layoutRect = layout.getBoundingClientRect();
-    if (
-      clientY < layoutRect.top ||
-      clientY > layoutRect.bottom ||
-      clientX < layoutRect.left ||
-      clientX > layoutRect.right
-    ) {
+  let best: CanvasContentScope | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const scope of scopes) {
+    if (clientY < scope.rect.top || clientY > scope.rect.bottom) {
       continue;
     }
-
-    for (const columnEl of layout.querySelectorAll("[data-column-id]")) {
-      const columnId = columnEl.getAttribute("data-column-id");
-      if (!columnId) {
-        continue;
-      }
-      const colRect = columnEl.getBoundingClientRect();
-      if (
-        clientX < colRect.left ||
-        clientX > colRect.right ||
-        clientY < colRect.top ||
-        clientY > colRect.bottom
-      ) {
-        continue;
-      }
-
-      const columnRow = findRowById(rows, columnId);
-      if (columnRow?.effectiveBlock.type !== "column") {
-        continue;
-      }
-
-      const rowId = resolveColumnRowAtY(columnRow, clientY, rowRects);
-      if (rowId) {
-        return rowId;
-      }
+    const distance = Math.max(
+      scope.rect.left - clientX,
+      clientX - scope.rect.right,
+      0
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = scope;
     }
   }
+  return best;
+}
 
+/**
+ * Route the pointer into the deepest content scope containing it (columns,
+ * tabs, callouts, expanded toggles — anything declaring `scopedContent`), then
+ * resolve the row at Y within that scope.
+ */
+function resolveScopedOverclick(
+  scopeRows: CanvasRow[],
+  clientX: number,
+  clientY: number,
+  rowRects: Map<string, DOMRect>,
+  scopeRects: ReadonlyMap<string, DOMRect>
+): string | null {
+  for (const row of scopeRows) {
+    const scopes = rowContentScopes(row, scopeRects);
+    if (scopes.length === 0) {
+      continue;
+    }
+    const scope = scopeAtPoint(
+      scopes,
+      rowRects.get(row.rowId),
+      clientX,
+      clientY
+    );
+    if (!scope) {
+      continue;
+    }
+    return (
+      resolveScopedOverclick(
+        scope.children,
+        clientX,
+        clientY,
+        rowRects,
+        scopeRects
+      ) ?? resolveScopeRowAtY(scope.children, clientY, rowRects)
+    );
+  }
   return null;
 }
 
 /**
  * Resolve which canvas row to focus when the user clicks empty space below
- * block content, inside a stretched column, or at the page bottom.
+ * block content, inside container dead space, or at the page bottom.
  */
 export function resolveOverclickRowFromPointer(
   rows: CanvasRow[],
   clientX: number,
   clientY: number,
-  rowRects: Map<string, DOMRect> = collectCanvasRowRects()
+  rowRects: Map<string, DOMRect> = collectCanvasRowRects(),
+  scopeRects: ReadonlyMap<string, DOMRect> = collectCanvasScopeRects()
 ): string | null {
   if (rows.length === 0) {
     return null;
   }
 
-  const columnsRow = resolveColumnsLayoutOverclick(
+  const scopedRow = resolveScopedOverclick(
     rows,
     clientX,
     clientY,
-    rowRects
+    rowRects,
+    scopeRects
   );
-  if (columnsRow) {
-    return columnsRow;
+  if (scopedRow) {
+    return scopedRow;
   }
 
   return resolveTopLevelOverclickRow(rows, clientY, rowRects);

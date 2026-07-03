@@ -7,7 +7,6 @@ export const COLUMN_SCOPE_EDGE_PX = 20;
  * Resolve which column child row should be selected for a pointer Y inside a
  * column scope. Mirrors column drop geometry but returns a row id for highlight.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: column band geometry mirrors drop resolver
 export function resolveColumnRowAtY(
   columnRow: CanvasRow,
   clientY: number,
@@ -17,7 +16,21 @@ export function resolveColumnRowAtY(
     return null;
   }
 
-  const children = columnRow.children;
+  return resolveScopeRowAtY(columnRow.children, clientY, rowRects);
+}
+
+/**
+ * Resolve which row of a content scope (column, tab, callout, toggle) should
+ * be selected for a pointer Y. Same band geometry as column drops: containing
+ * row wins, below-last clamps to last, the top edge band and inter-row gaps
+ * resolve to the nearest row.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: band geometry mirrors drop resolver
+export function resolveScopeRowAtY(
+  children: readonly CanvasRow[],
+  clientY: number,
+  rowRects: ReadonlyMap<string, DOMRect>
+): string | null {
   if (children.length === 0) {
     return null;
   }

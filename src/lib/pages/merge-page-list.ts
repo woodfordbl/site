@@ -1,4 +1,6 @@
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { isCanvasFixturePageId } from "@/lib/pages/canvas-fixture-page.ts";
+import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
   isLocallyDeletedPage,
   isUserCreatedPage,
@@ -7,6 +9,9 @@ import {
 
 /**
  * Merges shipped summaries with local overrides; sets `routeBy` (`slug` vs `id` for user-only rows).
+ * The template snapshot ({@link isTemplatePageId}) and the dev canvas fixture
+ * ({@link isCanvasFixturePageId}) are dropped here so they never enter the
+ * navigable list, the sidebar tree, or page dispatch.
  * @see docs/architecture/pages.md#navigation
  */
 export function mergePageList(
@@ -47,6 +52,8 @@ export function mergePageList(
   for (const localPage of localPages) {
     if (
       isUserCreatedPage(localPage) &&
+      !isTemplatePageId(localPage.id) &&
+      !isCanvasFixturePageId(localPage.id) &&
       !serverIds.has(localPage.id) &&
       !isLocallyDeletedPage(localPage)
     ) {

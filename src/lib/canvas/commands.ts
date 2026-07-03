@@ -82,6 +82,7 @@ export type CanvasCommand =
       /** When true, absorb following same-scope siblings as children. */
       absorb?: boolean;
     }
+  | { type: "callout.create"; rowId: string; text?: string }
   | { type: "tabs.addTab"; tabsRowId: string }
   | { type: "tabs.removeTab"; tabRowId: string }
   | { type: "tabs.moveTab"; tabRowId: string; direction: "prev" | "next" }
@@ -124,6 +125,12 @@ export type CanvasCommand =
       columnWidths: number[];
     }
   | {
+      type: "table.updateRowHeight";
+      tableRowId: string;
+      height: number;
+    }
+  | { type: "table.resetRowHeight"; tableRowId: string }
+  | {
       type: "table.focusCell";
       cellRowId: string;
       direction: "next" | "previous" | "down" | "up";
@@ -143,6 +150,7 @@ export type CanvasCommand =
       placement?: "start" | "end";
       offset?: number;
       embedAction?: "replace" | "caption";
+      calloutAction?: "editIcon";
     }
   | { type: "row.focusAdjacent"; rowId: string; direction: "up" | "down" }
   | { type: "row.moveAdjacent"; rowId: string; direction: "up" | "down" }

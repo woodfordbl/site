@@ -203,7 +203,7 @@ export function TableStructureHandle({
       <DropdownMenuContent
         align="start"
         anchor={triggerRef}
-        className="min-w-56 duration-0 data-closed:animate-none data-closed:duration-0"
+        className="duration-0 data-closed:animate-none data-closed:duration-0"
         data-table-structure-menu
         finalFocus={false}
         side={axis === "row" ? "right" : "bottom"}

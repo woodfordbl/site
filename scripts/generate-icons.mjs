@@ -35,6 +35,60 @@ async function writePng(svg, size, file) {
   console.log(`gen-icons: wrote ${file} (${size}×${size})`);
 }
 
+/** Render the monogram to a PNG buffer at the given pixel size. */
+function renderPngBuffer(size) {
+  return sharp(Buffer.from(monogramSvg({ size })))
+    .resize(size, size)
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Pack PNG buffers into a single `.ico`. Modern browsers (and the address-bar /
+ * bookmark UIs that prefer `favicon.ico` over the SVG) read PNG-encoded icon
+ * entries directly, so no BMP conversion is needed.
+ */
+function encodeIco(images) {
+  const HEADER_SIZE = 6;
+  const ENTRY_SIZE = 16;
+  const header = Buffer.alloc(HEADER_SIZE);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(images.length, 4); // image count
+
+  const entries = [];
+  let offset = HEADER_SIZE + ENTRY_SIZE * images.length;
+  for (const { size, data } of images) {
+    const entry = Buffer.alloc(ENTRY_SIZE);
+    entry.writeUInt8(size >= 256 ? 0 : size, 0); // width (0 ⇒ 256)
+    entry.writeUInt8(size >= 256 ? 0 : size, 1); // height (0 ⇒ 256)
+    entry.writeUInt8(0, 2); // palette size (0 ⇒ no palette)
+    entry.writeUInt8(0, 3); // reserved
+    entry.writeUInt16LE(1, 4); // color planes
+    entry.writeUInt16LE(32, 6); // bits per pixel
+    entry.writeUInt32LE(data.length, 8); // image byte length
+    entry.writeUInt32LE(offset, 12); // image byte offset
+    entries.push(entry);
+    offset += data.length;
+  }
+
+  return Buffer.concat([
+    header,
+    ...entries,
+    ...images.map((image) => image.data),
+  ]);
+}
+
+async function writeFavicon() {
+  const sizes = [16, 32, 48];
+  const images = await Promise.all(
+    sizes.map(async (size) => ({ size, data: await renderPngBuffer(size) }))
+  );
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(join(publicDir, "favicon.ico"), encodeIco(images));
+  console.log(`gen-icons: wrote favicon.ico (${sizes.join(", ")})`);
+}
+
 // Crisp scalable favicon for modern browsers.
 const faviconSvg = monogramSvg({ size: 512 });
 await sharp(Buffer.from(faviconSvg)); // validate it renders before writing
@@ -42,6 +96,9 @@ await import("node:fs/promises").then(({ writeFile }) =>
   writeFile(join(publicDir, "favicon.svg"), `${faviconSvg}\n`)
 );
 console.log("gen-icons: wrote favicon.svg");
+
+// Multi-resolution favicon.ico for legacy/address-bar contexts that ignore SVG.
+await writeFavicon();
 
 // iOS home-screen icon: full-bleed (iOS applies its own rounded mask).
 await writePng(

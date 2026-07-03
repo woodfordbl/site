@@ -18,12 +18,14 @@ import {
   useIsNarrowViewport,
 } from "@/hooks/device-layout.ts";
 
+import { blockColorClassName } from "@/lib/blocks/block-colors.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
 import { pageTitleBlockAlignClassName } from "@/lib/pages/page-title-layout.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
+import { cn } from "@/lib/utils.ts";
 
 /** Minimal inset when the block gutter sits beside the row in edit mode. */
 const topLevelPageTitleGutterAlignClassName = "pl-1";
@@ -45,6 +47,8 @@ function getTopLevelContentClassName(
 }
 
 interface BlockTreeNodeProps {
+  /** Gutter pull override for this row, set by a parent container (e.g. callout). */
+  gutterPullClassName?: string;
   mode: BlockMode;
   /** Container type when this row renders inside a container scope (column children). */
   parentType?: BlockType;
@@ -61,31 +65,34 @@ interface RowChromeProps {
 function ContainerRowNode({
   Container,
   enableTouchGesture,
+  gutterPullClassName,
   isMobile,
   mode,
+  parentType,
   row,
   showGutter,
 }: RowChromeProps & {
   Container: ComponentType<{ mode: BlockMode; row: CanvasRow }>;
+  gutterPullClassName?: string;
   mode: BlockMode;
+  parentType?: BlockType;
   row: CanvasRow;
 }) {
   const { insertAfter, insertAtScopeStart, insertBefore } =
     useCanvasEditorContext();
-  const isTable = row.effectiveBlock.type === "table";
+  const isCallout = row.effectiveBlock.type === "callout";
   const isTopLevel = !row.effectiveBlock.parentId;
-  const alignWithPageTitle = isTopLevel && !isTable;
+  const alignWithPageTitle = isTopLevel;
 
   return (
     <CanvasRowShell
-      contentClassName={getTopLevelContentClassName(
-        alignWithPageTitle,
-        showGutter,
-        isMobile
+      contentClassName={cn(
+        getTopLevelContentClassName(alignWithPageTitle, showGutter, isMobile),
+        blockColorClassName(row.effectiveBlock, parentType)
       )}
       enableTouchGesture={enableTouchGesture}
       gutter={
-        showGutter && !isTable ? (
+        showGutter ? (
           <RowGutter
             onInsert={(edge) => {
               handleContainerGutterInsert(row, edge, {
@@ -98,7 +105,8 @@ function ContainerRowNode({
           />
         ) : null
       }
-      reserveGutterSpace={showGutter && isTable}
+      gutterPullClassName={gutterPullClassName}
+      keepGutterOnNestedHover={isCallout}
       row={row}
     >
       <Container mode={mode} row={row} />
@@ -108,12 +116,14 @@ function ContainerRowNode({
 
 function LeafRowNode({
   enableTouchGesture,
+  gutterPullClassName,
   isMobile,
   mode,
   parentType,
   row,
   showGutter,
 }: RowChromeProps & {
+  gutterPullClassName?: string;
   mode: BlockMode;
   parentType?: BlockType;
   row: CanvasRow;
@@ -147,6 +157,7 @@ function LeafRowNode({
       enableTouchGesture={enableTouchGesture}
       gutter={showGutter ? <RowGutter row={row} /> : null}
       gutterAlignCenter={isDivider}
+      gutterPullClassName={gutterPullClassName}
       row={row}
     >
       <BlockRenderer
@@ -163,7 +174,12 @@ function LeafRowNode({
   );
 }
 
-function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
+function BlockTreeNodeImpl({
+  gutterPullClassName,
+  mode,
+  parentType,
+  row,
+}: BlockTreeNodeProps) {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const isNarrowViewport = useIsNarrowViewport();
 
@@ -182,7 +198,9 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
     return (
       <ContainerRowNode
         Container={resolveContainerComponent(spec)}
+        gutterPullClassName={gutterPullClassName}
         mode={mode}
+        parentType={parentType}
         row={row}
         {...chrome}
       />
@@ -190,7 +208,13 @@ function BlockTreeNodeImpl({ mode, parentType, row }: BlockTreeNodeProps) {
   }
 
   return (
-    <LeafRowNode mode={mode} parentType={parentType} row={row} {...chrome} />
+    <LeafRowNode
+      gutterPullClassName={gutterPullClassName}
+      mode={mode}
+      parentType={parentType}
+      row={row}
+      {...chrome}
+    />
   );
 }
 

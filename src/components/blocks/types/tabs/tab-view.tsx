@@ -23,6 +23,7 @@ export function TabView({ tabRow, mode }: TabViewProps) {
         "relative flex min-h-0 w-full min-w-0 flex-1 flex-col gap-0",
         tabRow.children.length === 0 && "min-h-16"
       )}
+      data-canvas-scope={tabRow.rowId}
       data-tab-content
     >
       {showScopeStart ? (

@@ -37,7 +37,7 @@ export function PageHeaderMenuTextSizeSubmenu({
         <IconTextSize />
         Text size
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-44">
+      <DropdownMenuSubContent>
         <DropdownMenuRadioGroup
           onValueChange={(value) => {
             onTextScaleChange(

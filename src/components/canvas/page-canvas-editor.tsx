@@ -2,6 +2,7 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,7 @@ import {
   CanvasFocusContext,
   CanvasSelectionContext,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import { CanvasMarquee } from "@/components/canvas/canvas-marquee.tsx";
 import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx";
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
@@ -32,6 +34,7 @@ import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-colla
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
 import { PageLinkDeleteDialog } from "@/components/canvas/page-link-delete-dialog.tsx";
+import { SelectionFormatToolbar } from "@/components/canvas/selection-format-toolbar.tsx";
 import { CanvasRowDndBridge } from "@/components/dnd/canvas-row-dnd-bridge.tsx";
 import {
   CanvasRowDragPreview,
@@ -52,6 +55,7 @@ import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
+import { publishCanvasDevtoolsState } from "@/lib/canvas/canvas-devtools-store.ts";
 import { isNonCanvasEditableFocused } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
@@ -141,6 +145,16 @@ function PageCanvasEditorBody({
   const dispatchPage = usePageDispatch(pages);
   const repositionPage = usePageReposition(pages, dispatchPage);
   const currentPageId = serverPage.id;
+
+  // Feed the dev-only Canvas devtools panel/overlay (no-op in production).
+  useEffect(() => {
+    publishCanvasDevtoolsState({
+      focus: editor.focus,
+      rows: editor.rows,
+      selection: editor.selection,
+    });
+    return () => publishCanvasDevtoolsState(null);
+  }, [editor.focus, editor.rows, editor.selection]);
 
   // Dragging a sidebar page onto the canvas inserts a child pageLink at the drop
   // position and re-nests the page under this one (cycle/depth guarded). The
@@ -408,6 +422,7 @@ function PageCanvasEditorBody({
       saveRow: editor.saveRow,
       selectAll: editor.selectAll,
       selectRow: editor.selectRow,
+      selectRows: editor.selectRows,
       toggleRowSelection: editor.toggleRowSelection,
     }),
     [
@@ -432,6 +447,7 @@ function PageCanvasEditorBody({
       editor.saveRow,
       editor.selectAll,
       editor.selectRow,
+      editor.selectRows,
       editor.toggleRowSelection,
       serverPage.id,
     ]
@@ -488,15 +504,17 @@ function PageCanvasEditorBody({
                     <PageContentLayoutProvider
                       useFullPanelWidth={useFullPanelWidth}
                     >
-                      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div className="relative flex flex-col max-md:flex-none md:min-h-0 md:flex-1 md:overflow-hidden">
                         <div
                           className={cn(
-                            // `overscroll-contain`: keep inner-scroll rubber-band
-                            // from chaining to the page and panning the visual
-                            // viewport, which is what makes the keyboard toolbar
-                            // jitter on iOS (see useKeyboardToolbarAnchor +
-                            // docs/architecture/keyboard-toolbar.md).
-                            "relative flex min-h-0 flex-1 flex-col overscroll-contain max-md:overflow-x-clip",
+                            // Desktop: this is the inner scroller — `overscroll-contain`
+                            // keeps its rubber-band from chaining to the page and
+                            // panning the visual viewport (keyboard-toolbar jitter on
+                            // iOS; see useKeyboardToolbarAnchor +
+                            // docs/architecture/keyboard-toolbar.md). On mobile the
+                            // document is the scroller, so this is normal flow and
+                            // body/html `overscroll-behavior: none` owns chain control.
+                            "relative flex flex-col max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overscroll-contain",
                             isCoarsePrimaryPointer
                               ? pageCanvasTouchScrollClassName
                               : pageCanvasMobileScrollClassName
@@ -533,7 +551,9 @@ function PageCanvasEditorBody({
                             </div>
                           </div>
                         </div>
+                        <CanvasMarquee scrollRootRef={scrollRootRef} />
                         <CanvasMenuRoot />
+                        <SelectionFormatToolbar />
                         <MobileBlockActionsDrawer />
                         <MobileEditorToolbar />
                         <PageLinkDeleteDialog

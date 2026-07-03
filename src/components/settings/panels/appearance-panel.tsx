@@ -20,7 +20,6 @@ import {
 } from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type { ThemePreference } from "@/lib/schemas/site-appearance.ts";
-import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
 const THEME_OPTIONS: Array<{ label: string; value: ThemePreference }> = [
   { value: "light", label: "Light" },
@@ -73,11 +72,7 @@ const CHART_DITHER_OPTIONS: Array<{ label: string; value: ChartDitherMode }> =
     label: CHART_DITHER_MODE_LABELS[value],
   }));
 
-interface AppearancePanelProps {
-  search: SettingsSearch;
-}
-
-export function AppearancePanel({ search }: AppearancePanelProps) {
+export function AppearancePanel() {
   const {
     chartDither,
     chartPalette,
@@ -93,7 +88,6 @@ export function AppearancePanel({ search }: AppearancePanelProps) {
   return (
     <SettingsPanelShell
       description="Choose how the site looks on this device."
-      search={search}
       section={section}
     >
       <SettingsItemCard>

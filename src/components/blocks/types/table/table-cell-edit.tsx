@@ -1,11 +1,14 @@
 import { useCallback } from "react";
+import { handleTableCellShortcut } from "@/components/blocks/types/table/table-cell-shortcuts.ts";
 import {
   useCanvasEditorContext,
+  useCanvasEditorState,
   useCanvasFocus,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
 import { canvasEditTextClassName } from "@/lib/blocks/block-spacing.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
+import type { CanvasField } from "@/lib/editor/caret-navigation.ts";
 import { cn } from "@/lib/utils.ts";
 
 type TableCellEditProps = BlockEditProps<"tableCell"> & {
@@ -22,13 +25,28 @@ export function TableCellEdit({
   onAutoFocusHandled,
   onCellFocus,
 }: TableCellEditProps) {
-  const { dispatch, clearSelection } = useCanvasEditorContext();
+  const { dispatch, clearSelection, moveAfter, moveBefore } =
+    useCanvasEditorContext();
+  const { rows } = useCanvasEditorState();
   const focus = useCanvasFocus();
   const rowId = row?.rowId ?? "";
   const isFocusTarget = focus?.rowId === rowId;
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (event: React.KeyboardEvent<CanvasField>) => {
+      if (
+        handleTableCellShortcut(event, {
+          cellRowId: rowId,
+          dispatch,
+          moveAfter,
+          moveBefore,
+          rows,
+        })
+      ) {
+        event.preventDefault();
+        return true;
+      }
+
       if (event.key === "Tab") {
         event.preventDefault();
         dispatch({
@@ -51,7 +69,7 @@ export function TableCellEdit({
 
       return false;
     },
-    [dispatch, rowId]
+    [dispatch, moveAfter, moveBefore, rowId, rows]
   );
 
   return (
@@ -68,9 +86,10 @@ export function TableCellEdit({
         canvasEditTextClassName,
         "w-full min-w-0 whitespace-pre-wrap"
       )}
+      marks={props.marks ?? []}
       multiline
       onAutoFocusHandled={onAutoFocusHandled}
-      onChange={(text) => onChange({ ...props, text })}
+      onChange={(text, marks) => onChange({ ...props, text, marks })}
       onKeyDown={handleKeyDown}
       onTextFocus={() => {
         clearSelection();

@@ -34,7 +34,9 @@ export function AppProviders({ children }: AppProvidersProps) {
       <NativeScrollbarEffect />
       <TooltipProvider>
         {children}
-        <Toaster closeButton position="bottom-right" />
+        {/* Lift the bottom offset above the 36px canvas footer lane so toasts
+          float just inside the canvas instead of overlapping the controls. */}
+        <Toaster closeButton offset={{ bottom: 48 }} position="bottom-right" />
       </TooltipProvider>
     </>
   );

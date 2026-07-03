@@ -36,7 +36,7 @@ export function PageHeaderMenuFontSubmenu({
         <IconTypography />
         Font
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-44">
+      <DropdownMenuSubContent>
         <DropdownMenuRadioGroup
           onValueChange={(value) => {
             onFontChange(value as PageFont);

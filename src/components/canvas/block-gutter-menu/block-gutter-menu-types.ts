@@ -1,23 +1,33 @@
 import type { getSlashMenuItems } from "@/components/blocks/registry.ts";
+import type { BlockColorCapability } from "@/lib/blocks/block-colors.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 
 export interface BlockGutterMenuContextValue {
   actionItems: ActionMenuEntry[];
+  blockBackgroundColor: BlockColor | undefined;
+  blockColor: BlockColor | undefined;
+  blockColorCapability: BlockColorCapability;
   blockTypeLabel: string | undefined;
+  calloutBlock: Extract<Block, { type: "callout" }> | null;
   canTurnInto: boolean;
   effectiveBlockId: string | undefined;
   embedBlock: Extract<Block, { type: "embed" }> | null;
+  handleAddCalloutIcon: () => void;
   handleAddColumn: () => void;
   handleAddRow: () => void;
   handleDelete: () => void;
   handleDuplicate: () => void;
+  handleEditCalloutIcon: () => void;
   handleEmbedCopyLink: () => void;
   handleEmbedOpenInBrowser: () => void;
   handleEmbedReplace: () => void;
   handleEmbedToggleCaption: (enabled: boolean) => void;
   handleFitToWidth: () => void;
+  handleSetBlockBackground: (color: BlockColor | undefined) => void;
+  handleSetBlockColor: (color: BlockColor | undefined) => void;
   handleToggleHeaderColumn: (enabled: boolean) => void;
   handleToggleHeaderRow: (enabled: boolean) => void;
   handleTurnInto: (key: string) => void;
@@ -46,8 +56,13 @@ export type BlockGutterMenuProps = Omit<
 
 export type BlockGutterMenuItemsInput = Pick<
   BlockGutterMenuContextValue,
+  | "blockBackgroundColor"
+  | "blockColor"
+  | "calloutBlock"
   | "canTurnInto"
   | "embedBlock"
+  | "handleAddCalloutIcon"
+  | "handleEditCalloutIcon"
   | "handleDuplicate"
   | "handleDelete"
   | "handleEmbedCopyLink"
@@ -59,8 +74,11 @@ export type BlockGutterMenuItemsInput = Pick<
   | "handleToggleHeaderRow"
   | "handleAddRow"
   | "handleAddColumn"
+  | "handleSetBlockBackground"
+  | "handleSetBlockColor"
   | "handleTurnInto"
   | "lastTableRowId"
+  | "blockColorCapability"
   | "tableBlock"
   | "turnIntoItems"
 >;

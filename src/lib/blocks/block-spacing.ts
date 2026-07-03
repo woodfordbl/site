@@ -20,7 +20,8 @@ const canvasGutterFirstLinePaddingClassNames = {
 export const bodyTextTypographyClassName =
   "text-[length:calc(1.125rem*var(--page-text-scale))] leading-relaxed";
 
-export const bodyTextClassName = `${bodyTextTypographyClassName} text-foreground`;
+// Color inherits from the block shell so block-level colors apply.
+export const bodyTextClassName = bodyTextTypographyClassName;
 
 const headingTopSpacingClassNames: Record<HeadingProps["level"], string> = {
   1: "pt-4",
@@ -86,8 +87,8 @@ export function getCanvasGutterAlignClassName(block: Block): string {
   return canvasGutterBodyFirstLineClassName;
 }
 
-/** Edit fields in lists/checklists: foreground text, muted placeholder via EditableSurface. */
-export const canvasEditTextClassName = `${bodyTextTypographyClassName} text-foreground`;
+/** Edit fields in lists/checklists: inherited text color, muted placeholder via EditableSurface. */
+export const canvasEditTextClassName = bodyTextTypographyClassName;
 
 export function getBlockShellSpacingClass(
   blockType: Block["type"],

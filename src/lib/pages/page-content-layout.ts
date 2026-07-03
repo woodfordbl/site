@@ -8,11 +8,15 @@ export function pageContentColumnClassName(options: {
 }): string {
   const { fullWidth, isNarrowViewport } = options;
 
+  // `text-foreground` is the default text color for canvas content: block-level
+  // color classes on each block shell override it, but title and uncolored
+  // blocks must not inherit the muted `text-sidebar-foreground` from the
+  // surrounding `<main>` (SidebarInset).
   if (isNarrowViewport || fullWidth) {
-    return "w-full min-w-0";
+    return "w-full min-w-0 text-foreground";
   }
 
-  return "mx-auto w-full min-w-0 max-w-[708px]";
+  return "mx-auto w-full min-w-0 max-w-[708px] text-foreground";
 }
 
 /** Whether the canvas uses full panel width (mobile always; desktop when fullWidth). */

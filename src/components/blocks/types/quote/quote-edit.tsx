@@ -11,8 +11,9 @@ export function QuoteEdit({ props, onChange, ...keyboard }: QuoteEditProps) {
       <EditableSurface
         ariaLabel="Quote"
         className={cn(bodyTextClassName, "italic")}
+        marks={props.marks ?? []}
         multiline
-        onChange={(text) => onChange({ ...props, text })}
+        onChange={(text, marks) => onChange({ ...props, text, marks })}
         placeholder="Quote"
         value={props.text}
         {...keyboard}

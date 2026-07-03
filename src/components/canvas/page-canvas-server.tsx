@@ -68,6 +68,7 @@ function createNoopCanvasEditorActions(
     saveRow: noop,
     selectAll: noop,
     selectRow: noop,
+    selectRows: noop,
     toggleRowSelection: noop,
   };
 }
@@ -106,10 +107,12 @@ export function CanvasBlocksReadOnly({
         <BlockActionsMenuProvider>
           <ReadOnlyHeadingCollapseProvider>
             <PageContentLayoutProvider useFullPanelWidth={useFullPanelWidth}>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex flex-col max-md:flex-none md:min-h-0 md:flex-1 md:overflow-hidden">
                 <div
                   className={cn(
-                    "relative flex min-h-0 flex-1 flex-col overflow-auto",
+                    // Mobile scrolls the document; desktop scrolls this inner box
+                    // (`md:overflow-auto` comes from the shared scroll className).
+                    "relative flex flex-col max-md:overflow-x-clip md:min-h-0 md:flex-1",
                     pageCanvasMobileScrollClassName
                   )}
                   data-scroll-restoration-id="page-canvas-scroll"

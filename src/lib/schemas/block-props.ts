@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+import { inlineMarksSchema } from "./rich-text.ts";
+
 export const headingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 /**
@@ -14,11 +17,13 @@ export const headingPropsSchema = z.object({
 export const toggleHeadingPropsSchema = z.object({
   level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
   collapsed: z.boolean().optional(),
 });
 
 export const textPropsSchema = z.object({
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 export const listPropsSchema = z.object({
@@ -27,10 +32,15 @@ export const listPropsSchema = z.object({
 
 export const quotePropsSchema = z.object({
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
+/**
+ * `callout` block props: an optional leading glyph. The callout is a container
+ * whose body is real child blocks (a `text` child by default), so it carries no
+ * primary text of its own. `icon` absent means the icon was removed.
+ */
 export const calloutPropsSchema = z.object({
-  text: z.string(),
   /** Emoji or `tabler:IconName` — same encoding as page icons. */
   icon: z.string().optional(),
 });
@@ -40,6 +50,7 @@ export const checklistPropsSchema = z.object({});
 export const checklistItemPropsSchema = z.object({
   checked: z.boolean(),
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 /** `pageLink` block props: target page id and optional slash-origin variant. */
@@ -58,9 +69,18 @@ export const columnPropsSchema = z.object({
   width: z.number().positive().optional(),
 });
 
-/** `tabs` block props: the author-chosen default tab (a `tab` block's id). */
+/** Tab bar density: trigger height and text scale. */
+export const tabsSizeSchema = z.enum(["sm", "md", "lg"]);
+/** Tab bar appearance: solid pill group, sliding pill, or underline. */
+export const tabsVariantSchema = z.enum(["default", "indicator", "line"]);
+
+/** `tabs` block props: the author-chosen default tab plus bar appearance. */
 export const tabsPropsSchema = z.object({
   defaultTabId: z.string().optional(),
+  /** Tab bar density (defaults to `md`). */
+  size: tabsSizeSchema.optional(),
+  /** Tab bar style (defaults to `indicator`). */
+  variant: tabsVariantSchema.optional(),
 });
 
 /** `tab` block props: the tab's display name and optional leading glyph. */
@@ -101,10 +121,14 @@ export const tablePropsSchema = z.object({
     ]),
 });
 
-export const tableRowPropsSchema = z.object({});
+export const tableRowPropsSchema = z.object({
+  /** Explicit row height in pixels; acts as a minimum (content can grow taller). */
+  height: z.number().positive().optional(),
+});
 
 export const tableCellPropsSchema = z.object({
   text: z.string(),
+  marks: inlineMarksSchema.optional(),
 });
 
 /** `code` block props: source text plus a Shiki language id (defaults to plaintext). */
@@ -140,6 +164,8 @@ export type DividerProps = z.infer<typeof dividerPropsSchema>;
 export type ColumnsProps = z.infer<typeof columnsPropsSchema>;
 export type ColumnProps = z.infer<typeof columnPropsSchema>;
 export type TabsProps = z.infer<typeof tabsPropsSchema>;
+export type TabsSize = z.infer<typeof tabsSizeSchema>;
+export type TabsVariant = z.infer<typeof tabsVariantSchema>;
 export type TabProps = z.infer<typeof tabPropsSchema>;
 export type MediaKind = z.infer<typeof mediaKindSchema>;
 export type MediaSource = z.infer<typeof mediaSourceSchema>;

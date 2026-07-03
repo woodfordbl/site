@@ -61,6 +61,14 @@ describe("keyboard command registry", () => {
       "extend-selection-up": "Shift+ArrowUp",
       "extend-selection-down": "Shift+ArrowDown",
       "clear-selection": "Escape",
+      "table-add-row": "Alt+=",
+      "table-add-column": "Mod+Alt+=",
+      "table-delete-row": "Alt+-",
+      "table-delete-column": "Mod+Alt+-",
+      "table-move-row-up": "Alt+Shift+ArrowUp",
+      "table-move-row-down": "Alt+Shift+ArrowDown",
+      "table-move-column-left": "Alt+Shift+ArrowLeft",
+      "table-move-column-right": "Alt+Shift+ArrowRight",
     };
 
     for (const [id, combo] of Object.entries(expected)) {

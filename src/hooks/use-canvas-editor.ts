@@ -13,9 +13,10 @@ import { tryApplyCanvasFocus } from "@/lib/canvas/apply-pending-focus.ts";
 import {
   type BlockSelectionState,
   emptyBlockSelection,
-  expandListContainerSelection,
+  expandUnitContainerSelection,
   getActiveCanvasRowId,
   isRowSelectedInUi,
+  normalizeSelectedRowIds,
   rowIdsInDocumentOrder,
   selectAllRows,
   selectionEdgeRowId,
@@ -36,6 +37,7 @@ import {
   flattenCanvasRows,
 } from "@/lib/canvas/focusable-rows.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
+import { warnSelectionInvariants } from "@/lib/canvas/selection-invariants.ts";
 import { buildAssetMediaBlock } from "@/lib/media/paste-media.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
@@ -124,6 +126,23 @@ export function useCanvasEditor(
     };
   }, [canvas.rows, clearFocus, focus]);
 
+  // Selection choke point: every selection write is normalized (descendants of
+  // a selected ancestor dropped, unknown ids pruned) so no code path can
+  // persist an ancestor+descendant selection. Dev builds warn first, since an
+  // unnormalized input means the producing code path has a bug.
+  const normalizeSelection = useCallback(
+    (next: BlockSelectionState): BlockSelectionState => {
+      const rows = getRows();
+      warnSelectionInvariants(rows, next.selectedRowIds);
+      const normalized = normalizeSelectedRowIds(rows, next.selectedRowIds);
+      if (normalized.length === next.selectedRowIds.length) {
+        return next;
+      }
+      return { anchorRowId: next.anchorRowId, selectedRowIds: normalized };
+    },
+    [getRows]
+  );
+
   const toggleRowSelection = useCallback(
     (rowId: string, modifiers?: { metaKey?: boolean; shiftKey?: boolean }) => {
       const focusRowId = focusRef.current?.rowId ?? getActiveCanvasRowId();
@@ -137,24 +156,51 @@ export function useCanvasEditor(
       }
 
       setSelection((current) =>
-        toggleBlockSelection(getRows(), current, rowId, modifiers, focusRowId)
+        normalizeSelection(
+          toggleBlockSelection(getRows(), current, rowId, modifiers, focusRowId)
+        )
       );
     },
-    [clearFocus, getRows]
+    [clearFocus, getRows, normalizeSelection]
   );
 
   const selectAll = useCallback(() => {
-    setSelection(selectAllRows(getRows()));
-  }, [getRows]);
+    setSelection(normalizeSelection(selectAllRows(getRows())));
+  }, [getRows, normalizeSelection]);
 
   const selectRow = useCallback(
     (rowId: string) => {
-      setSelection({
-        anchorRowId: rowId,
-        selectedRowIds: expandListContainerSelection(getRows(), rowId),
+      setSelection(
+        normalizeSelection({
+          anchorRowId: rowId,
+          selectedRowIds: expandUnitContainerSelection(getRows(), rowId),
+        })
+      );
+    },
+    [getRows, normalizeSelection]
+  );
+
+  // Replaces the whole selection (marquee drag-select). Bails on identical id
+  // lists so per-mousemove calls don't re-render every row.
+  const selectRows = useCallback(
+    (rowIds: string[]) => {
+      setSelection((current) => {
+        if (
+          current.selectedRowIds.length === rowIds.length &&
+          current.selectedRowIds.every((id, index) => id === rowIds[index])
+        ) {
+          return current;
+        }
+        if (rowIds.length === 0) {
+          return emptyBlockSelection;
+        }
+        return normalizeSelection({
+          anchorRowId: rowIds[0] ?? null,
+          selectedRowIds: rowIds,
+        });
       });
     },
-    [getRows]
+    [normalizeSelection]
   );
 
   const applyCommandEffects = useCallback((command: CanvasCommand) => {
@@ -449,6 +495,7 @@ export function useCanvasEditor(
       toggleRowSelection,
       selectAll,
       selectRow,
+      selectRows,
       clearSelection,
       isRowSelected,
       copySelection,
@@ -488,6 +535,7 @@ export function useCanvasEditor(
       toggleRowSelection,
       selectAll,
       selectRow,
+      selectRows,
       clearSelection,
       isRowSelected,
       copySelection,

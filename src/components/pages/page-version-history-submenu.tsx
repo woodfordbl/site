@@ -27,7 +27,7 @@ export function PageVersionHistorySubmenu({ pageId }: { pageId: string }) {
         <IconHistory />
         Version history
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="max-h-[60vh] min-w-56 overflow-y-auto">
+      <DropdownMenuSubContent className="max-h-[60vh] overflow-y-auto">
         {descriptors.length === 0 ? (
           <div className="px-3 py-3 text-muted-foreground text-sm">
             {isLoading ? "Loading…" : "No saved versions yet."}

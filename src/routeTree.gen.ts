@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TemplateRouteImport } from './routes/template'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevRouteImport } from './routes/dev'
 import { Route as SplatRouteImport } from './routes/$'
@@ -16,7 +17,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsSectionRouteImport } from './routes/settings.$section'
 import { Route as PSplatRouteImport } from './routes/p.$'
+import { Route as DevCanvasRouteImport } from './routes/dev_.canvas'
 
+const TemplateRoute = TemplateRouteImport.update({
+  id: '/template',
+  path: '/template',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -52,12 +59,19 @@ const PSplatRoute = PSplatRouteImport.update({
   path: '/p/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevCanvasRoute = DevCanvasRouteImport.update({
+  id: '/dev_/canvas',
+  path: '/dev/canvas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/template': typeof TemplateRoute
+  '/dev/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
@@ -66,6 +80,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
+  '/template': typeof TemplateRoute
+  '/dev/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings': typeof SettingsIndexRoute
@@ -76,6 +92,8 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/template': typeof TemplateRoute
+  '/dev_/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
@@ -87,17 +105,29 @@ export interface FileRouteTypes {
     | '/$'
     | '/dev'
     | '/settings'
+    | '/template'
+    | '/dev/canvas'
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/$' | '/dev' | '/p/$' | '/settings/$section' | '/settings'
+  to:
+    | '/'
+    | '/$'
+    | '/dev'
+    | '/template'
+    | '/dev/canvas'
+    | '/p/$'
+    | '/settings/$section'
+    | '/settings'
   id:
     | '__root__'
     | '/'
     | '/$'
     | '/dev'
     | '/settings'
+    | '/template'
+    | '/dev_/canvas'
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
@@ -108,11 +138,20 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   DevRoute: typeof DevRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  TemplateRoute: typeof TemplateRoute
+  DevCanvasRoute: typeof DevCanvasRoute
   PSplatRoute: typeof PSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/template': {
+      id: '/template'
+      path: '/template'
+      fullPath: '/template'
+      preLoaderRoute: typeof TemplateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -162,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev_/canvas': {
+      id: '/dev_/canvas'
+      path: '/dev/canvas'
+      fullPath: '/dev/canvas'
+      preLoaderRoute: typeof DevCanvasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -184,6 +230,8 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   DevRoute: DevRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  TemplateRoute: TemplateRoute,
+  DevCanvasRoute: DevCanvasRoute,
   PSplatRoute: PSplatRoute,
 }
 export const routeTree = rootRouteImport

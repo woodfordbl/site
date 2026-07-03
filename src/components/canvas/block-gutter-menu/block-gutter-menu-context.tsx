@@ -21,11 +21,19 @@ import {
   useCanvasEditorContext,
   useCanvasEditorState,
 } from "@/components/canvas/canvas-editor-context.tsx";
+import {
+  type BlockColorCapability,
+  resolveBlockColorCapability,
+} from "@/lib/blocks/block-colors.ts";
+import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
+import { DEFAULT_CALLOUT_ICON } from "@/lib/blocks/callout-defaults.ts";
+import { recordLastUsedBlockColor } from "@/lib/blocks/last-used-block-color.ts";
 import { measureTableFitTargetWidthPx } from "@/lib/dom/measure-table-fit-width.ts";
 import {
   copyEmbedLink,
   openEmbedInBrowser,
 } from "@/lib/media/embed-actions.ts";
+import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 
 export type {
   BlockGutterMenuContextValue,
@@ -57,7 +65,9 @@ export function BlockGutterMenuProvider({
   const { rows } = useCanvasEditorState();
   const { closeBlockActionsMenu, openRowId } = useBlockActionsMenu();
 
-  const row = rows.find((entry) => entry.rowId === rowId);
+  const rowContext = findRowContext(rows, rowId);
+  const row = rowContext?.row;
+  const parentType = rowContext?.parent?.effectiveBlock.type ?? null;
   const effectiveBlockId = row?.effectiveBlock.id;
   const canTurnInto = row ? canTurnIntoBlock(row) : false;
   const turnIntoValue = row
@@ -67,6 +77,8 @@ export function BlockGutterMenuProvider({
 
   const tableBlock =
     row?.effectiveBlock.type === "table" ? row.effectiveBlock : null;
+  const calloutBlock =
+    row?.effectiveBlock.type === "callout" ? row.effectiveBlock : null;
   const lastTableRowId = row?.children.at(-1)?.rowId;
   const tableColumnCount = row?.children[0]?.children.length ?? 0;
 
@@ -101,7 +113,7 @@ export function BlockGutterMenuProvider({
 
   const handleEmbedToggleCaption = useCallback(
     (enabled: boolean) => {
-      const currentRow = rows.find((entry) => entry.rowId === rowId);
+      const currentRow = findRowById(rows, rowId);
       const block = currentRow?.effectiveBlock;
       if (block?.type !== "embed") {
         return;
@@ -228,6 +240,64 @@ export function BlockGutterMenuProvider({
     });
   }, [dispatch, tableBlock, tableColumnCount]);
 
+  const handleAddCalloutIcon = useCallback(() => {
+    const currentRow = findRowById(rows, rowId);
+    const block = currentRow?.effectiveBlock;
+    if (block?.type !== "callout") {
+      return;
+    }
+    dispatch({
+      type: "row.update",
+      rowId,
+      block: {
+        ...block,
+        props: { ...block.props, icon: DEFAULT_CALLOUT_ICON },
+      },
+    });
+  }, [dispatch, rowId, rows]);
+
+  // Open the callout's inline icon picker (dropdown / drawer) so the icon can be
+  // changed or removed there; mirrors how embed "replace" hands off via focus.
+  const handleEditCalloutIcon = useCallback(() => {
+    runAfterMenuClose(() => {
+      dispatch({ type: "focus.set", rowId, calloutAction: "editIcon" });
+    });
+  }, [dispatch, rowId, runAfterMenuClose]);
+
+  const blockColorCapability: BlockColorCapability = row
+    ? resolveBlockColorCapability(row.effectiveBlock.type, parentType)
+    : { text: false, background: false };
+  const blockColor = row?.effectiveBlock.color;
+  const blockBackgroundColor = row?.effectiveBlock.backgroundColor;
+
+  const handleSetBlockColor = useCallback(
+    (color: BlockColor | undefined) => {
+      const block = findRowById(rows, rowId)?.effectiveBlock;
+      if (!block) {
+        return;
+      }
+      recordLastUsedBlockColor("color", color);
+      dispatch({ type: "row.update", rowId, block: { ...block, color } });
+    },
+    [dispatch, rowId, rows]
+  );
+
+  const handleSetBlockBackground = useCallback(
+    (color: BlockColor | undefined) => {
+      const block = findRowById(rows, rowId)?.effectiveBlock;
+      if (!block) {
+        return;
+      }
+      recordLastUsedBlockColor("backgroundColor", color);
+      dispatch({
+        type: "row.update",
+        rowId,
+        block: { ...block, backgroundColor: color },
+      });
+    },
+    [dispatch, rowId, rows]
+  );
+
   const handleDuplicate = useCallback(() => {
     onDuplicate?.();
   }, [onDuplicate]);
@@ -237,8 +307,13 @@ export function BlockGutterMenuProvider({
   }, [onDelete]);
 
   const actionItems = useBlockGutterMenuItems({
+    blockBackgroundColor,
+    blockColor,
+    calloutBlock,
     canTurnInto,
     embedBlock,
+    handleAddCalloutIcon,
+    handleEditCalloutIcon,
     handleAddColumn,
     handleAddRow,
     handleDelete,
@@ -248,10 +323,13 @@ export function BlockGutterMenuProvider({
     handleEmbedReplace,
     handleEmbedToggleCaption,
     handleFitToWidth,
+    handleSetBlockBackground,
+    handleSetBlockColor,
     handleToggleHeaderColumn,
     handleToggleHeaderRow,
     handleTurnInto,
     lastTableRowId,
+    blockColorCapability,
     tableBlock,
     turnIntoItems,
   });
@@ -259,10 +337,15 @@ export function BlockGutterMenuProvider({
   const value = useMemo<BlockGutterMenuContextValue>(
     () => ({
       actionItems,
+      blockBackgroundColor,
+      blockColor,
       blockTypeLabel,
+      calloutBlock,
       canTurnInto,
       effectiveBlockId,
       embedBlock,
+      handleAddCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
@@ -272,6 +355,8 @@ export function BlockGutterMenuProvider({
       handleEmbedReplace,
       handleEmbedToggleCaption,
       handleFitToWidth,
+      handleSetBlockBackground,
+      handleSetBlockColor,
       handleToggleHeaderColumn,
       handleToggleHeaderRow,
       handleTurnInto,
@@ -279,6 +364,7 @@ export function BlockGutterMenuProvider({
       lastTableRowId,
       menuOpen,
       rowId,
+      blockColorCapability,
       tableBlock,
       tableColumnCount,
       turnIntoItems,
@@ -286,10 +372,15 @@ export function BlockGutterMenuProvider({
     }),
     [
       actionItems,
+      blockBackgroundColor,
+      blockColor,
       blockTypeLabel,
+      calloutBlock,
       canTurnInto,
       effectiveBlockId,
       embedBlock,
+      handleAddCalloutIcon,
+      handleEditCalloutIcon,
       handleAddColumn,
       handleAddRow,
       handleDelete,
@@ -299,6 +390,8 @@ export function BlockGutterMenuProvider({
       handleEmbedReplace,
       handleEmbedToggleCaption,
       handleFitToWidth,
+      handleSetBlockBackground,
+      handleSetBlockColor,
       handleToggleHeaderColumn,
       handleToggleHeaderRow,
       handleTurnInto,
@@ -306,6 +399,7 @@ export function BlockGutterMenuProvider({
       lastTableRowId,
       menuOpen,
       rowId,
+      blockColorCapability,
       tableBlock,
       tableColumnCount,
       turnIntoItems,
