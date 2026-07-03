@@ -5,6 +5,11 @@ import {
 import { sweepOrphanAssets } from "@/db/assets/asset-gc.ts";
 import { createBlockShardStorageEventApi } from "@/db/collections/block-shard-storage-events.ts";
 import {
+  createDatabaseRowShardStorageEventApi,
+  DATABASE_ROW_COLLECTION_STORAGE_KEY,
+  databaseShardedRowStorage,
+} from "@/db/collections/database-sharded-row-storage.ts";
+import {
   backfillBlockCreatedAt,
   backfillPageCreatedAt,
   migrateCalloutsToContainers,
@@ -16,6 +21,10 @@ import {
 } from "@/db/collections/page-sharded-block-storage.ts";
 import { scheduleSnapshotPurge } from "@/db/snapshots/snapshot-purge.ts";
 import { reconcileDirtyPagesCookie } from "@/lib/local-draft/reconcile-dirty-pages-cookie.ts";
+import {
+  localDatabaseRowSchema,
+  localDatabaseSchema,
+} from "@/lib/schemas/database.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
 import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
@@ -123,6 +132,63 @@ export const localFavoritesCollection = getOrCreateHotCollection(
     )
 );
 
+/**
+ * Notion-style database definitions (fields, views, source config). Small,
+ * page-metadata-sized rows — plain single-key localStorage persistence.
+ */
+export const localDatabasesCollection = getOrCreateHotCollection(
+  "localDatabasesCollection",
+  () =>
+    createCollection(
+      localStorageCollectionOptions({
+        id: "local-databases",
+        storageKey: "site-local-databases",
+        getKey: (item) => item.id,
+        schema: localDatabaseSchema,
+      })
+    )
+);
+
+/**
+ * Database rows, sharded into one localStorage key per database
+ * (`site-local-db-rows:<databaseId>`) so cell edits rewrite only that
+ * database's shard — same pattern as `localBlocksCollection`.
+ */
+export const localDatabaseRowsCollection = getOrCreateHotCollection(
+  "localDatabaseRowsCollection",
+  () => {
+    // Assigned after creation so the storage-event bridge can re-trigger sync
+    // without a self-referencing annotation that would erase the collection's
+    // inferred row types.
+    let triggerManualSync: (() => void) | undefined;
+
+    const collection = createCollection(
+      localStorageCollectionOptions({
+        id: "local-database-rows",
+        storageKey: DATABASE_ROW_COLLECTION_STORAGE_KEY,
+        storage: databaseShardedRowStorage,
+        storageEventApi: createDatabaseRowShardStorageEventApi(
+          databaseShardedRowStorage,
+          () => triggerManualSync?.()
+        ),
+        getKey: (item) => item.id,
+        schema: localDatabaseRowSchema,
+      })
+    );
+
+    triggerManualSync = () => {
+      const sync = collection.config.sync as { manualTrigger?: () => void };
+      sync.manualTrigger?.();
+    };
+
+    // Rows are almost always queried per database; the index turns those
+    // `eq(row.databaseId, id)` live queries into constant-time lookups.
+    collection.createIndex((row) => row.databaseId);
+
+    return collection;
+  }
+);
+
 /** Reclaim orphaned media blobs once per boot, off the critical path. */
 function scheduleOrphanAssetSweep(): void {
   const run = () => {
@@ -156,6 +222,8 @@ function startLocalCollectionsSync(): void {
   localBlocksCollection.startSyncImmediate();
   localKeybindingsCollection.startSyncImmediate();
   localFavoritesCollection.startSyncImmediate();
+  localDatabasesCollection.startSyncImmediate();
+  localDatabaseRowsCollection.startSyncImmediate();
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;
