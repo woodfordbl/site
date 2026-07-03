@@ -4,6 +4,7 @@ import { readBlockShardPageIds } from "@/db/collections/page-sharded-block-stora
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { deleteAllBlocksForPage } from "@/db/queries/block-collection-ops.ts";
 import { clearPageSnapshots } from "@/db/snapshots/page-snapshot-store.ts";
+import { clearAllPageEditHistories } from "@/lib/canvas/page-edit-history.ts";
 import { writeDirtyPageIdsToDocument } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { writePageListLocalPreviewToDocument } from "@/lib/pages/page-list-local-preview-cookie.ts";
 
@@ -18,6 +19,7 @@ export async function resetAllToRemote(): Promise<void> {
     deleteAllBlocksForPage(readBlockShardForPage(pageId));
   }
 
+  clearAllPageEditHistories();
   writeDirtyPageIdsToDocument(new Set());
   writePageListLocalPreviewToDocument([]);
   await sweepOrphanAssets();

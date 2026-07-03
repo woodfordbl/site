@@ -31,6 +31,8 @@ export type CommandId =
   | "copy-blocks"
   | "paste-blocks"
   // Canvas — blocks (dispatched)
+  | "undo-edit"
+  | "redo-edit"
   | "move-row-up"
   | "move-row-down"
   | "extend-selection-up"
@@ -232,6 +234,28 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
   },
 
   // ── Canvas — blocks ──────────────────────────────────────────────────────
+  {
+    id: "undo-edit",
+    label: "Undo edit",
+    group: "Canvas — blocks",
+    defaultHotkey: "Mod+Z",
+    customizable: false,
+    scope: "canvas",
+    // The handler decides whether it owns the event: inside canvas fields it
+    // preventDefaults (native undo is broken on controlled inputs anyway), but
+    // in unrelated inputs (dialogs, search) the browser default must survive.
+    preventDefault: false,
+  },
+  {
+    id: "redo-edit",
+    label: "Redo edit",
+    group: "Canvas — blocks",
+    defaultHotkey: "Mod+Shift+Z",
+    aliases: ["Mod+Y"],
+    customizable: false,
+    scope: "canvas",
+    preventDefault: false,
+  },
   {
     id: "split-block",
     label: "Split block at caret",

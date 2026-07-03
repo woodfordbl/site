@@ -14,6 +14,8 @@ import {
   readSnapshotIndex,
   writeSnapshotIndex,
 } from "@/db/snapshots/page-snapshot-store.ts";
+import { orderBlocksByIds } from "@/lib/blocks/order-blocks.ts";
+import { recordPageEditHistory } from "@/lib/canvas/page-edit-history.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { formatRelativeTime } from "@/lib/pages/format-relative-time.ts";
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
@@ -94,6 +96,16 @@ export async function restorePageSnapshot(
 
     // Apply blocks + order atomically (ordering invariant).
     const existing = readBlockShardForPage(pageId);
+
+    // Restoring is itself a Ctrl+Z-able edit: record the pre-restore state.
+    const blockOrder = localPagesCollection.toArray.find(
+      (page) => page.id === pageId
+    )?.blockOrder;
+    recordPageEditHistory(
+      pageId,
+      orderBlocksByIds(blocksFromLocalBlocks(existing), blockOrder)
+    );
+
     const tx = beginPageBlockTransaction(
       pageId,
       existing.map((block) => block.id)
