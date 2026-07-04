@@ -1,27 +1,33 @@
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 
+import { DatabaseSettingsMenu } from "@/components/database/database-settings-menu.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
+import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 interface DatabaseTitleProps {
-  databaseId: string;
+  database: LocalDatabase;
   mode: "view" | "edit";
-  name: string;
   /** Count of the active view's filtered rows. */
   rowCount: number;
+  /** Total (unfiltered) row count — settings menu stats and Source section. */
+  totalRowCount: number;
 }
 
 /**
  * Database name above the grid plus a muted row count. In edit mode the name
- * is inline-editable: click to edit, commit via `renameDatabase` on
- * blur/Enter, Escape reverts.
+ * is inline-editable (click to edit, commit via `renameDatabase` on
+ * blur/Enter, Escape reverts) and the ⋯ settings menu mounts after the row
+ * count — revealed on row hover/focus on fine pointers, always visible on
+ * coarse pointers (`.hover-reveal` + `data-reveal-group`).
  */
 export function DatabaseTitle({
-  databaseId,
+  database,
   mode,
-  name,
   rowCount,
+  totalRowCount,
 }: DatabaseTitleProps): ReactNode {
+  const { id: databaseId, name } = database;
   // `null` = display mode; a string is the in-flight draft.
   const [draft, setDraft] = useState<string | null>(null);
   const focusOnMount = useFocusOnMount({ select: true });
@@ -74,7 +80,7 @@ export function DatabaseTitle({
   }
 
   return (
-    <div className="flex min-w-0 items-baseline gap-2">
+    <div className="flex min-w-0 items-baseline gap-2" data-reveal-group>
       {draft === null ? (
         nameDisplay
       ) : (
@@ -98,6 +104,9 @@ export function DatabaseTitle({
       <span className="shrink-0 text-muted-foreground text-xs">
         {countLabel}
       </span>
+      {mode === "edit" ? (
+        <DatabaseSettingsMenu database={database} rowCount={totalRowCount} />
+      ) : null}
     </div>
   );
 }

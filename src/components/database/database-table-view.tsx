@@ -68,10 +68,10 @@ export function DatabaseTableView({
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
       <DatabaseTitle
-        databaseId={databaseId}
+        database={database}
         mode={mode}
-        name={database.name}
         rowCount={rows.length}
+        totalRowCount={allRows.length}
       />
       {mode === "edit" ? (
         <DatabaseFilterBar

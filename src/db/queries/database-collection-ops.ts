@@ -525,6 +525,49 @@ export function renameDatabase(databaseId: string, name: string): void {
   commitDatabaseTransaction(tx);
 }
 
+/**
+ * Rebuild the database's `fields` array in the given id order, in one
+ * transaction, bumping `updatedAt`. Ids are validated against the existing
+ * schema: unknown ids are ignored (as are duplicates after the first), and
+ * fields missing from `orderedFieldIds` are appended in their prior relative
+ * order — the schema can never lose or gain fields through a reorder.
+ */
+export function reorderDatabaseFields(
+  databaseId: string,
+  orderedFieldIds: string[]
+): void {
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      // The draft's field type is the schema's input side (e.g. select
+      // `options` pre-`.default([])`), so reuse it rather than `DatabaseField`.
+      const byId = new Map(draft.fields.map((field) => [field.id, field]));
+      const ordered: typeof draft.fields = [];
+      const used = new Set<string>();
+
+      for (const fieldId of orderedFieldIds) {
+        const field = byId.get(fieldId);
+        if (field && !used.has(fieldId)) {
+          ordered.push(field);
+          used.add(fieldId);
+        }
+      }
+      for (const field of draft.fields) {
+        if (!used.has(field.id)) {
+          ordered.push(field);
+        }
+      }
+
+      draft.fields = ordered;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
 /** Delete a database definition and all of its rows in one transaction. */
 export function deleteDatabase(databaseId: string): void {
   const database = localDatabasesCollection.get(databaseId);

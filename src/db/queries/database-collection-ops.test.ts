@@ -375,6 +375,53 @@ describe("database collection ops", () => {
     expect(copy && rowDraft?.values[copy.id]).toBe(7);
   });
 
+  it("reorderDatabaseFields rebuilds the fields array in the given order", async () => {
+    const database = makeDatabase();
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseFields(databaseId, ["f-extra", "f-title"]);
+    await flushAsync();
+
+    const draft = databaseDrafts[0];
+    expect(draft?.fields.map((field) => field.id)).toEqual([
+      "f-extra",
+      "f-title",
+    ]);
+    expect(draft?.updatedAt).not.toBe(database.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("reorderDatabaseFields ignores unknown ids and appends missing ids in prior order", async () => {
+    const database = makeDatabase();
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseFields(databaseId, ["f-ghost", "f-extra"]);
+    await flushAsync();
+
+    expect(databaseDrafts[0]?.fields.map((field) => field.id)).toEqual([
+      "f-extra",
+      "f-title",
+    ]);
+  });
+
+  it("reorderDatabaseFields keeps only the first occurrence of duplicated ids", async () => {
+    const database = makeDatabase();
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseFields(databaseId, [
+      "f-extra",
+      "f-extra",
+      "f-title",
+      "f-extra",
+    ]);
+    await flushAsync();
+
+    expect(databaseDrafts[0]?.fields.map((field) => field.id)).toEqual([
+      "f-extra",
+      "f-title",
+    ]);
+  });
+
   it("deleteDatabase deletes the definition and only its rows in one commit", async () => {
     mocks.databaseGet.mockReturnValue(makeDatabase());
     mocks.rowState = [
