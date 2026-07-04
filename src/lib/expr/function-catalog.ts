@@ -37,9 +37,53 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
   },
   {
     name: "empty",
+    aliases: ["isEmpty"],
     signature: "empty(value)",
-    description: "True when the value is blank text or has no value at all.",
+    description:
+      "True when the value is blank text or has no value at all (also spelled isEmpty).",
     example: 'if(empty(thisPage.Notes), "Todo", "Done")',
+    category: "logic",
+  },
+  {
+    name: "isNotEmpty",
+    signature: "isNotEmpty(value)",
+    description: "True when the value has any non-blank content.",
+    example: 'if(isNotEmpty(thisPage.Notes), "✓", "")',
+    category: "logic",
+  },
+  {
+    name: "isNumber",
+    signature: "isNumber(value)",
+    description: "True when the value is a number.",
+    example: "isNumber(thisPage.Price)",
+    category: "logic",
+  },
+  {
+    name: "isText",
+    signature: "isText(value)",
+    description: "True when the value is text.",
+    example: "isText(thisPage.Name)",
+    category: "logic",
+  },
+  {
+    name: "isBoolean",
+    signature: "isBoolean(value)",
+    description: "True when the value is a true/false value.",
+    example: "isBoolean(thisPage.Done)",
+    category: "logic",
+  },
+  {
+    name: "isDate",
+    signature: "isDate(value)",
+    description: "True when the value is a valid date.",
+    example: "isDate(thisPage.Due)",
+    category: "logic",
+  },
+  {
+    name: "xor",
+    signature: "xor(a, b)",
+    description: "True when exactly one of the two booleans is true.",
+    example: "xor(thisPage.Done, thisPage.Archived)",
     category: "logic",
   },
   // Math
@@ -102,6 +146,94 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
     example: "average(thisPage.Q1, thisPage.Q2)",
     category: "math",
   },
+  {
+    name: "mod",
+    signature: "mod(a, b)",
+    description:
+      "Returns the remainder of a divided by b (the % operator, as a function).",
+    example: "mod(thisPage.Count, 2)",
+    category: "math",
+  },
+  {
+    name: "pow",
+    signature: "pow(base, exponent)",
+    description: "Raises base to the power of exponent.",
+    example: "pow(thisPage.Side, 2)",
+    category: "math",
+  },
+  {
+    name: "sqrt",
+    signature: "sqrt(number)",
+    description: "Returns the square root of a number.",
+    example: "sqrt(thisPage.Area)",
+    category: "math",
+  },
+  {
+    name: "clamp",
+    signature: "clamp(number, low, high)",
+    description: "Constrains a number to the range between low and high.",
+    example: "clamp(thisPage.Score, 0, 100)",
+    category: "math",
+  },
+  {
+    name: "sign",
+    signature: "sign(number)",
+    description:
+      "Returns -1, 0, or 1 for a negative, zero, or positive number.",
+    example: "sign(thisPage.Balance)",
+    category: "math",
+  },
+  {
+    name: "log",
+    signature: "log(number, base?)",
+    description: "Natural logarithm, or the logarithm to the given base.",
+    example: "log(thisPage.Value, 10)",
+    category: "math",
+  },
+  {
+    name: "log10",
+    signature: "log10(number)",
+    description: "Returns the base-10 logarithm of a number.",
+    example: "log10(thisPage.Value)",
+    category: "math",
+  },
+  {
+    name: "exp",
+    signature: "exp(number)",
+    description: "Returns e raised to the power of a number.",
+    example: "exp(thisPage.Rate)",
+    category: "math",
+  },
+  {
+    name: "roundUp",
+    signature: "roundUp(number, digits?)",
+    description:
+      "Rounds a number up (toward +∞) to the given number of decimal digits.",
+    example: "roundUp(thisPage.Price, 2)",
+    category: "math",
+  },
+  {
+    name: "roundDown",
+    signature: "roundDown(number, digits?)",
+    description:
+      "Rounds a number down (toward −∞) to the given number of decimal digits.",
+    example: "roundDown(thisPage.Price, 2)",
+    category: "math",
+  },
+  {
+    name: "roundToMultiple",
+    signature: "roundToMultiple(number, multiple)",
+    description: "Rounds a number to the nearest multiple of another number.",
+    example: "roundToMultiple(thisPage.Price, 5)",
+    category: "math",
+  },
+  {
+    name: "toNumber",
+    signature: "toNumber(value)",
+    description: "Converts text or a true/false value into a number.",
+    example: "toNumber(thisPage.Code)",
+    category: "math",
+  },
   // Text
   {
     name: "concat",
@@ -161,6 +293,90 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
     example: 'format(thisPage.Price) + " USD"',
     category: "text",
   },
+  {
+    name: "substring",
+    signature: "substring(text, start, end?)",
+    description:
+      "Extracts the characters from the 0-based start index up to (not including) end.",
+    example: "substring(thisPage.Code, 0, 3)",
+    category: "text",
+  },
+  {
+    name: "startsWith",
+    signature: "startsWith(text, prefix)",
+    description: "True when the text begins with the given prefix.",
+    example: 'startsWith(thisPage.Name, "draft")',
+    category: "text",
+  },
+  {
+    name: "endsWith",
+    signature: "endsWith(text, suffix)",
+    description: "True when the text ends with the given suffix.",
+    example: 'endsWith(thisPage.File, ".pdf")',
+    category: "text",
+  },
+  {
+    name: "indexOf",
+    signature: "indexOf(text, search)",
+    description:
+      "The 0-based index of the first occurrence of search, or -1 when it is absent.",
+    example: 'indexOf(thisPage.Email, "@")',
+    category: "text",
+  },
+  {
+    name: "padStart",
+    signature: "padStart(text, length, pad?)",
+    description:
+      "Pads the start of the text with pad (default space) until it reaches length.",
+    example: 'padStart(thisPage.Id, 5, "0")',
+    category: "text",
+  },
+  {
+    name: "padEnd",
+    signature: "padEnd(text, length, pad?)",
+    description:
+      "Pads the end of the text with pad (default space) until it reaches length.",
+    example: 'padEnd(thisPage.Name, 10, " ")',
+    category: "text",
+  },
+  {
+    name: "repeat",
+    signature: "repeat(text, count)",
+    description: "Repeats the text count times.",
+    example: 'repeat("•", thisPage.Level)',
+    category: "text",
+  },
+  {
+    name: "capitalize",
+    signature: "capitalize(text)",
+    description: "Uppercases the first character of the text.",
+    example: "capitalize(thisPage.Status)",
+    category: "text",
+  },
+  {
+    name: "regexMatch",
+    signature: "regexMatch(text, pattern)",
+    description:
+      "True when the regular expression pattern matches anywhere in the text.",
+    example: 'regexMatch(thisPage.Email, "^[^@]+@[^@]+$")',
+    category: "text",
+  },
+  {
+    name: "regexExtract",
+    signature: "regexExtract(text, pattern)",
+    description:
+      "Returns the first match of the regular expression, or empty text when there is none.",
+    example: 'regexExtract(thisPage.Note, "#\\\\w+")',
+    category: "text",
+  },
+  {
+    name: "regexReplace",
+    signature: "regexReplace(text, pattern, replacement)",
+    description:
+      "Replaces every regular-expression match with the replacement text.",
+    example: 'regexReplace(thisPage.Phone, "[^0-9]", "")',
+    category: "text",
+  },
   // Date
   {
     name: "formatDate",
@@ -190,6 +406,73 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
     signature: "today()",
     description: "Returns today's date as yyyy-mm-dd.",
     example: 'dateDiff(thisPage.Due, today(), "days") < 7',
+    category: "date",
+  },
+  {
+    name: "year",
+    signature: "year(date)",
+    description: "Returns the 4-digit year of a date.",
+    example: "year(thisPage.Due)",
+    category: "date",
+  },
+  {
+    name: "month",
+    signature: "month(date)",
+    description:
+      "Returns the month of a date as a number from 1 (January) to 12.",
+    example: "month(thisPage.Due)",
+    category: "date",
+  },
+  {
+    name: "day",
+    signature: "day(date)",
+    description: "Returns the day of the month (1–31) of a date.",
+    example: "day(thisPage.Due)",
+    category: "date",
+  },
+  {
+    name: "weekday",
+    signature: "weekday(date)",
+    description:
+      "Returns the day of the week as a number from 0 (Sunday) to 6 (Saturday).",
+    example: "weekday(thisPage.Due) == 0",
+    category: "date",
+  },
+  {
+    name: "dayName",
+    signature: "dayName(date)",
+    description: 'Returns the full weekday name of a date, e.g. "Monday".',
+    example: "dayName(thisPage.Due)",
+    category: "date",
+  },
+  {
+    name: "monthName",
+    signature: "monthName(date)",
+    description: 'Returns the full month name of a date, e.g. "January".',
+    example: "monthName(thisPage.Due)",
+    category: "date",
+  },
+  {
+    name: "startOf",
+    signature: "startOf(date, unit)",
+    description:
+      'Snaps a date to the start of its "day", "week", "month", or "year".',
+    example: 'startOf(thisPage.Due, "month")',
+    category: "date",
+  },
+  {
+    name: "endOf",
+    signature: "endOf(date, unit)",
+    description:
+      'Snaps a date to the end of its "day", "week", "month", or "year".',
+    example: 'endOf(thisPage.Due, "month")',
+    category: "date",
+  },
+  {
+    name: "isSameDay",
+    signature: "isSameDay(a, b)",
+    description: "True when two dates fall on the same calendar day.",
+    example: "isSameDay(thisPage.Due, today())",
     category: "date",
   },
   // Time

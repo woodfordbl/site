@@ -12,7 +12,13 @@ import { addYears } from "date-fns/addYears";
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { differenceInCalendarMonths } from "date-fns/differenceInCalendarMonths";
 import { differenceInCalendarYears } from "date-fns/differenceInCalendarYears";
+import { endOfMonth } from "date-fns/endOfMonth";
+import { endOfWeek } from "date-fns/endOfWeek";
+import { endOfYear } from "date-fns/endOfYear";
 import { format as dateFnsFormat } from "date-fns/format";
+import { startOfMonth } from "date-fns/startOfMonth";
+import { startOfWeek } from "date-fns/startOfWeek";
+import { startOfYear } from "date-fns/startOfYear";
 import { toIsoDatePart } from "@/lib/databases/cell-values.ts";
 import type { ExprBinaryOp, ExprNode } from "@/lib/expr/parse.ts";
 
@@ -113,6 +119,17 @@ function toText(value: ExprPlainValue): string {
     return value;
   }
   return String(value);
+}
+
+/**
+ * Cell-emptiness predicate shared by `empty`/`isEmpty`/`isNotEmpty`: `null`
+ * and blank/whitespace-only strings are empty; `0` and `false` are values.
+ * Mirrors `isCellEmpty` in the databases layer.
+ */
+function isEmptyValue(value: ExprPlainValue): boolean {
+  return (
+    value === null || (typeof value === "string" && value.trim().length === 0)
+  );
 }
 
 function parseDateArg(value: ExprPlainValue, fnName: string): Date | ExprError {
@@ -307,6 +324,309 @@ function evalDateDiff(args: ExprPlainValue[]): ExprValue {
   return differenceInCalendarYears(a, b);
 }
 
+/**
+ * Guard the result of a math function: a non-finite result (NaN from
+ * `sqrt(-1)`, ±Infinity from `pow(0, -1)`) becomes an `ExprError` value so it
+ * never leaks into display formatting or comparisons as a silent NaN.
+ */
+function finiteResult(fnName: string, value: number): ExprValue {
+  if (!Number.isFinite(value)) {
+    return exprError(`${fnName}(): result is not a finite number`);
+  }
+  return value;
+}
+
+/** `applyNumeric` with a {@link finiteResult} guard for functions that can overflow/NaN. */
+function applyNumericChecked(
+  fnName: string,
+  value: ExprPlainValue,
+  apply: (n: number) => number
+): ExprValue {
+  const n = requireNumber(value, fnName);
+  return typeof n === "number" ? finiteResult(fnName, apply(n)) : n;
+}
+
+/** Resolve two arguments to numbers (first error wins), then combine them. */
+function twoNumbers(
+  fnName: string,
+  args: ExprPlainValue[],
+  combine: (a: number, b: number) => ExprValue
+): ExprValue {
+  const a = requireNumber(args[0], fnName);
+  if (typeof a !== "number") {
+    return a;
+  }
+  const b = requireNumber(args[1], fnName);
+  if (typeof b !== "number") {
+    return b;
+  }
+  return combine(a, b);
+}
+
+/** `mod(a, b)` — remainder, function form of `%` (errors on a zero divisor). */
+function evalMod(args: ExprPlainValue[]): ExprValue {
+  return twoNumbers("mod", args, (a, b) =>
+    b === 0 ? exprError("Division by zero") : a % b
+  );
+}
+
+/** `clamp(n, low, high)` — constrain `n` to `[low, high]`. */
+function evalClamp(args: ExprPlainValue[]): ExprValue {
+  const n = requireNumber(args[0], "clamp");
+  if (typeof n !== "number") {
+    return n;
+  }
+  const low = requireNumber(args[1], "clamp");
+  if (typeof low !== "number") {
+    return low;
+  }
+  const high = requireNumber(args[2], "clamp");
+  if (typeof high !== "number") {
+    return high;
+  }
+  if (low > high) {
+    return exprError("clamp(): low bound is greater than high bound");
+  }
+  return Math.min(Math.max(n, low), high);
+}
+
+/** `log(n, base?)` — natural log, or log to `base` when supplied. */
+function evalLog(args: ExprPlainValue[]): ExprValue {
+  const n = requireNumber(args[0], "log");
+  if (typeof n !== "number") {
+    return n;
+  }
+  if (args.length === 1) {
+    return finiteResult("log", Math.log(n));
+  }
+  const base = requireNumber(args[1], "log");
+  if (typeof base !== "number") {
+    return base;
+  }
+  return finiteResult("log", Math.log(n) / Math.log(base));
+}
+
+/** `roundUp`/`roundDown(number, digits?)` — directional rounding to `digits` decimals. */
+function evalRoundDir(
+  fnName: string,
+  args: ExprPlainValue[],
+  round: (n: number) => number
+): ExprValue {
+  const value = requireNumber(args[0], fnName);
+  if (typeof value !== "number") {
+    return value;
+  }
+  if (args.length === 1) {
+    return round(value);
+  }
+  const digits = requireNumber(args[1], fnName);
+  if (typeof digits !== "number") {
+    return digits;
+  }
+  const factor = 10 ** Math.trunc(digits);
+  return round(value * factor) / factor;
+}
+
+/** `roundToMultiple(number, multiple)` — nearest multiple of `multiple`. */
+function evalRoundToMultiple(args: ExprPlainValue[]): ExprValue {
+  return twoNumbers("roundToMultiple", args, (value, multiple) =>
+    multiple === 0
+      ? exprError("roundToMultiple(): multiple cannot be zero")
+      : Math.round(value / multiple) * multiple
+  );
+}
+
+/** `toNumber(value)` — coerce text/boolean to a number, erroring when it can't. */
+function evalToNumber(value: ExprPlainValue): ExprValue {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") {
+      return exprError("toNumber(): empty text");
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed)
+      ? parsed
+      : exprError(
+          `toNumber(): cannot convert ${JSON.stringify(value)} to a number`
+        );
+  }
+  return exprError("toNumber(): cannot convert empty to a number");
+}
+
+/**
+ * Longest string a padding/repeat function will build, mirroring
+ * {@link MAX_EXPRESSION_LENGTH}'s spirit — bounds `padStart`/`padEnd`/`repeat`
+ * so a huge length argument can't allocate an unbounded string.
+ */
+const MAX_STRING_BUILD_LENGTH = 10_000;
+
+/** `padStart`/`padEnd(text, length, pad?)` — pad to `length` with `pad` (default space). */
+function evalPad(
+  fnName: string,
+  args: ExprPlainValue[],
+  pad: (text: string, length: number, fill: string) => string
+): ExprValue {
+  const text = toText(args[0]);
+  const length = requireNumber(args[1], fnName);
+  if (typeof length !== "number") {
+    return length;
+  }
+  const target = Math.trunc(length);
+  if (target > MAX_STRING_BUILD_LENGTH) {
+    return exprError(
+      `${fnName}(): target length exceeds ${MAX_STRING_BUILD_LENGTH}`
+    );
+  }
+  const fill = args.length > 2 ? toText(args[2]) : " ";
+  return pad(text, target, fill === "" ? " " : fill);
+}
+
+/** `repeat(text, count)` — concatenate `count` copies of `text`. */
+function evalRepeat(args: ExprPlainValue[]): ExprValue {
+  const text = toText(args[0]);
+  const count = requireNumber(args[1], "repeat");
+  if (typeof count !== "number") {
+    return count;
+  }
+  const times = Math.trunc(count);
+  if (times < 0) {
+    return exprError("repeat(): count cannot be negative");
+  }
+  if (times * text.length > MAX_STRING_BUILD_LENGTH) {
+    return exprError(
+      `repeat(): result exceeds ${MAX_STRING_BUILD_LENGTH} characters`
+    );
+  }
+  return text.repeat(times);
+}
+
+/** `substring(text, start, end?)` — slice by 0-based indices (end exclusive). */
+function evalSubstring(args: ExprPlainValue[]): ExprValue {
+  const text = toText(args[0]);
+  const start = requireNumber(args[1], "substring");
+  if (typeof start !== "number") {
+    return start;
+  }
+  if (args.length === 2) {
+    return text.slice(Math.trunc(start));
+  }
+  const end = requireNumber(args[2], "substring");
+  if (typeof end !== "number") {
+    return end;
+  }
+  return text.slice(Math.trunc(start), Math.trunc(end));
+}
+
+/** Compile a user regex without throwing; a bad pattern becomes an `ExprError`. */
+function safeRegExp(
+  fnName: string,
+  pattern: ExprPlainValue,
+  flags?: string
+): RegExp | ExprError {
+  const source = requireString(pattern, fnName);
+  if (typeof source !== "string") {
+    return source;
+  }
+  try {
+    return new RegExp(source, flags);
+  } catch {
+    return exprError(
+      `${fnName}(): invalid regular expression ${JSON.stringify(source)}`
+    );
+  }
+}
+
+/** `regexMatch(text, pattern)` — true when `pattern` matches anywhere in `text`. */
+function evalRegexMatch(args: ExprPlainValue[]): ExprValue {
+  const regex = safeRegExp("regexMatch", args[1]);
+  return regex instanceof RegExp ? regex.test(toText(args[0])) : regex;
+}
+
+/** `regexExtract(text, pattern)` — the first match (whole match), or "" if none. */
+function evalRegexExtract(args: ExprPlainValue[]): ExprValue {
+  const regex = safeRegExp("regexExtract", args[1]);
+  if (regex instanceof RegExp === false) {
+    return regex;
+  }
+  const match = toText(args[0]).match(regex);
+  return match === null ? "" : match[0];
+}
+
+/** `regexReplace(text, pattern, replacement)` — replace every match (global). */
+function evalRegexReplace(args: ExprPlainValue[]): ExprValue {
+  const regex = safeRegExp("regexReplace", args[1], "g");
+  if (regex instanceof RegExp === false) {
+    return regex;
+  }
+  return toText(args[0]).replace(regex, toText(args[2]));
+}
+
+/** Read one date argument and project a part out of it (year, weekday, …). */
+function evalDatePart(
+  fnName: string,
+  arg: ExprPlainValue,
+  extract: (date: Date) => ExprPlainValue
+): ExprValue {
+  const date = parseDateArg(arg, fnName);
+  return date instanceof Date ? extract(date) : date;
+}
+
+const START_OF_UNIT = new Map<string, (date: Date) => Date>([
+  ["day", (date) => date],
+  ["week", (date) => startOfWeek(date)],
+  ["month", startOfMonth],
+  ["year", startOfYear],
+]);
+
+const END_OF_UNIT = new Map<string, (date: Date) => Date>([
+  ["day", (date) => date],
+  ["week", (date) => endOfWeek(date)],
+  ["month", endOfMonth],
+  ["year", endOfYear],
+]);
+
+/** `startOf`/`endOf(date, unit)` — snap a date to the boundary of its period. */
+function evalDateBoundary(
+  fnName: string,
+  args: ExprPlainValue[],
+  table: Map<string, (date: Date) => Date>
+): ExprValue {
+  const date = parseDateArg(args[0], fnName);
+  if (date instanceof Date === false) {
+    return date;
+  }
+  const unit = requireString(args[1], fnName);
+  if (typeof unit !== "string") {
+    return unit;
+  }
+  const snap = table.get(unit.trim().toLowerCase());
+  if (snap === undefined) {
+    return exprError(
+      `${fnName}(): unknown unit ${JSON.stringify(unit)} — use "day", "week", "month", or "year"`
+    );
+  }
+  return dateFnsFormat(snap(date), ISO_DATE_PATTERN);
+}
+
+/** `isSameDay(a, b)` — true when two dates fall on the same calendar day. */
+function evalIsSameDay(args: ExprPlainValue[]): ExprValue {
+  const a = parseDateArg(args[0], "isSameDay");
+  if (a instanceof Date === false) {
+    return a;
+  }
+  const b = parseDateArg(args[1], "isSameDay");
+  if (b instanceof Date === false) {
+    return b;
+  }
+  return differenceInCalendarDays(a, b) === 0;
+}
+
 interface ExprFunctionDef {
   apply(args: ExprPlainValue[], scope: ExprScope): ExprValue;
   maxArgs: number;
@@ -428,9 +748,7 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
       // 0 and false are values.
       minArgs: 1,
       maxArgs: 1,
-      apply: (args) =>
-        args[0] === null ||
-        (typeof args[0] === "string" && args[0].trim().length === 0),
+      apply: (args) => isEmptyValue(args[0]),
     },
   ],
   [
@@ -464,6 +782,264 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
   ],
   ["dateadd", { minArgs: 3, maxArgs: 3, apply: (args) => evalDateAdd(args) }],
   ["datediff", { minArgs: 3, maxArgs: 3, apply: (args) => evalDateDiff(args) }],
+  // Logic — type guards and boolean helpers (all eager; `if`/`switch`/`ifs`
+  // that need lazy branches live in evalCall, not here).
+  [
+    "isempty",
+    { minArgs: 1, maxArgs: 1, apply: (args) => isEmptyValue(args[0]) },
+  ],
+  [
+    "isnotempty",
+    { minArgs: 1, maxArgs: 1, apply: (args) => !isEmptyValue(args[0]) },
+  ],
+  [
+    "isnumber",
+    { minArgs: 1, maxArgs: 1, apply: (args) => typeof args[0] === "number" },
+  ],
+  [
+    "istext",
+    { minArgs: 1, maxArgs: 1, apply: (args) => typeof args[0] === "string" },
+  ],
+  [
+    "isboolean",
+    { minArgs: 1, maxArgs: 1, apply: (args) => typeof args[0] === "boolean" },
+  ],
+  [
+    "isdate",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) =>
+        typeof args[0] === "string" && toIsoDatePart(args[0]) !== "",
+    },
+  ],
+  [
+    "xor",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) => {
+        const a = requireBoolean(args[0], "xor");
+        if (typeof a !== "boolean") {
+          return a;
+        }
+        const b = requireBoolean(args[1], "xor");
+        return typeof b === "boolean" ? a !== b : b;
+      },
+    },
+  ],
+  // Math
+  ["mod", { minArgs: 2, maxArgs: 2, apply: (args) => evalMod(args) }],
+  [
+    "pow",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) =>
+        twoNumbers("pow", args, (a, b) => finiteResult("pow", a ** b)),
+    },
+  ],
+  [
+    "sqrt",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => applyNumericChecked("sqrt", args[0], Math.sqrt),
+    },
+  ],
+  ["clamp", { minArgs: 3, maxArgs: 3, apply: (args) => evalClamp(args) }],
+  [
+    "sign",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => applyNumeric("sign", args[0], Math.sign),
+    },
+  ],
+  ["log", { minArgs: 1, maxArgs: 2, apply: (args) => evalLog(args) }],
+  [
+    "log10",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => applyNumericChecked("log10", args[0], Math.log10),
+    },
+  ],
+  [
+    "exp",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => applyNumericChecked("exp", args[0], Math.exp),
+    },
+  ],
+  [
+    "roundup",
+    {
+      minArgs: 1,
+      maxArgs: 2,
+      apply: (args) => evalRoundDir("roundUp", args, Math.ceil),
+    },
+  ],
+  [
+    "rounddown",
+    {
+      minArgs: 1,
+      maxArgs: 2,
+      apply: (args) => evalRoundDir("roundDown", args, Math.floor),
+    },
+  ],
+  [
+    "roundtomultiple",
+    { minArgs: 2, maxArgs: 2, apply: (args) => evalRoundToMultiple(args) },
+  ],
+  [
+    "tonumber",
+    { minArgs: 1, maxArgs: 1, apply: (args) => evalToNumber(args[0]) },
+  ],
+  // Text
+  [
+    "substring",
+    { minArgs: 2, maxArgs: 3, apply: (args) => evalSubstring(args) },
+  ],
+  [
+    "startswith",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) => toText(args[0]).startsWith(toText(args[1])),
+    },
+  ],
+  [
+    "endswith",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) => toText(args[0]).endsWith(toText(args[1])),
+    },
+  ],
+  [
+    "indexof",
+    {
+      // 0-based index of the first occurrence, or -1 when not found.
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) => toText(args[0]).indexOf(toText(args[1])),
+    },
+  ],
+  [
+    "padstart",
+    {
+      minArgs: 2,
+      maxArgs: 3,
+      apply: (args) => evalPad("padStart", args, (t, n, f) => t.padStart(n, f)),
+    },
+  ],
+  [
+    "padend",
+    {
+      minArgs: 2,
+      maxArgs: 3,
+      apply: (args) => evalPad("padEnd", args, (t, n, f) => t.padEnd(n, f)),
+    },
+  ],
+  ["repeat", { minArgs: 2, maxArgs: 2, apply: (args) => evalRepeat(args) }],
+  [
+    "capitalize",
+    {
+      // Uppercase the first character, leave the rest untouched.
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => {
+        const text = toText(args[0]);
+        return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1);
+      },
+    },
+  ],
+  [
+    "regexmatch",
+    { minArgs: 2, maxArgs: 2, apply: (args) => evalRegexMatch(args) },
+  ],
+  [
+    "regexextract",
+    { minArgs: 2, maxArgs: 2, apply: (args) => evalRegexExtract(args) },
+  ],
+  [
+    "regexreplace",
+    { minArgs: 3, maxArgs: 3, apply: (args) => evalRegexReplace(args) },
+  ],
+  // Date parts
+  [
+    "year",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => evalDatePart("year", args[0], (d) => d.getFullYear()),
+    },
+  ],
+  [
+    "month",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => evalDatePart("month", args[0], (d) => d.getMonth() + 1),
+    },
+  ],
+  [
+    "day",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => evalDatePart("day", args[0], (d) => d.getDate()),
+    },
+  ],
+  [
+    "weekday",
+    {
+      // 0 = Sunday … 6 = Saturday (JS `getDay` convention).
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => evalDatePart("weekday", args[0], (d) => d.getDay()),
+    },
+  ],
+  [
+    "dayname",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) =>
+        evalDatePart("dayName", args[0], (d) => dateFnsFormat(d, "EEEE")),
+    },
+  ],
+  [
+    "monthname",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) =>
+        evalDatePart("monthName", args[0], (d) => dateFnsFormat(d, "MMMM")),
+    },
+  ],
+  [
+    "startof",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) => evalDateBoundary("startOf", args, START_OF_UNIT),
+    },
+  ],
+  [
+    "endof",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) => evalDateBoundary("endOf", args, END_OF_UNIT),
+    },
+  ],
+  [
+    "issameday",
+    { minArgs: 2, maxArgs: 2, apply: (args) => evalIsSameDay(args) },
+  ],
 ]);
 
 /**

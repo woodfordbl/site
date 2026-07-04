@@ -391,6 +391,155 @@ describe("functions", () => {
   });
 });
 
+describe("logic functions (v2)", () => {
+  it("isEmpty / isNotEmpty mirror empty's semantics", () => {
+    expect(run("isEmpty(null)")).toBe(true);
+    expect(run('isEmpty("   ")')).toBe(true);
+    expect(run("isEmpty(0)")).toBe(false);
+    expect(run('isNotEmpty("x")')).toBe(true);
+    expect(run('isNotEmpty("")')).toBe(false);
+  });
+
+  it("type guards classify values", () => {
+    expect(run("isNumber(3)")).toBe(true);
+    expect(run('isNumber("3")')).toBe(false);
+    expect(run('isText("x")')).toBe(true);
+    expect(run("isBoolean(true)")).toBe(true);
+    expect(run("isBoolean(1)")).toBe(false);
+    expect(run('isDate("2026-03-05")')).toBe(true);
+    expect(run('isDate("not a date")')).toBe(false);
+    expect(run("isDate(5)")).toBe(false);
+  });
+
+  it("xor is exclusive-or over booleans", () => {
+    expect(run("xor(true, false)")).toBe(true);
+    expect(run("xor(true, true)")).toBe(false);
+    expect(run("xor(false, false)")).toBe(false);
+    expect(errorMessage(run("xor(1, true)"))).toContain("expects a boolean");
+  });
+});
+
+describe("math functions (v2)", () => {
+  it("mod is the function form of %", () => {
+    expect(run("mod(7, 3)")).toBe(1);
+    expect(run("mod(-7, 3)")).toBe(-1);
+    expect(errorMessage(run("mod(5, 0)"))).toBe("Division by zero");
+  });
+
+  it("pow / sqrt with finite guards", () => {
+    expect(run("pow(2, 10)")).toBe(1024);
+    expect(run("sqrt(9)")).toBe(3);
+    expect(errorMessage(run("sqrt(-1)"))).toContain("not a finite number");
+    expect(errorMessage(run("pow(0, -1)"))).toContain("not a finite number");
+  });
+
+  it("clamp constrains to a range", () => {
+    expect(run("clamp(5, 0, 10)")).toBe(5);
+    expect(run("clamp(-3, 0, 10)")).toBe(0);
+    expect(run("clamp(99, 0, 10)")).toBe(10);
+    expect(errorMessage(run("clamp(5, 10, 0)"))).toContain("low bound");
+  });
+
+  it("sign / log / log10 / exp", () => {
+    expect(run("sign(-4)")).toBe(-1);
+    expect(run("sign(0)")).toBe(0);
+    expect(run("log10(1000)")).toBe(3);
+    expect(run("log(8, 2)")).toBe(3);
+    expect(run("exp(0)")).toBe(1);
+    expect(errorMessage(run("log10(0)"))).toContain("not a finite number");
+  });
+
+  it("roundUp / roundDown / roundToMultiple", () => {
+    expect(run("roundUp(3.1)")).toBe(4);
+    expect(run("roundUp(3.144, 2)")).toBe(3.15);
+    expect(run("roundDown(3.9)")).toBe(3);
+    expect(run("roundDown(3.199, 2)")).toBe(3.19);
+    expect(run("roundToMultiple(12, 5)")).toBe(10);
+    expect(run("roundToMultiple(13, 5)")).toBe(15);
+    expect(errorMessage(run("roundToMultiple(1, 0)"))).toContain(
+      "cannot be zero"
+    );
+  });
+
+  it("toNumber coerces text and booleans", () => {
+    expect(run('toNumber("3.5")')).toBe(3.5);
+    expect(run("toNumber(true)")).toBe(1);
+    expect(run("toNumber(false)")).toBe(0);
+    expect(run("toNumber(42)")).toBe(42);
+    expect(errorMessage(run('toNumber("abc")'))).toContain("cannot convert");
+    expect(errorMessage(run('toNumber("")'))).toContain("empty text");
+  });
+});
+
+describe("text functions (v2)", () => {
+  it("substring slices by index", () => {
+    expect(run('substring("hello", 1)')).toBe("ello");
+    expect(run('substring("hello", 1, 3)')).toBe("el");
+    expect(run('substring("hello", 0, 0)')).toBe("");
+  });
+
+  it("startsWith / endsWith / indexOf", () => {
+    expect(run('startsWith("draft-1", "draft")')).toBe(true);
+    expect(run('endsWith("report.pdf", ".pdf")')).toBe(true);
+    expect(run('indexOf("a@b", "@")')).toBe(1);
+    expect(run('indexOf("abc", "z")')).toBe(-1);
+  });
+
+  it("padStart / padEnd / repeat", () => {
+    expect(run('padStart("7", 3, "0")')).toBe("007");
+    expect(run('padEnd("7", 3, "-")')).toBe("7--");
+    expect(run('repeat("ab", 3)')).toBe("ababab");
+    expect(errorMessage(run('repeat("x", -1)'))).toContain("negative");
+    expect(errorMessage(run('repeat("x", 100000)'))).toContain("exceeds");
+  });
+
+  it("capitalize uppercases the first character only", () => {
+    expect(run('capitalize("hello world")')).toBe("Hello world");
+    expect(run('capitalize("")')).toBe("");
+  });
+
+  it("regex functions never throw on bad patterns", () => {
+    expect(run('regexMatch("a1b2", "[0-9]")')).toBe(true);
+    expect(run('regexExtract("order #42", "#[0-9]+")')).toBe("#42");
+    expect(run('regexExtract("nope", "#[0-9]+")')).toBe("");
+    expect(run('regexReplace("a1b2c3", "[0-9]", "")')).toBe("abc");
+    expect(errorMessage(run('regexMatch("x", "[")'))).toContain(
+      "invalid regular expression"
+    );
+  });
+});
+
+describe("date-part functions (v2)", () => {
+  it("extracts calendar parts", () => {
+    expect(run('year("2026-03-05")')).toBe(2026);
+    expect(run('month("2026-03-05")')).toBe(3);
+    expect(run('day("2026-03-05")')).toBe(5);
+    // 2026-03-05 is a Thursday → getDay() === 4.
+    expect(run('weekday("2026-03-05")')).toBe(4);
+    expect(run('dayName("2026-03-05")')).toBe("Thursday");
+    expect(run('monthName("2026-03-05")')).toBe("March");
+  });
+
+  it("startOf / endOf snap to period boundaries", () => {
+    expect(run('startOf("2026-03-05", "month")')).toBe("2026-03-01");
+    expect(run('endOf("2026-03-05", "month")')).toBe("2026-03-31");
+    expect(run('startOf("2026-03-05", "year")')).toBe("2026-01-01");
+    expect(errorMessage(run('startOf("2026-03-05", "decade")'))).toContain(
+      "unknown unit"
+    );
+  });
+
+  it("isSameDay compares calendar days", () => {
+    expect(run('isSameDay("2026-03-05", "2026-03-05")')).toBe(true);
+    expect(run('isSameDay("2026-03-05", "2026-03-06")')).toBe(false);
+  });
+
+  it("date-part functions reject non-dates", () => {
+    expect(errorMessage(run('year("nope")'))).toContain("invalid date");
+    expect(errorMessage(run("month(5)"))).toContain("expects a date");
+  });
+});
+
 describe("scope properties", () => {
   it("resolves values from the scope", () => {
     const scope = scopeOf({ Score: 10, Name: "Ada", Done: true, Empty: null });

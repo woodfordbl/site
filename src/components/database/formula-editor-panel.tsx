@@ -248,7 +248,9 @@ export function FormulaEditorPanel({
       <Textarea
         aria-label="Formula expression"
         autoComplete="off"
-        className="max-h-32 min-h-16 font-mono text-xs md:text-xs"
+        // 16px on mobile stops iOS Safari from force-zooming on focus; the
+        // compact 12px is desktop-only (md:).
+        className="max-h-32 min-h-16 font-mono text-base md:text-xs"
         onChange={(event) => {
           setDraft(event.target.value);
         }}
