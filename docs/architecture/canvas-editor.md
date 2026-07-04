@@ -186,6 +186,10 @@ List items are plain **text** only (no headings, quotes, or page links inside bu
 
 Checklist items are **`checklistItem`** blocks with `props.text` and `props.checked`. Each row renders a ShadCN checkbox (toggle in edit mode; read-only in view) beside an inline text field. Enter, Backspace, and Turn into follow the same container lift/split policy as list items. The shell lives in [`ChecklistView`](../../src/components/blocks/types/checklist/checklist-view.tsx).
 
+## Undo / redo
+
+Session-long block undo (**Mod+Z** / **Mod+Shift+Z**, registry ids `undo-edit` / `redo-edit`) lives in [`page-edit-history.ts`](../../src/lib/canvas/page-edit-history.ts): one in-memory undo/redo stack pair per page for the lifetime of the tab (500 entries, blocks held by reference — cheap because canvas blocks are immutable per version). The commit path in [`use-page-canvas.ts`](../../src/db/queries/use-page-canvas.ts) records the **pre-transaction** block list whenever a transaction actually changed blocks; single-block typing bursts pass a `historyCoalesceKey` so repeats within 1s collapse into the burst's first entry. Applying an undo/redo replays the entry through a normal block transaction with capture suppressed (the pop already moved state between stacks). This complements the persisted [snapshot timeline](./local-first-persistence.md#page-snapshots-version-history) (coarse 10-minute checkpoints across reloads) with transaction-level undo within the session. Reset page / Reset all clear the stacks; restoring a version-history snapshot records an undo entry first, so the restore itself is Mod+Z-able. The hotkey claims the event conditionally (`preventDefault: false` in [`keyboard-commands.ts`](../../src/lib/settings/keyboard-commands.ts)) so native field undo still runs where canvas history does not apply, and [`canvas-keyboard-shortcuts.ts`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) skips non-canvas fields (page title, dialogs, sidebar rename).
+
 ## Minimum and trailing rows
 
 Editable canvases keep a normal empty `text` row available through `normalizeEditablePageBlocks`:

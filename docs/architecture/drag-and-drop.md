@@ -127,7 +127,7 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 - [Canvas commands](../reference/canvas-commands.md)
 - [Page commands — `page.reposition`](../reference/page-commands.md#page-reposition)
 
-Reposition and canvas structural drops persist through the same paths that schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history).
+Reposition and canvas structural drops persist through the same paths that schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](./local-first-persistence.md#page-snapshots-version-history). Canvas block drops also commit through a normal block transaction, so they record a session undo entry — Mod+Z reverts a drop ([canvas-editor — Undo / redo](./canvas-editor.md#undo--redo)).
 
 ## Scope
 

@@ -46,7 +46,7 @@ Locally-edited pages keep a tiered checkpoint history in IndexedDB (`createStore
 - **Media safety:** checkpoints store only block props (the `assetId` reference), never blob bytes — restoring re-points at the existing `site-assets` blob. `sweepOrphanAssets` ([`asset-gc.ts`](../../src/db/assets/asset-gc.ts)) therefore unions snapshot-referenced asset ids into its live set so a blob held only by a checkpoint is not reclaimed.
 - **Lifecycle:** `clearPageSnapshots` runs on **Reset page**, hard delete, **Reset all**, and author **Save to source**. All writes fail soft (best-effort; quota errors route to `reportPersistenceError` and never block an edit).
 
-This replaces an earlier write-only per-edit event log (capped at 100, never surfaced); the checkpoint timeline is now the single page-history surface.
+This replaces an earlier write-only per-edit event log (capped at 100, never surfaced); the checkpoint timeline is now the single **persisted** page-history surface. Fine-grained transaction-level undo within a session is separate and purely in-memory ([`page-edit-history.ts`](../../src/lib/canvas/page-edit-history.ts), recorded from the block-commit path in [`use-page-canvas.ts`](../../src/db/queries/use-page-canvas.ts)); `restorePageSnapshot` records one undo entry before applying, so a restore is itself Mod+Z-able — see [canvas-editor — Undo / redo](./canvas-editor.md#undo--redo).
 
 ## Local page document (metadata)
 
