@@ -3,6 +3,7 @@ import type {
   DatabaseCellValue,
   DatabaseFieldType,
   DatabaseNumberFormat,
+  DatabaseSelectOption,
 } from "@/lib/schemas/database.ts";
 
 /**
@@ -26,6 +27,13 @@ export interface ConnectorFieldDef {
   name: string;
   /** Number display format; only meaningful when `type` is `"number"`. */
   numberFormat?: DatabaseNumberFormat;
+  /**
+   * Static option set; only meaningful when `type` is `"select"` or
+   * `"multiSelect"`. Row values must store OPTION IDS. Options are fixed at
+   * declaration time — the sync engine only writes row values, never schema,
+   * so select columns are only safe for closed sets known up front.
+   */
+  options?: DatabaseSelectOption[];
   /** Stable provider-side key; `ConnectorRow.values` is keyed by this. */
   sourceKey: string;
   /** Database field type the synced values conform to. */

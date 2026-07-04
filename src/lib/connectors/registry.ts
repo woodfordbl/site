@@ -1,5 +1,6 @@
 import { coingeckoMarketsConnector } from "@/lib/connectors/coingecko-markets.ts";
 import { frankfurterRatesConnector } from "@/lib/connectors/frankfurter-rates.ts";
+import { githubPrsConnector } from "@/lib/connectors/github-prs.ts";
 import { githubReposConnector } from "@/lib/connectors/github-repos.ts";
 import type { ConnectorDefinition } from "@/lib/connectors/types.ts";
 
@@ -10,6 +11,7 @@ import type { ConnectorDefinition } from "@/lib/connectors/types.ts";
  */
 export const CONNECTORS: Record<string, ConnectorDefinition> = {
   [githubReposConnector.id]: githubReposConnector,
+  [githubPrsConnector.id]: githubPrsConnector,
   [coingeckoMarketsConnector.id]: coingeckoMarketsConnector,
   [frankfurterRatesConnector.id]: frankfurterRatesConnector,
 };

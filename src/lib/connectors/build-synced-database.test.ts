@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildSyncedDatabaseSeed } from "@/lib/connectors/build-synced-database.ts";
 import { frankfurterRatesConnector } from "@/lib/connectors/frankfurter-rates.ts";
+import { githubPrsConnector } from "@/lib/connectors/github-prs.ts";
 import { githubReposConnector } from "@/lib/connectors/github-repos.ts";
 import { localDatabaseSchema } from "@/lib/schemas/database.ts";
 
@@ -41,6 +42,23 @@ describe("buildSyncedDatabaseSeed", () => {
     expect(stars?.type === "number" ? stars.format : undefined).toBe("integer");
     const url = database.fields.find((field) => field.sourceKey === "url");
     expect(url?.type).toBe("url");
+  });
+
+  it("passes static select options through to the seeded field", () => {
+    const { database } = buildSyncedDatabaseSeed(githubPrsConnector, {
+      owner: "octocat",
+      repo: "hello-world",
+      state: "all",
+    });
+    expect(localDatabaseSchema.parse(database)).toBeTruthy();
+    const state = database.fields.find((field) => field.sourceKey === "state");
+    expect(state?.type).toBe("select");
+    expect(state?.type === "select" ? state.options : undefined).toEqual([
+      { id: "open", name: "Open", color: "green" },
+      { id: "draft", name: "Draft", color: "gray" },
+      { id: "merged", name: "Merged", color: "purple" },
+      { id: "closed", name: "Closed", color: "red" },
+    ]);
   });
 
   it("resolves primaryFieldId from primarySourceKey", () => {

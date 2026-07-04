@@ -28,6 +28,9 @@ export function connectorFieldToDatabaseField(
   if (field.type === "number") {
     field.format = def.numberFormat;
   }
+  if (field.type === "select" || field.type === "multiSelect") {
+    field.options = def.options ?? [];
+  }
   return field;
 }
 
