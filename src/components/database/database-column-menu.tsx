@@ -4,6 +4,8 @@ import {
   IconColumnInsertRight,
   IconCopy,
   IconEyeOff,
+  IconPhoto,
+  IconPhotoOff,
   IconPinned,
   IconPinnedOff,
   IconPlus,
@@ -15,6 +17,7 @@ import {
   IconTextWrap,
   IconTrash,
 } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -30,19 +33,26 @@ import {
   columnOrderWithInsert,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
-  isActiveSort,
   isFrozenExactlyAt,
   numberFormatPatch,
   renamedSelectOptions,
   selectOptionsPatch,
-  toggledSorts,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
   withAddedSelectOption,
   withoutSelectOption,
 } from "@/components/database/database-column-menu-helpers.ts";
-import { DATABASE_FIELD_TYPE_ICONS } from "@/components/database/database-field-icons.ts";
+import {
+  DATABASE_FIELD_TYPE_ICONS,
+  resolveFieldIcon,
+} from "@/components/database/database-field-icons.ts";
+import {
+  sortEntryFor,
+  sortPriority,
+  toggledSorts,
+} from "@/components/database/database-filter-helpers.ts";
 import { aggregateFnLabel } from "@/components/database/database-grid-helpers.ts";
+import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -75,6 +85,7 @@ import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
+import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
   type DatabaseField,
@@ -108,9 +119,31 @@ const NUMBER_FORMAT_LABELS: Record<DatabaseNumberFormat, string> = {
   currency: "Currency",
 };
 
-/** Trailing check for items with menu-managed (non-checkbox) check state. */
-function ItemCheck({ checked }: { checked: boolean }) {
-  return checked ? <IconCheck className="ml-auto" /> : null;
+/**
+ * Trailing check for items with menu-managed (non-checkbox) check state.
+ * `priority` (1-based, multi-sort views only) renders beside the check so
+ * users can read each field's rank in the sort order.
+ */
+function ItemCheck({
+  checked,
+  priority,
+}: {
+  checked: boolean;
+  priority?: number | null;
+}) {
+  if (!checked) {
+    return null;
+  }
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-1">
+      {priority ? (
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {priority}
+        </span>
+      ) : null}
+      <IconCheck />
+    </span>
+  );
 }
 
 /**
@@ -125,15 +158,15 @@ function stopMenuKeys(event: KeyboardEvent<HTMLInputElement>): void {
 
 interface ColumnRenameInputProps {
   draftName: string;
-  fieldType: DatabaseField["type"];
+  field: DatabaseField;
   onDraftNameChange: (name: string) => void;
   onSubmit: () => void;
 }
 
-/** Autofocused rename input at the top of the menu, with the type icon. */
+/** Autofocused rename input at the top of the menu, with the field's icon. */
 function ColumnRenameInput({
   draftName,
-  fieldType,
+  field,
   onDraftNameChange,
   onSubmit,
 }: ColumnRenameInputProps) {
@@ -151,14 +184,14 @@ function ColumnRenameInput({
     };
   }, []);
 
-  const TypeIcon = DATABASE_FIELD_TYPE_ICONS[fieldType];
+  const FieldIcon = resolveFieldIcon(field);
 
   return (
     <div className="p-1 pb-2">
       <InputGroup className="h-8">
         <InputGroupAddon align="inline-start">
           <InputGroupText>
-            <TypeIcon className="stroke-[1.5px]" />
+            <FieldIcon className="stroke-[1.5px]" />
           </InputGroupText>
         </InputGroupAddon>
         <InputGroupInput
@@ -466,6 +499,11 @@ export function DatabaseColumnMenu({
 }: DatabaseColumnMenuProps): ReactNode {
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(field.name);
+  // The picker opens anchored to the header cell after the menu closes —
+  // same controlled `hideTrigger` pattern as the sidebar "Change icon".
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const queryClient = useQueryClient();
   const config = view.config;
   const viewId = view.id;
 
@@ -497,13 +535,19 @@ export function DatabaseColumnMenu({
 
   const freezePrefix = freezePrefixEndingAt(displayFieldIds, field.id);
   const frozenHere = isFrozenExactlyAt(config.pinnedFieldIds, freezePrefix);
-  const sortedAsc = isActiveSort(view.sorts, field.id, "asc");
-  const sortedDesc = isActiveSort(view.sorts, field.id, "desc");
+  const sortEntry = sortEntryFor(view.sorts, field.id);
+  // Rank shown beside the check only when the view is multi-sorted.
+  const fieldSortPriority =
+    (view.sorts?.length ?? 0) > 1 ? sortPriority(view.sorts, field.id) : null;
 
   const applySort = (direction: "asc" | "desc") => {
     updateDatabaseView(databaseId, viewId, {
       sorts: toggledSorts(view.sorts, field.id, direction),
     });
+  };
+
+  const writeIcon = (icon: string | undefined) => {
+    updateDatabaseField(databaseId, field.id, { icon });
   };
 
   const insertField = (side: "left" | "right") => {
@@ -531,133 +575,184 @@ export function DatabaseColumnMenu({
   };
 
   return (
-    <DropdownMenu onOpenChange={handleOpenChange} open={open}>
-      <DropdownMenuTrigger
-        render={<button className={triggerClassName} type="button" />}
-      >
-        {children}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-64 min-w-64">
-        <ColumnRenameInput
-          draftName={draftName}
-          fieldType={field.type}
-          onDraftNameChange={setDraftName}
-          onSubmit={() => {
-            commitRename();
-            setOpen(false);
-          }}
-        />
-        <DropdownMenuLabel>
-          {FIELD_TYPE_DEFS[field.type].label}
-        </DropdownMenuLabel>
-        <EditPropertySubmenu databaseId={databaseId} field={field} />
-        <ChangeTypeSubmenu databaseId={databaseId} field={field} />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            applySort("asc");
-          }}
+    <>
+      <DropdownMenu onOpenChange={handleOpenChange} open={open}>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={triggerClassName}
+              ref={triggerRef}
+              type="button"
+            />
+          }
         >
-          <IconSortAscending />
-          Sort ascending
-          <ItemCheck checked={sortedAsc} />
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            applySort("desc");
-          }}
-        >
-          <IconSortDescending />
-          Sort descending
-          <ItemCheck checked={sortedDesc} />
-        </DropdownMenuItem>
-        <CalculateSubmenu
-          activeFn={config.calculations?.[field.id]}
-          field={field}
-          onSelect={(fn) => {
-            patchConfig({
-              calculations: calculationsWithSelection(
-                config.calculations,
-                field.id,
-                fn
-              ),
-            });
-          }}
-        />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            patchConfig({
-              pinnedFieldIds: frozenHere ? undefined : freezePrefix,
-            });
-          }}
-        >
-          {frozenHere ? <IconPinnedOff /> : <IconPinned />}
-          {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={isPrimary}
-          onClick={() => {
-            updateDatabaseView(databaseId, viewId, {
-              visibleFieldIds: visibleFieldIdsAfterHide(
-                view.visibleFieldIds,
-                displayFieldIds,
-                field.id
-              ),
-            });
-          }}
-        >
-          <IconEyeOff />
-          Hide property
-        </DropdownMenuItem>
-        <DropdownMenuSwitchItem
-          checked={config.wrapFieldIds?.includes(field.id) ?? false}
-          onCheckedChange={() => {
-            patchConfig({
-              wrapFieldIds: toggledWrapFieldIds(config.wrapFieldIds, field.id),
-            });
-          }}
-        >
-          <IconTextWrap />
-          Wrap content
-        </DropdownMenuSwitchItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            insertField("left");
-          }}
-        >
-          <IconColumnInsertLeft />
-          Insert left
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => {
-            insertField("right");
-          }}
-        >
-          <IconColumnInsertRight />
-          Insert right
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => {
-            duplicateDatabaseField(databaseId, field.id);
-          }}
-        >
-          <IconCopy />
-          Duplicate property
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={isPrimary}
-          onClick={() => {
-            removeDatabaseField(databaseId, field.id);
-          }}
-          variant="destructive"
-        >
-          <IconTrash />
-          Delete property
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {children}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-64 min-w-64">
+          <ColumnRenameInput
+            draftName={draftName}
+            field={field}
+            onDraftNameChange={setDraftName}
+            onSubmit={() => {
+              commitRename();
+              setOpen(false);
+            }}
+          />
+          <DropdownMenuLabel>
+            {FIELD_TYPE_DEFS[field.type].label}
+          </DropdownMenuLabel>
+          <EditPropertySubmenu databaseId={databaseId} field={field} />
+          <ChangeTypeSubmenu databaseId={databaseId} field={field} />
+          <DropdownMenuItem
+            onClick={() => {
+              setIconPickerOpen(true);
+            }}
+            onPointerEnter={() => {
+              // Warm picker chunks + catalogs on intent (AGENTS.md pickers).
+              ensurePageIconPickerReady(queryClient);
+            }}
+          >
+            <IconPhoto />
+            Change icon
+          </DropdownMenuItem>
+          {field.icon ? (
+            <DropdownMenuItem
+              onClick={() => {
+                writeIcon(undefined);
+              }}
+            >
+              <IconPhotoOff />
+              Remove icon
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              applySort("asc");
+            }}
+          >
+            <IconSortAscending />
+            Sort ascending
+            <ItemCheck
+              checked={sortEntry?.direction === "asc"}
+              priority={fieldSortPriority}
+            />
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              applySort("desc");
+            }}
+          >
+            <IconSortDescending />
+            Sort descending
+            <ItemCheck
+              checked={sortEntry?.direction === "desc"}
+              priority={fieldSortPriority}
+            />
+          </DropdownMenuItem>
+          <CalculateSubmenu
+            activeFn={config.calculations?.[field.id]}
+            field={field}
+            onSelect={(fn) => {
+              patchConfig({
+                calculations: calculationsWithSelection(
+                  config.calculations,
+                  field.id,
+                  fn
+                ),
+              });
+            }}
+          />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              patchConfig({
+                pinnedFieldIds: frozenHere ? undefined : freezePrefix,
+              });
+            }}
+          >
+            {frozenHere ? <IconPinnedOff /> : <IconPinned />}
+            {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isPrimary}
+            onClick={() => {
+              updateDatabaseView(databaseId, viewId, {
+                visibleFieldIds: visibleFieldIdsAfterHide(
+                  view.visibleFieldIds,
+                  displayFieldIds,
+                  field.id
+                ),
+              });
+            }}
+          >
+            <IconEyeOff />
+            Hide property
+          </DropdownMenuItem>
+          <DropdownMenuSwitchItem
+            checked={config.wrapFieldIds?.includes(field.id) ?? false}
+            onCheckedChange={() => {
+              patchConfig({
+                wrapFieldIds: toggledWrapFieldIds(
+                  config.wrapFieldIds,
+                  field.id
+                ),
+              });
+            }}
+          >
+            <IconTextWrap />
+            Wrap content
+          </DropdownMenuSwitchItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              insertField("left");
+            }}
+          >
+            <IconColumnInsertLeft />
+            Insert left
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              insertField("right");
+            }}
+          >
+            <IconColumnInsertRight />
+            Insert right
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              duplicateDatabaseField(databaseId, field.id);
+            }}
+          >
+            <IconCopy />
+            Duplicate property
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={isPrimary}
+            onClick={() => {
+              removeDatabaseField(databaseId, field.id);
+            }}
+            variant="destructive"
+          >
+            <IconTrash />
+            Delete property
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <GlyphIconPicker
+        anchor={triggerRef}
+        ariaLabel={`Change icon for ${field.name}`}
+        hideTrigger
+        icon={field.icon}
+        onOpenChange={setIconPickerOpen}
+        onRemove={() => {
+          writeIcon(undefined);
+        }}
+        onSelect={writeIcon}
+        open={iconPickerOpen}
+      />
+    </>
   );
 }

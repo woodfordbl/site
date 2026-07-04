@@ -6,10 +6,8 @@ import {
   columnOrderWithInsert,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
-  isActiveSort,
   isFrozenExactlyAt,
   renamedSelectOptions,
-  toggledSorts,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
   withAddedSelectOption,
@@ -51,38 +49,6 @@ describe("aggregateFnsForFieldType", () => {
     expect(fns).toContain("earliest");
     expect(fns).toContain("latest");
     expect(fns).not.toContain("sum");
-  });
-});
-
-describe("sort toggling", () => {
-  it("replaces the view's sorts with a single key", () => {
-    expect(
-      toggledSorts([{ fieldId: "a", direction: "asc" }], "b", "desc")
-    ).toEqual([{ fieldId: "b", direction: "desc" }]);
-  });
-
-  it("clears sorts when the field is already sorted in that direction", () => {
-    expect(
-      toggledSorts([{ fieldId: "a", direction: "asc" }], "a", "asc")
-    ).toEqual([]);
-  });
-
-  it("flips direction on the same field instead of clearing", () => {
-    expect(
-      toggledSorts([{ fieldId: "a", direction: "asc" }], "a", "desc")
-    ).toEqual([{ fieldId: "a", direction: "desc" }]);
-  });
-
-  it("only reports single-key sorts as active", () => {
-    const multi = [
-      { fieldId: "a", direction: "asc" },
-      { fieldId: "b", direction: "desc" },
-    ] as const;
-    expect(isActiveSort(multi, "a", "asc")).toBe(false);
-    expect(isActiveSort(undefined, "a", "asc")).toBe(false);
-    expect(isActiveSort([{ fieldId: "a", direction: "asc" }], "a", "asc")).toBe(
-      true
-    );
   });
 });
 

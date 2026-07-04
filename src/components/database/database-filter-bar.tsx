@@ -1,5 +1,7 @@
 import {
   IconArrowDown,
+  IconArrowLeft,
+  IconArrowRight,
   IconArrowUp,
   IconCheck,
   IconChevronDown,
@@ -16,17 +18,20 @@ import {
   useState,
 } from "react";
 
-import { DATABASE_FIELD_TYPE_ICONS } from "@/components/database/database-field-icons.ts";
+import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   appendFilterCondition,
   conditionOptionIds,
   conditionValueLabel,
+  flippedSortDirection,
   innerGroupChipLabel,
   isFilterInnerGroup,
+  movedSort,
   patchFilterCondition,
   removeFilterEntry,
   setFilterOp,
   toggleConditionOptionId,
+  withoutSort,
 } from "@/components/database/database-filter-helpers.ts";
 import { isoDateToLocalDate } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionCombobox } from "@/components/database/database-option-combobox.tsx";
@@ -35,8 +40,10 @@ import { Calendar } from "@/components/ui/calendar.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import {
@@ -65,6 +72,7 @@ import type {
   DatabaseFilterGroupOp,
   DatabaseFilterInnerGroup,
   DatabaseFilterOperator,
+  DatabaseSort,
   DatabaseView,
 } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -74,7 +82,8 @@ import { cn } from "@/lib/utils.ts";
  * grid (edit mode only). One chip per root-level condition — field, operator,
  * and value are separate click targets editing in place via popovers — plus a
  * "+ Filter" type-ahead field picker, a Match all/any control once two or
- * more root entries exist, and sort-indicator chips while the view is sorted.
+ * more root entries exist, and one sort chip per view sort in priority order
+ * (flip direction, reorder priority, remove).
  *
  * Deferred (per §5.2 of the databases proposal):
  * - All writes mutate the saved view directly through `updateDatabaseView`;
@@ -147,10 +156,11 @@ export function DatabaseFilterBar({
     }
   };
 
-  const handleRemoveSort = (fieldId: string) => {
-    const sorts = (view.sorts ?? []).filter((sort) => sort.fieldId !== fieldId);
+  const sorts = view.sorts ?? [];
+
+  const applySortsChange = (next: readonly DatabaseSort[] | undefined) => {
     updateDatabaseView(databaseId, view.id, {
-      sorts: sorts.length > 0 ? sorts : undefined,
+      sorts: next && next.length > 0 ? [...next] : undefined,
     });
   };
 
@@ -178,12 +188,22 @@ export function DatabaseFilterBar({
         )
       )}
       <AddFilterChip fields={fields} onPick={handleAddField} />
-      {(view.sorts ?? []).map((sort) => (
+      {sorts.map((sort, index) => (
         <SortChip
+          canMoveLeft={index > 0}
+          canMoveRight={index < sorts.length - 1}
           direction={sort.direction}
           fieldName={fieldsById[sort.fieldId]?.name ?? "Unknown field"}
           key={sort.fieldId}
-          onRemove={() => handleRemoveSort(sort.fieldId)}
+          onClearAll={() => applySortsChange(undefined)}
+          onFlip={() =>
+            applySortsChange(flippedSortDirection(sorts, sort.fieldId))
+          }
+          onMove={(delta) =>
+            applySortsChange(movedSort(sorts, sort.fieldId, delta))
+          }
+          onRemove={() => applySortsChange(withoutSort(sorts, sort.fieldId))}
+          priority={sorts.length > 1 ? index + 1 : null}
         />
       ))}
       {view.filter && rootEntries.length >= 2 ? (
@@ -239,7 +259,7 @@ function FilterConditionChip({
     );
   }
 
-  const Icon = DATABASE_FIELD_TYPE_ICONS[field.type];
+  const Icon = resolveFieldIcon(field);
   const valueLabel = conditionValueLabel(field, condition);
 
   const handleValueOpenChange = (open: boolean) => {
@@ -592,7 +612,7 @@ function AddFilterChip({
           </InputGroup>
           <div className="flex max-h-56 flex-col overflow-y-auto">
             {filtered.map((field) => {
-              const Icon = DATABASE_FIELD_TYPE_ICONS[field.type];
+              const Icon = resolveFieldIcon(field);
               return (
                 <button
                   className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
@@ -655,24 +675,95 @@ function MatchOpControl({
   );
 }
 
-/** Sort indicator chip — the full sort UI lives in the column menu. */
-function SortChip({
-  direction,
-  fieldName,
-  onRemove,
-}: {
+interface SortChipProps {
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
   direction: "asc" | "desc";
   fieldName: string;
+  onClearAll: () => void;
+  onFlip: () => void;
+  onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
-}): ReactNode {
+  /** 1-based priority — shown only when the view has 2+ sorts (`null` hides it). */
+  priority: number | null;
+}
+
+/**
+ * One sort chip, rendered per view sort in priority order: priority number
+ * (multi-sort only) + field name, a direction-arrow button that flips the
+ * sort, a priority dropdown (move left/right, clear all — multi-sort only),
+ * and × removing just this sort. Adding sorts lives in the column menu.
+ */
+function SortChip({
+  canMoveLeft,
+  canMoveRight,
+  direction,
+  fieldName,
+  onClearAll,
+  onFlip,
+  onMove,
+  onRemove,
+  priority,
+}: SortChipProps): ReactNode {
   const Arrow = direction === "asc" ? IconArrowUp : IconArrowDown;
   return (
     <div className={CHIP_CLASS}>
       <span className={CHIP_SEGMENT_CLASS}>
-        <Arrow className="size-3.5 shrink-0 stroke-[1.5px]" />
+        {priority === null ? null : (
+          <span className="tabular-nums">{priority}</span>
+        )}
         <span className="max-w-32 truncate text-foreground">{fieldName}</span>
       </span>
-      <RemoveChipButton label="Remove sort" onRemove={onRemove} />
+      <button
+        aria-label={`Sort ${fieldName} ${
+          direction === "asc" ? "descending" : "ascending"
+        }`}
+        className={cn(CHIP_BUTTON_CLASS, "px-1")}
+        onClick={onFlip}
+        type="button"
+      >
+        <Arrow className="size-3.5 stroke-[1.5px]" />
+      </button>
+      {priority === null ? null : (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                aria-label={`Change sort priority for ${fieldName}`}
+                className={cn(CHIP_BUTTON_CLASS, "px-1")}
+                type="button"
+              >
+                <IconChevronDown className="size-3.5 stroke-[1.5px]" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem
+              disabled={!canMoveLeft}
+              onClick={() => onMove(-1)}
+            >
+              <IconArrowLeft />
+              Move left
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!canMoveRight}
+              onClick={() => onMove(1)}
+            >
+              <IconArrowRight />
+              Move right
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onClearAll}>
+              <IconX />
+              Clear all sorts
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      <RemoveChipButton
+        label={`Remove sort by ${fieldName}`}
+        onRemove={onRemove}
+      />
     </div>
   );
 }

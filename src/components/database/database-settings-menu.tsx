@@ -20,7 +20,7 @@ import {
 } from "react";
 
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
-import { DATABASE_FIELD_TYPE_ICONS } from "@/components/database/database-field-icons.ts";
+import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -149,10 +149,10 @@ interface PropertyRowProps {
 }
 
 /**
- * One field row in the Properties submenu: type icon + name, move up/down,
- * and a hide/show toggle. The primary field shows a "Title" badge and can
- * never be hidden. Tapping the name opens nothing this wave — field editing
- * lives in the column menu.
+ * One field row in the Properties submenu: field icon (custom glyph or type
+ * icon) + name, move up/down, and a hide/show toggle. The primary field shows
+ * a "Title" badge and can never be hidden. Tapping the name opens nothing
+ * this wave — field editing lives in the column menu.
  */
 function PropertyRow({
   canMoveDown,
@@ -163,11 +163,11 @@ function PropertyRow({
   onMove,
   onToggleVisible,
 }: PropertyRowProps) {
-  const TypeIcon = DATABASE_FIELD_TYPE_ICONS[field.type];
+  const FieldIcon = resolveFieldIcon(field);
 
   return (
     <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm">
-      <TypeIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+      <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">{field.name}</span>
       {isPrimary ? (
         <span className="shrink-0 rounded-sm bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">

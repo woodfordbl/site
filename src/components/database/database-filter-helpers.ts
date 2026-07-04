@@ -7,12 +7,13 @@ import type {
   DatabaseFilterGroup,
   DatabaseFilterGroupOp,
   DatabaseFilterInnerGroup,
+  DatabaseSort,
 } from "@/lib/schemas/database.ts";
 
 /**
  * Pure helpers for the filter chip bar: immutable root-group mutations over
- * the `DatabaseFilterGroup` grammar and chip label formatting. React-free so
- * they stay unit testable.
+ * the `DatabaseFilterGroup` grammar, multi-sort list mutations, and chip
+ * label formatting. React-free so they stay unit testable.
  */
 
 /** One root-level entry of a filter group. */
@@ -170,4 +171,91 @@ export function innerGroupChipLabel(group: DatabaseFilterInnerGroup): string {
   const count = group.conditions.length;
   const noun = count === 1 ? "condition" : "conditions";
   return `(${count} ${noun} · ${group.op})`;
+}
+
+/*
+ * Multi-sort mutations. `view.sorts` is the priority list — index 0 is the
+ * primary key (`applySorts` compares in list order), so "priority" here is
+ * just 1-based position. Helpers that can empty the list return `undefined`
+ * so callers can hand the result straight to `updateDatabaseView` (an unset
+ * sorts key restores manual drag order).
+ */
+
+/** The view's sort entry for a field, if any. */
+export function sortEntryFor(
+  sorts: readonly DatabaseSort[] | undefined,
+  fieldId: string
+): DatabaseSort | undefined {
+  return sorts?.find((sort) => sort.fieldId === fieldId);
+}
+
+/** 1-based sort priority of a field; 0 when the field is not sorted. */
+export function sortPriority(
+  sorts: readonly DatabaseSort[] | undefined,
+  fieldId: string
+): number {
+  const index = (sorts ?? []).findIndex((sort) => sort.fieldId === fieldId);
+  return index + 1;
+}
+
+/** Sorts with one field's direction flipped in place (priority unchanged). */
+export function flippedSortDirection(
+  sorts: readonly DatabaseSort[],
+  fieldId: string
+): DatabaseSort[] {
+  return sorts.map((sort) =>
+    sort.fieldId === fieldId
+      ? { ...sort, direction: sort.direction === "asc" ? "desc" : "asc" }
+      : sort
+  );
+}
+
+/** Sorts without a field's entry; `undefined` when none remain. */
+export function withoutSort(
+  sorts: readonly DatabaseSort[],
+  fieldId: string
+): DatabaseSort[] | undefined {
+  const next = sorts.filter((sort) => sort.fieldId !== fieldId);
+  return next.length > 0 ? next : undefined;
+}
+
+/**
+ * Sorts after clicking a column-menu sort item (add/toggle semantics): not
+ * sorted → append at the end (lowest priority); already sorted in that
+ * direction → remove the entry; sorted the other way → flip in place.
+ */
+export function toggledSorts(
+  sorts: readonly DatabaseSort[] | undefined,
+  fieldId: string,
+  direction: DatabaseSort["direction"]
+): DatabaseSort[] | undefined {
+  const base = sorts ?? [];
+  const existing = sortEntryFor(base, fieldId);
+  if (!existing) {
+    return [...base, { fieldId, direction }];
+  }
+  if (existing.direction === direction) {
+    return withoutSort(base, fieldId);
+  }
+  return flippedSortDirection(base, fieldId);
+}
+
+/**
+ * Sorts with a field's entry moved one step in priority (`-1` = higher,
+ * `+1` = lower). Out-of-range moves and unknown fields return the list
+ * unchanged.
+ */
+export function movedSort(
+  sorts: readonly DatabaseSort[],
+  fieldId: string,
+  delta: -1 | 1
+): DatabaseSort[] {
+  const index = sorts.findIndex((sort) => sort.fieldId === fieldId);
+  const target = index + delta;
+  if (index === -1 || target < 0 || target >= sorts.length) {
+    return [...sorts];
+  }
+  const next = [...sorts];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
 }

@@ -4,18 +4,25 @@ import {
   appendFilterCondition,
   conditionOptionIds,
   conditionValueLabel,
+  flippedSortDirection,
   innerGroupChipLabel,
   isFilterInnerGroup,
+  movedSort,
   patchFilterCondition,
   removeFilterEntry,
   setFilterOp,
+  sortEntryFor,
+  sortPriority,
   toggleConditionOptionId,
+  toggledSorts,
+  withoutSort,
 } from "@/components/database/database-filter-helpers.ts";
 import type {
   DatabaseField,
   DatabaseFilterCondition,
   DatabaseFilterGroup,
   DatabaseFilterInnerGroup,
+  DatabaseSort,
 } from "@/lib/schemas/database.ts";
 
 const condition = (
@@ -262,5 +269,94 @@ describe("innerGroupChipLabel", () => {
     expect(
       innerGroupChipLabel({ id: "g2", op: "and", conditions: [condition()] })
     ).toBe("(1 condition · and)");
+  });
+});
+
+const sorts: DatabaseSort[] = [
+  { fieldId: "a", direction: "asc" },
+  { fieldId: "b", direction: "desc" },
+  { fieldId: "c", direction: "asc" },
+];
+
+describe("sortEntryFor / sortPriority", () => {
+  it("finds a field's sort entry and its 1-based priority", () => {
+    expect(sortEntryFor(sorts, "b")).toEqual({
+      fieldId: "b",
+      direction: "desc",
+    });
+    expect(sortPriority(sorts, "a")).toBe(1);
+    expect(sortPriority(sorts, "c")).toBe(3);
+  });
+
+  it("returns undefined / 0 for unsorted fields and missing lists", () => {
+    expect(sortEntryFor(sorts, "zz")).toBeUndefined();
+    expect(sortEntryFor(undefined, "a")).toBeUndefined();
+    expect(sortPriority(sorts, "zz")).toBe(0);
+    expect(sortPriority(undefined, "a")).toBe(0);
+  });
+});
+
+describe("toggledSorts", () => {
+  it("appends an unsorted field at the end (lowest priority)", () => {
+    expect(toggledSorts(sorts, "d", "desc")).toEqual([
+      ...sorts,
+      { fieldId: "d", direction: "desc" },
+    ]);
+    expect(toggledSorts(undefined, "d", "asc")).toEqual([
+      { fieldId: "d", direction: "asc" },
+    ]);
+  });
+
+  it("removes the entry when already sorted in that direction", () => {
+    expect(toggledSorts(sorts, "b", "desc")).toEqual([sorts[0], sorts[2]]);
+  });
+
+  it("clears to undefined when removing the only sort", () => {
+    expect(toggledSorts([sorts[0]], "a", "asc")).toBeUndefined();
+  });
+
+  it("flips direction in place (keeping priority) when sorted the other way", () => {
+    expect(toggledSorts(sorts, "a", "desc")).toEqual([
+      { fieldId: "a", direction: "desc" },
+      sorts[1],
+      sorts[2],
+    ]);
+  });
+});
+
+describe("flippedSortDirection", () => {
+  it("flips only the matching entry", () => {
+    expect(flippedSortDirection(sorts, "b")).toEqual([
+      sorts[0],
+      { fieldId: "b", direction: "asc" },
+      sorts[2],
+    ]);
+  });
+
+  it("leaves the list unchanged for unknown fields", () => {
+    expect(flippedSortDirection(sorts, "zz")).toEqual(sorts);
+  });
+});
+
+describe("withoutSort", () => {
+  it("removes one entry, keeping the rest in priority order", () => {
+    expect(withoutSort(sorts, "a")).toEqual([sorts[1], sorts[2]]);
+  });
+
+  it("returns undefined when the last entry goes", () => {
+    expect(withoutSort([sorts[0]], "a")).toBeUndefined();
+  });
+});
+
+describe("movedSort", () => {
+  it("swaps a sort with its neighbor in the given direction", () => {
+    expect(movedSort(sorts, "b", -1)).toEqual([sorts[1], sorts[0], sorts[2]]);
+    expect(movedSort(sorts, "b", 1)).toEqual([sorts[0], sorts[2], sorts[1]]);
+  });
+
+  it("clamps at the edges and ignores unknown fields", () => {
+    expect(movedSort(sorts, "a", -1)).toEqual(sorts);
+    expect(movedSort(sorts, "c", 1)).toEqual(sorts);
+    expect(movedSort(sorts, "zz", 1)).toEqual(sorts);
   });
 });

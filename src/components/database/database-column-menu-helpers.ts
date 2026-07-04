@@ -4,14 +4,14 @@ import type {
   DatabaseFieldType,
   DatabaseNumberFormat,
   DatabaseSelectOption,
-  DatabaseSort,
 } from "@/lib/schemas/database.ts";
 
 /**
- * Pure helpers behind the column header menu: sort toggling, Calculate-fn
- * filtering per field type, freeze-prefix computation, hide/wrap list edits,
- * column-order splicing, and select-option list edits. React-free so they
- * stay unit testable.
+ * Pure helpers behind the column header menu: Calculate-fn filtering per
+ * field type, freeze-prefix computation, hide/wrap list edits, column-order
+ * splicing, and select-option list edits. Sort-list mutations live in
+ * `database-filter-helpers.ts` (shared with the filter bar's sort chips).
+ * React-free so they stay unit testable.
  */
 
 /** Aggregates valid for every field type (emptiness/count taxonomy). */
@@ -56,38 +56,6 @@ export function aggregateFnsForFieldType(
     return [...UNIVERSAL_AGGREGATE_FNS, ...DATE_AGGREGATE_FNS];
   }
   return [...UNIVERSAL_AGGREGATE_FNS];
-}
-
-/**
- * Whether the view is single-key sorted by exactly this field + direction —
- * the check state for the menu's sort items (toggle semantics).
- */
-export function isActiveSort(
-  sorts: readonly DatabaseSort[] | undefined,
-  fieldId: string,
-  direction: DatabaseSort["direction"]
-): boolean {
-  return (
-    sorts !== undefined &&
-    sorts.length === 1 &&
-    sorts[0].fieldId === fieldId &&
-    sorts[0].direction === direction
-  );
-}
-
-/**
- * Sorts after clicking a sort item: REPLACE the view's sorts with a single
- * key (single-key sort this wave — multi-sort appends come later), or clear
- * them entirely when the field is already sorted in that direction.
- */
-export function toggledSorts(
-  sorts: readonly DatabaseSort[] | undefined,
-  fieldId: string,
-  direction: DatabaseSort["direction"]
-): DatabaseSort[] {
-  return isActiveSort(sorts, fieldId, direction)
-    ? []
-    : [{ fieldId, direction }];
 }
 
 /**
