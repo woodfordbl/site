@@ -44,6 +44,11 @@ const databaseFieldBaseSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: databaseFieldTypeSchema,
+  /**
+   * Optional custom glyph (emoji or `tabler:IconName`, matching page icons).
+   * Falls back to the field-type icon when unset.
+   */
+  icon: z.string().optional(),
 });
 
 /**

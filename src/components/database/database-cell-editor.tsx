@@ -14,6 +14,7 @@ import {
   parseNumberCellInput,
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionCombobox } from "@/components/database/database-option-combobox.tsx";
+import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
@@ -121,6 +122,7 @@ function TextCellInlineEditor({
 }: DatabaseCellInlineEditorProps): ReactNode {
   const initial = initialDraft(field, value);
   const [draft, setDraft] = useState(initial);
+  const focusOnMount = useFocusOnMount({ select: true });
   // Set once Enter/Tab/Escape handled the exit so the trailing blur is a no-op.
   const finishedRef = useRef(false);
   const isNumber = field.type === "number";
@@ -182,12 +184,7 @@ function TextCellInlineEditor({
       }}
       onChange={(event) => setDraft(event.target.value)}
       onKeyDown={handleKeyDown}
-      ref={(node) => {
-        // Focus + select-all on mount so typing overwrites, matching grid
-        // editors; `autoFocus` is avoided per a11y lint rules.
-        node?.focus();
-        node?.select();
-      }}
+      ref={focusOnMount}
       type="text"
       value={draft}
     />

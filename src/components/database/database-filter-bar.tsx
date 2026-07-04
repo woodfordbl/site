@@ -30,6 +30,7 @@ import {
 } from "@/components/database/database-filter-helpers.ts";
 import { isoDateToLocalDate } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionCombobox } from "@/components/database/database-option-combobox.tsx";
+import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import {
   DropdownMenu,
@@ -419,6 +420,7 @@ function FilterTextValueInput({
   onCommit,
 }: FilterTextValueInputProps): ReactNode {
   const [draft, setDraft] = useState(initial);
+  const focusSelectOnMount = useFocusOnMount({ select: true });
   // Set once Enter committed so the trailing blur doesn't commit twice.
   const finishedRef = useRef(false);
 
@@ -445,12 +447,7 @@ function FilterTextValueInput({
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Value"
-        ref={(node) => {
-          // Focus + select-all on open so typing overwrites; `autoFocus` is
-          // avoided per a11y lint rules.
-          node?.focus();
-          node?.select();
-        }}
+        ref={focusSelectOnMount}
         value={draft}
       />
     </InputGroup>
@@ -534,6 +531,7 @@ function AddFilterChip({
   onPick: (field: DatabaseField) => void;
 }): ReactNode {
   const [open, setOpen] = useState(false);
+  const focusOnMount = useFocusOnMount();
   const [query, setQuery] = useState("");
   const trimmed = query.trim().toLowerCase();
 
@@ -588,9 +586,7 @@ function AddFilterChip({
                 }
               }}
               placeholder="Filter by…"
-              ref={(node) => {
-                node?.focus();
-              }}
+              ref={focusOnMount}
               value={query}
             />
           </InputGroup>

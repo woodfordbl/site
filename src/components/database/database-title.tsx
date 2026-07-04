@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 
+import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
 
 interface DatabaseTitleProps {
@@ -23,6 +24,7 @@ export function DatabaseTitle({
 }: DatabaseTitleProps): ReactNode {
   // `null` = display mode; a string is the in-flight draft.
   const [draft, setDraft] = useState<string | null>(null);
+  const focusOnMount = useFocusOnMount({ select: true });
   const finishedRef = useRef(false);
 
   const commit = (value: string) => {
@@ -88,10 +90,7 @@ export function DatabaseTitle({
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Untitled"
-          ref={(node) => {
-            node?.focus();
-            node?.select();
-          }}
+          ref={focusOnMount}
           type="text"
           value={draft}
         />

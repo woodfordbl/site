@@ -2,6 +2,7 @@ import { IconCheck, IconPlus, IconSearch } from "@tabler/icons-react";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { DatabaseOptionPill } from "@/components/database/database-cell.tsx";
+import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import {
   InputGroup,
   InputGroupAddon,
@@ -36,6 +37,7 @@ export function DatabaseOptionCombobox({
   selectedIds,
 }: DatabaseOptionComboboxProps): ReactNode {
   const [query, setQuery] = useState("");
+  const focusOnMount = useFocusOnMount();
   const trimmed = query.trim();
 
   const filtered = useMemo(() => {
@@ -109,11 +111,7 @@ export function DatabaseOptionCombobox({
             create();
           }}
           placeholder={onCreateOption ? "Search or create…" : "Search options…"}
-          ref={(node) => {
-            // Focus on mount so the popover editor is immediately typeable;
-            // `autoFocus` is avoided per a11y lint rules.
-            node?.focus();
-          }}
+          ref={focusOnMount}
           value={query}
         />
       </InputGroup>
