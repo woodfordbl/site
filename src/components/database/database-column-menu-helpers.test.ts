@@ -4,14 +4,19 @@ import {
   aggregateFnsForFieldType,
   calculationsWithSelection,
   columnOrderWithInsert,
+  dateFormatPatch,
   expressionPatch,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
   logicalColumnOrder,
+  MAX_NUMBER_DECIMALS,
+  numberDecimalsPatch,
+  numberGroupingPatch,
   recoloredSelectOptions,
   renamedSelectOptions,
   selectFieldForOptionEdit,
+  steppedDecimals,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
   withAddedSelectOption,
@@ -270,6 +275,52 @@ describe("expressionPatch", () => {
     expect(expressionPatch("thisPage.Price * 1.1")).toEqual({
       expression: "thisPage.Price * 1.1",
     });
+  });
+});
+
+describe("steppedDecimals", () => {
+  it("steps between Auto (undefined) and 0", () => {
+    expect(steppedDecimals(undefined, 1)).toBe(0);
+    expect(steppedDecimals(0, -1)).toBeUndefined();
+    expect(steppedDecimals(undefined, -1)).toBeUndefined();
+  });
+
+  it("steps within the 0-6 range and clamps at the cap", () => {
+    expect(steppedDecimals(3, 1)).toBe(4);
+    expect(steppedDecimals(3, -1)).toBe(2);
+    expect(steppedDecimals(MAX_NUMBER_DECIMALS, 1)).toBe(MAX_NUMBER_DECIMALS);
+  });
+});
+
+describe("numberDecimalsPatch", () => {
+  it("carries the fixed fraction digits", () => {
+    expect(numberDecimalsPatch(2)).toEqual({ decimals: 2 });
+  });
+
+  it("clears the key for Auto", () => {
+    expect(numberDecimalsPatch(undefined)).toEqual({ decimals: undefined });
+  });
+});
+
+describe("numberGroupingPatch", () => {
+  it("clears the key when enabling (absent = on)", () => {
+    expect(numberGroupingPatch(true)).toEqual({ useGrouping: undefined });
+  });
+
+  it("stores false when disabling", () => {
+    expect(numberGroupingPatch(false)).toEqual({ useGrouping: false });
+  });
+});
+
+describe("dateFormatPatch", () => {
+  it("carries non-default formats", () => {
+    expect(dateFormatPatch("long")).toEqual({ format: "long" });
+    expect(dateFormatPatch("relative")).toEqual({ format: "relative" });
+    expect(dateFormatPatch("iso")).toEqual({ format: "iso" });
+  });
+
+  it("clears the key for Default (absent = default)", () => {
+    expect(dateFormatPatch("default")).toEqual({ format: undefined });
   });
 });
 

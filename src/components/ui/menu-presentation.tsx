@@ -293,6 +293,8 @@ const rowClassName = (destructive?: boolean) =>
 
 interface DrawerMenuRowProps {
   children: ReactNode;
+  /** Merged after the base row classes (callers can compact/retint a row). */
+  className?: string;
   destructive?: boolean;
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLElement>) => void;
@@ -308,6 +310,7 @@ interface DrawerMenuRowProps {
  */
 export function DrawerMenuRow({
   children,
+  className,
   destructive,
   disabled,
   onClick,
@@ -340,7 +343,11 @@ export function DrawerMenuRow({
     return cloneElement(
       render as ReactElement<Record<string, unknown>>,
       {
-        className: cn(rowClassName(destructive), renderProps.className),
+        className: cn(
+          rowClassName(destructive),
+          className,
+          renderProps.className
+        ),
         "data-disabled": disabled ? "" : undefined,
         onClick: handleRenderClick,
       },
@@ -359,7 +366,7 @@ export function DrawerMenuRow({
 
   return (
     <button
-      className={rowClassName(destructive)}
+      className={cn(rowClassName(destructive), className)}
       data-disabled={disabled ? "" : undefined}
       disabled={disabled}
       onClick={handleClick}
@@ -370,9 +377,26 @@ export function DrawerMenuRow({
   );
 }
 
-export function DrawerMenuSectionLabel({ children }: { children: ReactNode }) {
+/**
+ * Section label above a drawer row group. Sentence case like every other
+ * menu label (no uppercase transform), and a flex row so trailing `ml-auto`
+ * content (e.g. the column menu's Synced badge) sits at the right edge in
+ * drawer mode exactly as it does in the popover presentation.
+ */
+export function DrawerMenuSectionLabel({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="px-3 pt-2 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+    <div
+      className={cn(
+        "flex items-center px-3 pt-2 pb-1 font-medium text-muted-foreground text-xs",
+        className
+      )}
+    >
       {children}
     </div>
   );

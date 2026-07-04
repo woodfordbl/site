@@ -74,6 +74,12 @@ function selectedOptions(
 interface DatabaseCellValueViewProps {
   field: DatabaseField;
   mode: "view" | "edit";
+  /**
+   * Display clock instant for `relative`-format date fields — pass the table
+   * view's visible clock tick so "3 days ago" re-renders as time passes.
+   * Omitted (e.g. row-page properties panel) it falls back to render-time.
+   */
+  now?: Date;
   value: DatabaseCellValue | undefined;
 }
 
@@ -112,12 +118,34 @@ function DatabaseFormulaCellValue({
 }
 
 /**
+ * Date cell display: the field's date format over the coerced ISO string,
+ * with the table view's clock instant injected so `relative` text matches
+ * the tick that re-rendered the row (falling back to render-time when the
+ * host surface has no ticking clock).
+ */
+function DatabaseDateCellValue({
+  field,
+  now,
+  value,
+}: {
+  field: DatabaseField;
+  now: Date | undefined;
+  value: DatabaseCellValue;
+}): ReactNode {
+  const opts = now === undefined ? undefined : { now: () => now };
+  return (
+    <span className="truncate">{formatCellValue(field, value, opts)}</span>
+  );
+}
+
+/**
  * Render one cell's stored value for display. Empty cells render nothing;
  * wrong-shaped values are coerced defensively and never throw.
  */
 export function DatabaseCellValueView({
   field,
   mode,
+  now,
   value,
 }: DatabaseCellValueViewProps): ReactNode {
   // Formula cells render the merged computed value (or the error marker)
@@ -195,9 +223,7 @@ export function DatabaseCellValueView({
       );
     }
     case "date":
-      return (
-        <span className="truncate">{formatCellValue(field, coerced)}</span>
-      );
+      return <DatabaseDateCellValue field={field} now={now} value={coerced} />;
     default:
       return null;
   }

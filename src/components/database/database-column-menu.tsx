@@ -7,6 +7,7 @@ import {
   IconCopy,
   IconEyeOff,
   IconLayoutGrid,
+  IconMinus,
   IconPhoto,
   IconPhotoOff,
   IconPinned,
@@ -21,6 +22,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { format as formatDate } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -35,15 +37,20 @@ import {
   aggregateFnsForFieldType,
   calculationsWithSelection,
   columnOrderWithInsert,
+  dateFormatPatch,
   expressionPatch,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
   logicalColumnOrder,
+  MAX_NUMBER_DECIMALS,
+  numberDecimalsPatch,
   numberFormatPatch,
+  numberGroupingPatch,
   recoloredSelectOptions,
   renamedSelectOptions,
   selectOptionsPatch,
+  steppedDecimals,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
   withAddedSelectOption,
@@ -96,6 +103,7 @@ import {
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
@@ -106,6 +114,7 @@ import { compareManualOrder } from "@/lib/databases/row-sort.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
+  type DatabaseDateFormat,
   type DatabaseField,
   type DatabaseNumberFormat,
   type DatabaseSelectOption,
@@ -136,6 +145,23 @@ const NUMBER_FORMAT_LABELS: Record<DatabaseNumberFormat, string> = {
   integer: "Integer",
   percent: "Percent",
   currency: "Currency",
+};
+
+/** Sample rendered by the number submenu's live example line. */
+const NUMBER_EXAMPLE_VALUE = 1234.5678;
+
+const DATE_FORMATS = [
+  "default",
+  "long",
+  "relative",
+  "iso",
+] as const satisfies readonly DatabaseDateFormat[];
+
+const DATE_FORMAT_LABELS: Record<DatabaseDateFormat, string> = {
+  default: "Default",
+  long: "Long",
+  relative: "Relative",
+  iso: "ISO",
 };
 
 /**
@@ -209,7 +235,7 @@ function ColumnRenameInput({
 
   return (
     <div className="p-1 pb-2">
-      <InputGroup className="h-8">
+      <InputGroup className="h-8 pointer-coarse:h-10">
         <InputGroupAddon align="inline-start">
           <InputGroupText>
             <FieldIcon className="stroke-[1.5px]" />
@@ -266,10 +292,12 @@ function SelectOptionRow({
     <div className="flex items-center gap-1">
       <DropdownMenuSub>
         {/* Compact swatch-only trigger: the swatch is the label, so the
-            wrapper's trailing chevron is hidden. */}
+            wrapper's trailing chevron is hidden. Sizing applies in BOTH
+            presentations (the drawer row would otherwise stretch full-width
+            and crush the rename input); touch gets a larger hit area. */}
         <DropdownMenuSubTrigger
           aria-label={`Change color for option ${option.name}`}
-          className="size-7 shrink-0 justify-center p-0 [&>svg]:hidden"
+          className="pointer-coarse:size-10 size-7 shrink-0 justify-center rounded-md p-0 [&>span]:justify-center [&>svg]:hidden"
         >
           <BlockColorSwatch color={option.color} variant="background" />
         </DropdownMenuSubTrigger>
@@ -280,7 +308,7 @@ function SelectOptionRow({
           />
         </DropdownMenuSubContent>
       </DropdownMenuSub>
-      <InputGroup className="h-8 flex-1">
+      <InputGroup className="h-8 pointer-coarse:h-10 flex-1">
         <InputGroupInput
           aria-label={`Rename option ${option.name}`}
           autoComplete="off"
@@ -356,7 +384,7 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
           option={option}
         />
       ))}
-      <InputGroup className="h-8">
+      <InputGroup className="h-8 pointer-coarse:h-10">
         <InputGroupAddon align="inline-start">
           <InputGroupText>
             <IconPlus />
@@ -429,6 +457,152 @@ function FormulaExpressionEditor({
   );
 }
 
+interface NumberPropertyEditorProps {
+  databaseId: string;
+  field: DatabaseField & { type: "number" };
+}
+
+/**
+ * Number display config: the format preset radio, a Decimals stepper (Auto =
+ * the format's natural precision, 0-6 pins fixed fraction digits), a
+ * thousands-separators switch, and a muted live example line rendering
+ * {@link NUMBER_EXAMPLE_VALUE} through the real cell formatter so it can
+ * never drift from grid output.
+ *
+ * Excel-style custom format strings ("#,##0.00"-style codes) are a
+ * deliberate non-goal here: the presets plus decimals plus grouping cover
+ * the practical range, and custom codes would need a pattern parser and an
+ * error surface for invalid input.
+ */
+function NumberPropertyEditor({
+  databaseId,
+  field,
+}: NumberPropertyEditorProps) {
+  const stepDecimals = (delta: 1 | -1) => {
+    updateDatabaseField(
+      databaseId,
+      field.id,
+      numberDecimalsPatch(steppedDecimals(field.decimals, delta))
+    );
+  };
+
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>Number format</DropdownMenuLabel>
+      </DropdownMenuGroup>
+      <DropdownMenuRadioGroup
+        onValueChange={(value) => {
+          updateDatabaseField(
+            databaseId,
+            field.id,
+            numberFormatPatch(value as DatabaseNumberFormat)
+          );
+        }}
+        value={field.format ?? "plain"}
+      >
+        {NUMBER_FORMATS.map((format) => (
+          <DropdownMenuRadioItem key={format} value={format}>
+            {NUMBER_FORMAT_LABELS[format]}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator />
+      <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-1.5 text-sm">
+        Decimals
+        <span className="flex items-center gap-0.5">
+          <Button
+            aria-label="Fewer decimals"
+            disabled={field.decimals === undefined}
+            onClick={() => {
+              stepDecimals(-1);
+            }}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <IconMinus />
+          </Button>
+          <span className="min-w-8 text-center text-muted-foreground text-xs tabular-nums">
+            {field.decimals ?? "Auto"}
+          </span>
+          <Button
+            aria-label="More decimals"
+            disabled={field.decimals === MAX_NUMBER_DECIMALS}
+            onClick={() => {
+              stepDecimals(1);
+            }}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <IconPlus />
+          </Button>
+        </span>
+      </div>
+      <DropdownMenuSwitchItem
+        checked={field.useGrouping !== false}
+        onCheckedChange={(checked) => {
+          updateDatabaseField(
+            databaseId,
+            field.id,
+            numberGroupingPatch(checked)
+          );
+        }}
+      >
+        Thousands separators
+      </DropdownMenuSwitchItem>
+      <DropdownMenuSeparator />
+      {/* Live example: the field already carries the current settings, so
+          formatting it directly reflects every change immediately. */}
+      <div className="px-2 py-1 text-muted-foreground text-xs tabular-nums">
+        {formatCellValue(field, NUMBER_EXAMPLE_VALUE)}
+      </div>
+    </>
+  );
+}
+
+interface DatePropertyEditorProps {
+  databaseId: string;
+  field: DatabaseField & { type: "date" };
+}
+
+/**
+ * Date display config: the format radio (Default / Long / Relative / ISO),
+ * each option trailed by a muted example of TODAY's date rendered through
+ * the real cell formatter so examples never drift from grid output. Writes
+ * go through `dateFormatPatch` (Default clears the key — absent = default).
+ */
+function DatePropertyEditor({ databaseId, field }: DatePropertyEditorProps) {
+  // Local date parts (not toISOString) so the example never shows the UTC
+  // calendar day near midnight.
+  const todayIso = formatDate(new Date(), "yyyy-MM-dd");
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>Date format</DropdownMenuLabel>
+      </DropdownMenuGroup>
+      <DropdownMenuRadioGroup
+        onValueChange={(value) => {
+          updateDatabaseField(
+            databaseId,
+            field.id,
+            dateFormatPatch(value as DatabaseDateFormat)
+          );
+        }}
+        value={field.format ?? "default"}
+      >
+        {DATE_FORMATS.map((dateFormat) => (
+          <DropdownMenuRadioItem key={dateFormat} value={dateFormat}>
+            {DATE_FORMAT_LABELS[dateFormat]}
+            <span className="ml-auto pl-3 text-muted-foreground text-xs">
+              {formatCellValue({ ...field, format: dateFormat }, todayIso)}
+            </span>
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </>
+  );
+}
+
 interface EditPropertySubmenuProps {
   databaseId: string;
   field: DatabaseField;
@@ -437,9 +611,10 @@ interface EditPropertySubmenuProps {
 }
 
 /**
- * Per-type "Edit property" config submenu: number → format picker,
- * select/multi-select → option list editor, formula → expression editor.
- * Types without config render nothing (the submenu is omitted entirely).
+ * Per-type "Edit property" config submenu: number → format/decimals/grouping
+ * display config, date → display format picker, select/multi-select → option
+ * list editor, formula → expression editor. Types without config render
+ * nothing (the submenu is omitted entirely).
  */
 function EditPropertySubmenu({
   databaseId,
@@ -474,25 +649,21 @@ function EditPropertySubmenu({
           Edit property
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Number format</DropdownMenuLabel>
-          </DropdownMenuGroup>
-          <DropdownMenuRadioGroup
-            onValueChange={(value) => {
-              updateDatabaseField(
-                databaseId,
-                field.id,
-                numberFormatPatch(value as DatabaseNumberFormat)
-              );
-            }}
-            value={field.format ?? "plain"}
-          >
-            {NUMBER_FORMATS.map((format) => (
-              <DropdownMenuRadioItem key={format} value={format}>
-                {NUMBER_FORMAT_LABELS[format]}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+          <NumberPropertyEditor databaseId={databaseId} field={field} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
+  if (field.type === "date") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconSettings />
+          Edit property
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <DatePropertyEditor databaseId={databaseId} field={field} />
         </DropdownMenuSubContent>
       </DropdownMenuSub>
     );
@@ -758,13 +929,15 @@ export function DatabaseColumnMenu({
             }}
           />
           <DropdownMenuGroup>
-            <DropdownMenuLabel className="flex items-center">
-              {FIELD_TYPE_DEFS[field.type].label}
+            <DropdownMenuLabel className="flex items-center gap-2">
+              <span className="min-w-0 truncate">
+                {FIELD_TYPE_DEFS[field.type].label}
+              </span>
               {synced ? (
-                <span className="ml-auto inline-flex items-center gap-1 font-normal">
+                <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-normal text-[11px] text-muted-foreground">
                   <IconCloudDown
                     aria-hidden
-                    className="size-3.5 stroke-[1.5px]"
+                    className="size-3 stroke-[1.5px]"
                   />
                   Synced
                 </span>

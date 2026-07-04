@@ -4,6 +4,7 @@ import {
   IconCheck,
   IconClock,
   IconColumns3,
+  IconCopy,
   IconDatabase,
   IconDots,
   IconEye,
@@ -28,6 +29,10 @@ import {
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import {
+  AddDatabaseViewMenuItems,
+  DATABASE_VIEW_TYPE_ICONS,
+} from "@/components/database/database-view-switcher.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -50,6 +55,8 @@ import {
 } from "@/components/ui/input-group.tsx";
 import {
   deleteDatabase,
+  duplicateDatabaseView,
+  removeDatabaseView,
   renameDatabase,
   reorderDatabaseFields,
   updateDatabaseSource,
@@ -68,7 +75,6 @@ import type {
   DatabaseField,
   DatabaseSource,
   DatabaseView,
-  DatabaseViewType,
   LocalDatabase,
 } from "@/lib/schemas/database.ts";
 
@@ -76,15 +82,10 @@ import type {
  * Database ⋯ settings menu in the title row (edit mode only), following the
  * page header menu conventions: rename-in-place at top, Properties / Views /
  * Source submenus, a two-step destructive Delete, and a non-interactive stats
- * footer. All writes go through the database collection ops.
+ * footer. All writes go through the database collection ops. Per-view
+ * sections (Properties visibility, Group, Vertical separators) scope to the
+ * ACTIVE view threaded from the title row — never `views[0]`.
  */
-
-const VIEW_TYPE_LABELS: Record<DatabaseViewType, string> = {
-  table: "Table",
-  list: "List",
-  board: "Board",
-  chart: "Chart",
-};
 
 /** Timestamps in menu copy: "Jan 5, 2026 3:24 PM". */
 function formatTimestamp(iso: string): string {
@@ -133,7 +134,7 @@ function DatabaseRenameInput({
 
   return (
     <div className="p-1 pb-2">
-      <InputGroup className="h-8">
+      <InputGroup className="h-8 pointer-coarse:h-10">
         <InputGroupAddon align="inline-start">
           <InputGroupText>
             <IconDatabase className="stroke-[1.5px]" />
@@ -190,11 +191,11 @@ function PropertyRow({
   const FieldIcon = resolveFieldIcon(field);
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm">
+    <div className="flex min-h-8 pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-1.5 py-1 text-sm">
       <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">{field.name}</span>
       {isPrimary ? (
-        <span className="shrink-0 rounded-sm bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
           Title
         </span>
       ) : null}
@@ -236,18 +237,18 @@ function PropertyRow({
 
 interface PropertiesSubmenuProps {
   database: LocalDatabase;
+  /** The active view — field visibility is a per-view setting. */
+  view: DatabaseView;
 }
 
 /**
  * Properties submenu: one row per field in schema order with reorder and
- * hide/show controls. Visibility writes `visibleFieldIds` on the FIRST view
- * only for now — multi-view threading is deferred with linked views.
+ * hide/show controls. Visibility writes `visibleFieldIds` on the ACTIVE view;
+ * reorder rewrites the schema (all views).
  */
-function PropertiesSubmenu({ database }: PropertiesSubmenuProps) {
-  const view = database.views[0];
-
+function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
   const isVisible = (fieldId: string): boolean =>
-    !view?.visibleFieldIds || view.visibleFieldIds.includes(fieldId);
+    !view.visibleFieldIds || view.visibleFieldIds.includes(fieldId);
 
   const moveField = (index: number, delta: -1 | 1) => {
     const ids = database.fields.map((field) => field.id);
@@ -260,9 +261,6 @@ function PropertiesSubmenu({ database }: PropertiesSubmenuProps) {
   };
 
   const toggleVisible = (fieldId: string) => {
-    if (!view) {
-      return;
-    }
     const allFieldIds = database.fields.map((field) => field.id);
     const next = isVisible(fieldId)
       ? visibleFieldIdsAfterHide(view.visibleFieldIds, allFieldIds, fieldId)
@@ -300,20 +298,17 @@ function PropertiesSubmenu({ database }: PropertiesSubmenuProps) {
 
 interface GroupSubmenuProps {
   database: LocalDatabase;
+  /** The active view — grouping is a per-view setting. */
+  view: DatabaseView;
 }
 
 /**
  * Group submenu: "None" plus every groupable field (formula fields are
- * excluded — no stable stored bucket key). Picking a field groups the FIRST
- * view (same single-view scope as Properties) and resets the collapse
- * state; re-picking the active field is a no-op so collapsed groups
- * survive an accidental click.
+ * excluded — no stable stored bucket key). Picking a field groups the ACTIVE
+ * view and resets the collapse state; re-picking the active field is a no-op
+ * so collapsed groups survive an accidental click.
  */
-function GroupSubmenu({ database }: GroupSubmenuProps) {
-  const view = database.views[0];
-  if (!view) {
-    return null;
-  }
+function GroupSubmenu({ database, view }: GroupSubmenuProps) {
   const activeFieldId = view.groupBy?.fieldId;
   const groupableFields = database.fields.filter(isGroupableField);
 
@@ -367,12 +362,27 @@ function GroupSubmenu({ database }: GroupSubmenuProps) {
 }
 
 interface ViewRowProps {
+  /** Delete guard: the last remaining view can never be removed. */
+  canDelete: boolean;
   databaseId: string;
+  /** Activates a view after Duplicate (the copy becomes the active view). */
+  onViewIdChange?: (viewId: string) => void;
   view: DatabaseView;
 }
 
-/** One view row: inline rename input with the view type as a trailing label. */
-function ViewRow({ databaseId, view }: ViewRowProps) {
+/**
+ * One view row: type icon, inline rename input, and Duplicate / Delete
+ * actions. Delete is disabled on the last view (`removeDatabaseView` also
+ * refuses at the op level); Duplicate switches the block to the copy.
+ */
+function ViewRow({
+  canDelete,
+  databaseId,
+  onViewIdChange,
+  view,
+}: ViewRowProps) {
+  const TypeIcon = DATABASE_VIEW_TYPE_ICONS[view.type];
+
   const commit = (value: string) => {
     const trimmed = value.trim();
     if (trimmed !== "" && trimmed !== view.name) {
@@ -381,51 +391,92 @@ function ViewRow({ databaseId, view }: ViewRowProps) {
   };
 
   return (
-    <InputGroup className="h-8">
-      <InputGroupInput
-        aria-label={`Rename view ${view.name}`}
-        autoComplete="off"
-        defaultValue={view.name}
-        onBlur={(event) => {
-          commit(event.currentTarget.value);
-        }}
-        onKeyDown={(event) => {
-          stopMenuKeys(event);
-          if (event.key === "Enter") {
-            event.preventDefault();
+    <div className="flex items-center gap-1">
+      <InputGroup className="h-8 min-w-0 flex-1">
+        <InputGroupAddon align="inline-start">
+          <InputGroupText>
+            <TypeIcon className="stroke-[1.5px]" />
+          </InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput
+          aria-label={`Rename view ${view.name}`}
+          autoComplete="off"
+          defaultValue={view.name}
+          onBlur={(event) => {
             commit(event.currentTarget.value);
+          }}
+          onKeyDown={(event) => {
+            stopMenuKeys(event);
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit(event.currentTarget.value);
+            }
+          }}
+        />
+      </InputGroup>
+      <Button
+        aria-label={`Duplicate view ${view.name}`}
+        onClick={() => {
+          const copy = duplicateDatabaseView(databaseId, view.id);
+          if (copy) {
+            onViewIdChange?.(copy.id);
           }
         }}
-      />
-      <InputGroupAddon align="inline-end">
-        <InputGroupText>{VIEW_TYPE_LABELS[view.type]}</InputGroupText>
-      </InputGroupAddon>
-    </InputGroup>
+        size="icon-xs"
+        variant="ghost"
+      >
+        <IconCopy />
+      </Button>
+      <Button
+        aria-label={`Delete view ${view.name}`}
+        disabled={!canDelete}
+        onClick={() => {
+          removeDatabaseView(databaseId, view.id);
+        }}
+        size="icon-xs"
+        variant="ghost"
+      >
+        <IconTrash />
+      </Button>
+    </div>
   );
 }
 
 interface ViewsSubmenuProps {
   database: LocalDatabase;
+  /** Activates a view (Add view / Duplicate switch the block to it). */
+  onViewIdChange?: (viewId: string) => void;
 }
 
 /**
- * Views submenu: the database's saved views with inline rename and the view
- * type label. "Add view" and per-view style pickers are Phase 2 (multi-view
- * switching / linked-view threading) — intentionally omitted here.
+ * Views submenu: the database's saved views with inline rename, per-view
+ * Duplicate / Delete (guarded to keep at least one view), and the Add view
+ * entries mirroring the title-row switcher's "+".
  */
-function ViewsSubmenu({ database }: ViewsSubmenuProps) {
+function ViewsSubmenu({ database, onViewIdChange }: ViewsSubmenuProps) {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <IconLayoutList />
         Views
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
+      <DropdownMenuSubContent className="w-64 min-w-64">
         <div className="flex flex-col gap-1 p-1">
           {database.views.map((view) => (
-            <ViewRow databaseId={database.id} key={view.id} view={view} />
+            <ViewRow
+              canDelete={database.views.length > 1}
+              databaseId={database.id}
+              key={view.id}
+              onViewIdChange={onViewIdChange}
+              view={view}
+            />
           ))}
         </div>
+        <DropdownMenuSeparator />
+        <AddDatabaseViewMenuItems
+          databaseId={database.id}
+          onCreated={onViewIdChange}
+        />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -529,7 +580,7 @@ function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
   return (
     <div className="px-2 py-2">
       <span className="text-muted-foreground text-xs">{auth.label}</span>
-      <InputGroup className="mt-1 h-8">
+      <InputGroup className="mt-1 h-8 pointer-coarse:h-10">
         <InputGroupInput
           aria-label={auth.label}
           autoComplete="off"
@@ -743,6 +794,12 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 export interface DatabaseSettingsMenuProps {
+  /**
+   * The ACTIVE view (block-resolved) — the per-view sections (Properties
+   * visibility, Group, Vertical separators) write to it. Absent only when
+   * the database has no views at all (degenerate data).
+   */
+  activeView?: DatabaseView;
   database: LocalDatabase;
   /** Whether the hosting block currently hides the title row text. */
   hideTitle?: boolean;
@@ -751,6 +808,8 @@ export interface DatabaseSettingsMenuProps {
    * write to) the "Hide title" switch row is not rendered.
    */
   onHideTitleChange?: (hideTitle: boolean) => void;
+  /** Activates a view — Views submenu Add/Duplicate switch the block to it. */
+  onViewIdChange?: (viewId: string) => void;
   /** Total (unfiltered) row count — stats footer and Source section. */
   rowCount: number;
 }
@@ -763,9 +822,11 @@ export interface DatabaseSettingsMenuProps {
  * are references and fall back to their "not found" empty state.
  */
 export function DatabaseSettingsMenu({
+  activeView,
   database,
   hideTitle = false,
   onHideTitleChange,
+  onViewIdChange,
   rowCount,
 }: DatabaseSettingsMenuProps): ReactNode {
   const [open, setOpen] = useState(false);
@@ -793,7 +854,9 @@ export function DatabaseSettingsMenu({
     [commitRename, database.name]
   );
 
-  const firstView: DatabaseView | undefined = database.views[0];
+  // Per-view menu sections scope to the block's active view; `views[0]` is
+  // only the degenerate fallback (callers without view context).
+  const view: DatabaseView | undefined = activeView ?? database.views[0];
 
   const handleDeleteClick = () => {
     if (!confirmingDelete) {
@@ -831,9 +894,9 @@ export function DatabaseSettingsMenu({
           }}
         />
         <DropdownMenuSeparator />
-        <PropertiesSubmenu database={database} />
-        <ViewsSubmenu database={database} />
-        <GroupSubmenu database={database} />
+        {view ? <PropertiesSubmenu database={database} view={view} /> : null}
+        <ViewsSubmenu database={database} onViewIdChange={onViewIdChange} />
+        {view ? <GroupSubmenu database={database} view={view} /> : null}
         {onHideTitleChange ? (
           <DropdownMenuSwitchItem
             checked={hideTitle}
@@ -843,12 +906,12 @@ export function DatabaseSettingsMenu({
             Hide title
           </DropdownMenuSwitchItem>
         ) : null}
-        {firstView ? (
+        {view && view.type === "table" ? (
           <DropdownMenuSwitchItem
-            checked={firstView.config.showVerticalLines !== false}
+            checked={view.config.showVerticalLines !== false}
             onCheckedChange={(next) => {
-              updateDatabaseView(database.id, firstView.id, {
-                config: { ...firstView.config, showVerticalLines: next },
+              updateDatabaseView(database.id, view.id, {
+                config: { ...view.config, showVerticalLines: next },
               });
             }}
           >

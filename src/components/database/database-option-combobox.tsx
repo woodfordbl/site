@@ -19,6 +19,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { useResolvedMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
 import type { DatabaseSelectOption } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -61,6 +62,9 @@ export function DatabaseOptionCombobox({
 }: DatabaseOptionComboboxProps): ReactNode {
   const [query, setQuery] = useState("");
   const focusOnMount = useFocusOnMount();
+  // In drawer presentation the drawer body scrolls (vaul's at-top drag
+  // contract intact) — a popover max-height would clip long option lists.
+  const isDrawer = useResolvedMenuPresentation() === "drawer";
   const trimmed = query.trim();
 
   const filtered = useMemo(() => {
@@ -138,7 +142,12 @@ export function DatabaseOptionCombobox({
           value={query}
         />
       </InputGroup>
-      <div className="flex max-h-56 flex-col overflow-y-auto">
+      <div
+        className={cn(
+          "flex flex-col",
+          isDrawer ? undefined : "max-h-56 overflow-y-auto"
+        )}
+      >
         {filtered.map((option) => (
           <ComboboxOptionRow
             fieldId={fieldId}

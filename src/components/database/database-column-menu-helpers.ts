@@ -1,5 +1,6 @@
 import type {
   DatabaseAggregateFn,
+  DatabaseDateFormat,
   DatabaseField,
   DatabaseFieldType,
   DatabaseNumberFormat,
@@ -211,6 +212,59 @@ export function numberFormatPatch(
   format: DatabaseNumberFormat
 ): DatabaseFieldPatch {
   return { format } as DatabaseFieldPatch;
+}
+
+/** Decimals stepper bounds (mirrors the schema's 0-6 cap). */
+export const MAX_NUMBER_DECIMALS = 6;
+
+/**
+ * Next `decimals` value after one stepper click: "Auto" (undefined — the
+ * format's natural precision) sits below 0, so decrementing 0 returns to
+ * Auto and incrementing Auto lands on 0; steps clamp at the schema cap.
+ */
+export function steppedDecimals(
+  decimals: number | undefined,
+  delta: 1 | -1
+): number | undefined {
+  if (decimals === undefined) {
+    return delta === 1 ? 0 : undefined;
+  }
+  const next = decimals + delta;
+  if (next < 0) {
+    return;
+  }
+  return Math.min(next, MAX_NUMBER_DECIMALS);
+}
+
+/**
+ * Field patch setting a number field's fixed fraction digits — `undefined`
+ * ("Auto") clears the key back to the format's natural precision.
+ */
+export function numberDecimalsPatch(
+  decimals: number | undefined
+): DatabaseFieldPatch {
+  return { decimals } as DatabaseFieldPatch;
+}
+
+/**
+ * Field patch setting a number field's thousands separators. Absent = on is
+ * the schema convention, so enabling CLEARS the key and only `false` is ever
+ * stored.
+ */
+export function numberGroupingPatch(useGrouping: boolean): DatabaseFieldPatch {
+  return { useGrouping: useGrouping ? undefined : false } as DatabaseFieldPatch;
+}
+
+/**
+ * Field patch setting a date field's display format. Absent = `default` is
+ * the schema convention, so picking Default clears the key.
+ */
+export function dateFormatPatch(
+  format: DatabaseDateFormat
+): DatabaseFieldPatch {
+  return {
+    format: format === "default" ? undefined : format,
+  } as DatabaseFieldPatch;
 }
 
 /** Field patch replacing a select/multi-select option list. */
