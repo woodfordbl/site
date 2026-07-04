@@ -1,4 +1,8 @@
-import { IconMathFunction, IconSearch } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconMathFunction,
+  IconSearch,
+} from "@tabler/icons-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -162,6 +166,7 @@ export function FormulaEditorPanel({
 }: FormulaEditorPanelProps): ReactNode {
   const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
+  const [errorOpen, setErrorOpen] = useState(false);
   const fieldRef = useRef<FormulaCodeFieldHandle>(null);
   const coarse = useIsCoarsePrimaryPointer();
 
@@ -256,16 +261,30 @@ export function FormulaEditorPanel({
     operatorEntries.length === 0;
 
   let status: ReactNode = null;
-  if (parsed !== null) {
-    status = parsed.ok ? (
+  if (parsed?.ok) {
+    status = (
       <span className="px-0.5 text-muted-foreground text-xs">
         ✓ Valid
         {resultType && resultType !== "unknown" ? ` · ${resultType}` : ""}
       </span>
-    ) : (
-      <span className="px-0.5 text-destructive text-xs">
-        {parsed.error.message} (at character {parsed.error.position + 1})
-      </span>
+    );
+  } else if (parsed !== null) {
+    // Errors (often just mid-edit) stay quiet: a small triangle that reveals
+    // the message on hover (title) or tap (toggles it inline).
+    const message = `${parsed.error.message} (at character ${parsed.error.position + 1})`;
+    status = (
+      <button
+        aria-label={message}
+        className="flex items-center gap-1 self-start rounded px-0.5 text-destructive text-xs outline-none focus-visible:bg-accent"
+        onClick={() => {
+          setErrorOpen((open) => !open);
+        }}
+        title={message}
+        type="button"
+      >
+        <IconAlertTriangle className="size-3.5 shrink-0 stroke-[1.5px]" />
+        {errorOpen ? <span className="text-left">{message}</span> : null}
+      </button>
     );
   }
 

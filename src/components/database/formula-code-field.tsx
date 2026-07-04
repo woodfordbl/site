@@ -4,6 +4,7 @@ import {
   type Ref,
   type SyntheticEvent,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -163,6 +164,7 @@ export function FormulaCodeField({
 }: FormulaCodeFieldProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const composingRef = useRef(false);
+  const recolorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fieldByName = useMemo(() => {
     const map = new Map<string, DatabaseField>();
@@ -174,33 +176,69 @@ export function FormulaCodeField({
     }
     return map;
   }, [fields]);
+  // Latest map for the debounced/blur callbacks (avoids stale closures).
+  const fieldByNameRef = useRef(fieldByName);
+  fieldByNameRef.current = fieldByName;
 
-  // Initial (and SSR) markup; identity is stable so React never rewrites it —
-  // the layout effect owns syncing the DOM to the model after mount.
+  // Initial (and SSR) markup; identity is stable so React never rewrites it.
   const initialHtmlRef = useRef<{ __html: string } | null>(null);
   if (initialHtmlRef.current === null) {
     initialHtmlRef.current = { __html: sourceToHtml(value, fieldByName) };
   }
 
-  useLayoutEffect(() => {
+  /**
+   * Re-tokenize the DOM in place: recolor spans and (re)build chips from
+   * whatever source the field currently holds, preserving the caret. This is
+   * the ONLY thing that replaces the DOM, and it deliberately runs on a pause
+   * or on blur — never per keystroke — so typing stays native and smooth.
+   */
+  const recolor = useCallback((preserveCaret: boolean) => {
     const root = rootRef.current;
     if (!root || composingRef.current) {
       return;
     }
-    const html = sourceToHtml(value, fieldByName);
+    const source = serializeFormulaDom(root);
+    const html = sourceToHtml(source, fieldByNameRef.current);
     if (root.innerHTML === html) {
+      return;
+    }
+    const caret = preserveCaret ? getFormulaCaret(root) : null;
+    root.innerHTML = html;
+    if (caret) {
+      setFormulaCaret(root, {
+        start: Math.min(caret.start, source.length),
+        end: Math.min(caret.end, source.length),
+      });
+    }
+  }, []);
+
+  // Sync the DOM only on EXTERNAL value changes (programmatic insert, reset).
+  // A change whose text already matches the DOM came from our own typing — we
+  // leave that DOM alone so the native edit isn't disturbed.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || composingRef.current || serializeFormulaDom(root) === value) {
       return;
     }
     const hadFocus = root.ownerDocument.activeElement === root;
     const caret = hadFocus ? getFormulaCaret(root) : null;
-    root.innerHTML = html;
+    root.innerHTML = sourceToHtml(value, fieldByName);
     if (caret) {
       setFormulaCaret(root, {
         start: Math.min(caret.start, value.length),
         end: Math.min(caret.end, value.length),
       });
     }
-  });
+  }, [value, fieldByName]);
+
+  useEffect(
+    () => () => {
+      if (recolorTimerRef.current) {
+        clearTimeout(recolorTimerRef.current);
+      }
+    },
+    []
+  );
 
   const emit = useCallback(() => {
     const root = rootRef.current;
@@ -210,10 +248,16 @@ export function FormulaCodeField({
   }, [onChange]);
 
   const handleInput = useCallback(() => {
-    if (!composingRef.current) {
-      emit();
+    if (composingRef.current) {
+      return;
     }
-  }, [emit]);
+    emit();
+    // Recolor shortly after typing pauses (never mid-keystroke).
+    if (recolorTimerRef.current) {
+      clearTimeout(recolorTimerRef.current);
+    }
+    recolorTimerRef.current = setTimeout(() => recolor(true), 350);
+  }, [emit, recolor]);
 
   useImperativeHandle(
     handleRef,
@@ -231,7 +275,7 @@ export function FormulaCodeField({
         const end = caret?.end ?? source.length;
         onChange(source.slice(0, start) + text + source.slice(end));
         const next = start + caretOffset;
-        // Restore the caret after the value change rebuilds the DOM.
+        // Value change rebuilds the DOM (external path); place the caret after.
         requestAnimationFrame(() => {
           const current = rootRef.current;
           if (current) {
@@ -242,6 +286,47 @@ export function FormulaCodeField({
       },
     }),
     [onChange]
+  );
+
+  // Backspace/Delete adjacent to a chip removes the WHOLE reference in one go,
+  // rather than leaving the browser to chip away at its inner label.
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      onKeyDown?.(event);
+      if (
+        event.defaultPrevented ||
+        composingRef.current ||
+        (event.key !== "Backspace" && event.key !== "Delete")
+      ) {
+        return;
+      }
+      const root = rootRef.current;
+      const caret = root ? getFormulaCaret(root) : null;
+      if (!(root && caret) || caret.start !== caret.end) {
+        return;
+      }
+      const source = serializeFormulaDom(root);
+      const chips = scanExpressionSegments(source).filter(
+        (segment) => segment.className === "property"
+      );
+      const target =
+        event.key === "Backspace"
+          ? chips.find((chip) => chip.end === caret.start)
+          : chips.find((chip) => chip.start === caret.start);
+      if (!target) {
+        return;
+      }
+      event.preventDefault();
+      onChange(source.slice(0, target.start) + source.slice(target.end));
+      requestAnimationFrame(() => {
+        const current = rootRef.current;
+        if (current) {
+          current.focus();
+          setFormulaCaret(current, { start: target.start, end: target.start });
+        }
+      });
+    },
+    [onChange, onKeyDown]
   );
 
   // Enter never splits the field into <div>s: insert a literal newline (the
@@ -269,9 +354,10 @@ export function FormulaCodeField({
       if (root && pasted) {
         insertPlainTextAtSelection(root, pasted);
         emit();
+        recolor(true);
       }
     },
-    [emit]
+    [emit, recolor]
   );
 
   return (
@@ -289,6 +375,7 @@ export function FormulaCodeField({
       dangerouslySetInnerHTML={initialHtmlRef.current}
       data-placeholder={placeholder}
       onBeforeInput={handleBeforeInput}
+      onBlur={() => recolor(false)}
       onCompositionEnd={() => {
         composingRef.current = false;
         emit();
@@ -297,7 +384,7 @@ export function FormulaCodeField({
         composingRef.current = true;
       }}
       onInput={handleInput}
-      onKeyDown={onKeyDown}
+      onKeyDown={handleKeyDown}
       onPaste={handlePaste}
       ref={rootRef}
       role="textbox"

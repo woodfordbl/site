@@ -3,7 +3,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
-import { serializeFormulaDom } from "@/lib/editor/formula-dom.ts";
+import {
+  serializeFormulaDom,
+  setFormulaCaret,
+} from "@/lib/editor/formula-dom.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 // The panel only reads the coarse-pointer hint for row sizing; stub it so the
@@ -101,6 +104,19 @@ describe("FormulaEditorPanel", () => {
     // The function insert leaves the caret inside its parens, so the property
     // lands there; it serializes back to its full source via the chip.
     expect(serializeFormulaDom(field())).toBe("average(thisPage.Price)");
+  });
+
+  it("deletes a whole property chip on Backspace", async () => {
+    renderPanel("thisPage.Price");
+    await flushFrames();
+    const el = field();
+    const end = "thisPage.Price".length;
+    setFormulaCaret(el, { start: end, end });
+
+    fireEvent.keyDown(el, { key: "Backspace" });
+    await flushFrames();
+    // The entire reference is removed, not just a character of its label.
+    expect(serializeFormulaDom(el)).toBe("");
   });
 
   it("excludes formula fields from Properties and previews errors honestly", async () => {
