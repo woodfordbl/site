@@ -19,6 +19,7 @@
     "@tanstack/react-router-devtools": "^1.167.0",
     "@tanstack/react-router-ssr-query": "^1.167.1",
     "@tanstack/react-start": "^1.168.26",
+    "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.3",
     "@tanstack/router-plugin": "^1.168.18",
     "@vercel/og": "^0.11.1",

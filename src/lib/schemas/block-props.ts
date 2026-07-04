@@ -140,6 +140,16 @@ export const codePropsSchema = z.object({
   language: z.string().optional(),
 });
 
+/** `database` block props: a reference to a workspace database entity. Rows never live in the block tree. */
+export const databasePropsSchema = z.object({
+  /** Empty string until the placeholder flow creates/links a database. */
+  databaseId: z.string(),
+  /** Saved view to render; defaults to the database's first view. */
+  viewId: z.string().optional(),
+  /** Hide the title row for this block (per placement, like Notion). */
+  hideTitle: z.boolean().optional(),
+});
+
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
 export const embedPropsSchema = z.object({
   url: z.string(),
@@ -170,6 +180,7 @@ export type TabProps = z.infer<typeof tabPropsSchema>;
 export type MediaKind = z.infer<typeof mediaKindSchema>;
 export type MediaSource = z.infer<typeof mediaSourceSchema>;
 export type MediaProps = z.infer<typeof mediaPropsSchema>;
+export type DatabaseProps = z.infer<typeof databasePropsSchema>;
 export type EmbedProps = z.infer<typeof embedPropsSchema>;
 export type TableProps = z.infer<typeof tablePropsSchema>;
 export type TableRowProps = z.infer<typeof tableRowPropsSchema>;

@@ -3,12 +3,14 @@ import {
   IconCheckbox,
   IconChevronRight,
   IconCode,
+  IconDatabase,
   IconH1,
   IconH2,
   IconH3,
   IconH4,
   IconInfoCircle,
   IconLayoutColumns,
+  IconLayoutDashboard,
   IconLayoutNavbar,
   IconLink,
   IconList,
@@ -24,6 +26,8 @@ import { ChecklistItemEdit } from "@/components/blocks/types/checklist/checklist
 import { ChecklistItemView } from "@/components/blocks/types/checklist/checklist-item-view.tsx";
 import { CodeEdit } from "@/components/blocks/types/code/code-edit.tsx";
 import { CodeView } from "@/components/blocks/types/code/code-view.tsx";
+import { DatabaseEdit } from "@/components/blocks/types/database/database-edit.tsx";
+import { DatabaseView } from "@/components/blocks/types/database/database-view.tsx";
 import { DividerEdit } from "@/components/blocks/types/divider/divider-edit.tsx";
 import { DividerView } from "@/components/blocks/types/divider/divider-view.tsx";
 import { EmbedEdit } from "@/components/blocks/types/embed/embed-edit.tsx";
@@ -313,6 +317,19 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     View: EmbedView,
     Edit: EmbedEdit,
   },
+  database: {
+    type: "database",
+    label: "Database",
+    slashAliases: ["database", "db", "table database", "data"],
+    icon: IconDatabase,
+    createDefault: () => createEmptyBlock("database"),
+    behavior: {
+      editStrategy: "inline-custom",
+      capabilities: INLINE_CUSTOM_CAPABILITIES,
+    },
+    View: DatabaseView,
+    Edit: DatabaseEdit,
+  },
   column: {
     type: "column",
     label: "Column",
@@ -363,6 +380,19 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
         aliases: ["4", "four", "cols4"],
         icon: IconLayoutColumns,
         keywords: ["4 columns", "four columns", "columns", "cols"],
+      },
+      {
+        // Dashboard scaffold: 2 columns, each seeded with an unlinked
+        // `database` block placeholder — the documented composition pattern
+        // for dashboards (databases.md § Dashboards).
+        key: "columns-dashboard",
+        id: "columns",
+        columnCount: 2,
+        columnSeed: "database",
+        label: "Dashboard",
+        aliases: ["dashboard", "dash"],
+        icon: IconLayoutDashboard,
+        keywords: ["dashboard", "database views", "columns", "charts"],
       },
     ],
     Container: () => resolveRegisteredContainer("columns"),

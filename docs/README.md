@@ -14,6 +14,7 @@ Start here for canvas, pages, and data-layer behavior.
 - [Author dev mode](./architecture/author-dev-mode.md) — save to `content/pages/*.json`
 - [Block types](./architecture/block-types.md) — BlockSpec / ContainerSpec; how-to: [Adding a block type](./architecture/block-types.md#adding-a-block-type)
 - [Table blocks](./architecture/table-blocks.md) — grid model, keyboard, row/column DnD
+- [Databases](./architecture/databases.md) — typed fields, views, sharded rows, table grid, filter bar
 - [Haptics](./architecture/haptics.md) — semantic moments, device support, when (not) to buzz
 - [BlockNote comparison](./architecture/blocknote-comparison.md)
 - [Editor tracks](./architecture/editor-tracks.md)

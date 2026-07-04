@@ -141,7 +141,10 @@ export function PageSidebarHoverReveal({
       <div
         aria-hidden={!open}
         className={cn(
-          "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-lg",
+          // bg-sidebar (not bg-background): styles.css remaps --sidebar inside
+          // this panel — to --background in light, and one elevation step
+          // lighter (--popover) in dark — so the surface must read the token.
+          "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-sidebar text-foreground shadow-lg",
           "transition-[transform,opacity,visibility] will-change-transform motion-reduce:transition-opacity",
           open
             ? "pointer-events-auto opacity-100"

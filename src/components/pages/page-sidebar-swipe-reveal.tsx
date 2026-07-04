@@ -1,4 +1,5 @@
 import {
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -38,6 +39,20 @@ interface PageSidebarSwipeRevealProps {
  * {@link useHaptics} (a no-op off coarse pointers) as a swipe crosses the snap
  * line, and once when a backdrop tap closes; the hamburger trigger fires its
  * own tick in-gesture (see `toggleSidebar` in `sidebar.tsx`).
+ *
+ * Three gesture surfaces share the same axis-locked drag machinery:
+ *
+ * - the **left-edge strip** (closed): eager pointer capture, `touch-action:
+ *   none` — the opening swipe.
+ * - the **content scrim** (open): eager capture, `touch-action: none` — a swipe
+ *   or tap closes.
+ * - the **sidebar panel itself** (open): `touch-action: pan-y` with *deferred*
+ *   capture — the pointer is only captured once movement locks to the
+ *   horizontal axis, so taps still reach the page rows and a vertical drag is
+ *   handed to the browser to scroll the page list natively. Horizontal intent
+ *   additionally `preventDefault`s `touchmove` (non-passive) so iOS cannot
+ *   start a late list scroll mid-drag; a click that trails a completed drag is
+ *   swallowed in the capture phase so the swipe never navigates.
  */
 export function PageSidebarSwipeReveal({
   children,
@@ -187,8 +202,8 @@ export function PageSidebarSwipeReveal({
     return axis;
   }, []);
 
-  const handlePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+  const beginGesture = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, captureNow: boolean) => {
       if (!event.isPrimary) {
         return;
       }
@@ -201,6 +216,13 @@ export function PageSidebarSwipeReveal({
       didDragRef.current = false;
       hapticStateRef.current = openMobile;
       captureElRef.current = event.currentTarget;
+      if (!captureNow) {
+        // Deferred-capture surface (the sidebar panel): leave the pointer with
+        // the row under the finger so a tap still clicks through; capture moves
+        // to the panel only when the axis locks horizontal (see
+        // handlePointerMove).
+        return;
+      }
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
       } catch {
@@ -209,6 +231,50 @@ export function PageSidebarSwipeReveal({
       }
     },
     [openMobile]
+  );
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => beginGesture(event, true),
+    [beginGesture]
+  );
+
+  const handlePanelPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => beginGesture(event, false),
+    [beginGesture]
+  );
+
+  // First significant movement decides the axis: vertical hands the gesture
+  // back to the browser (the page — or, on the pan-y panel surface, the sidebar
+  // list — scrolls natively); horizontal claims pointer capture for
+  // deferred-capture surfaces so the rest of the drag tracks the panel even
+  // when the finger leaves it (and the trailing click is retargeted away from
+  // the row under the finger).
+  const resolveAxisOnMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, dx: number, dy: number): Axis => {
+      if (axisRef.current !== "undecided") {
+        return axisRef.current;
+      }
+      const axis = lockAxis(dx, dy);
+      if (axis === "vertical") {
+        releaseCapture(event.pointerId);
+        endGesture();
+        return axis;
+      }
+      const captureEl = captureElRef.current;
+      if (
+        axis === "horizontal" &&
+        captureEl &&
+        !captureEl.hasPointerCapture(event.pointerId)
+      ) {
+        try {
+          captureEl.setPointerCapture(event.pointerId);
+        } catch {
+          // Pointer may already be gone; the drag still works uncaptured.
+        }
+      }
+      return axis;
+    },
+    [endGesture, lockAxis, releaseCapture]
   );
 
   const handlePointerMove = useCallback(
@@ -221,20 +287,7 @@ export function PageSidebarSwipeReveal({
       const dx = event.clientX - origin.x;
       const dy = event.clientY - origin.y;
 
-      if (axisRef.current === "undecided") {
-        const axis = lockAxis(dx, dy);
-        if (axis === "undecided") {
-          return;
-        }
-        if (axis === "vertical") {
-          // Hand the gesture back to the browser so the page scrolls.
-          releaseCapture(event.pointerId);
-          endGesture();
-          return;
-        }
-      }
-
-      if (axisRef.current !== "horizontal") {
+      if (resolveAxisOnMove(event, dx, dy) !== "horizontal") {
         return;
       }
 
@@ -248,18 +301,11 @@ export function PageSidebarSwipeReveal({
 
       lastRef.current = { x: event.clientX, t: event.timeStamp };
     },
-    [
-      endGesture,
-      lockAxis,
-      openMobile,
-      releaseCapture,
-      sidebarWidth,
-      tickHapticForState,
-    ]
+    [openMobile, resolveAxisOnMove, sidebarWidth, tickHapticForState]
   );
 
-  const handlePointerUp = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+  const finishGesture = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, tapCloses: boolean) => {
       const origin = originRef.current;
       releaseCapture(event.pointerId);
 
@@ -274,9 +320,10 @@ export function PageSidebarSwipeReveal({
       endGesture();
 
       if (!didDrag) {
-        // A tap: on the open backdrop it closes; on the closed edge strip it
-        // does nothing (only a swipe opens).
-        if (openMobile) {
+        // A tap: on the open backdrop it closes; on the closed edge strip and
+        // on the open sidebar panel it does nothing (panel taps fall through to
+        // the page rows; only a swipe drives the panel).
+        if (tapCloses && openMobile) {
           commitOpenFromGesture(false);
         } else {
           setDragOffset(null);
@@ -313,6 +360,31 @@ export function PageSidebarSwipeReveal({
     ]
   );
 
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => finishGesture(event, true),
+    [finishGesture]
+  );
+
+  const handlePanelPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => finishGesture(event, false),
+    [finishGesture]
+  );
+
+  // A completed panel drag can still synthesize a click (mouse pointers always;
+  // touch when the browser kept the tap heuristic alive). Swallow it in the
+  // capture phase so a close-swipe never doubles as a row navigation.
+  const handlePanelClickCapture = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (!didDragRef.current) {
+        return;
+      }
+      didDragRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    []
+  );
+
   const handlePointerCancel = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       releaseCapture(event.pointerId);
@@ -328,6 +400,37 @@ export function PageSidebarSwipeReveal({
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
   };
+
+  // Same drag machinery on the open sidebar panel itself, tuned for a surface
+  // full of interactive, vertically scrollable rows: capture is deferred until
+  // the axis locks horizontal, a tap never closes, and `touch-action: pan-y`
+  // (on the layer, below) leaves vertical list scrolling to the browser.
+  const panelGestureHandlers = {
+    onClickCapture: handlePanelClickCapture,
+    onPointerCancel: handlePointerCancel,
+    onPointerDown: handlePanelPointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePanelPointerUp,
+  };
+
+  // Once a panel gesture locks horizontal, block iOS from starting a late
+  // vertical list scroll under the drag: `touch-action: pan-y` is only
+  // evaluated at gesture start, so mid-drag scroll intent needs a non-passive
+  // touchmove preventDefault. Touch events fire on the touchstart target's
+  // subtree, so this only ever sees gestures that began on the panel.
+  useEffect(() => {
+    const node = sidebarRef.current;
+    if (!node) {
+      return;
+    }
+    const onTouchMove = (event: TouchEvent) => {
+      if (axisRef.current === "horizontal") {
+        event.preventDefault();
+      }
+    };
+    node.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => node.removeEventListener("touchmove", onTouchMove);
+  }, []);
 
   const translateX = dragOffset ?? (openMobile ? sidebarWidth : 0);
   const isDragging = dragOffset !== null;
@@ -439,8 +542,12 @@ export function PageSidebarSwipeReveal({
         inert={!openMobile}
         ref={sidebarRef}
         role="dialog"
-        style={{ visibility: revealActive ? undefined : "hidden" }}
+        style={{
+          touchAction: "pan-y",
+          visibility: revealActive ? undefined : "hidden",
+        }}
         tabIndex={-1}
+        {...(openMobile ? panelGestureHandlers : {})}
       >
         <div
           className="flex h-full flex-col"

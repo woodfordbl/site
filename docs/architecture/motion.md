@@ -99,6 +99,17 @@ to a short `opacity 100ms ease`, matching `.overlay-popover-surface`.
    the container" (a specific sibling, a `:has()` selector, etc.) — keep that
    utility and still use the shared classes for the hidden/animated base.
 
+## Scroll-edge fades
+
+`.scroll-fade-y` in [`styles.css`](../../src/styles.css) masks a ScrollArea's
+edges from the viewport's `--scroll-area-overflow-*` variables. The database
+table grid uses a horizontal pinned-edge variant next to it:
+`.database-grid-pinned-shadow`, a single full-height gradient overlay at the
+pinned-column boundary (one element spanning header through calculate row —
+per-cell box-shadows would break at row borders). Its opacity is scroll-gated:
+written by a rAF-throttled scroll listener, `0` at `scrollLeft` 0 and only
+while real horizontal overflow exists; see [databases](./databases.md).
+
 ## Scroll containment
 
 `html`/`body` carry `overscroll-behavior: none` in [`styles.css`](../../src/styles.css)

@@ -9,8 +9,14 @@
 | Server defaults | `content/pages/**/*.json` | Yes (git) |
 | Local page metadata | `localPagesCollection` (`site-local-pages`) | No (localStorage) |
 | Local blocks | `localBlocksCollection` (`site-local-blocks:<pageId>` shards) | No (localStorage) |
+| Local databases | `localDatabasesCollection` (`site-local-databases`) | No (localStorage) |
+| Local database rows | `localDatabaseRowsCollection` (`site-local-db-rows:<databaseId>` shards; quarantine `site-local-db-rows-quarantine`) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
 | Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
+| Database sync bookkeeping | IndexedDB `site-db-sync-meta` / `meta` ([`sync-meta-store.ts`](../../src/db/sync/sync-meta-store.ts): etag, last sync/error, tombstone counts) | No |
+| Connector tokens | `site-connector-tokens` (localStorage, client-only — [`token-store.ts`](../../src/lib/connectors/token-store.ts)) | No |
+
+The database collections sync in `startLocalCollectionsSync` ([`local-collections.ts`](../../src/db/collections/local-collections.ts)) like the others; the rows collection carries a BTree index on `databaseId`. Row sharding, quarantine, ops, and reads: [databases — Storage](./databases.md#storage) (saved-view CRUD — `addDatabaseView` / `duplicateDatabaseView` / `removeDatabaseView` — rides the same explicit-commit database transaction path as the other ops). Connector-synced rows are written by the client-side sync engine ([`database-sync-engine.ts`](../../src/db/sync/database-sync-engine.ts)) into the same row shards, so they propagate cross-tab via the existing storage events; mounted views of a synced table register ref-counted watchers (`watchDatabaseSync`) that accelerate the leader's poll to the connector floor ([`resolveWatchedInterval`](../../src/db/sync/sync-schedule.ts)) while visible: [databases — Connector sync](./databases.md#connector-sync). A row's lazily-materialized page (`row.pageId`, set by `setDatabaseRowPageId` on copy-on-write) is an ordinary user page in `localPagesCollection` plus its block shard — nested under the database's host page and flagged `databaseRowSource` so it stays out of the sidebar: [databases — Row pages](./databases.md#row-pages-virtual--copy-on-write).
 
 ## Local media assets (IndexedDB, not TanStack collections)
 
@@ -40,7 +46,7 @@ Locally-edited pages keep a tiered checkpoint history in IndexedDB (`createStore
 - **Media safety:** checkpoints store only block props (the `assetId` reference), never blob bytes — restoring re-points at the existing `site-assets` blob. `sweepOrphanAssets` ([`asset-gc.ts`](../../src/db/assets/asset-gc.ts)) therefore unions snapshot-referenced asset ids into its live set so a blob held only by a checkpoint is not reclaimed.
 - **Lifecycle:** `clearPageSnapshots` runs on **Reset page**, hard delete, **Reset all**, and author **Save to source**. All writes fail soft (best-effort; quota errors route to `reportPersistenceError` and never block an edit).
 
-This replaces an earlier write-only per-edit event log (capped at 100, never surfaced); the checkpoint timeline is now the single page-history surface.
+This replaces an earlier write-only per-edit event log (capped at 100, never surfaced); the checkpoint timeline is now the single **persisted** page-history surface. Fine-grained transaction-level undo within a session is separate and purely in-memory ([`page-edit-history.ts`](../../src/lib/canvas/page-edit-history.ts), recorded from the block-commit path in [`use-page-canvas.ts`](../../src/db/queries/use-page-canvas.ts)); `restorePageSnapshot` records one undo entry before applying, so a restore is itself Mod+Z-able — see [canvas-editor — Undo / redo](./canvas-editor.md#undo--redo).
 
 ## Local page document (metadata)
 
@@ -102,7 +108,7 @@ Implementation: `src/lib/local-draft/dirty-pages-cookie.ts`.
 UI-hint cookies share read/write helpers in [`document-cookie.ts`](../../src/lib/cookies/document-cookie.ts). Writes are size-budget-guarded (~3800-byte encoded-value budget — browsers silently drop `document.cookie` writes over ~4 KB, which would freeze a stale value forever); `writeDocumentCookie` returns a boolean so callers can degrade instead.
 
 - `site-local-dirty` — dirty page ids (above).
-- `site-page-list-local` — dirty overlays, user-created pages, and delete tombstones ([`page-list-local-preview-cookie.ts`](../../src/lib/pages/page-list-local-preview-cookie.ts)); written synchronously on metadata persist/delete and by [`SyncPageListLocalPreviewEffect`](../../src/components/pages/sync-page-list-local-preview-effect.tsx). Tombstones and user pages first when over budget. **Loading priority:** no cookie → server only; cookie present → `mergePageList(server, cookie)` for SSR/hydration until `localPagesCollection` is ready, then live localStorage via [`mergeLocalPageSources`](../../src/lib/pages/merge-local-page-sources.ts) (preview + bootstrap merged while the collection initializes).
+- `site-page-list-local` — dirty overlays, user-created pages, and delete tombstones ([`page-list-local-preview-cookie.ts`](../../src/lib/pages/page-list-local-preview-cookie.ts)); written synchronously on metadata persist/delete and by [`SyncPageListLocalPreviewEffect`](../../src/components/pages/sync-page-list-local-preview-effect.tsx). Tombstones and user pages first when over budget. Materialized database row pages (`databaseRowSource` on [`localPageSchema`](../../src/lib/schemas/local-page.ts)) are excluded — they are never sidebar-visible ([pages — Page list](./pages.md#page-list)), so mirroring them would only spend budget. **Loading priority:** no cookie → server only; cookie present → `mergePageList(server, cookie)` for SSR/hydration until `localPagesCollection` is ready, then live localStorage via [`mergeLocalPageSources`](../../src/lib/pages/merge-local-page-sources.ts) (preview + bootstrap merged while the collection initializes).
 - `site-page-list-expanded` — sidebar chevron state. Read during SSR as `PageSidebarPrefs.expandedPageIds` ([`read-page-sidebar-prefs.server.ts`](../../src/lib/pages/read-page-sidebar-prefs.server.ts) / [`load-page-sidebar-prefs.ts`](../../src/lib/pages/load-page-sidebar-prefs.ts)) so the static sidebar shell renders the expanded tree plus active-page ancestors (`PageListContent` `initialExpandedIds` in [`page-list.tsx`](../../src/components/pages/page-list.tsx)) — no collapse-then-expand flash.
 - `site-device-layout` — client-measured narrow viewport + coarse primary pointer (`{"nv":0|1,"cp":0|1}`) written by [`SyncDeviceLayoutCookieEffect`](../../src/components/layout/device-layout-provider.tsx) after live `matchMedia`; read during SSR via [`readDeviceLayoutHintsFromRequest`](../../src/lib/device/parse-device-layout-from-request.server.ts) / [`loadDeviceLayoutHints`](../../src/lib/device/load-device-layout-hints.ts) so shell + canvas seed correctly on return visits. First visit falls back to Bowser UA + Client Hints inference — see [canvas-editor — Device signals](./canvas-editor.md#device-signals).
 
@@ -115,6 +121,20 @@ UI-hint cookies share read/write helpers in [`document-cookie.ts`](../../src/lib
 - **Cross-tab sync:** TanStack DB `storage` events on page metadata and block shard keys; the canvas reads blocks from `useLiveQuery` (`usePageBlocks`). Typing writes through the transaction path on each keystroke — there is no separate draft overlay. When metadata sync changes a shipped page slug, passive tabs update the address bar via `useSyncPageUrl` (`history.replaceState` on `/$` only — user `/p/…` routes are skipped). The active tab updates the URL on title **blur** (`persistPageMetadata` with `syncUrl: true`) or immediately on `persistPageReposition` when the slug changes.
 
 `applyPageBlockDiff` / `replacePageBlocks` are the durable-order boundary for bulk canvas structure. They must update `localPagesCollection.blockOrder` and the page's `localBlocksCollection` rows in the same TanStack DB transaction, and that transaction must accept mutations for both collections. Incremental hot-path ops follow the same rule inside `runBlockTransaction`. If the block rows are accepted without the page metadata mutation, later reads can combine new rows with stale `blockOrder` and render inserts or moves out of order.
+
+## Draft-proxy invariant
+
+TanStack DB `update` drafts are change-tracking proxies. Mutations must never spread
+draft objects back into stored documents — zod v4 `z.record` keys reject proxied values
+on the next write. Database view ops JSON-flatten drafts before rebuilding
+(see [databases — Draft-proxy invariant](./databases.md#draft-proxy-invariant-mutations)).
+
+## Sync meta ordering
+
+Connector sync meta (`site-db-sync-meta`) persists a new ETag/missing-count
+snapshot only after the row-apply transaction commit resolves — a failed apply
+keeps the old ETag so the next poll refetches instead of freezing rows behind
+a 304 (see [databases — Review-hardening invariants](./databases.md#review-hardening-invariants)).
 
 ## Persistence error surfacing
 

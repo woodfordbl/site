@@ -69,6 +69,7 @@
     {
       "includes": [
         "src/routes/$.tsx",
+        "src/routes/db.$databaseId.$rowId.tsx",
         "src/routes/p.$.tsx",
         "src/routes/settings.$section.tsx",
         "src/routes/settings.index.tsx"

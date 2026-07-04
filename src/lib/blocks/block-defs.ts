@@ -147,6 +147,12 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
     defaultProps: () => ({ url: "" }),
     isEmpty: (block) => isBlank(block.props.url),
   },
+  database: {
+    // Leaf reference to a workspace database entity; rows never live in the
+    // block tree. Empty until the placeholder flow links a database.
+    defaultProps: () => ({ databaseId: "" }),
+    isEmpty: (block) => block.props.databaseId === "",
+  },
   table: {
     defaultProps: () => ({
       hasHeaderRow: true,

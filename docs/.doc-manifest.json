@@ -283,6 +283,25 @@
       ],
       "docs": ["docs/architecture/haptics.md"],
       "majorGlobs": ["src/components/layout/haptics-provider.tsx"]
+    },
+    {
+      "globs": [
+        "src/components/database/**",
+        "src/components/blocks/types/database/**",
+        "src/lib/databases/**",
+        "src/lib/schemas/database.ts",
+        "src/db/collections/database-sharded-row-storage.ts",
+        "src/db/queries/database-collection-ops.ts",
+        "src/db/queries/use-database.ts"
+      ],
+      "docs": ["docs/architecture/databases.md"],
+      "majorGlobs": [
+        "src/lib/schemas/database.ts",
+        "src/db/queries/database-collection-ops.ts",
+        "src/components/database/database-table-grid.tsx",
+        "src/components/database/database-filter-bar.tsx",
+        "src/components/database/database-column-menu.tsx"
+      ]
     }
   ]
 }

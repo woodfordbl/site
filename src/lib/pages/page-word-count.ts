@@ -38,6 +38,7 @@ function countWordsInBlock(block: Block): number {
     case "pageLink":
     case "table":
     case "tableRow":
+    case "database":
       return 0;
     default: {
       const neverBlock: never = block;

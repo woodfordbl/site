@@ -40,7 +40,12 @@ export function toLocalPagePreviewEntry(
   };
 }
 
-/** Dirty overlays, user-created pages, and delete tombstones for SSR sidebar merge. */
+/**
+ * Dirty overlays, user-created pages, and delete tombstones for SSR sidebar
+ * merge. Materialized row pages (`databaseRowSource`) are excluded: they are
+ * never sidebar-visible, so mirroring them would only spend cookie budget
+ * and leak unmarked stubs into the SSR tree.
+ */
 export function localPagePreviewEntriesFromPages(
   pages: LocalPage[]
 ): LocalPagePreviewEntry[] {
@@ -49,9 +54,10 @@ export function localPagePreviewEntriesFromPages(
   return pages
     .filter(
       (page) =>
-        isLocallyDeletedPage(page) ||
-        isUserCreatedPage(page) ||
-        dirtyPageIds.has(page.id)
+        page.databaseRowSource === undefined &&
+        (isLocallyDeletedPage(page) ||
+          isUserCreatedPage(page) ||
+          dirtyPageIds.has(page.id))
     )
     .map(toLocalPagePreviewEntry);
 }

@@ -1,11 +1,50 @@
 "use client";
 
 import type * as React from "react";
+import { useCallback, useRef } from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils.ts";
 
 type DrawerVariant = "auto" | "menu";
+
+/**
+ * vaul refuses to drag while `window.getSelection()` has highlighted text, and
+ * Chrome reflects a text field's internal selection there. Drawers that
+ * autofocus-and-select an input (e.g. rename fields) are therefore born
+ * undraggable. A mouse press collapses such a selection natively, but a touch
+ * press does not — so mirror that here: when a touch press starts outside the
+ * selection's own field, collapse it so the drag can begin. A press on the
+ * field itself is left alone (the user may be adjusting their selection).
+ */
+function collapseForeignFieldSelection(
+  event: React.PointerEvent<HTMLDivElement>
+): void {
+  if (event.pointerType === "mouse") {
+    return;
+  }
+  const active = document.activeElement;
+  if (
+    !(
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement
+    ) ||
+    (event.target instanceof Node && active.contains(event.target))
+  ) {
+    return;
+  }
+  try {
+    if (
+      active.selectionStart !== null &&
+      active.selectionStart !== active.selectionEnd
+    ) {
+      const end = active.selectionEnd ?? active.value.length;
+      active.setSelectionRange(end, end);
+    }
+  } catch {
+    // Some input types (e.g. number) don't support selection APIs.
+  }
+}
 
 function Drawer({
   ...props
@@ -59,12 +98,89 @@ function DrawerOverlay({
   );
 }
 
+/**
+ * vaul drags via pointer events, but when a touch lands on a natively
+ * scrollable element the browser latches a scroll gesture and fires
+ * `pointercancel` — even when the scroller is already at the top and a
+ * downward pan cannot scroll anything. That made drawers with overflowing
+ * lists (plain `overflow-y-auto` or the Base UI ScrollArea viewport)
+ * impossible to swipe away from the body. vaul only counteracts this on
+ * iOS + `modal`; this guard covers every drawer: prevent the native scroll
+ * from starting for a downward touch move whose nearest scroller inside the
+ * drawer is at `scrollTop` 0, so the pointer stream survives and vaul's own
+ * drag logic takes over. Scrolled lists keep native scrolling (no dismissal
+ * mid-list), and `data-vaul-no-drag` regions are left untouched.
+ */
+/**
+ * Whether a downward pan from `target` would natively scroll a scroller
+ * between it and `boundary` — i.e. some scroll container is not at its top,
+ * so the browser (not vaul) should own the gesture.
+ */
+function hasScrollableAboveTop(target: EventTarget | null, boundary: Element) {
+  let element = target instanceof Element ? target : null;
+  while (element && element !== boundary) {
+    if (element.scrollHeight > element.clientHeight) {
+      const { overflowY } = getComputedStyle(element);
+      if (overflowY === "auto" || overflowY === "scroll") {
+        // At the top the native scroll is a no-op — vaul should drag instead.
+        return element.scrollTop > 0;
+      }
+    }
+    element = element.parentElement;
+  }
+  return false;
+}
+
+function useDrawerBoundaryTouchGuard(): (node: HTMLDivElement | null) => void {
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  return useCallback((node: HTMLDivElement | null) => {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+    if (!node) {
+      return;
+    }
+
+    let lastY = 0;
+    const onTouchStart = (event: TouchEvent) => {
+      lastY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch || event.touches.length > 1) {
+        return;
+      }
+      const movingDown = touch.clientY > lastY;
+      lastY = touch.clientY;
+      if (!(movingDown && event.cancelable)) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (
+        target?.closest("[data-vaul-no-drag]") ||
+        hasScrollableAboveTop(event.target, node)
+      ) {
+        return;
+      }
+      event.preventDefault();
+    };
+
+    node.addEventListener("touchstart", onTouchStart, { passive: true });
+    node.addEventListener("touchmove", onTouchMove, { passive: false });
+    cleanupRef.current = () => {
+      node.removeEventListener("touchstart", onTouchStart);
+      node.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
+}
+
 function DrawerContent({
   className,
   children,
   showHandle = true,
   variant = "auto",
   hasTitle = true,
+  ref,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content> & {
   showHandle?: boolean;
@@ -80,6 +196,8 @@ function DrawerContent({
    */
   hasTitle?: boolean;
 }) {
+  const boundaryGuardRef = useDrawerBoundaryTouchGuard();
+
   return (
     <DrawerPortal data-slot="drawer-portal">
       <DrawerOverlay />
@@ -95,7 +213,19 @@ function DrawerContent({
         )}
         data-slot="drawer-content"
         data-variant={variant}
+        ref={(node: HTMLDivElement | null) => {
+          boundaryGuardRef(node);
+          if (typeof ref === "function") {
+            ref(node);
+          } else if (ref) {
+            ref.current = node;
+          }
+        }}
         {...props}
+        onPointerDownCapture={(event) => {
+          props.onPointerDownCapture?.(event);
+          collapseForeignFieldSelection(event);
+        }}
       >
         {hasTitle ? null : <DrawerTitle className="sr-only">Menu</DrawerTitle>}
         {showHandle ? (

@@ -90,6 +90,7 @@ export function applyBlockConversion(
       rowId: row.rowId,
       count: item.columnCount ?? 2,
       text: cleanedText,
+      seedChildType: item.columnSeed,
     });
   } else if (item.id === "tabs") {
     dispatch({

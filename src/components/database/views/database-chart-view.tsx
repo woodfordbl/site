@@ -1,0 +1,517 @@
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  useChartDither,
+  useChartGradientDither,
+} from "@/components/ui/chart.tsx";
+import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
+import {
+  buildChartData,
+  CHART_Y_AGGREGATE_LABELS,
+  type ChartData,
+  type DatabaseChartConfig as ChartViewConfig,
+  chartColorOverride,
+  chartTokenIndex,
+  type DatabaseChartMark,
+  type DatabaseChartYAggregate,
+  DEFAULT_CHART_MARK,
+  DEFAULT_CHART_Y_AGGREGATE,
+  formatChartYValue,
+  resolveChartPaletteId,
+  resolveChartXField,
+  resolveChartYField,
+} from "@/lib/databases/chart-data.ts";
+import type {
+  DatabaseField,
+  DatabaseView,
+  LocalDatabase,
+  LocalDatabaseRow,
+} from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
+
+/**
+ * Chart saved view: renders `view.config.chart` (mark/axes/series/palette)
+ * over the entry-computed row pipeline on the site chart system —
+ * `ChartContainer` + `--chart-1..5` tokens, workspace palette + dither aware.
+ * Edit mode mounts the hover-revealed config gear (`DatabaseChartConfig`);
+ * view mode keeps the chart interactive (tooltips) with config hidden.
+ */
+
+/** Props contract for saved-view renderers mounted by `database-table-view.tsx`. */
+export interface DatabaseChartViewProps {
+  database: LocalDatabase;
+  /** Full field schema (visibility is a per-view concern, applied here). */
+  fields: DatabaseField[];
+  mode: "view" | "edit";
+  /** Filtered + sorted + formula-merged rows computed by the entry. */
+  rows: LocalDatabaseRow[];
+  /** The saved view being rendered (`view.type === "chart"`). */
+  view: DatabaseView;
+}
+
+/** ~320px plot height; width stays fluid. */
+const CHART_HEIGHT_CLASS = "h-80";
+
+/** Rounded data ends on the topmost bar segment, anchored to the baseline. */
+const BAR_END_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
+
+const EMPTY_CHART_CONFIG: ChartViewConfig = {};
+
+/**
+ * `prefers-reduced-motion`, live-updated. Recharts mount/update animations
+ * are disabled when set; hover tooltips remain (state, not motion).
+ */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(query.matches);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setReduced(event.matches);
+    };
+    query.addEventListener("change", handleChange);
+    return () => {
+      query.removeEventListener("change", handleChange);
+    };
+  }, []);
+  return reduced;
+}
+
+type TooltipFormatter = NonNullable<
+  ComponentProps<typeof ChartTooltipContent>["formatter"]
+>;
+
+/**
+ * Tooltip row renderer matching `ChartTooltipContent`'s default anatomy
+ * (swatch → muted series label → mono value) but with the Y value formatted
+ * per the field's display config instead of a bare `toLocaleString`. The
+ * swatch reads `--color-<key>` so it follows palette and theme, and stays a
+ * solid color even when the mark itself is dither-patterned.
+ */
+function makeTooltipFormatter(
+  config: ChartConfig,
+  formatValue: (value: number) => string
+): TooltipFormatter {
+  return (value, name) => {
+    const key = String(name);
+    return (
+      <>
+        <div
+          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+          style={{ backgroundColor: `var(--color-${key})` }}
+        />
+        <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+          <span className="text-muted-foreground">
+            {config[key]?.label ?? key}
+          </span>
+          <span className="font-medium font-mono text-foreground tabular-nums">
+            {typeof value === "number" ? formatValue(value) : String(value)}
+          </span>
+        </div>
+      </>
+    );
+  };
+}
+
+interface ChartLegendSlotProps {
+  chart: ChartViewConfig;
+  /** Config lookup key name on datum objects (pie); cartesian legends omit it. */
+  nameKey?: string;
+  seriesCount: number;
+}
+
+/**
+ * Legend per config: shown when `showLegend` is set, defaulting to on only
+ * for multi-series charts (a single series is named by its context — no
+ * legend box). Position maps top/bottom/right onto Recharts alignment.
+ */
+function ChartLegendSlot({
+  chart,
+  nameKey,
+  seriesCount,
+}: ChartLegendSlotProps): ReactNode {
+  const show = chart.showLegend ?? seriesCount > 1;
+  if (!show) {
+    return null;
+  }
+  const position = chart.legendPosition ?? "bottom";
+  if (position === "right") {
+    return (
+      <ChartLegend
+        align="right"
+        content={
+          <ChartLegendContent
+            className="flex-col items-start gap-2 pt-0 pl-4"
+            nameKey={nameKey}
+          />
+        }
+        layout="vertical"
+        verticalAlign="middle"
+      />
+    );
+  }
+  return (
+    <ChartLegend
+      content={<ChartLegendContent nameKey={nameKey} />}
+      verticalAlign={position}
+    />
+  );
+}
+
+interface CartesianChartProps {
+  aggregate: DatabaseChartYAggregate;
+  chart: ChartViewConfig;
+  data: ChartData;
+  mark: Exclude<DatabaseChartMark, "pie">;
+  palette: ChartPaletteId | undefined;
+  yField: DatabaseField | null;
+}
+
+/** Bar (grouped/stacked), line, and area (stackable) marks. */
+function CartesianChart({
+  aggregate,
+  chart,
+  data,
+  mark,
+  palette,
+  yField,
+}: CartesianChartProps): ReactNode {
+  const reduceMotion = usePrefersReducedMotion();
+
+  // Series keys are user data (text values can hold spaces/quotes), so the
+  // Recharts dataKeys / CSS color vars use positional `s1..sN` aliases;
+  // labels and color overrides stay attached to the raw series.
+  const { chartConfig, chartRows } = useMemo(() => {
+    const config: ChartConfig = {};
+    for (const [index, series] of data.series.entries()) {
+      config[`s${String(index + 1)}`] = {
+        label: series.label,
+        color: `var(--chart-${String(chartTokenIndex(series.color, index))})`,
+      };
+    }
+    const rowsData = data.categories.map((category, categoryIndex) => {
+      const record: Record<string, string | number | null> = { category };
+      for (const [index, series] of data.series.entries()) {
+        record[`s${String(index + 1)}`] = series.points[categoryIndex];
+      }
+      return record;
+    });
+    return { chartConfig: config, chartRows: rowsData };
+  }, [data]);
+
+  const seriesKeys = Object.keys(chartConfig);
+  const dither = useChartGradientDither(chartConfig);
+  const formatValue = (value: number) =>
+    formatChartYValue(aggregate, yField, value);
+  const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
+  const stacked = chart.stacked === true;
+  const showGrid = chart.showGrid !== false;
+
+  const grid = showGrid ? <CartesianGrid vertical={false} /> : null;
+  const xAxis = (
+    <XAxis
+      axisLine={false}
+      dataKey="category"
+      minTickGap={16}
+      tickLine={false}
+      tickMargin={8}
+    />
+  );
+  const yAxis = (
+    <YAxis
+      allowDecimals={aggregate !== "count"}
+      axisLine={false}
+      tickFormatter={formatValue}
+      tickLine={false}
+      width={48}
+    />
+  );
+  const tooltip = (
+    <ChartTooltip
+      content={<ChartTooltipContent formatter={tooltipFormatter} />}
+    />
+  );
+  const legend = (
+    <ChartLegendSlot chart={chart} seriesCount={data.series.length} />
+  );
+
+  let plot: ReactNode;
+  if (mark === "bar") {
+    plot = (
+      <BarChart accessibilityLayer data={chartRows}>
+        {dither.defs}
+        {grid}
+        {xAxis}
+        {yAxis}
+        {tooltip}
+        {seriesKeys.map((key, index) => (
+          <Bar
+            dataKey={key}
+            fill={dither.fill(key)}
+            isAnimationActive={!reduceMotion}
+            key={key}
+            radius={
+              dither.barRadius ??
+              (!stacked || index === seriesKeys.length - 1 ? BAR_END_RADIUS : 0)
+            }
+            stackId={stacked ? "stack" : undefined}
+          />
+        ))}
+        {legend}
+      </BarChart>
+    );
+  } else if (mark === "line") {
+    plot = (
+      <LineChart accessibilityLayer data={chartRows}>
+        {grid}
+        {xAxis}
+        {yAxis}
+        {tooltip}
+        {seriesKeys.map((key) => (
+          <Line
+            connectNulls={false}
+            dataKey={key}
+            dot={false}
+            isAnimationActive={!reduceMotion}
+            key={key}
+            stroke={`var(--color-${key})`}
+            strokeWidth={2}
+            type={dither.lineType}
+          />
+        ))}
+        {legend}
+      </LineChart>
+    );
+  } else {
+    plot = (
+      <AreaChart accessibilityLayer data={chartRows}>
+        {dither.defs}
+        {grid}
+        {xAxis}
+        {yAxis}
+        {tooltip}
+        {seriesKeys.map((key) => (
+          <Area
+            connectNulls={false}
+            dataKey={key}
+            fill={dither.fill(key)}
+            fillOpacity={dither.enabled ? 1 : 0.4}
+            isAnimationActive={!reduceMotion}
+            key={key}
+            stackId={stacked ? "stack" : undefined}
+            stroke={`var(--color-${key})`}
+            strokeWidth={2}
+            type={dither.lineType}
+          />
+        ))}
+        {legend}
+      </AreaChart>
+    );
+  }
+
+  return (
+    <ChartContainer
+      className={cn(
+        "aspect-auto w-full",
+        CHART_HEIGHT_CLASS,
+        dither.crispClassName
+      )}
+      config={chartConfig}
+      palette={palette}
+      ref={dither.ref}
+    >
+      {plot}
+    </ChartContainer>
+  );
+}
+
+interface PieMarkChartProps {
+  aggregate: DatabaseChartYAggregate;
+  chart: ChartViewConfig;
+  data: ChartData;
+  palette: ChartPaletteId | undefined;
+  yField: DatabaseField | null;
+}
+
+/** Pie mark: one slice per category, colors cycling the palette tokens. */
+function PieMarkChart({
+  aggregate,
+  chart,
+  data,
+  palette,
+  yField,
+}: PieMarkChartProps): ReactNode {
+  const reduceMotion = usePrefersReducedMotion();
+
+  // Category labels are user data — same positional `c1..cN` aliasing as the
+  // cartesian series keys; per-slice overrides key on the stable bucket key.
+  const { chartConfig, pieRows } = useMemo(() => {
+    const config: ChartConfig = {};
+    const rowsData = data.categories.map((label, index) => {
+      const key = `c${String(index + 1)}`;
+      const token = chartTokenIndex(
+        chartColorOverride(chart, data.categoryKeys[index]),
+        index
+      );
+      config[key] = { label, color: `var(--chart-${String(token)})` };
+      return { name: key, value: data.series[0]?.points[index] ?? 0 };
+    });
+    return { chartConfig: config, pieRows: rowsData };
+  }, [chart, data]);
+
+  const dither = useChartDither(chartConfig);
+  const formatValue = (value: number) =>
+    formatChartYValue(aggregate, yField, value);
+  const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
+  const slices = pieRows.map((entry) => ({
+    ...entry,
+    fill: dither.fill(entry.name),
+  }));
+
+  return (
+    <ChartContainer
+      className={cn("aspect-auto w-full", CHART_HEIGHT_CLASS)}
+      config={chartConfig}
+      palette={palette}
+    >
+      <PieChart accessibilityLayer>
+        {dither.defs}
+        <ChartTooltip
+          content={<ChartTooltipContent formatter={tooltipFormatter} />}
+        />
+        <Pie
+          data={slices}
+          dataKey="value"
+          isAnimationActive={!reduceMotion}
+          nameKey="name"
+          stroke="var(--background)"
+          strokeWidth={2}
+        />
+        <ChartLegendSlot
+          chart={chart}
+          nameKey="name"
+          seriesCount={data.categories.length}
+        />
+      </PieChart>
+    </ChartContainer>
+  );
+}
+
+/** Dashed guidance panel at chart height for unconfigured / empty states. */
+function ChartEmptyState({
+  hint,
+  title,
+}: {
+  hint?: string;
+  title: string;
+}): ReactNode {
+  return (
+    <div
+      className={cn(
+        "flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-border border-dashed px-4 text-center",
+        CHART_HEIGHT_CLASS
+      )}
+    >
+      <span className="font-medium text-muted-foreground text-sm">{title}</span>
+      {hint ? (
+        <span className="text-muted-foreground/70 text-xs">{hint}</span>
+      ) : null}
+    </div>
+  );
+}
+
+export function DatabaseChartView({
+  fields,
+  mode,
+  rows,
+  view,
+}: DatabaseChartViewProps): ReactNode {
+  const chart = view.config.chart ?? EMPTY_CHART_CONFIG;
+  const mark = chart.mark ?? DEFAULT_CHART_MARK;
+  const aggregate = chart.yAggregate ?? DEFAULT_CHART_Y_AGGREGATE;
+  const xField = resolveChartXField(fields, chart);
+  const yField = resolveChartYField(fields, chart);
+  const palette = resolveChartPaletteId(chart.palette);
+  const data = useMemo(
+    () => buildChartData(fields, rows, chart),
+    [fields, rows, chart]
+  );
+
+  let body: ReactNode;
+  if (!xField) {
+    body = (
+      <ChartEmptyState
+        hint={
+          mode === "edit"
+            ? "Choose an X axis property in the chart settings."
+            : "This chart has no X axis property yet."
+        }
+        title="Pick a field to chart"
+      />
+    );
+  } else if (aggregate !== "count" && !yField) {
+    body = (
+      <ChartEmptyState
+        hint="Pick a number property to aggregate in the chart settings, or switch the Y value to Count."
+        title={`${CHART_Y_AGGREGATE_LABELS[aggregate]} needs a number property`}
+      />
+    );
+  } else if (data.categories.length === 0) {
+    body = (
+      <ChartEmptyState
+        hint="Rows matching this view will appear here."
+        title="No data to chart"
+      />
+    );
+  } else if (mark === "pie") {
+    body = (
+      <PieMarkChart
+        aggregate={aggregate}
+        chart={chart}
+        data={data}
+        palette={palette}
+        yField={yField}
+      />
+    );
+  } else {
+    body = (
+      <CartesianChart
+        aggregate={aggregate}
+        chart={chart}
+        data={data}
+        mark={mark}
+        palette={palette}
+        yField={yField}
+      />
+    );
+  }
+
+  // Chart config now lives in the database ⋯ settings menu's "Chart" submenu
+  // (see `ChartOptionsItems`) — no floating gear on the chart itself.
+  return <div className="relative">{body}</div>;
+}

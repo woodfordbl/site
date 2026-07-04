@@ -1,0 +1,115 @@
+import {
+  IconAlignLeft,
+  IconCalendar,
+  IconCircleDot,
+  IconHash,
+  IconLink,
+  IconList,
+  IconMathFunction,
+  IconSquareCheck,
+} from "@tabler/icons-react";
+import { type ComponentType, createElement } from "react";
+
+import { TablerGlyph } from "@/components/pages/tabler-glyph.tsx";
+import { TABLER_PAGE_ICON_PREFIX } from "@/lib/pages/page-icon.ts";
+import { useTablerIconGlyph } from "@/lib/pages/page-icon-catalog.ts";
+import type {
+  DatabaseField,
+  DatabaseFieldType,
+} from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
+
+/**
+ * Field-type icons shared by database surfaces outside the grid (filter bar,
+ * pickers). The grid header keeps its own copy this wave; consolidation on
+ * this map is deferred until the grid file is free to edit.
+ */
+export const DATABASE_FIELD_TYPE_ICONS: Record<
+  DatabaseFieldType,
+  ComponentType<{ className?: string }>
+> = {
+  text: IconAlignLeft,
+  number: IconHash,
+  checkbox: IconSquareCheck,
+  select: IconCircleDot,
+  multiSelect: IconList,
+  date: IconCalendar,
+  url: IconLink,
+  formula: IconMathFunction,
+};
+
+type FieldIconComponent = ComponentType<{ className?: string }>;
+
+/**
+ * Custom-icon components cached per `type + icon` so `resolveFieldIcon`
+ * returns stable identities across renders (no remount churn in menus/grids).
+ */
+const customFieldIconCache = new Map<string, FieldIconComponent>();
+
+/**
+ * `tabler:IconName` field icons resolve through the same by-name glyph fetch
+ * page icons use (no full catalog download); the field-type icon paints as a
+ * fallback until the glyph arrives (or if the name is unknown).
+ */
+function createTablerFieldIcon(
+  name: string,
+  Fallback: FieldIconComponent
+): FieldIconComponent {
+  return function TablerFieldIcon({ className }: { className?: string }) {
+    const glyph = useTablerIconGlyph(name);
+    if (!glyph) {
+      return createElement(Fallback, { className });
+    }
+    return createElement(TablerGlyph, {
+      className,
+      filled: glyph.filled,
+      node: glyph.node,
+    });
+  };
+}
+
+/** Emoji field icons render the raw character sized to sit like an svg glyph. */
+function createEmojiFieldIcon(value: string): FieldIconComponent {
+  return function EmojiFieldIcon({ className }: { className?: string }) {
+    return createElement(
+      "span",
+      {
+        "aria-hidden": true,
+        className: cn(
+          "inline-flex shrink-0 select-none items-center justify-center text-sm leading-none",
+          className
+        ),
+      },
+      value
+    );
+  };
+}
+
+/**
+ * Icon component for a field, honoring its optional custom glyph:
+ * `tabler:IconName` → the Tabler glyph via the page-icon by-name render path,
+ * any other non-empty string → the emoji character, unset → the field-type
+ * icon. Callers size it like the type icons (`size-4 stroke-[1.5px]` in
+ * headers). CROSS-AGENT CONTRACT: the grid header also renders through this —
+ * keep the export name stable.
+ */
+export function resolveFieldIcon(
+  field: Pick<DatabaseField, "icon" | "type">
+): FieldIconComponent {
+  const icon = field.icon;
+  if (!icon) {
+    return DATABASE_FIELD_TYPE_ICONS[field.type];
+  }
+  const cacheKey = `${field.type}\u0000${icon}`;
+  let component = customFieldIconCache.get(cacheKey);
+  if (!component) {
+    component = icon.startsWith(TABLER_PAGE_ICON_PREFIX)
+      ? createTablerFieldIcon(
+          icon.slice(TABLER_PAGE_ICON_PREFIX.length),
+          DATABASE_FIELD_TYPE_ICONS[field.type]
+        )
+      : createEmojiFieldIcon(icon);
+    customFieldIconCache.set(cacheKey, component);
+  }
+  return component;
+}

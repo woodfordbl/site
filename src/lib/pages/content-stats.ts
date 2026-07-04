@@ -296,6 +296,7 @@ export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   tab: "Tabs",
   media: "Media",
   embed: "Embeds",
+  database: "Databases",
   table: "Tables",
   tableRow: "Table rows",
   tableCell: "Table cells",

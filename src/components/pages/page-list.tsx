@@ -52,6 +52,7 @@ import {
 import { cn } from "@/lib/utils.ts";
 
 import { NewPageButton } from "./new-page-button.tsx";
+import { HostedDatabasesProvider } from "./page-list-database-rows.tsx";
 import { PageListItem } from "./page-list-item.tsx";
 
 /** HTML5 drag channel for sidebar page rows. */
@@ -129,9 +130,18 @@ function PageListContent({
 }) {
   const activePage = useActivePageRef();
   const dispatch = usePageDispatch(pages);
-  // The template snapshot is excluded from `pages` upstream (mergePageList), so
-  // the sidebar tree never needs to filter it here.
-  const tree = useMemo(() => buildPageTree(pages), [pages]);
+  // The template snapshot is excluded from `pages` upstream (mergePageList).
+  // Materialized row pages (`databaseRowSource`) are filtered HERE — the
+  // lowest sidebar-only point — so routing, search, breadcrumbs, and
+  // reposition planning (sibling `sidebarOrder` scopes) still see them.
+  const sidebarTreePages = useMemo(
+    () => pages.filter((page) => page.databaseRowSource === undefined),
+    [pages]
+  );
+  const tree = useMemo(
+    () => buildPageTree(sidebarTreePages),
+    [sidebarTreePages]
+  );
   // Always seed from the SSR-known cookie prop so the server and first client
   // render match exactly; the live cookie is re-read on mount for cross-tab sync.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
@@ -391,9 +401,11 @@ export function PageList() {
   const { pages } = useMergedPageListItems();
 
   return (
-    <PageListContent
-      initialExpandedIds={sidebarPrefs.expandedPageIds}
-      pages={pages}
-    />
+    <HostedDatabasesProvider>
+      <PageListContent
+        initialExpandedIds={sidebarPrefs.expandedPageIds}
+        pages={pages}
+      />
+    </HostedDatabasesProvider>
   );
 }

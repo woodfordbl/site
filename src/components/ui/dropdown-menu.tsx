@@ -178,7 +178,11 @@ function DropdownMenuLabel({
 }) {
   const { presentation } = useMenuPresentation();
   if (presentation === "drawer") {
-    return <DrawerMenuSectionLabel>{children}</DrawerMenuSectionLabel>;
+    return (
+      <DrawerMenuSectionLabel className={asClassName(className)}>
+        {children}
+      </DrawerMenuSectionLabel>
+    );
   }
   return (
     <MenuPrimitive.GroupLabel
@@ -292,6 +296,9 @@ function DropdownMenuSubTrigger({
     }
     return (
       <DrawerMenuRow
+        // Keep the caller's styling (e.g. compact swatch-only subtriggers)
+        // instead of silently dropping it in drawer presentation.
+        className={asClassName(className)}
         disabled={disabled}
         onClick={() => {
           if (!disabled) {
