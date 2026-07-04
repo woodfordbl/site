@@ -68,11 +68,13 @@ describe("inferType", () => {
     expect(typeOf('switch(thisPage.Name, "x", 1, 2)')).toBe("number");
   });
 
-  it("types let/lets by their body and pipes as text", () => {
+  it("types let/lets by their body and formatters as text", () => {
     expect(typeOf("let(x, thisPage.Price, x * 2)")).toBe("number");
     expect(typeOf("lets(a, thisPage.Name, b, 2, a)")).toBe("unknown");
-    expect(typeOf("thisPage.Price | currency")).toBe("text");
-    expect(typeOf('thisPage.Due | date("MMM d")')).toBe("text");
+    expect(typeOf("currency(thisPage.Price)")).toBe("text");
+    expect(typeOf("compact(thisPage.Price)")).toBe("text");
+    expect(typeOf("toDate(thisPage.Notes)")).toBe("date");
+    expect(typeOf("toBoolean(thisPage.Notes)")).toBe("boolean");
   });
 
   it("types list literals and list operations", () => {

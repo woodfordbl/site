@@ -176,22 +176,8 @@ describe("tokenize operators", () => {
     expect(errorOf("true & false").message).toContain('"&&"');
   });
 
-  it("tokenizes a lone | as the format-pipe operator", () => {
-    expect(tokensOf("x | currency")).toEqual([
-      { type: "identifier", value: "x", position: 0 },
-      { type: "punct", value: "|", position: 2 },
-      { type: "identifier", value: "currency", position: 4 },
-      { type: "eof", position: 12 },
-    ]);
-  });
-
-  it("still prefers || (or) over a single |", () => {
-    expect(tokensOf("a || b")).toEqual([
-      { type: "identifier", value: "a", position: 0 },
-      { type: "punct", value: "||", position: 2 },
-      { type: "identifier", value: "b", position: 5 },
-      { type: "eof", position: 6 },
-    ]);
+  it("gives a hint for a lone |", () => {
+    expect(errorOf("true | false").message).toContain('"||"');
   });
 
   it("errors on unexpected characters with their position", () => {

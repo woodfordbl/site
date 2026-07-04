@@ -138,18 +138,27 @@ Both are lazy like `if` (only the matched branch evaluates), added beside `evalI
 `evaluate.ts` — not in the `EXPR_FUNCTIONS` table, because their arguments must not be
 eagerly evaluated.
 
-### 3.6 Format pipes, unified with databases §5.3
+### 3.6 Formatting & conversion — one unified format (functions, not pipes)
+
+A pipe operator (`value | currency`) was prototyped and **removed**: a second syntax for what
+functions already do was confusing, and it fought the "one way to do things" goal. Formatting
+and type conversion are ordinary functions, so there is a single mental model — everything is
+`fn(value, …)`:
 
 ```
-thisPage.Revenue | currency("USD") | compact     → "$1.2M"
-thisPage.Due     | date("MMM d") | ago            → "3 days ago"
+currency(thisPage.Revenue)        → "$1,200,000.00"
+compact(thisPage.Revenue)         → "1.2M"
+formatDate(thisPage.Due, "MMM d") → "Mar 5"
+fromNow(thisPage.Due)             → "3 days ago"
+toDate(thisPage.Timestamp)        → "2026-03-05"   (convert)
+toNumber(thisPage.Code)           → 42             (convert)
 ```
 
-A pipe is a trailing, left-associative operator (`value | fn(args)`) that affects **display
-only** and never changes the value's type — identical vocabulary to the inline-token spec so
-there is one mental model across chips and columns: `currency`, `percent`, `compact`, `plain`,
-`ago`/`fromNow`, `date(pattern)`, `number(decimals)`. Adds one precedence level below `or` in
-`parse.ts` and a display-layer pass that does not touch `ExprValue`.
+Format functions (`currency`, `percent`, `compact`, `formatNumber`, `fromNow`/`timeAgo`) return
+display text; conversion functions (`toText`, `toNumber`, `toDate`, `toBoolean`) change a
+value's type so math on dates/numbers is easy. `fromNow`/`timeAgo` read the clock and are
+`isVolatile`. No new operator, no display-layer pass — they are entries in `EXPR_FUNCTIONS`
+like every other function.
 
 ---
 
@@ -256,7 +265,7 @@ Each phase is independently mergeable and ships user-visible value.
 |---|---|---|---|
 | **A — Quick wins** | ✅ shipped | Bigger catalog, no-zoom editor | Mobile font fix (§6.1); the pure functions (logic/text/math/date-parts, §4) as `EXPR_FUNCTIONS` + catalog entries, drift test green |
 | **B — Ergonomics** | ✅ shipped | Nicer single-row formulas | `let`/`lets` (§3.2), method-chaining sugar (§3.3), `switch`/`ifs` (§3.5) — parser-side, evaluator mostly untouched |
-| **C — Types + editor** | ◑ partial | Typed, guided authoring | `inferType` pass (§3.1) ✅; format pipes (§3.6) ✅; result-type badge + Pipes section in the builder ✅. Still open: chips bound to field ids (§6.2) and inline caret autocomplete (§6.3) — the larger contenteditable-adjacent UI slice |
+| **C — Types + editor** | ◑ partial | Typed, guided authoring | `inferType` pass (§3.1) ✅; formatting/conversion as unified functions (§3.6, pipes removed) ✅; result-type badge ✅; single searchable autocomplete with inline titles + descriptions, no detail strip, fills the drawer on mobile ✅. Still open: chips bound to field ids (§6.2) and at-caret typeahead (§6.3) |
 | **D — Lists** | ✅ shipped | `count()` tier 1 | `list` type + higher-order ops (§3.4); list aggregates over `multiSelect`/literals (§5 tier 1) |
 | **E — Relations** | ⛔ blocked | `count()` tier 2 (the payoff) | relation-backed `list<row>` + aggregates, sharing the Phase 6 rollup engine (§5 tier 2) |
 

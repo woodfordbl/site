@@ -1,8 +1,4 @@
-import {
-  IconArrowRight,
-  IconMathFunction,
-  IconSearch,
-} from "@tabler/icons-react";
+import { IconMathFunction, IconSearch } from "@tabler/icons-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -27,7 +23,6 @@ import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
 import {
   EXPR_FUNCTION_CATALOG,
   EXPR_OPERATOR_CATALOG,
-  EXPR_PIPE_CATALOG,
   formulaPropertyReference,
 } from "@/lib/expr/function-catalog.ts";
 import { type ExprType, inferType } from "@/lib/expr/infer-type.ts";
@@ -39,6 +34,17 @@ import type {
   DatabaseFieldType,
 } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
+
+/**
+ * Shared formula BUILDER panel (Notion-style): an expression textarea with live
+ * parse status + result type and a first-row preview on top, then a single
+ * searchable, scrollable autocomplete of Properties / Functions / Operators.
+ * Each row carries its own title, signature, and description inline (no
+ * separate detail strip), and inserts at the caret when tapped. Width-fluid and
+ * height-fluid: in the desktop column-menu submenu (~360px) the list caps at a
+ * max height; in the mobile menu drawer it grows to fill the sheet so there is
+ * no dead space. Save hands the draft to the caller's `onSave` unconditionally.
+ */
 
 /** Map a database field type to the expression type its values evaluate to. */
 function fieldExprType(type: DatabaseFieldType): ExprType {
@@ -61,17 +67,6 @@ function fieldExprType(type: DatabaseFieldType): ExprType {
 }
 
 /**
- * Shared formula BUILDER panel (Notion-style): expression textarea with live
- * parse status and a first-row preview on top, then a searchable reference of
- * Properties / Functions / Operators that insert at the caret, with a
- * fixed-height detail strip documenting the focused entry. Width-fluid so it
- * works both in the desktop column-menu submenu (~360px) and full-width in
- * the mobile menu drawer. Save hands the draft to the caller's `onSave`
- * unconditionally (so the menu can close); the caller compares against the
- * stored expression and skips the write for unchanged drafts.
- */
-
-/**
  * Keep typing inside menu-embedded inputs from triggering the menu's
  * typeahead/arrow navigation; Escape still propagates so it closes the menu.
  */
@@ -83,51 +78,53 @@ function stopMenuKeys(
   }
 }
 
-/** Docs shown in the detail strip for the focused/last-inserted entry. */
-interface ReferenceDetail {
-  description: string;
-  example?: string;
-  title: string;
-}
-
 interface ReferenceRowProps {
-  children: ReactNode;
-  detail: ReferenceDetail;
+  /** One-line description shown beneath the title. */
+  description?: string;
+  /** Muted signature/type shown after the name on the title line. */
+  hint?: string;
+  icon: ReactNode;
+  /** Canonical name (monospace) shown on the title line. */
+  label: string;
   onInsert: () => void;
-  onShowDetail: (detail: ReferenceDetail) => void;
 }
 
 /**
- * One tappable reference row: tap inserts (and shows its docs in the detail
- * strip); hover/focus previews the docs without inserting. ≥40px tall on
- * coarse pointers for touch.
+ * One tappable autocomplete row: an icon + monospace name + muted hint on the
+ * title line, with the description beneath. Tapping inserts at the caret. Tall
+ * enough for a comfortable touch target on coarse pointers.
  */
 function ReferenceRow({
-  children,
-  detail,
+  hint,
+  icon,
+  label,
+  description,
   onInsert,
-  onShowDetail,
 }: ReferenceRowProps) {
-  const coarse = useIsCoarsePrimaryPointer();
   return (
     <button
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
-        coarse ? "min-h-10" : "min-h-7"
-      )}
-      onClick={() => {
-        onShowDetail(detail);
-        onInsert();
-      }}
-      onFocus={() => {
-        onShowDetail(detail);
-      }}
-      onPointerEnter={() => {
-        onShowDetail(detail);
-      }}
+      className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left outline-none hover:bg-accent focus-visible:bg-accent"
+      onClick={onInsert}
       type="button"
     >
-      {children}
+      <span className="flex items-center gap-2">
+        <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-4 [&_svg]:stroke-[1.5px]">
+          {icon}
+        </span>
+        <span className="shrink-0 font-mono text-foreground text-sm">
+          {label}
+        </span>
+        {hint ? (
+          <span className="truncate font-mono text-muted-foreground text-xs">
+            {hint}
+          </span>
+        ) : null}
+      </span>
+      {description ? (
+        <span className="line-clamp-2 pl-6 text-muted-foreground text-xs">
+          {description}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -135,7 +132,7 @@ function ReferenceRow({
 /** Muted section heading inside the reference list. */
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-1.5 pt-2 pb-1 font-medium text-muted-foreground text-xs first:pt-1">
+    <div className="px-2 pt-2 pb-1 font-medium text-muted-foreground text-xs first:pt-1">
       {children}
     </div>
   );
@@ -164,8 +161,8 @@ export function FormulaEditorPanel({
 }: FormulaEditorPanelProps): ReactNode {
   const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
-  const [detail, setDetail] = useState<ReferenceDetail | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const coarse = useIsCoarsePrimaryPointer();
 
   // Mounted only while the (sub)menu is open — steal focus from the popup
   // after Base UI's initial focus pass (same rAF pattern as the rename input).
@@ -251,16 +248,6 @@ export function FormulaEditorPanel({
     [normalizedQuery]
   );
 
-  const pipeEntries = useMemo(
-    () =>
-      EXPR_PIPE_CATALOG.filter((entry) =>
-        `${entry.name} ${entry.signature} ${entry.description}`
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [normalizedQuery]
-  );
-
   // Advisory result type of the current draft, for the ✓ Valid badge. Resolves
   // property references to their field types; unknown when it can't be pinned.
   const resultType = useMemo<ExprType | null>(() => {
@@ -280,8 +267,7 @@ export function FormulaEditorPanel({
   const nothingMatches =
     propertyFields.length === 0 &&
     functionEntries.length === 0 &&
-    operatorEntries.length === 0 &&
-    pipeEntries.length === 0;
+    operatorEntries.length === 0;
 
   let status: ReactNode = null;
   if (parsed !== null) {
@@ -298,16 +284,20 @@ export function FormulaEditorPanel({
   }
 
   return (
-    <div className="flex w-full flex-col gap-1.5 p-1">
-      <span className="px-0.5 font-medium text-muted-foreground text-xs">
-        Formula
-      </span>
+    <div
+      className={cn(
+        "flex w-full flex-col gap-1.5 p-1",
+        // Fill the drawer sheet on touch so the autocomplete grows into the
+        // space instead of leaving it dead; the popover sizes to content.
+        coarse && "h-full min-h-0"
+      )}
+    >
       <Textarea
         aria-label="Formula expression"
         autoComplete="off"
-        // 16px on mobile stops iOS Safari from force-zooming on focus; the
-        // compact 12px is desktop-only (md:).
-        className="max-h-32 min-h-16 font-mono text-base md:text-xs"
+        // Normal app input sizing: 16px on mobile (matches the base input and
+        // keeps iOS from zooming on focus), 14px on desktop.
+        className="max-h-40 min-h-12 font-mono text-base md:text-sm"
         onChange={(event) => {
           setDraft(event.target.value);
         }}
@@ -323,14 +313,14 @@ export function FormulaEditorPanel({
           Preview: {preview === "" ? "(empty)" : preview}
         </span>
       )}
-      <InputGroup className="h-8">
+      <InputGroup className="h-9">
         <InputGroupAddon align="inline-start">
           <InputGroupText>
             <IconSearch />
           </InputGroupText>
         </InputGroupAddon>
         <InputGroupInput
-          aria-label="Search properties, functions, operators, and pipes"
+          aria-label="Search properties, functions, and operators"
           autoComplete="off"
           onChange={(event) => {
             setQuery(event.target.value);
@@ -340,7 +330,12 @@ export function FormulaEditorPanel({
           value={query}
         />
       </InputGroup>
-      <ScrollArea className="max-h-52 overflow-hidden rounded-md border border-border">
+      <ScrollArea
+        className={cn(
+          "overflow-hidden rounded-md border border-border",
+          coarse ? "min-h-0 flex-1" : "max-h-72"
+        )}
+      >
         <div className="flex flex-col p-1">
           {propertyFields.length > 0 ? (
             <SectionLabel>Properties</SectionLabel>
@@ -350,20 +345,15 @@ export function FormulaEditorPanel({
             const reference = formulaPropertyReference(propertyField.name);
             return (
               <ReferenceRow
-                detail={{
-                  title: reference,
-                  description: `Inserts this row's ${propertyField.name} value.`,
-                  example: reference,
-                }}
+                description={`Inserts ${reference}`}
+                hint={`· ${propertyField.type}`}
+                icon={<FieldIcon />}
                 key={propertyField.id}
+                label={propertyField.name}
                 onInsert={() => {
                   insertAtCaret(reference, reference.length);
                 }}
-                onShowDetail={setDetail}
-              >
-                <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-                <span className="truncate">{propertyField.name}</span>
-              </ReferenceRow>
+              />
             );
           })}
           {functionEntries.length > 0 ? (
@@ -371,98 +361,42 @@ export function FormulaEditorPanel({
           ) : null}
           {functionEntries.map((entry) => (
             <ReferenceRow
-              detail={{
-                title: entry.signature,
-                description: entry.description,
-                example: entry.example,
-              }}
+              description={entry.description}
+              hint={entry.signature.slice(entry.name.length)}
+              icon={<IconMathFunction />}
               key={entry.name}
+              label={entry.name}
               onInsert={() => {
                 // Caret lands inside the parens, ready for arguments.
                 insertAtCaret(`${entry.name}()`, entry.name.length + 1);
               }}
-              onShowDetail={setDetail}
-            >
-              <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-              <span className="shrink-0 font-mono text-xs">{entry.name}</span>
-              <span className="truncate text-muted-foreground text-xs">
-                {entry.signature.slice(entry.name.length)}
-              </span>
-            </ReferenceRow>
+            />
           ))}
           {operatorEntries.length > 0 ? (
             <SectionLabel>Operators</SectionLabel>
           ) : null}
           {operatorEntries.map((entry) => (
             <ReferenceRow
-              detail={{
-                title: entry.symbol,
-                description: entry.description,
-              }}
+              description={entry.description}
+              icon={
+                <span className="text-center font-mono text-xs">
+                  {entry.symbol}
+                </span>
+              }
               key={entry.symbol}
+              label={entry.symbol}
               onInsert={() => {
                 insertAtCaret(` ${entry.symbol} `, entry.symbol.length + 2);
               }}
-              onShowDetail={setDetail}
-            >
-              <span className="w-8 shrink-0 text-center font-mono text-xs">
-                {entry.symbol}
-              </span>
-              <span className="truncate text-muted-foreground text-xs">
-                {entry.description}
-              </span>
-            </ReferenceRow>
-          ))}
-          {pipeEntries.length > 0 ? <SectionLabel>Pipes</SectionLabel> : null}
-          {pipeEntries.map((entry) => (
-            <ReferenceRow
-              detail={{
-                title: `| ${entry.signature}`,
-                description: entry.description,
-                example: entry.example,
-              }}
-              key={entry.name}
-              onInsert={() => {
-                // Append the pipe after the current expression.
-                insertAtCaret(` | ${entry.name}`, entry.name.length + 3);
-              }}
-              onShowDetail={setDetail}
-            >
-              <IconArrowRight className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-              <span className="shrink-0 font-mono text-xs">{entry.name}</span>
-              <span className="truncate text-muted-foreground text-xs">
-                {entry.description}
-              </span>
-            </ReferenceRow>
+            />
           ))}
           {nothingMatches ? (
-            <div className="px-1.5 py-3 text-center text-muted-foreground text-xs">
+            <div className="px-2 py-3 text-center text-muted-foreground text-xs">
               No matches
             </div>
           ) : null}
         </div>
       </ScrollArea>
-      <div className="flex h-20 flex-col gap-0.5 overflow-hidden rounded-md border border-border px-2 py-1.5">
-        {detail === null ? (
-          <span className="text-muted-foreground text-xs">
-            Select an item to see how it works.
-          </span>
-        ) : (
-          <>
-            <span className="truncate font-mono text-foreground text-xs">
-              {detail.title}
-            </span>
-            <span className="line-clamp-2 text-muted-foreground text-xs">
-              {detail.description}
-            </span>
-            {detail.example ? (
-              <span className="truncate font-mono text-muted-foreground text-xs">
-                {detail.example}
-              </span>
-            ) : null}
-          </>
-        )}
-      </div>
       <Button
         className="self-end"
         onClick={() => {

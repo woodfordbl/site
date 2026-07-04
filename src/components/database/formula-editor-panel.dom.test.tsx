@@ -64,7 +64,7 @@ describe("FormulaEditorPanel", () => {
 
     const textarea = screen.getByLabelText("Formula expression");
     const search = screen.getByLabelText(
-      "Search properties, functions, operators, and pipes"
+      "Search properties, functions, and operators"
     );
 
     // Search narrows the reference list to the average function.

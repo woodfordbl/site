@@ -82,6 +82,13 @@ const FUNCTION_RESULT_TYPES = new Map<string, ExprType>([
       "monthname",
       "now",
       "join",
+      "currency",
+      "percent",
+      "compact",
+      "formatnumber",
+      "fromnow",
+      "timeago",
+      "totext",
     ] as const
   ).map((name): [string, ExprType] => [name, "text"]),
   // boolean
@@ -103,10 +110,11 @@ const FUNCTION_RESULT_TYPES = new Map<string, ExprType>([
       "includes",
       "some",
       "every",
+      "toboolean",
     ] as const
   ).map((name): [string, ExprType] => [name, "boolean"]),
   // date
-  ...(["dateadd", "today", "startof", "endof"] as const).map(
+  ...(["dateadd", "today", "startof", "endof", "todate"] as const).map(
     (name): [string, ExprType] => [name, "date"]
   ),
   // list
@@ -238,9 +246,6 @@ export function inferType(
       }
       return FUNCTION_RESULT_TYPES.get(lower) ?? "unknown";
     }
-    case "pipe":
-      // Every pipe formats to display text.
-      return "text";
     case "list":
       return "list";
     default:

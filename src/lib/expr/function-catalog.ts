@@ -521,6 +521,67 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
     example: 'formatDate(now(), "MMM d, HH:mm")',
     category: "time",
   },
+  {
+    name: "fromNow",
+    aliases: ["timeAgo"],
+    signature: "fromNow(date)",
+    description:
+      'Shows a date as a clock-relative distance, e.g. "3 days ago" (also spelled timeAgo).',
+    example: "fromNow(thisPage.Due)",
+    category: "time",
+  },
+  // Format (value → display text)
+  {
+    name: "currency",
+    signature: "currency(value, code?)",
+    description: "Formats a number as currency text (default USD).",
+    example: "currency(thisPage.Price)",
+    category: "text",
+  },
+  {
+    name: "percent",
+    signature: "percent(value, decimals?)",
+    description: "Formats a fraction as a percentage (0.42 becomes 42%).",
+    example: "percent(thisPage.Rate, 1)",
+    category: "text",
+  },
+  {
+    name: "compact",
+    signature: "compact(value)",
+    description: "Abbreviates a large number (12400 becomes 12.4K).",
+    example: "compact(thisPage.Views)",
+    category: "text",
+  },
+  {
+    name: "formatNumber",
+    signature: "formatNumber(value, decimals?)",
+    description:
+      "Formats a number with grouping and an optional fixed number of decimals.",
+    example: "formatNumber(thisPage.Amount, 2)",
+    category: "text",
+  },
+  // Convert (change a value's type)
+  {
+    name: "toText",
+    signature: "toText(value)",
+    description: "Converts any value to plain text.",
+    example: "toText(thisPage.Price)",
+    category: "text",
+  },
+  {
+    name: "toDate",
+    signature: "toDate(value)",
+    description: "Parses a value into a date (yyyy-mm-dd).",
+    example: "toDate(thisPage.Timestamp)",
+    category: "date",
+  },
+  {
+    name: "toBoolean",
+    signature: "toBoolean(value)",
+    description: 'Converts a value to true/false ("yes"/"no"/1/0 accepted).',
+    example: "toBoolean(thisPage.Flag)",
+    category: "logic",
+  },
   // List
   {
     name: "count",
@@ -733,69 +794,6 @@ export const EXPR_OPERATOR_CATALOG: readonly ExprOperatorCatalogEntry[] = [
     symbol: "not",
     description: "Inverts a true/false value.",
     category: "logic",
-  },
-];
-
-/** One documented format pipe: what the builder lists and inserts after `|`. */
-export interface ExprPipeCatalogEntry {
-  /** One sentence, sentence case. */
-  readonly description: string;
-  /** An example result the pipe produces (display only). */
-  readonly example: string;
-  /** Canonical (insertable) pipe name. */
-  readonly name: string;
-  /** Human signature, e.g. `currency(code?)`. */
-  readonly signature: string;
-}
-
-/**
- * Every display pipe, mirroring `EXPR_PIPES` in `evaluate.ts`. Pipes format a
- * value for display (`value | currency`) and never change its type; the
- * vocabulary is shared with the inline-token language (databases §5.3).
- */
-export const EXPR_PIPE_CATALOG: readonly ExprPipeCatalogEntry[] = [
-  {
-    name: "currency",
-    signature: "currency(code?)",
-    description: "Formats a number as currency (default USD).",
-    example: "1234.5 → $1,234.50",
-  },
-  {
-    name: "percent",
-    signature: "percent(decimals?)",
-    description: "Formats a number as a percentage (0.42 → 42%).",
-    example: "0.42 → 42%",
-  },
-  {
-    name: "compact",
-    signature: "compact",
-    description: "Abbreviates large numbers.",
-    example: "12400 → 12.4K",
-  },
-  {
-    name: "number",
-    signature: "number(decimals?)",
-    description: "Formats a number with grouping and optional fixed decimals.",
-    example: "1234.5 → 1,234.50",
-  },
-  {
-    name: "date",
-    signature: "date(pattern)",
-    description: 'Formats a date with a date-fns pattern like "MMM d, yyyy".',
-    example: '2026-03-05 → "Mar 5"',
-  },
-  {
-    name: "ago",
-    signature: "ago",
-    description:
-      "Shows a date as a clock-relative distance (also spelled fromNow).",
-    example: "→ 3 days ago",
-  },
-  {
-    name: "plain",
-    signature: "plain",
-    description: "Renders the value with the default display formatting.",
-    example: "true → Yes",
   },
 ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { IconCheck, IconChevronLeft } from "@tabler/icons-react";
+import { IconCheck } from "@tabler/icons-react";
 import {
   cloneElement,
   createContext,
@@ -14,7 +14,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { DrawerContent, DrawerNestedRoot } from "@/components/ui/drawer.tsx";
+import {
+  DrawerContent,
+  DrawerNestedRoot,
+  DrawerTitle,
+} from "@/components/ui/drawer.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useHaptics } from "@/hooks/haptics.ts";
 import { cn } from "@/lib/utils.ts";
@@ -252,22 +256,13 @@ export function MenuDrawerSubDrawer({
 
   return (
     <DrawerNestedRoot onOpenChange={onOpenChange} open={open}>
-      <DrawerContent hasTitle={false} variant="menu">
-        <div className="flex items-center gap-1 px-2 py-1.5">
-          <button
-            aria-label="Back"
-            className="flex size-9 items-center justify-center rounded-lg text-muted-foreground active:bg-accent"
-            onClick={() => onOpenChange(false)}
-            type="button"
-          >
-            <IconChevronLeft className="size-5" />
-          </button>
-          {title ? (
-            <span className="cn-font-heading flex min-w-0 items-center gap-2 font-medium text-base text-foreground [&_svg:not([class*='size-'])]:size-5 [&_svg]:shrink-0">
-              {title}
-            </span>
-          ) : null}
-        </div>
+      <DrawerContent hasTitle={title == null} variant="menu">
+        {/* No visible header bar: the drag handle + swipe-down dismiss this
+            level, so the back button and title only cost vertical space. The
+            title is kept sr-only to satisfy vaul's accessible-name requirement. */}
+        {title == null ? null : (
+          <DrawerTitle className="sr-only">{title}</DrawerTitle>
+        )}
         <MenuPresentationProvider
           close={() => {
             onOpenChange(false);

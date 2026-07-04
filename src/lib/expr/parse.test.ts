@@ -35,8 +35,6 @@ function sexpr(node: ExprNode): string {
       return `(${node.op} ${sexpr(node.left)} ${sexpr(node.right)})`;
     case "call":
       return `(${node.name} ${node.args.map(sexpr).join(" ")})`;
-    case "pipe":
-      return `(| ${node.name} ${[node.input, ...node.args].map(sexpr).join(" ")})`;
     case "list":
       return `[${node.elements.map(sexpr).join(" ")}]`;
     default:
@@ -243,38 +241,6 @@ describe("parse method chaining", () => {
   });
 });
 
-describe("parse format pipes", () => {
-  it("parses a bare pipe and a pipe with args", () => {
-    expect(sexpr(astOf("thisPage.Price | currency"))).toBe(
-      "(| currency prop:Price)"
-    );
-    expect(sexpr(astOf('thisPage.Due | date("MMM d")'))).toBe(
-      '(| date prop:Due "MMM d")'
-    );
-  });
-
-  it("is lowest precedence — the whole expression is piped", () => {
-    expect(sexpr(astOf("1 + 2 | compact"))).toBe("(| compact (+ 1 2))");
-  });
-
-  it("chains left to right", () => {
-    expect(sexpr(astOf("thisPage.N | number(2) | plain"))).toBe(
-      "(| plain (| number prop:N 2))"
-    );
-  });
-
-  it("works inside groups and call arguments", () => {
-    expect(sexpr(astOf("(1 | compact)"))).toBe("(| compact 1)");
-    expect(sexpr(astOf("concat(thisPage.P | currency)"))).toBe(
-      "(concat (| currency prop:P))"
-    );
-  });
-
-  it("errors when a pipe name is missing", () => {
-    expect(errorOf("1 | ").message).toContain("pipe name");
-  });
-});
-
 describe("parse list literals", () => {
   it("parses empty, flat, and nested lists", () => {
     expect(sexpr(astOf("[]"))).toBe("[]");
@@ -283,9 +249,9 @@ describe("parse list literals", () => {
     expect(sexpr(astOf("[[1, 2], [3]]"))).toBe("[[1 2] [3]]");
   });
 
-  it("supports method chaining and pipes on a list", () => {
+  it("supports method chaining on a list", () => {
     expect(sexpr(astOf("[3, 1, 2].sort()"))).toBe("(sort [3 1 2])");
-    expect(sexpr(astOf("[1, 2] | plain"))).toBe("(| plain [1 2])");
+    expect(sexpr(astOf("[1, 2].reverse()"))).toBe("(reverse [1 2])");
   });
 
   it("errors on an unclosed list", () => {

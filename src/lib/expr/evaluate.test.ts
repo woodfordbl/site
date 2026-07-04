@@ -685,51 +685,55 @@ describe("higher-order list functions (v2)", () => {
   });
 });
 
-describe("format pipes (v2)", () => {
-  it("currency / percent / compact / number format numbers", () => {
-    expect(run("1234.5 | currency")).toBe("$1,234.50");
-    expect(run('1234.5 | currency("EUR")')).toBe("€1,234.50");
-    expect(run("0.42 | percent")).toBe("42%");
-    expect(run("0.425 | percent(1)")).toBe("42.5%");
-    expect(run("12400 | compact")).toBe("12.4K");
-    expect(run("1234.5 | number(2)")).toBe("1,234.50");
+describe("format functions (v2)", () => {
+  it("currency / percent / compact / formatNumber", () => {
+    expect(run("currency(1234.5)")).toBe("$1,234.50");
+    expect(run('currency(1234.5, "EUR")')).toBe("€1,234.50");
+    expect(run("percent(0.42)")).toBe("42%");
+    expect(run("percent(0.425, 1)")).toBe("42.5%");
+    expect(run("compact(12400)")).toBe("12.4K");
+    expect(run("formatNumber(1234.5, 2)")).toBe("1,234.50");
   });
 
-  it("date pipe formats a date string", () => {
-    expect(run('"2026-03-05" | date("MMM d")')).toBe("Mar 5");
-  });
-
-  it("plain applies the default display", () => {
-    expect(run("true | plain")).toBe("Yes");
-    expect(run("1234.5 | plain")).toBe("1,234.5");
-  });
-
-  it("ago is clock-relative and reads the injected now", () => {
+  it("fromNow / timeAgo are clock-relative and read the injected now", () => {
     const scope: ExprScope = {
       getProperty: () => null,
       // Exactly three calendar days after the parsed (local-midnight) date, so
       // date-fns' distance rounding is unambiguous.
       now: () => new Date(2026, 2, 8),
     };
-    expect(run('"2026-03-05" | ago', scope)).toBe("3 days ago");
+    expect(run('fromNow("2026-03-05")', scope)).toBe("3 days ago");
+    expect(run('timeAgo("2026-03-05")', scope)).toBe("3 days ago");
   });
 
-  it("propagates input errors and reports unknown pipes / bad types", () => {
-    expect(errorMessage(run("1 / 0 | currency"))).toBe("Division by zero");
-    expect(errorMessage(run("5 | bogus"))).toContain('Unknown pipe "bogus"');
-    expect(errorMessage(run('"x" | currency'))).toContain("expects a number");
-    expect(errorMessage(run('1234 | currency("NOPE")'))).toContain(
+  it("propagates input errors and reports bad types", () => {
+    expect(errorMessage(run("currency(1 / 0)"))).toBe("Division by zero");
+    expect(errorMessage(run('currency("x")'))).toContain("expects a number");
+    expect(errorMessage(run('currency(1234, "NOPE")'))).toContain(
       "unknown currency code"
     );
   });
 
-  it("chains and composes with expressions", () => {
-    expect(run("(1 + 2) | compact")).toBe("3");
-    expect(run('concat("~", 1234.5 | currency)')).toBe("~$1,234.50");
+  it("composes like any function", () => {
+    expect(run('concat("~", currency(1234.5))')).toBe("~$1,234.50");
   });
 });
 
-describe("pipe volatility (v2)", () => {
+describe("type conversion functions (v2)", () => {
+  it("toText / toNumber / toDate / toBoolean", () => {
+    expect(run("toText(1234.5)")).toBe("1234.5");
+    expect(run('toText(["a", "b"])')).toBe("a, b");
+    expect(run('toNumber("42")')).toBe(42);
+    expect(run('toDate("2026-03-05T10:30:00Z")')).toBe("2026-03-05");
+    expect(run('toBoolean("yes")')).toBe(true);
+    expect(run('toBoolean("no")')).toBe(false);
+    expect(run("toBoolean(0)")).toBe(false);
+    expect(run("toBoolean(3)")).toBe(true);
+    expect(errorMessage(run('toBoolean("maybe")'))).toContain("cannot convert");
+  });
+});
+
+describe("clock-volatile functions (v2)", () => {
   function volatileOf(source: string): boolean {
     const parsed = parseExpression(source);
     if (!parsed.ok) {
@@ -738,11 +742,10 @@ describe("pipe volatility (v2)", () => {
     return isVolatileExpression(parsed.ast);
   }
 
-  it("ago / fromNow pipes are volatile; pure pipes are not", () => {
-    expect(volatileOf("thisPage.Due | ago")).toBe(true);
-    expect(volatileOf("thisPage.Due | fromNow")).toBe(true);
-    expect(volatileOf("thisPage.Price | currency")).toBe(false);
-    expect(volatileOf('today() | date("MMM d")')).toBe(true);
+  it("fromNow / timeAgo are volatile; pure formatters are not", () => {
+    expect(volatileOf("fromNow(thisPage.Due)")).toBe(true);
+    expect(volatileOf("timeAgo(thisPage.Due)")).toBe(true);
+    expect(volatileOf("currency(thisPage.Price)")).toBe(false);
   });
 });
 

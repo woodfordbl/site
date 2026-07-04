@@ -1230,148 +1230,160 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
         withList("sort", args, (l) => [...l].sort(compareForSort)),
     },
   ],
+  // Formatting (value → display text) and type conversion — unified as plain
+  // functions (there is no separate pipe syntax).
+  ["currency", { minArgs: 1, maxArgs: 2, apply: (args) => evalCurrency(args) }],
+  ["percent", { minArgs: 1, maxArgs: 2, apply: (args) => evalPercent(args) }],
+  ["compact", { minArgs: 1, maxArgs: 1, apply: (args) => evalCompact(args) }],
+  [
+    "formatnumber",
+    { minArgs: 1, maxArgs: 2, apply: (args) => evalFormatNumber(args) },
+  ],
+  [
+    "fromnow",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args, scope) => evalFromNow(args, scope),
+    },
+  ],
+  [
+    // Alias for fromNow (kept as its own entry so errors name "timeAgo()").
+    "timeago",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args, scope) => evalFromNow(args, scope),
+    },
+  ],
+  ["totext", { minArgs: 1, maxArgs: 1, apply: (args) => toText(args[0]) }],
+  ["todate", { minArgs: 1, maxArgs: 1, apply: (args) => evalToDate(args) }],
+  [
+    "toboolean",
+    { minArgs: 1, maxArgs: 1, apply: (args) => evalToBoolean(args[0]) },
+  ],
 ]);
 
-/**
- * A format pipe: turns a value into display text without changing its type.
- * Shared vocabulary with the inline-token language (databases proposal §5.3)
- * so chips and formula columns format identically. Receives the injected
- * `scope` for the clock-relative `ago`/`fromNow` pipes.
- */
-type PipeFormatter = (
-  value: ExprPlainValue,
-  args: ExprPlainValue[],
-  scope: ExprScope
-) => ExprValue;
-
-/** Coerce a pipe input to a number, or name the pipe in the type error. */
-function pipeNumber(name: string, value: ExprPlainValue): number | ExprError {
-  return typeof value === "number"
-    ? value
-    : exprError(`"${name}" pipe expects a number, got ${typeName(value)}`);
-}
-
-/** Optional integer argument (e.g. decimal places) shared by numeric pipes. */
-function pipeIntArg(
-  name: string,
-  args: ExprPlainValue[],
-  fallback: number
-): number | ExprError {
-  if (args.length === 0) {
-    return fallback;
+/** Optional integer argument (decimal places) for the numeric formatters. */
+function optionalDigits(
+  fnName: string,
+  args: ExprPlainValue[]
+): number | null | ExprError {
+  if (args.length < 2) {
+    return null;
   }
-  const value = args[0];
-  return typeof value === "number"
-    ? Math.trunc(value)
-    : exprError(`"${name}" pipe expects a number of digits`);
+  const digits = requireNumber(args[1], fnName);
+  return typeof digits === "number" ? Math.trunc(digits) : digits;
 }
 
-/** Every display pipe, keyed by lowercased name (see {@link PipeFormatter}). */
-const EXPR_PIPES = new Map<string, PipeFormatter>([
-  ["plain", (value) => formatExprValueDefault(value)],
-  [
-    "number",
-    (value, args) => {
-      const n = pipeNumber("number", value);
-      if (typeof n !== "number") {
-        return n;
-      }
-      const digits = pipeIntArg("number", args, -1);
-      if (typeof digits !== "number") {
-        return digits;
-      }
-      const options: Intl.NumberFormatOptions =
-        digits < 0
-          ? { maximumFractionDigits: 6 }
-          : { minimumFractionDigits: digits, maximumFractionDigits: digits };
-      return new Intl.NumberFormat("en-US", options).format(n);
-    },
-  ],
-  [
-    "currency",
-    (value, args) => {
-      const n = pipeNumber("currency", value);
-      if (typeof n !== "number") {
-        return n;
-      }
-      const code = args.length > 0 ? toText(args[0]) : "USD";
-      try {
-        return new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: code,
-        }).format(n);
-      } catch {
-        return exprError(
-          `"currency" pipe: unknown currency code ${JSON.stringify(code)}`
-        );
-      }
-    },
-  ],
-  [
-    "percent",
-    (value, args) => {
-      const n = pipeNumber("percent", value);
-      if (typeof n !== "number") {
-        return n;
-      }
-      const digits = pipeIntArg("percent", args, 0);
-      if (typeof digits !== "number") {
-        return digits;
-      }
-      return new Intl.NumberFormat("en-US", {
-        style: "percent",
-        minimumFractionDigits: digits,
-        maximumFractionDigits: digits,
-      }).format(n);
-    },
-  ],
-  [
-    "compact",
-    (value) => {
-      const n = pipeNumber("compact", value);
-      return typeof n === "number"
-        ? new Intl.NumberFormat("en-US", {
-            notation: "compact",
-            maximumFractionDigits: 1,
-          }).format(n)
-        : n;
-    },
-  ],
-  [
-    "date",
-    (value, args) => {
-      const date = parseDateArg(value, "date");
-      if (date instanceof Date === false) {
-        return date;
-      }
-      const pattern = requireString(args[0] ?? null, "date");
-      if (typeof pattern !== "string") {
-        return pattern;
-      }
-      try {
-        return dateFnsFormat(date, pattern);
-      } catch {
-        return exprError(
-          `"date" pipe: invalid format pattern ${JSON.stringify(pattern)}`
-        );
-      }
-    },
-  ],
-  ["ago", (value, _args, scope) => pipeRelative(value, scope)],
-  ["fromnow", (value, _args, scope) => pipeRelative(value, scope)],
-]);
+/** `currency(value, code?)` — format a number as currency text (default USD). */
+function evalCurrency(args: ExprPlainValue[]): ExprValue {
+  const n = requireNumber(args[0], "currency");
+  if (typeof n !== "number") {
+    return n;
+  }
+  const code = args.length > 1 ? toText(args[1]) : "USD";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: code,
+    }).format(n);
+  } catch {
+    return exprError(
+      `currency(): unknown currency code ${JSON.stringify(code)}`
+    );
+  }
+}
 
-/** Shared body for `ago`/`fromNow`: distance from a date to the clock now. */
-function pipeRelative(value: ExprPlainValue, scope: ExprScope): ExprValue {
-  const date = parseDateArg(value, "ago");
+/** `percent(value, decimals?)` — format a fraction as a percentage (0.42 → 42%). */
+function evalPercent(args: ExprPlainValue[]): ExprValue {
+  const n = requireNumber(args[0], "percent");
+  if (typeof n !== "number") {
+    return n;
+  }
+  const digits = optionalDigits("percent", args);
+  if (typeof digits !== "number" && digits !== null) {
+    return digits;
+  }
+  const places = digits ?? 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "percent",
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  }).format(n);
+}
+
+/** `compact(value)` — abbreviate a large number (12400 → 12.4K). */
+function evalCompact(args: ExprPlainValue[]): ExprValue {
+  const n = requireNumber(args[0], "compact");
+  return typeof n === "number"
+    ? new Intl.NumberFormat("en-US", {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(n)
+    : n;
+}
+
+/** `formatNumber(value, decimals?)` — grouped number text with optional fixed decimals. */
+function evalFormatNumber(args: ExprPlainValue[]): ExprValue {
+  const n = requireNumber(args[0], "formatNumber");
+  if (typeof n !== "number") {
+    return n;
+  }
+  const digits = optionalDigits("formatNumber", args);
+  if (typeof digits !== "number" && digits !== null) {
+    return digits;
+  }
+  const options: Intl.NumberFormatOptions =
+    digits === null
+      ? { maximumFractionDigits: 6 }
+      : { minimumFractionDigits: digits, maximumFractionDigits: digits };
+  return new Intl.NumberFormat("en-US", options).format(n);
+}
+
+/** `fromNow(date)` / `timeAgo(date)` — clock-relative distance ("3 days ago"). */
+function evalFromNow(args: ExprPlainValue[], scope: ExprScope): ExprValue {
+  const date = parseDateArg(args[0], "fromNow");
   if (date instanceof Date === false) {
     return date;
   }
   return formatDistance(date, scopeNow(scope), { addSuffix: true });
 }
 
-/** Pipe names whose result depends on the clock (see {@link isVolatileExpression}). */
-const VOLATILE_PIPE_NAMES = new Set(["ago", "fromnow"]);
+/** `toDate(value)` — parse a value into an ISO date string (yyyy-mm-dd). */
+function evalToDate(args: ExprPlainValue[]): ExprValue {
+  const date = parseDateArg(args[0], "toDate");
+  return date instanceof Date ? dateFnsFormat(date, ISO_DATE_PATTERN) : date;
+}
+
+/** `toBoolean(value)` — coerce a value to true/false with common text rules. */
+function evalToBoolean(value: ExprPlainValue): ExprValue {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (value === null) {
+    return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "yes" || normalized === "1") {
+      return true;
+    }
+    if (
+      normalized === "false" ||
+      normalized === "no" ||
+      normalized === "0" ||
+      normalized === ""
+    ) {
+      return false;
+    }
+    return exprError(`toBoolean(): cannot convert ${JSON.stringify(value)}`);
+  }
+  return exprError("toBoolean(): cannot convert a list to a boolean");
+}
 
 /**
  * Every implemented function name (lowercased), lazily-evaluated `if`
@@ -1399,7 +1411,7 @@ export function implementedExprFunctionNames(): string[] {
 }
 
 /** Function names whose results depend on the clock (see {@link isVolatileExpression}). */
-const VOLATILE_FUNCTION_NAMES = new Set(["now", "today"]);
+const VOLATILE_FUNCTION_NAMES = new Set(["now", "today", "fromnow", "timeago"]);
 
 function arityMessage(name: string, def: ExprFunctionDef, got: number): string {
   if (def.minArgs === def.maxArgs) {
@@ -1927,31 +1939,6 @@ function evalCall(
   return def.apply(values, scope);
 }
 
-/** Evaluate a `value | name(args)` pipe: format the input, never re-type it. */
-function evalPipe(
-  node: Extract<ExprNode, { kind: "pipe" }>,
-  scope: ExprScope,
-  bindings: Bindings
-): ExprValue {
-  const value = evalNode(node.input, scope, bindings);
-  if (isExprError(value)) {
-    return value;
-  }
-  const formatter = EXPR_PIPES.get(node.name.toLowerCase());
-  if (formatter === undefined) {
-    return exprError(`Unknown pipe "${node.name}"`);
-  }
-  const argValues: ExprPlainValue[] = [];
-  for (const arg of node.args) {
-    const argValue = evalNode(arg, scope, bindings);
-    if (isExprError(argValue)) {
-      return argValue;
-    }
-    argValues.push(argValue);
-  }
-  return formatter(value, argValues, scope);
-}
-
 /** Recursive core of {@link evaluateExpression}, threading the binding scope. */
 function evalNode(
   ast: ExprNode,
@@ -1965,8 +1952,6 @@ function evalNode(
       return scope.getProperty(ast.name);
     case "variable":
       return lookupBinding(bindings, ast.name);
-    case "pipe":
-      return evalPipe(ast, scope, bindings);
     case "list": {
       const elements: ExprList = [];
       for (const element of ast.elements) {
@@ -2029,12 +2014,6 @@ export function isVolatileExpression(ast: ExprNode): boolean {
     case "call":
       return (
         VOLATILE_FUNCTION_NAMES.has(ast.name.toLowerCase()) ||
-        ast.args.some(isVolatileExpression)
-      );
-    case "pipe":
-      return (
-        VOLATILE_PIPE_NAMES.has(ast.name.toLowerCase()) ||
-        isVolatileExpression(ast.input) ||
         ast.args.some(isVolatileExpression)
       );
     case "list":
