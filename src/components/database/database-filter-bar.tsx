@@ -488,6 +488,9 @@ function FilterValueEditor({
   switch (field.type) {
     case "text":
     case "url":
+    // Formula columns filter as strings in v1 — the condition compares
+    // against the computed value's text projection (see FIELD_TYPE_DEFS).
+    case "formula":
       return (
         <FilterTextValueInput
           initial={typeof condition.value === "string" ? condition.value : ""}

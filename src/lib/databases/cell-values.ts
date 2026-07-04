@@ -53,6 +53,22 @@ export function toIsoDatePart(value: string): string {
 }
 
 /**
+ * Coerce a merged (read-time computed) formula cell — see
+ * `lib/databases/formula-values.ts`. Computed values are scalar
+ * string/number/boolean; anything else (the in-memory error marker array,
+ * stale stored values from a previous field type) reads as empty.
+ */
+function coerceFormulaValue(value: DatabaseCellValue): DatabaseCellValue {
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  return null;
+}
+
+/**
  * Defensively coerce a stored cell value into the shape the field type
  * expects. Wrong-shaped values (e.g. a string in a number field, an option-id
  * array in a single select) collapse to `null` — never thrown, never leaked
@@ -87,6 +103,8 @@ export function coerceCellValue(
       const trimmed = value.trim();
       return toIsoDatePart(trimmed) === "" ? null : trimmed;
     }
+    case "formula":
+      return coerceFormulaValue(value);
     default:
       return null;
   }
@@ -145,9 +163,29 @@ export function cellToPlainText(
     }
     case "date":
       return typeof coerced === "string" ? toIsoDatePart(coerced) : "";
+    case "formula":
+      return formulaPlainText(coerced);
     default:
       return "";
   }
+}
+
+/**
+ * Plain text for a coerced (scalar) formula cell: strings as-is, numbers via
+ * `String`, booleans "Yes"/"No" (matching checkbox and the formula display
+ * convention in `lib/expr`).
+ */
+function formulaPlainText(coerced: DatabaseCellValue): string {
+  if (typeof coerced === "string") {
+    return coerced;
+  }
+  if (typeof coerced === "number") {
+    return String(coerced);
+  }
+  if (typeof coerced === "boolean") {
+    return coerced ? "Yes" : "No";
+  }
+  return "";
 }
 
 /**

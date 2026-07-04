@@ -235,13 +235,18 @@ export function isSyncedField(
  * Whether a field routes through `DatabaseCellInlineEditor` when its cell is
  * clicked in edit mode: text/url/number take the input overlay,
  * select/multi-select/date open popover editors. Checkbox is the exception —
- * it toggles in place with no editing state. Synced fields (`sourceKey`) are
- * never editable — this is the single edit-mode gate, so their cells also
- * drop out of keyboard Tab/Enter navigation; view-mode rendering is
- * unaffected.
+ * it toggles in place with no editing state. Formula cells are computed at
+ * read time and strictly read-only (edit the expression via the column
+ * menu). Synced fields (`sourceKey`) are never editable — this is the single
+ * edit-mode gate, so excluded cells also drop out of keyboard Tab/Enter
+ * navigation; view-mode rendering is unaffected.
  */
 export function isInlineEditableField(field: DatabaseField): boolean {
-  return field.type !== "checkbox" && !isSyncedField(field);
+  return (
+    field.type !== "checkbox" &&
+    field.type !== "formula" &&
+    !isSyncedField(field)
+  );
 }
 
 /** One virtualized grid item: a group header row or a data row. */

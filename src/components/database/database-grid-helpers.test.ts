@@ -314,6 +314,10 @@ describe("isInlineEditableField", () => {
     expect(isInlineEditableField(field("checkbox"))).toBe(false);
   });
 
+  it("excludes formula — computed cells are read-only", () => {
+    expect(isInlineEditableField(field("formula"))).toBe(false);
+  });
+
   it("excludes synced fields — the sync engine owns their values", () => {
     expect(isInlineEditableField({ ...field("text"), sourceKey: "name" })).toBe(
       false

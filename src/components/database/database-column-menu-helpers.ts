@@ -45,12 +45,13 @@ const DATE_AGGREGATE_FNS = [
 /**
  * The Calculate-menu aggregate functions valid for a field type, in menu
  * order: the universal count/percent taxonomy for everyone, plus numeric
- * reducers for numbers and earliest/latest for dates.
+ * reducers for numbers and formulas (formula columns reduce over their
+ * number-typed computed values) and earliest/latest for dates.
  */
 export function aggregateFnsForFieldType(
   type: DatabaseFieldType
 ): DatabaseAggregateFn[] {
-  if (type === "number") {
+  if (type === "number" || type === "formula") {
     return [...UNIVERSAL_AGGREGATE_FNS, ...NUMBER_AGGREGATE_FNS];
   }
   if (type === "date") {
@@ -150,8 +151,9 @@ type DatabaseFieldPatch = Partial<Omit<DatabaseField, "id">>;
 
 /**
  * Field patch for "Change type": the new type plus fresh per-type defaults
- * (empty option lists for selects, no number format → "plain"), clearing the
- * other variants' config keys. Cell values are NOT migrated this wave —
+ * (empty option lists for selects, no number format → "plain", an empty
+ * expression for formulas — the user writes one via Edit property), clearing
+ * the other variants' config keys. Cell values are NOT migrated this wave —
  * `coerceCellValue` already renders mismatched stored values as empty, so a
  * type change simply blanks incompatible cells until value coercion lands.
  *
@@ -165,7 +167,13 @@ export function fieldTypeChangePatch(
   const options: DatabaseSelectOption[] | undefined =
     type === "select" || type === "multiSelect" ? [] : undefined;
   const format: DatabaseNumberFormat | undefined = undefined;
-  return { type, options, format } as DatabaseFieldPatch;
+  const expression: string | undefined = type === "formula" ? "" : undefined;
+  return { type, options, format, expression } as DatabaseFieldPatch;
+}
+
+/** Field patch replacing a formula field's expression source. */
+export function expressionPatch(expression: string): DatabaseFieldPatch {
+  return { expression } as DatabaseFieldPatch;
 }
 
 /** Field patch setting a number field's display format. */

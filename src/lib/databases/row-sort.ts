@@ -87,9 +87,34 @@ function compareNonEmpty(
         typeof a === "string" ? a : "",
         typeof b === "string" ? b : ""
       );
+    case "formula":
+      return compareFormulaValues(field, a, b);
     default:
       return 0;
   }
+}
+
+/**
+ * Compare two computed (mixed-type) formula cells: same-type pairs compare
+ * natively (numbers numerically, booleans false-before-true); mixed pairs
+ * fall back to text collation of the plain-text projection (v1 semantics —
+ * matches the formula column's string-flavored filtering).
+ */
+function compareFormulaValues(
+  field: DatabaseField,
+  a: DatabaseCellValue,
+  b: DatabaseCellValue
+): number {
+  if (typeof a === "number" && typeof b === "number") {
+    return a - b;
+  }
+  if (typeof a === "boolean" && typeof b === "boolean") {
+    return (a ? 1 : 0) - (b ? 1 : 0);
+  }
+  return TEXT_COLLATOR.compare(
+    cellToPlainText(field, a),
+    cellToPlainText(field, b)
+  );
 }
 
 /**

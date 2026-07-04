@@ -4,6 +4,7 @@ import {
   aggregateFnsForFieldType,
   calculationsWithSelection,
   columnOrderWithInsert,
+  expressionPatch,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
@@ -176,6 +177,23 @@ describe("fieldTypeChangePatch", () => {
       type: "number",
       options: undefined,
       format: undefined,
+    });
+  });
+
+  it("gives formulas a fresh empty expression", () => {
+    expect(fieldTypeChangePatch("formula")).toEqual({
+      type: "formula",
+      options: undefined,
+      format: undefined,
+      expression: "",
+    });
+  });
+});
+
+describe("expressionPatch", () => {
+  it("carries the expression source only", () => {
+    expect(expressionPatch("thisPage.Price * 1.1")).toEqual({
+      expression: "thisPage.Price * 1.1",
     });
   });
 });

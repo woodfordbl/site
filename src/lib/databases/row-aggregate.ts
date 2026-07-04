@@ -14,7 +14,8 @@ import type {
 /**
  * Calculate-row aggregates over a view's (already filtered) row set —
  * Notion's footer taxonomy. Count functions look at cell emptiness; numeric
- * reducers apply to number fields only; earliest/latest to date fields only
+ * reducers apply to number and formula fields (formula columns aggregate
+ * their merged computed values); earliest/latest to date fields only
  * (returning the winning cell's ISO string). Percent functions return 0–1
  * fractions — display formatting is `formatAggregateValue`'s job.
  */
@@ -106,7 +107,9 @@ function computeNumberAggregate(
   field: DatabaseField,
   rows: readonly LocalDatabaseRow[]
 ): number | null {
-  if (field.type !== "number") {
+  // Formula columns qualify over their merged (computed) values —
+  // `numericValues` keeps only the number-typed results.
+  if (field.type !== "number" && field.type !== "formula") {
     return null;
   }
   const values = numericValues(field, rows);

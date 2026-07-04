@@ -8,6 +8,8 @@ import {
   formatCellValue,
   isCellEmpty,
 } from "@/lib/databases/cell-values.ts";
+import { formulaCellErrorDisplay } from "@/lib/databases/formula-values.ts";
+import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -76,6 +78,40 @@ interface DatabaseCellValueViewProps {
 }
 
 /**
+ * Formula cell display over the merged computed value (see
+ * `lib/databases/formula-values.ts`): numbers right-aligned tabular-nums,
+ * booleans "Yes"/"No" text (not a checkbox — the cell is read-only), strings
+ * plain. Evaluation errors travel as the overlay's marker and render as
+ * muted "⚠ …" text with the message in a title tooltip.
+ */
+function DatabaseFormulaCellValue({
+  value,
+}: {
+  value: DatabaseCellValue | undefined;
+}): ReactNode {
+  const errorDisplay = formulaCellErrorDisplay(value);
+  if (errorDisplay !== null) {
+    return (
+      <span className="truncate text-muted-foreground" title={errorDisplay}>
+        {errorDisplay}
+      </span>
+    );
+  }
+  if (value === null || value === undefined || Array.isArray(value)) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return (
+      <span className="ml-auto truncate text-right tabular-nums">
+        {exprValueToDisplay(value)}
+      </span>
+    );
+  }
+  const display = exprValueToDisplay(value);
+  return display === "" ? null : <span className="truncate">{display}</span>;
+}
+
+/**
  * Render one cell's stored value for display. Empty cells render nothing;
  * wrong-shaped values are coerced defensively and never throw.
  */
@@ -84,6 +120,11 @@ export function DatabaseCellValueView({
   mode,
   value,
 }: DatabaseCellValueViewProps): ReactNode {
+  // Formula cells render the merged computed value (or the error marker)
+  // before coercion — the marker array would otherwise coerce to empty.
+  if (field.type === "formula") {
+    return <DatabaseFormulaCellValue value={value} />;
+  }
   const coerced = coerceCellValue(field, value);
   // Checkboxes render their box even when unset; every other type stays blank.
   if (field.type !== "checkbox" && isCellEmpty(coerced)) {

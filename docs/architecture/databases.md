@@ -166,6 +166,42 @@ UI surfaces:
   `deleteDatabaseRows` skips rows with `externalId` (they would respawn on the next
   sync).
 
+## Formula fields
+
+Formula values are computed at **read time** — never stored in `row.values`.
+[`formula-values.ts`](../../src/lib/databases/formula-values.ts) is the pure overlay:
+`computeFormulaOverlay(fields, rows, { now? })` parses each formula's expression once
+per call (`lib/expr` engine), evaluates per row via `createRowScope`, and records
+`{ cellValue, display, isError }` per cell (`exprValueToCellValue` /
+`exprValueToDisplay`). `withFormulaValues` merges the results into row **copies**
+(inputs never mutated; parse-error and blank expressions yield `null` cells, shadowing
+any stale stored values under the field id). `database-table-view.tsx` feeds these
+merged rows to the whole pipeline — filter, sort, group, Calculate row, and the grid —
+so formulas participate in the view machinery like stored columns:
+
+- **Coercion** — `coerceCellValue`'s formula case passes scalar string/number/boolean
+  through; everything else reads as empty.
+- **Error transport** — evaluation errors collapse to `null` for the machinery, and the
+  "⚠ …" display travels through the merged value as a single-element string-array
+  marker decoded only by the formula cell renderer (`formulaCellErrorDisplay`); cells
+  render it as muted text with a title tooltip. Merged rows are ephemeral render
+  inputs — markers are never persisted.
+- **Display** — formula cells are read-only (`isInlineEditableField` excludes formula):
+  numbers right-aligned tabular-nums, booleans "Yes"/"No" text, strings plain.
+- **Filtering** — string operator set (`FIELD_TYPE_DEFS.formula`) over the computed
+  value; **mixed-type formula columns filter as strings v1** (number results satisfy
+  emptiness operators but not text matches). Sorting compares same-type pairs natively,
+  mixed pairs by text collation. Numeric Calculate reducers (sum/average/…) work over a
+  formula column's number-typed results; grouping stays excluded (`isGroupableField`).
+- **Volatile clocks** — when any expression uses `now()`/`today()`
+  (`hasVolatileFormula`), the table view re-evaluates every 60s, pausing while the tab
+  is hidden and refreshing on visibility return.
+- **Editing** — the column menu's Edit property submenu becomes a monospace expression
+  editor with live parse feedback (positioned error / "✓ Valid") and an explicit Save;
+  broken expressions show a warning badge on the column header (`formulaDisplayInfo`).
+  Formula→formula references are per-cell errors v1 (cycle safety without a dependency
+  graph); the dependency-DAG upgrade is sketched in `createRowScope`'s docs.
+
 ## Draft-proxy invariant (mutations)
 
 TanStack DB `update` drafts are change-tracking proxies. **Never spread draft objects
@@ -187,7 +223,8 @@ delete the database entity (blocks are references; entity lifecycle UI is future
 ## Deferred (see proposal phases)
 
 Row drag-reorder UI, linked-view/`viewId` threading and multi-view switching ("Add view"
-and view styles), row pages (`pageId` is schema-ready), relations/rollups/formulas,
+and view styles), row pages (`pageId` is schema-ready), relations/rollups,
+formula-aware typed filter operators and formula→formula references,
 board/gallery/list/chart views, workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push
 connectors, the server proxy route, and a `/settings` Connections panel.

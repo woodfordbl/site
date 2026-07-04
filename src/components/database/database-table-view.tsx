@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { DatabaseFilterBar } from "@/components/database/database-filter-bar.tsx";
 import { DatabaseMobileToolbar } from "@/components/database/database-mobile-toolbar.tsx";
@@ -6,6 +6,11 @@ import { DatabaseTableGrid } from "@/components/database/database-table-grid.tsx
 import { DatabaseTitle } from "@/components/database/database-title.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import {
+  computeFormulaOverlay,
+  hasVolatileFormula,
+  withFormulaValues,
+} from "@/lib/databases/formula-values.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import {
   type DatabaseRowGroup,
@@ -17,7 +22,10 @@ import {
   resolveColumnOrder,
   resolvePinnedFields,
 } from "@/lib/databases/view-config.ts";
-import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
+import type {
+  DatabaseField,
+  LocalDatabaseRow,
+} from "@/lib/schemas/database.ts";
 
 /** Props contract for the database grid rendered by `database` blocks. */
 export interface DatabaseTableViewProps {
@@ -41,6 +49,60 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+/** Re-evaluation cadence for clock-dependent (`now()`/`today()`) formulas. */
+const VOLATILE_FORMULA_REFRESH_MS = 60_000;
+
+const NO_FIELDS: DatabaseField[] = [];
+
+/**
+ * Clock driving volatile formula re-evaluation: ticks every minute while any
+ * formula uses `now()`/`today()`, pausing entirely while the tab is hidden
+ * (and refreshing immediately when it becomes visible again). Non-volatile
+ * schemas keep the mount-time instant — their results never read the clock.
+ */
+function useFormulaClock(fields: readonly DatabaseField[]): Date {
+  const volatile = useMemo(() => hasVolatileFormula(fields), [fields]);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!volatile) {
+      return;
+    }
+    let intervalId: number | undefined;
+    const stop = () => {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    };
+    const start = () => {
+      if (intervalId === undefined) {
+        intervalId = window.setInterval(() => {
+          setNow(new Date());
+        }, VOLATILE_FORMULA_REFRESH_MS);
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        setNow(new Date());
+        start();
+      }
+    };
+    if (!document.hidden) {
+      start();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [volatile]);
+
+  return now;
+}
+
 /**
  * Table view for one workspace database: resolves the definition and rows via
  * live queries, applies the first view's filter/sorts, and renders the
@@ -58,13 +120,27 @@ export function DatabaseTableView({
   const isNarrowViewport = useIsNarrowViewport();
   const view = database?.views[0];
 
+  const fields = database?.fields ?? NO_FIELDS;
+  const formulaNow = useFormulaClock(fields);
+
+  // Formula overlay: computed values merged into row COPIES so formulas ride
+  // the whole existing pipeline — filter, sort, group, Calculate row, and the
+  // grid's cells all read merged values. No formula fields → rows pass
+  // through untouched.
+  const mergedRows = useMemo<LocalDatabaseRow[]>(() => {
+    const overlay = computeFormulaOverlay(fields, allRows, {
+      now: () => formulaNow,
+    });
+    return withFormulaValues(allRows, overlay);
+  }, [allRows, fields, formulaNow]);
+
   const rows = useMemo<LocalDatabaseRow[]>(() => {
     if (!(database && view)) {
       return [];
     }
-    const filtered = applyFilter(allRows, database.fields, view.filter);
+    const filtered = applyFilter(mergedRows, database.fields, view.filter);
     return sortRowsForView(filtered, database.fields, view);
-  }, [allRows, database, view]);
+  }, [mergedRows, database, view]);
 
   // Row buckets for grouped views, built AFTER filter + sort so buckets
   // preserve the view's row order; `null` keeps the grid ungrouped (also the

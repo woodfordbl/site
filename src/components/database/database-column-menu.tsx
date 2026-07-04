@@ -1,4 +1,5 @@
 import {
+  IconAlertTriangle,
   IconCheck,
   IconCloudDown,
   IconColumnInsertLeft,
@@ -33,6 +34,7 @@ import {
   aggregateFnsForFieldType,
   calculationsWithSelection,
   columnOrderWithInsert,
+  expressionPatch,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
@@ -82,6 +84,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
 import {
   addDatabaseField,
   duplicateDatabaseField,
@@ -93,7 +96,9 @@ import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
+import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
+import { parseExpression } from "@/lib/expr/parse.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
@@ -160,7 +165,9 @@ function ItemCheck({
  * Keep typing inside menu-embedded inputs from triggering the menu's
  * typeahead/arrow navigation; Escape still propagates so it closes the menu.
  */
-function stopMenuKeys(event: KeyboardEvent<HTMLInputElement>): void {
+function stopMenuKeys(
+  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
+): void {
   if (event.key !== "Escape") {
     event.stopPropagation();
   }
@@ -372,17 +379,127 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
   );
 }
 
+interface FormulaExpressionEditorProps {
+  databaseId: string;
+  field: DatabaseField & { type: "formula" };
+  /** Closes the whole column menu after a successful Save. */
+  onSaved: () => void;
+}
+
+/**
+ * Formula editor inside the Edit property submenu: a monospace textarea over
+ * the field's expression with live parse feedback (positioned error message,
+ * muted "✓ Valid" when the draft parses), a `thisPage.Property` reference
+ * hint, and an explicit Save (evaluation is read-time — saving simply
+ * rewrites the expression and the overlay recomputes).
+ */
+function FormulaExpressionEditor({
+  databaseId,
+  field,
+  onSaved,
+}: FormulaExpressionEditorProps) {
+  const [draft, setDraft] = useState(field.expression);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Mounted only while the submenu is open — steal focus from the popup
+  // after Base UI's initial focus pass (same rAF pattern as the rename input).
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  const trimmed = draft.trim();
+  const parsed = trimmed === "" ? null : parseExpression(draft);
+
+  let feedback: ReactNode = null;
+  if (parsed !== null) {
+    feedback = parsed.ok ? (
+      <span className="px-0.5 text-muted-foreground text-xs">✓ Valid</span>
+    ) : (
+      <span className="px-0.5 text-destructive text-xs">
+        {parsed.error.message} (at character {parsed.error.position + 1})
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex w-72 flex-col gap-1.5 p-1">
+      <span className="px-0.5 font-medium text-muted-foreground text-xs">
+        Formula
+      </span>
+      <Textarea
+        aria-label="Formula expression"
+        autoComplete="off"
+        className="min-h-20 font-mono text-xs md:text-xs"
+        onChange={(event) => {
+          setDraft(event.target.value);
+        }}
+        onKeyDown={stopMenuKeys}
+        placeholder="thisPage.Price * 1.1"
+        ref={textareaRef}
+        spellCheck={false}
+        value={draft}
+      />
+      {feedback}
+      <span className="px-0.5 text-muted-foreground text-xs">
+        Use thisPage.Property — e.g. thisPage.Price * 1.1
+      </span>
+      <Button
+        className="self-end"
+        onClick={() => {
+          if (draft !== field.expression) {
+            updateDatabaseField(databaseId, field.id, expressionPatch(draft));
+          }
+          onSaved();
+        }}
+        size="xs"
+        variant="outline"
+      >
+        Save
+      </Button>
+    </div>
+  );
+}
+
 interface EditPropertySubmenuProps {
   databaseId: string;
   field: DatabaseField;
+  /** Closes the whole column menu (used after the formula editor saves). */
+  onRequestClose: () => void;
 }
 
 /**
  * Per-type "Edit property" config submenu: number → format picker,
- * select/multi-select → option list editor. Types without config render
- * nothing (the submenu is omitted entirely).
+ * select/multi-select → option list editor, formula → expression editor.
+ * Types without config render nothing (the submenu is omitted entirely).
  */
-function EditPropertySubmenu({ databaseId, field }: EditPropertySubmenuProps) {
+function EditPropertySubmenu({
+  databaseId,
+  field,
+  onRequestClose,
+}: EditPropertySubmenuProps) {
+  if (field.type === "formula") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconSettings />
+          Edit property
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <FormulaExpressionEditor
+            databaseId={databaseId}
+            field={field}
+            onSaved={onRequestClose}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
   if (field.type === "number") {
     return (
       <DropdownMenuSub>
@@ -438,8 +555,9 @@ interface ChangeTypeSubmenuProps {
 }
 
 /**
- * "Change type" submenu over all seven field types. Cell values are NOT
- * migrated this wave — see `fieldTypeChangePatch`.
+ * "Change type" submenu over every field type (formula included — changing
+ * TO formula starts with an empty expression written via Edit property).
+ * Cell values are NOT migrated this wave — see `fieldTypeChangePatch`.
  */
 function ChangeTypeSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
   return (
@@ -582,6 +700,9 @@ export function DatabaseColumnMenu({
   // but never schema-destructive ones: type/config edits and deletion would
   // fight the sync engine's reconciliation.
   const synced = isSyncedField(field);
+  // Broken formula badge on the header (parse errors only — per-row
+  // evaluation errors render in their cells instead).
+  const { parseError } = formulaDisplayInfo(field);
   const freezePrefix = freezePrefixEndingAt(displayFieldIds, field.id);
   const frozenHere = isFrozenExactlyAt(config.pinnedFieldIds, freezePrefix);
   const sortEntry = sortEntryFor(view.sorts, field.id);
@@ -646,6 +767,15 @@ export function DatabaseColumnMenu({
           }
         >
           {children}
+          {parseError ? (
+            <span
+              className="ml-auto inline-flex shrink-0 text-(--block-text-yellow)"
+              title={`Formula error: ${parseError}`}
+            >
+              <IconAlertTriangle aria-hidden className="size-3.5" />
+              <span className="sr-only">Formula error: {parseError}</span>
+            </span>
+          ) : null}
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-64 min-w-64">
           <ColumnRenameInput
@@ -674,7 +804,13 @@ export function DatabaseColumnMenu({
           <DropdownMenuSeparator />
           {synced ? null : (
             <>
-              <EditPropertySubmenu databaseId={databaseId} field={field} />
+              <EditPropertySubmenu
+                databaseId={databaseId}
+                field={field}
+                onRequestClose={() => {
+                  handleOpenChange(false);
+                }}
+              />
               <ChangeTypeSubmenu databaseId={databaseId} field={field} />
             </>
           )}
