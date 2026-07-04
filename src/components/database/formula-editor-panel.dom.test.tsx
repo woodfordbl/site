@@ -20,6 +20,7 @@ const FIELDS: DatabaseField[] = [
 const FIRST_ROW_VALUES = { "f-price": 10, "f-qty": 4 };
 
 const PARSE_ERROR_RE = /Unexpected end of expression/;
+const VALID_NUMBER_RE = /✓ Valid · number/;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
 function flushFrames(): Promise<void> {
@@ -89,7 +90,7 @@ describe("FormulaEditorPanel", () => {
     );
 
     // Live parse status (with inferred result type) + first-row preview.
-    expect(screen.getByText(/✓ Valid · number/)).toBeDefined();
+    expect(screen.getByText(VALID_NUMBER_RE)).toBeDefined();
     expect(screen.getByText("Preview: 10")).toBeDefined();
   });
 
