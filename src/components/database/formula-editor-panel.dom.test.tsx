@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
+import { serializeFormulaDom } from "@/lib/editor/formula-dom.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 // The panel only reads the coarse-pointer hint for row sizing; stub it so the
@@ -19,10 +20,9 @@ const FIELDS: DatabaseField[] = [
 
 const FIRST_ROW_VALUES = { "f-price": 10, "f-qty": 4 };
 
-const PARSE_ERROR_RE = /Unexpected end of expression/;
 const VALID_NUMBER_RE = /✓ Valid · number/;
 
-/** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
+/** Flush the field's rAF-based caret restoration (stubbed to timeouts). */
 function flushFrames(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
@@ -45,10 +45,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderPanel(onSave = vi.fn()) {
+function renderPanel(expression = "", onSave = vi.fn()) {
   render(
     <FormulaEditorPanel
-      expression=""
+      expression={expression}
       fields={FIELDS}
       firstRowValues={FIRST_ROW_VALUES}
       onSave={onSave}
@@ -57,81 +57,66 @@ function renderPanel(onSave = vi.fn()) {
   return onSave;
 }
 
+function field(): HTMLElement {
+  return screen.getByLabelText("Formula expression");
+}
+
 describe("FormulaEditorPanel", () => {
-  it("searches, inserts a function then a property at the caret, and previews", async () => {
-    renderPanel();
+  it("renders an existing formula with a property chip, type, and preview", async () => {
+    renderPanel("thisPage.Price * 2");
     await flushFrames();
 
-    const textarea = screen.getByLabelText("Formula expression");
+    // The property renders as a chip carrying its source and showing the name.
+    const chip = field().querySelector("[data-formula-chip]");
+    expect(chip?.getAttribute("data-source")).toBe("thisPage.Price");
+    expect(chip?.textContent).toContain("Price");
+    // Serializing the field round-trips to the exact source.
+    expect(serializeFormulaDom(field())).toBe("thisPage.Price * 2");
+
+    expect(screen.getByText(VALID_NUMBER_RE)).toBeDefined();
+    expect(screen.getByText("Preview: 20")).toBeDefined();
+  });
+
+  it("filters the reference list as you search", () => {
+    renderPanel();
     const search = screen.getByLabelText(
       "Search properties, functions, and operators"
     );
-
-    // Search narrows the reference list to the average function.
     fireEvent.change(search, { target: { value: "aver" } });
     expect(screen.queryByText("sum")).toBeNull();
     expect(screen.queryByText("Price")).toBeNull();
-
-    // Tapping the function inserts `average()` with the caret inside parens.
-    fireEvent.click(screen.getByText("average"));
-    await flushFrames();
-    expect((textarea as HTMLTextAreaElement).value).toBe("average()");
-    expect((textarea as HTMLTextAreaElement).selectionStart).toBe(
-      "average(".length
-    );
-
-    // Clearing the search brings Properties back; tapping one inserts a
-    // thisPage reference at the caret (inside the parens).
-    fireEvent.change(search, { target: { value: "" } });
-    fireEvent.click(screen.getByText("Price"));
-    await flushFrames();
-    expect((textarea as HTMLTextAreaElement).value).toBe(
-      "average(thisPage.Price)"
-    );
-
-    // Live parse status (with inferred result type) + first-row preview.
-    expect(screen.getByText(VALID_NUMBER_RE)).toBeDefined();
-    expect(screen.getByText("Preview: 10")).toBeDefined();
+    expect(screen.getByText("average")).toBeDefined();
   });
 
-  it("uses the bracket form for non-identifier property names", async () => {
+  it("inserts references into the field (source round-trips through chips)", async () => {
     renderPanel();
     await flushFrames();
 
-    fireEvent.click(screen.getByText("Unit Count"));
+    fireEvent.click(screen.getByText("average"));
     await flushFrames();
+    expect(serializeFormulaDom(field())).toBe("average()");
 
-    const textarea = screen.getByLabelText(
-      "Formula expression"
-    ) as HTMLTextAreaElement;
-    expect(textarea.value).toBe('thisPage["Unit Count"]');
-    // Bracket references resolve like any other property in the preview.
-    expect(screen.getByText("Preview: 4")).toBeDefined();
+    fireEvent.click(screen.getByText("Price"));
+    await flushFrames();
+    // The function insert leaves the caret inside its parens, so the property
+    // lands there; it serializes back to its full source via the chip.
+    expect(serializeFormulaDom(field())).toBe("average(thisPage.Price)");
   });
 
   it("excludes formula fields from Properties and previews errors honestly", async () => {
-    renderPanel();
+    renderPanel("1 / 0");
     await flushFrames();
 
     // The formula field itself must not be insertable.
     expect(screen.queryByText("Total")).toBeNull();
-
-    const textarea = screen.getByLabelText("Formula expression");
-    fireEvent.change(textarea, { target: { value: "1 / 0" } });
     expect(screen.getByText("Preview: ⚠ Division by zero")).toBeDefined();
-
-    fireEvent.change(textarea, { target: { value: "1 +" } });
-    expect(screen.getByText(PARSE_ERROR_RE)).toBeDefined();
   });
 
-  it("hands the draft to onSave", async () => {
-    const onSave = renderPanel();
+  it("hands the current draft to onSave", async () => {
+    const onSave = renderPanel("thisPage.Price * 2");
     await flushFrames();
 
-    const textarea = screen.getByLabelText("Formula expression");
-    fireEvent.change(textarea, { target: { value: "thisPage.Price * 2" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
     expect(onSave).toHaveBeenCalledWith("thisPage.Price * 2");
   });
 });

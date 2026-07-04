@@ -8,6 +8,10 @@ import {
   useState,
 } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import {
+  FormulaCodeField,
+  type FormulaCodeFieldHandle,
+} from "@/components/database/formula-code-field.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   InputGroup,
@@ -16,7 +20,6 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { Textarea } from "@/components/ui/textarea.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { evaluateExpression } from "@/lib/expr/evaluate.ts";
 import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
@@ -70,9 +73,7 @@ function fieldExprType(type: DatabaseFieldType): ExprType {
  * Keep typing inside menu-embedded inputs from triggering the menu's
  * typeahead/arrow navigation; Escape still propagates so it closes the menu.
  */
-function stopMenuKeys(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
-): void {
+function stopMenuKeys(event: KeyboardEvent<HTMLElement>): void {
   if (event.key !== "Escape") {
     event.stopPropagation();
   }
@@ -161,38 +162,23 @@ export function FormulaEditorPanel({
 }: FormulaEditorPanelProps): ReactNode {
   const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fieldRef = useRef<FormulaCodeFieldHandle>(null);
   const coarse = useIsCoarsePrimaryPointer();
 
   // Mounted only while the (sub)menu is open — steal focus from the popup
   // after Base UI's initial focus pass (same rAF pattern as the rename input).
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      textareaRef.current?.focus();
+      fieldRef.current?.focus();
     });
     return () => {
       cancelAnimationFrame(frame);
     };
   }, []);
 
-  /**
-   * Splice `text` into the draft at the textarea's caret (replacing any
-   * selection — its selectionStart/End survive blur), then restore focus with
-   * the caret `caretOffset` characters into the inserted text.
-   */
+  /** Insert reference text at the field's caret (the field owns caret math). */
   const insertAtCaret = (text: string, caretOffset: number) => {
-    const element = textareaRef.current;
-    const start = element?.selectionStart ?? draft.length;
-    const end = element?.selectionEnd ?? draft.length;
-    setDraft(draft.slice(0, start) + text + draft.slice(end));
-    const caret = start + caretOffset;
-    requestAnimationFrame(() => {
-      const target = textareaRef.current;
-      if (target) {
-        target.focus();
-        target.setSelectionRange(caret, caret);
-      }
-    });
+    fieldRef.current?.insertAtCaret(text, caretOffset);
   };
 
   const trimmed = draft.trim();
@@ -292,19 +278,16 @@ export function FormulaEditorPanel({
         coarse && "h-full min-h-0"
       )}
     >
-      <Textarea
-        aria-label="Formula expression"
-        autoComplete="off"
+      <FormulaCodeField
+        ariaLabel="Formula expression"
         // Normal app input sizing: 16px on mobile (matches the base input and
         // keeps iOS from zooming on focus), 14px on desktop.
-        className="max-h-40 min-h-12 font-mono text-base md:text-sm"
-        onChange={(event) => {
-          setDraft(event.target.value);
-        }}
+        className="max-h-40 overflow-y-auto"
+        fields={fields}
+        handleRef={fieldRef}
+        onChange={setDraft}
         onKeyDown={stopMenuKeys}
         placeholder="thisPage.Price * 1.1"
-        ref={textareaRef}
-        spellCheck={false}
         value={draft}
       />
       {status}
