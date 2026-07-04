@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
   DatabaseFilterChips,
   DatabaseFilterMatchOp,
+  DatabaseGroupByChip,
   DatabaseSortChips,
 } from "@/components/database/database-filter-bar.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -88,6 +89,7 @@ export function DatabaseMobileToolbar({
 }: DatabaseMobileToolbarProps): ReactNode {
   const filterCount = view.filter?.conditions.length ?? 0;
   const sortCount = view.sorts?.length ?? 0;
+  const isGrouped = view.groupBy !== undefined;
 
   return (
     <>
@@ -107,17 +109,24 @@ export function DatabaseMobileToolbar({
         </div>
       </ToolbarPopoverButton>
       <ToolbarPopoverButton
-        active={sortCount > 0}
+        active={sortCount > 0 || isGrouped}
         icon={<IconArrowsSort aria-hidden />}
         label={sortCount > 0 ? `Sorts (${sortCount} active)` : "Sorts"}
       >
-        {sortCount > 0 ? (
-          <DatabaseSortChips
-            className={CHIP_ROW_CLASS}
-            databaseId={databaseId}
-            fields={fields}
-            view={view}
-          />
+        {sortCount > 0 || isGrouped ? (
+          <div className={CHIP_ROW_CLASS}>
+            <DatabaseSortChips
+              className="contents"
+              databaseId={databaseId}
+              fields={fields}
+              view={view}
+            />
+            <DatabaseGroupByChip
+              databaseId={databaseId}
+              fields={fields}
+              view={view}
+            />
+          </div>
         ) : (
           <p className="px-1 py-0.5 text-muted-foreground text-sm">
             No sorts. Add one from a column header menu.

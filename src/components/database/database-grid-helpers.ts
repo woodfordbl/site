@@ -1,7 +1,9 @@
+import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseAggregateFn,
   DatabaseField,
   DatabaseTableViewConfig,
+  LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
 /**
@@ -240,6 +242,38 @@ export function isSyncedField(
  */
 export function isInlineEditableField(field: DatabaseField): boolean {
   return field.type !== "checkbox" && !isSyncedField(field);
+}
+
+/** One virtualized grid item: a group header row or a data row. */
+export type GridItem =
+  | { kind: "groupHeader"; group: DatabaseRowGroup }
+  | { kind: "row"; row: LocalDatabaseRow };
+
+/**
+ * Flatten a grouped view into the virtualizer's item list: each group
+ * contributes its header followed by its rows, except collapsed groups
+ * (`view.config.collapsedGroupKeys`) which contribute only the header.
+ * Ungrouped views (`groups === null`) flatten to plain row items.
+ */
+export function flattenGridItems(
+  groups: readonly DatabaseRowGroup[] | null,
+  rows: readonly LocalDatabaseRow[],
+  collapsedGroupKeys: readonly string[] | undefined
+): GridItem[] {
+  if (!groups) {
+    return rows.map((row) => ({ kind: "row", row }));
+  }
+  const collapsed = new Set(collapsedGroupKeys);
+  const items: GridItem[] = [];
+  for (const group of groups) {
+    items.push({ kind: "groupHeader", group });
+    if (!collapsed.has(group.key)) {
+      for (const row of group.rows) {
+        items.push({ kind: "row", row });
+      }
+    }
+  }
+  return items;
 }
 
 /** One editing cell, addressed by stable row + field ids. */

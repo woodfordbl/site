@@ -1,4 +1,4 @@
-import { IconPlus } from "@tabler/icons-react";
+import { IconChevronRight, IconPlus } from "@tabler/icons-react";
 import {
   type ColumnDef,
   getCoreRowModel,
@@ -36,8 +36,10 @@ import {
   type CellEditMove,
   type CellEditTarget,
   DEFAULT_COLUMN_WIDTH_PX,
+  flattenGridItems,
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
+  type GridItem,
   isInlineEditableField,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
@@ -49,9 +51,13 @@ import { useDatabaseColumnResize } from "@/components/database/use-database-colu
 import { Button } from "@/components/ui/button.tsx";
 import {
   addDatabaseField,
+  insertDatabaseRow,
+  updateDatabaseCell,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
+import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
+import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseField,
   DatabaseView,
@@ -64,6 +70,12 @@ import { cn } from "@/lib/utils.ts";
  * only — rows arrive pre-filtered/pre-sorted from the view layer) with
  * TanStack Virtual row windowing inside one horizontal-scroll container.
  * Pinned columns render `position: sticky` from the view's `pinnedFieldIds`.
+ *
+ * Grouped views (`view.groupBy`) virtualize a flattened header+row item
+ * list (`flattenGridItems`); buckets render the incoming sorted-or-manual
+ * row order as given — drag-reorder across/within groups is out of scope.
+ * The Calculate row still aggregates over ALL filtered rows, collapsed
+ * groups included.
  */
 
 /** Extra virtual rows above/below the viewport. */
@@ -91,6 +103,12 @@ interface DatabaseTableGridProps {
   columns: readonly DatabaseField[];
   databaseId: string;
   /**
+   * Row buckets when the view has a resolvable `groupBy` (built by
+   * `groupRowsForView` over the same filtered + sorted `rows`); `null`
+   * renders the flat ungrouped grid. Collapsed groups render header-only.
+   */
+  groups?: readonly DatabaseRowGroup[] | null;
+  /**
    * Connector-synced database: the "New row" strip is hidden (rows come from
    * the source). Local columns stay first-class — add-field remains enabled.
    */
@@ -108,6 +126,7 @@ interface DatabaseTableGridProps {
 export function DatabaseTableGrid({
   columns,
   databaseId,
+  groups = null,
   isSyncedDatabase = false,
   mode,
   pinnedFields,
@@ -275,8 +294,36 @@ export function DatabaseTableGrid({
     }
   }, [databaseId, view.id, view.visibleFieldIds]);
 
+  // Grouped views virtualize a flattened header+row item list; collapsed
+  // groups contribute only their header.
+  const collapsedGroupKeys = view.config.collapsedGroupKeys;
+  const collapsedKeySet = useMemo(
+    () => new Set(collapsedGroupKeys),
+    [collapsedGroupKeys]
+  );
+  const items = useMemo<GridItem[]>(
+    () => flattenGridItems(groups, rows, collapsedGroupKeys),
+    [collapsedGroupKeys, groups, rows]
+  );
+
+  const handleToggleGroup = useCallback(
+    (groupKey: string) => {
+      const current = view.config.collapsedGroupKeys ?? [];
+      const next = current.includes(groupKey)
+        ? current.filter((key) => key !== groupKey)
+        : [...current, groupKey];
+      updateDatabaseView(databaseId, view.id, {
+        config: {
+          ...view.config,
+          collapsedGroupKeys: next.length > 0 ? next : undefined,
+        },
+      });
+    },
+    [databaseId, view.config, view.id]
+  );
+
   const virtualizer = useVirtualizer({
-    count: rows.length,
+    count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => GRID_ROW_HEIGHT_PX,
     overscan: ROW_OVERSCAN,
@@ -299,9 +346,13 @@ export function DatabaseTableGrid({
   useEffect(() => {
     editStateRef.current = {
       editableFieldIds,
-      rowIds: rows.map((row) => row.id),
+      // Visible (non-collapsed) rows only, so keyboard navigation skips
+      // group headers and never lands inside a collapsed group.
+      rowIds: items.flatMap((item) =>
+        item.kind === "row" ? [item.row.id] : []
+      ),
     };
-  }, [editableFieldIds, rows]);
+  }, [editableFieldIds, items]);
 
   const handleStartEdit = useCallback((target: CellEditTarget) => {
     setEditing(target);
@@ -331,17 +382,45 @@ export function DatabaseTableGrid({
     [primaryFieldId]
   );
 
+  const groupByFieldId = view.groupBy?.fieldId;
+  const handleAddRowToGroup = useCallback(
+    (group: DatabaseRowGroup) => {
+      // Insert after the group's last row so manual-order views keep the new
+      // row inside the bucket; seed the group-by cell so sorted/grouped
+      // views bucket it correctly (the empty group inserts a blank row).
+      const lastRow = group.rows.at(-1);
+      const row = insertDatabaseRow(databaseId, { after: lastRow?.id });
+      if (groupByFieldId !== undefined && group.value !== null) {
+        updateDatabaseCell(row.id, groupByFieldId, group.value);
+      }
+      // A collapsed bucket would swallow the new row invisibly — expand it.
+      if (collapsedKeySet.has(group.key)) {
+        handleToggleGroup(group.key);
+      }
+      handleRowInserted(row);
+    },
+    [
+      collapsedKeySet,
+      databaseId,
+      groupByFieldId,
+      handleRowInserted,
+      handleToggleGroup,
+    ]
+  );
+
   // Keep the editing row mounted: keyboard navigation and freshly inserted
   // rows may land outside the virtual window.
   useEffect(() => {
     if (!editing) {
       return;
     }
-    const index = rows.findIndex((row) => row.id === editing.rowId);
+    const index = items.findIndex(
+      (item) => item.kind === "row" && item.row.id === editing.rowId
+    );
     if (index >= 0) {
       virtualizer.scrollToIndex(index);
     }
-  }, [editing, rows, virtualizer]);
+  }, [editing, items, virtualizer]);
 
   const calculations = view.config.calculations;
   const hasCalculations =
@@ -365,7 +444,7 @@ export function DatabaseTableGrid({
           {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
           <div
             aria-colcount={gridColumns.length}
-            aria-rowcount={rows.length + 1}
+            aria-rowcount={items.length + 1}
             className="relative"
             ref={gridRef}
             role="grid"
@@ -423,7 +502,7 @@ export function DatabaseTableGrid({
                 </div>
               ) : null}
             </div>
-            {rows.length === 0 ? (
+            {items.length === 0 ? (
               <div className="flex h-9 items-center px-2 text-muted-foreground text-sm">
                 <span className="sticky left-2">No rows</span>
               </div>
@@ -435,7 +514,23 @@ export function DatabaseTableGrid({
                 style={{ height: virtualizer.getTotalSize() }}
               >
                 {virtualizer.getVirtualItems().map((virtualRow) => {
-                  const row = rows[virtualRow.index];
+                  const item = items[virtualRow.index];
+                  if (item.kind === "groupHeader") {
+                    return (
+                      <GridGroupHeaderRow
+                        collapsed={collapsedKeySet.has(item.group.key)}
+                        group={item.group}
+                        key={`group:${item.group.key}`}
+                        measureRow={virtualizer.measureElement}
+                        onAddRow={handleAddRowToGroup}
+                        onToggle={handleToggleGroup}
+                        rowIndex={virtualRow.index}
+                        showAddRow={mode === "edit" && !isSyncedDatabase}
+                        top={virtualRow.start}
+                      />
+                    );
+                  }
+                  const row = item.row;
                   return (
                     <GridRow
                       columns={gridColumns}
@@ -589,6 +684,108 @@ function GridHeaderCell({
     </div>
   );
 }
+
+interface GridGroupHeaderRowProps {
+  collapsed: boolean;
+  group: DatabaseRowGroup;
+  /** `virtualizer.measureElement` — headers report their fixed 36px height. */
+  measureRow: (node: HTMLDivElement | null) => void;
+  onAddRow: (group: DatabaseRowGroup) => void;
+  onToggle: (groupKey: string) => void;
+  /** Zero-based flattened item index (drives measurement + ARIA row index). */
+  rowIndex: number;
+  /** Edit mode on a non-synced database — synced rows come from the source. */
+  showAddRow: boolean;
+  top: number;
+}
+
+/**
+ * One group header row (Linear-style): full-width, spanning every column,
+ * with the content stuck to the left edge like the "No rows" strip. The
+ * whole row toggles collapse via an invisible full-row button (the chevron
+ * rotates when expanded); a colored select option adds a status dot before
+ * the label; the muted count and the hover-revealed per-group "+" (adds a
+ * row pre-seeded with the group's value) trail it. Memoized separately from
+ * `GridRow` so scrolling stays cheap.
+ */
+const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
+  collapsed,
+  group,
+  measureRow,
+  onAddRow,
+  onToggle,
+  rowIndex,
+  showAddRow,
+  top,
+}: GridGroupHeaderRowProps) {
+  const colorDef = group.color ? BLOCK_COLOR_DEFS[group.color] : undefined;
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: virtualized div grid — see the grid container note.
+    // biome-ignore lint/a11y/useFocusableInteractive: the full-row toggle button inside is the focusable element.
+    <div
+      aria-rowindex={rowIndex + 2}
+      className="absolute top-0 left-0 flex w-full border-border border-b bg-muted/30"
+      data-index={rowIndex}
+      data-reveal-group=""
+      ref={measureRow}
+      role="row"
+      style={{
+        height: GRID_ROW_HEIGHT_PX,
+        transform: `translateY(${top}px)`,
+      }}
+    >
+      {/* biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note. */}
+      {/* biome-ignore lint/a11y/useFocusableInteractive: the toggle button inside is the focusable element. */}
+      <div aria-colindex={1} className="flex w-full min-w-0" role="gridcell">
+        <button
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} group ${group.label}`}
+          className="absolute inset-0 cursor-pointer outline-none focus-visible:bg-muted/50"
+          onClick={() => {
+            onToggle(group.key);
+          }}
+          type="button"
+        />
+        {/* Visible content: sticky against horizontal scroll, click-through
+            to the full-row toggle underneath (the "+" opts back in). */}
+        <div className="pointer-events-none sticky left-0 z-10 flex max-w-full items-center gap-1.5 px-2">
+          <IconChevronRight
+            className={cn(
+              "size-4 shrink-0 stroke-[1.5px] text-muted-foreground transition-transform",
+              !collapsed && "rotate-90"
+            )}
+          />
+          {colorDef ? (
+            <span
+              aria-hidden
+              className={cn(
+                "size-2 shrink-0 rounded-full bg-current",
+                colorDef.textClass
+              )}
+            />
+          ) : null}
+          <span className="truncate font-medium text-sm">{group.label}</span>
+          <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+            {group.rows.length}
+          </span>
+          {showAddRow ? (
+            <Button
+              aria-label={`Add row to group ${group.label}`}
+              className="hover-reveal pointer-events-auto shrink-0 text-muted-foreground"
+              onClick={() => {
+                onAddRow(group);
+              }}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <IconPlus />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+});
 
 interface GridRowProps {
   columns: readonly GridColumn[];

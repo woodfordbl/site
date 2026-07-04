@@ -305,7 +305,10 @@ function toPlain<T>(value: T): T {
 /**
  * Shallow-merge a patch into the matching view (immutably rebuilding the
  * `views` array from plain data; the view id is never patched) and bump
- * `updatedAt`.
+ * `updatedAt`. Keys explicitly passed as `undefined` are REMOVED from the
+ * view — `toPlain`'s JSON round-trip drops undefined-valued keys, so a plain
+ * spread could never unset an optional view key (`groupBy`, `sorts`,
+ * `filter`).
  */
 export function updateDatabaseView(
   databaseId: string,
@@ -313,13 +316,25 @@ export function updateDatabaseView(
   patch: Partial<Omit<DatabaseView, "id">>
 ): void {
   const timestamp = nowIso();
+  const clearedKeys = Object.keys(patch).filter(
+    (key) => patch[key as keyof typeof patch] === undefined
+  );
   const tx = createDatabaseTransaction();
 
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
-      draft.views = toPlain(draft.views).map((view) =>
-        view.id === viewId ? { ...view, ...toPlain(patch), id: view.id } : view
-      );
+      draft.views = toPlain(draft.views).map((view) => {
+        if (view.id !== viewId) {
+          return view;
+        }
+        const merged = { ...view, ...toPlain(patch), id: view.id };
+        if (clearedKeys.length === 0) {
+          return merged;
+        }
+        return Object.fromEntries(
+          Object.entries(merged).filter(([key]) => !clearedKeys.includes(key))
+        ) as typeof merged;
+      });
       draft.updatedAt = timestamp;
     });
   });
@@ -424,6 +439,7 @@ function stripFieldFromView(view: DatabaseView, fieldId: string): DatabaseView {
     ...view,
     visibleFieldIds: view.visibleFieldIds?.filter((id) => id !== fieldId),
     sorts: view.sorts?.filter((sort) => sort.fieldId !== fieldId),
+    groupBy: view.groupBy?.fieldId === fieldId ? undefined : view.groupBy,
     filter: view.filter
       ? stripFieldFromFilter(view.filter, fieldId)
       : undefined,

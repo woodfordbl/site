@@ -5,6 +5,7 @@ import {
   IconColumnInsertRight,
   IconCopy,
   IconEyeOff,
+  IconLayoutGrid,
   IconPhoto,
   IconPhotoOff,
   IconPinned,
@@ -92,6 +93,7 @@ import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
+import { isGroupableField } from "@/lib/databases/row-group.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
@@ -593,6 +595,16 @@ export function DatabaseColumnMenu({
     });
   };
 
+  const isGroupedByField = view.groupBy?.fieldId === field.id;
+  const toggleGroupBy = () => {
+    // Grouping by a new field (or clearing) always resets the collapse
+    // state — collapsed keys belong to the previous field's buckets.
+    updateDatabaseView(databaseId, viewId, {
+      groupBy: isGroupedByField ? undefined : { fieldId: field.id },
+      config: { ...config, collapsedGroupKeys: undefined },
+    });
+  };
+
   const writeIcon = (icon: string | undefined) => {
     updateDatabaseField(databaseId, field.id, { icon });
   };
@@ -713,6 +725,13 @@ export function DatabaseColumnMenu({
               priority={fieldSortPriority}
             />
           </DropdownMenuItem>
+          {isGroupableField(field) ? (
+            <DropdownMenuItem onClick={toggleGroupBy}>
+              <IconLayoutGrid />
+              Group by
+              <ItemCheck checked={isGroupedByField} />
+            </DropdownMenuItem>
+          ) : null}
           <CalculateSubmenu
             activeFn={config.calculations?.[field.id]}
             field={field}

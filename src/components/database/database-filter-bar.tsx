@@ -5,6 +5,7 @@ import {
   IconArrowUp,
   IconCheck,
   IconChevronDown,
+  IconLayoutGrid,
   IconPlus,
   IconSearch,
   IconX,
@@ -254,6 +255,45 @@ export function DatabaseSortChips({
 }
 
 /**
+ * Group-by chip: `[grid icon] Grouped by <field>` with a trailing × that
+ * clears `view.groupBy` (and the collapse state with it). Renders nothing
+ * when the view is ungrouped. Reused by the desktop inline bar and the
+ * mobile sort popover.
+ */
+export function DatabaseGroupByChip({
+  databaseId,
+  fields,
+  view,
+}: Omit<ChipStripProps, "className">): ReactNode {
+  const groupBy = view.groupBy;
+  if (!groupBy) {
+    return null;
+  }
+  const fieldName =
+    fields.find((field) => field.id === groupBy.fieldId)?.name ??
+    "Unknown field";
+
+  return (
+    <div className={CHIP_CLASS}>
+      <span className={CHIP_SEGMENT_CLASS}>
+        <IconLayoutGrid className="size-3.5 shrink-0 stroke-[1.5px]" />
+        Grouped by
+        <span className="max-w-32 truncate text-foreground">{fieldName}</span>
+      </span>
+      <RemoveChipButton
+        label={`Clear grouping by ${fieldName}`}
+        onRemove={() => {
+          updateDatabaseView(databaseId, view.id, {
+            groupBy: undefined,
+            config: { ...view.config, collapsedGroupKeys: undefined },
+          });
+        }}
+      />
+    </div>
+  );
+}
+
+/**
  * Match all/any control, shown only once the root filter group has two or
  * more entries. Kept separate from `DatabaseFilterChips` so the desktop bar
  * can place it after the sort chips (trailing, `ml-auto`) exactly as before.
@@ -301,6 +341,11 @@ export function DatabaseFilterBar({
       />
       <DatabaseSortChips
         className="contents"
+        databaseId={databaseId}
+        fields={fields}
+        view={view}
+      />
+      <DatabaseGroupByChip
         databaseId={databaseId}
         fields={fields}
         view={view}

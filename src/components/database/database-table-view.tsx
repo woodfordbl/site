@@ -7,6 +7,11 @@ import { DatabaseTitle } from "@/components/database/database-title.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
+import {
+  type DatabaseRowGroup,
+  groupRowsForView,
+  resolveGroupByField,
+} from "@/lib/databases/row-group.ts";
 import { sortRowsForView } from "@/lib/databases/row-sort.ts";
 import {
   resolveColumnOrder,
@@ -61,6 +66,16 @@ export function DatabaseTableView({
     return sortRowsForView(filtered, database.fields, view);
   }, [allRows, database, view]);
 
+  // Row buckets for grouped views, built AFTER filter + sort so buckets
+  // preserve the view's row order; `null` keeps the grid ungrouped (also the
+  // fallback for stale/formula group-by fields).
+  const groups = useMemo<DatabaseRowGroup[] | null>(() => {
+    if (!(database && view && resolveGroupByField(database.fields, view))) {
+      return null;
+    }
+    return groupRowsForView(rows, database.fields, view);
+  }, [database, rows, view]);
+
   const columns = useMemo(
     () => (database && view ? resolveColumnOrder(database.fields, view) : []),
     [database, view]
@@ -113,6 +128,7 @@ export function DatabaseTableView({
       <DatabaseTableGrid
         columns={columns}
         databaseId={databaseId}
+        groups={groups}
         isSyncedDatabase={database.source?.kind === "connector"}
         mode={mode}
         pinnedFields={pinnedFields}

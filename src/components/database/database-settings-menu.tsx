@@ -1,12 +1,14 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconCheck,
   IconClock,
   IconColumns3,
   IconDatabase,
   IconDots,
   IconEye,
   IconEyeOff,
+  IconLayoutGrid,
   IconLayoutList,
   IconListDetails,
   IconRefresh,
@@ -60,6 +62,7 @@ import {
   setConnectorToken,
 } from "@/lib/connectors/token-store.ts";
 import type { ConnectorAuthSpec } from "@/lib/connectors/types.ts";
+import { isGroupableField } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseField,
   DatabaseSource,
@@ -286,6 +289,74 @@ function PropertiesSubmenu({ database }: PropertiesSubmenuProps) {
             }}
           />
         ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+interface GroupSubmenuProps {
+  database: LocalDatabase;
+}
+
+/**
+ * Group submenu: "None" plus every groupable field (formula fields are
+ * excluded — no stable stored bucket key). Picking a field groups the FIRST
+ * view (same single-view scope as Properties) and resets the collapse
+ * state; re-picking the active field is a no-op so collapsed groups
+ * survive an accidental click.
+ */
+function GroupSubmenu({ database }: GroupSubmenuProps) {
+  const view = database.views[0];
+  if (!view) {
+    return null;
+  }
+  const activeFieldId = view.groupBy?.fieldId;
+  const groupableFields = database.fields.filter(isGroupableField);
+
+  const writeGroupBy = (fieldId: string | null) => {
+    if (fieldId === activeFieldId || (fieldId === null && !activeFieldId)) {
+      return;
+    }
+    updateDatabaseView(database.id, view.id, {
+      groupBy: fieldId === null ? undefined : { fieldId },
+      config: { ...view.config, collapsedGroupKeys: undefined },
+    });
+  };
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconLayoutGrid />
+        Group
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuItem
+          onClick={() => {
+            writeGroupBy(null);
+          }}
+        >
+          None
+          {activeFieldId === undefined ? (
+            <IconCheck className="ml-auto shrink-0" />
+          ) : null}
+        </DropdownMenuItem>
+        {groupableFields.map((field) => {
+          const FieldIcon = resolveFieldIcon(field);
+          return (
+            <DropdownMenuItem
+              key={field.id}
+              onClick={() => {
+                writeGroupBy(field.id);
+              }}
+            >
+              <FieldIcon className="stroke-[1.5px]" />
+              <span className="min-w-0 flex-1 truncate">{field.name}</span>
+              {activeFieldId === field.id ? (
+                <IconCheck className="ml-auto shrink-0" />
+              ) : null}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -719,6 +790,7 @@ export function DatabaseSettingsMenu({
         <DropdownMenuSeparator />
         <PropertiesSubmenu database={database} />
         <ViewsSubmenu database={database} />
+        <GroupSubmenu database={database} />
         {onHideTitleChange ? (
           <DropdownMenuSwitchItem
             checked={hideTitle}
