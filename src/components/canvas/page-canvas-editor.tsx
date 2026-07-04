@@ -56,6 +56,7 @@ import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { publishCanvasDevtoolsState } from "@/lib/canvas/canvas-devtools-store.ts";
+import { isNonCanvasEditableFocused } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
   collectCanvasRowRects,
@@ -245,6 +246,23 @@ function PageCanvasEditorBody({
   // block field is focused, replicating the old isBlockFieldFocused guard. The
   // hasSelection guards below match the previous handler's behavior.
   useCommandHotkeys({
+    // Session-long undo/redo of block edits. Skipped (leaving the browser
+    // default intact) when focus is in a non-canvas field — page title,
+    // dialogs — whose text is not covered by the block edit history.
+    "undo-edit": (event) => {
+      if (isNonCanvasEditableFocused()) {
+        return;
+      }
+      event.preventDefault();
+      editor.undoEdit();
+    },
+    "redo-edit": (event) => {
+      if (isNonCanvasEditableFocused()) {
+        return;
+      }
+      event.preventDefault();
+      editor.redoEdit();
+    },
     "select-all-blocks": editor.selectAll,
     "copy-blocks": () => {
       if (hasSelection) {

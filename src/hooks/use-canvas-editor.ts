@@ -226,9 +226,16 @@ export function useCanvasEditor(
 
   const dispatch = useCallback(
     (command: CanvasCommand) => {
-      canvasRef.current.runBlockTransaction(() => {
-        applyCommandEffects(command);
-      });
+      canvasRef.current.runBlockTransaction(
+        () => {
+          applyCommandEffects(command);
+        },
+        // Keystroke commits are one row.update per keypress; coalesce a burst
+        // in the same block into a single undo entry.
+        command.type === "row.update"
+          ? { historyCoalesceKey: `row.update:${command.rowId}` }
+          : undefined
+      );
     },
     [applyCommandEffects]
   );
@@ -506,6 +513,8 @@ export function useCanvasEditor(
       hasLocalChanges: canvas.hasLocalChanges,
       isStale: canvas.isStale,
       resetToServer: canvas.resetToServer,
+      undoEdit: canvas.undoEdit,
+      redoEdit: canvas.redoEdit,
     }),
     [
       canvas.rows,
@@ -514,6 +523,8 @@ export function useCanvasEditor(
       canvas.hasLocalChanges,
       canvas.isStale,
       canvas.resetToServer,
+      canvas.undoEdit,
+      canvas.redoEdit,
       getRows,
       dispatch,
       dispatchCommands,

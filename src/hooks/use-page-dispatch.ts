@@ -12,6 +12,7 @@ import { useLocalPages } from "@/hooks/use-local-pages.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import type { PageCommand } from "@/lib/canvas/commands.ts";
 import type { PageEffect } from "@/lib/canvas/effects.ts";
+import { clearPageEditHistory } from "@/lib/canvas/page-edit-history.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
@@ -62,6 +63,7 @@ function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
 
   deleteAllBlocksForPage(readBlockShardForPage(pageId));
   markPageClean(pageId);
+  clearPageEditHistory(pageId);
 
   if (isHardDeleteLocalPage(localPage)) {
     localPagesCollection.delete(pageId);
