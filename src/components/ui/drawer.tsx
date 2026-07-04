@@ -11,18 +11,19 @@ type DrawerVariant = "auto" | "menu";
 /**
  * When a nested drawer opens, vaul scales the parent drawer back
  * (`transform: scale(...)`) but leaves it undimmed — so the receding drawer
- * stays fully lit behind the one pulling up. These drive a darkening that tracks
- * that scale: full brightness at rest, dimming linearly to
- * `NESTED_BACKDROP_MIN_BRIGHTNESS` at vaul's fully-nested scale. Dimming (a
- * `brightness()` filter) rather than fading opacity keeps the drawer opaque —
- * it recedes into shadow instead of turning see-through. The values mirror
- * vaul's own displacement and transition so the dim and the scale move as one.
+ * stays fully lit behind the one pulling up. These drive a black scrim over it
+ * that tracks that scale: clear at rest, darkening linearly to
+ * `NESTED_BACKDROP_MAX_DIM` at vaul's fully-nested scale. It's the same black as
+ * the drawer overlay (`bg-black/20`, `DrawerOverlay`), so the receding drawer
+ * dims into the exact color the incoming overlay uses rather than a
+ * washed-out `brightness()` tint of its own colors. The values mirror vaul's own
+ * displacement and transition so the dim and the scale move as one.
  */
-const NESTED_BACKDROP_MIN_BRIGHTNESS = 0.6;
+const NESTED_BACKDROP_MAX_DIM = 0.2;
 /** Mirrors vaul's internal `NESTED_DISPLACEMENT` (px a parent is pushed back). */
 const VAUL_NESTED_DISPLACEMENT = 16;
-/** Mirrors vaul's `TRANSITIONS` (0.5s + its ease), for the brightness side. */
-const VAUL_NESTED_TRANSITION = "filter 0.5s cubic-bezier(0.32, 0.72, 0, 1)";
+/** Mirrors vaul's `TRANSITIONS` (0.5s + its ease), for the scrim's opacity. */
+const VAUL_NESTED_TRANSITION = "opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1)";
 const DRAWER_SCALE_PATTERN = /scale\(([\d.]+)\)/;
 
 /**
@@ -192,17 +193,19 @@ function useDrawerBoundaryTouchGuard(): (node: HTMLDivElement | null) => void {
 }
 
 /**
- * Dims a drawer proportionally to the scale vaul applies while a nested drawer
- * is stacked on top of it, so the background drawer recedes into shadow as the
- * new one pulls up: full brightness at rest, easing to
- * `NESTED_BACKDROP_MIN_BRIGHTNESS` at the fully-nested scale. A `brightness()`
- * filter (rather than opacity) keeps the drawer opaque — it darkens instead of
- * turning see-through. vaul mutates the element's inline `transform` for every
- * phase — the eased rise on open, the finger-proportional drag while the nested
- * drawer is swiped away, and the settle on release — so mirroring its live scale
- * onto brightness tracks all of them with no extra state. A top-level drawer
- * with no nested child never gets a `scale()` (its own drag is a pure
- * translate), so it stays fully lit.
+ * Darkens a drawer proportionally to the scale vaul applies while a nested
+ * drawer is stacked on top of it, by driving the opacity of a black scrim (the
+ * `data-slot="drawer-dim"` child) over it — so the background drawer recedes
+ * into the same black the incoming overlay uses: clear at rest, easing to
+ * `NESTED_BACKDROP_MAX_DIM` at the fully-nested scale. vaul mutates the content
+ * element's inline `transform` for every phase — the eased rise on open, the
+ * finger-proportional drag while the nested drawer is swiped away, and the
+ * settle on release — so mirroring its live scale onto the scrim tracks all of
+ * them with no extra state. A top-level drawer with no nested child never gets a
+ * `scale()` (its own drag is a pure translate), so its scrim stays clear.
+ *
+ * The scrim lives on a separate child, so writing its opacity never feeds back
+ * into the observer watching the content's own `style`.
  */
 function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -213,10 +216,13 @@ function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
     if (!node) {
       return;
     }
+    const scrim = node.querySelector<HTMLElement>(
+      ':scope > [data-slot="drawer-dim"]'
+    );
+    if (!scrim) {
+      return;
+    }
 
-    // Baseline is full brightness; only diverge once vaul actually scales the
-    // drawer back, so a resting (unscaled) drawer is never touched.
-    let lastBrightness = 1;
     const sync = () => {
       const scaleMatch = DRAWER_SCALE_PATTERN.exec(node.style.transform);
       const scale = scaleMatch ? Number.parseFloat(scaleMatch[1]) : 1;
@@ -225,22 +231,14 @@ function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
       // the dim finishes exactly at the final (fully-nested) scale.
       const maxDelta = VAUL_NESTED_DISPLACEMENT / (window.innerWidth || 1);
       const progress = Math.min(Math.max((1 - scale) / maxDelta, 0), 1);
-      const brightness = 1 - progress * (1 - NESTED_BACKDROP_MIN_BRIGHTNESS);
-      // Ignore the mutations our own filter/transition writes trigger.
-      if (Math.abs(brightness - lastBrightness) < 0.001) {
-        return;
-      }
-      lastBrightness = brightness;
+      const dim = progress * NESTED_BACKDROP_MAX_DIM;
       // While vaul animates the scale (open / close / release) it sets a
-      // `transform` transition; give the filter the matching curve so they move
+      // `transform` transition; give the scrim the matching curve so they move
       // together. While the nested drawer is dragged vaul sets `none`, and the
       // dim should likewise track the finger 1:1.
-      const scaleTransition = node.style.transition;
-      if (scaleTransition && scaleTransition !== "none") {
-        node.style.transition = `${scaleTransition}, ${VAUL_NESTED_TRANSITION}`;
-      }
-      node.style.filter =
-        brightness >= 0.999 ? "" : `brightness(${brightness.toFixed(3)})`;
+      scrim.style.transition =
+        node.style.transition === "none" ? "none" : VAUL_NESTED_TRANSITION;
+      scrim.style.opacity = dim < 0.001 ? "" : dim.toFixed(3);
     };
 
     const observer = new MutationObserver(sync);
@@ -249,7 +247,7 @@ function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
 
     cleanupRef.current = () => {
       observer.disconnect();
-      node.style.filter = "";
+      scrim.style.opacity = "";
     };
   }, []);
 }
@@ -317,6 +315,13 @@ function DrawerContent({
           />
         ) : null}
         {children}
+        {/* Black scrim, driven by useNestedBackdropFade: darkens this drawer
+            (in the overlay's own color) as a nested drawer stacks over it. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-10 rounded-t-2xl bg-black opacity-0"
+          data-slot="drawer-dim"
+        />
       </DrawerPrimitive.Content>
     </DrawerPortal>
   );
