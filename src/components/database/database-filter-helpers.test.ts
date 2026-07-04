@@ -4,6 +4,7 @@ import {
   appendFilterCondition,
   conditionOptionIds,
   conditionValueLabel,
+  filterHasRelativeOperator,
   flippedSortDirection,
   innerGroupChipLabel,
   isFilterInnerGroup,
@@ -277,6 +278,91 @@ describe("conditionValueLabel", () => {
         condition({ operator: "eq", value: "2026-03-05" })
       )
     ).toBe("Mar 5, 2026");
+  });
+
+  it("formats between values as a start – end range", () => {
+    const dateField: DatabaseField = { id: "f1", name: "Due", type: "date" };
+    expect(
+      conditionValueLabel(
+        dateField,
+        condition({ operator: "between", value: ["2026-01-05", "2026-02-02"] })
+      )
+    ).toBe("Jan 5, 2026 – Feb 2, 2026");
+  });
+
+  it("shows no range label for half-formed or wrong-shaped between values", () => {
+    const dateField: DatabaseField = { id: "f1", name: "Due", type: "date" };
+    expect(
+      conditionValueLabel(
+        dateField,
+        condition({ operator: "between", value: ["2026-01-05"] })
+      )
+    ).toBe("");
+    expect(
+      conditionValueLabel(
+        dateField,
+        condition({ operator: "between", value: ["2026-01-05", "not a date"] })
+      )
+    ).toBe("");
+    expect(
+      conditionValueLabel(dateField, condition({ operator: "between" }))
+    ).toBe("");
+  });
+
+  it("returns empty for relative date operators (valueless)", () => {
+    const dateField: DatabaseField = { id: "f1", name: "Due", type: "date" };
+    expect(
+      conditionValueLabel(
+        dateField,
+        condition({ operator: "pastWeek", value: "2026-01-05" })
+      )
+    ).toBe("");
+  });
+});
+
+describe("filterHasRelativeOperator", () => {
+  it("is false for no filter, empty filters, and absolute operators", () => {
+    expect(filterHasRelativeOperator(undefined)).toBe(false);
+    expect(filterHasRelativeOperator({ op: "and", conditions: [] })).toBe(
+      false
+    );
+    expect(
+      filterHasRelativeOperator({
+        op: "and",
+        conditions: [
+          condition({
+            operator: "between",
+            value: ["2026-01-01", "2026-02-01"],
+          }),
+          condition({ id: "c2", operator: "onOrAfter", value: "2026-01-01" }),
+        ],
+      })
+    ).toBe(false);
+  });
+
+  it("detects a relative operator at the root level", () => {
+    expect(
+      filterHasRelativeOperator({
+        op: "and",
+        conditions: [condition({ operator: "pastWeek" })],
+      })
+    ).toBe(true);
+  });
+
+  it("detects a relative operator inside an inner group", () => {
+    expect(
+      filterHasRelativeOperator({
+        op: "or",
+        conditions: [
+          condition(),
+          {
+            id: "g1",
+            op: "and",
+            conditions: [condition({ id: "c2", operator: "nextMonth" })],
+          },
+        ],
+      })
+    ).toBe(true);
   });
 });
 

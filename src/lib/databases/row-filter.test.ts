@@ -229,6 +229,156 @@ describe("rowMatchesCondition", () => {
     ).toBe(expected);
   });
 
+  describe("between", () => {
+    function matchesBetween(
+      cellIso: string | undefined,
+      value?: DatabaseCellValue
+    ): boolean {
+      const row =
+        cellIso === undefined
+          ? makeRow("rb", {})
+          : makeRow("rb", { [dueField.id]: cellIso });
+      return rowMatchesCondition(
+        row,
+        dueField,
+        cond(dueField.id, "between", value)
+      );
+    }
+
+    it("includes both bounds (inclusive start ≤ cell ≤ end)", () => {
+      const range = ["2026-03-01", "2026-03-31"];
+      expect(matchesBetween("2026-03-01", range)).toBe(true);
+      expect(matchesBetween("2026-03-15", range)).toBe(true);
+      expect(matchesBetween("2026-03-31", range)).toBe(true);
+      expect(matchesBetween("2026-02-28", range)).toBe(false);
+      expect(matchesBetween("2026-04-01", range)).toBe(false);
+    });
+
+    it("normalizes swapped bounds to min/max", () => {
+      expect(matchesBetween("2026-03-15", ["2026-03-31", "2026-03-01"])).toBe(
+        true
+      );
+      expect(matchesBetween("2026-04-01", ["2026-03-31", "2026-03-01"])).toBe(
+        false
+      );
+    });
+
+    it("compares on ISO date parts of timestamp bounds and cells", () => {
+      expect(
+        matchesBetween("2026-03-05T23:59:00.000Z", [
+          "2026-03-05T00:00:00.000Z",
+          "2026-03-05",
+        ])
+      ).toBe(true);
+    });
+
+    it("never matches an empty cell", () => {
+      expect(matchesBetween(undefined, ["2026-03-01", "2026-03-31"])).toBe(
+        false
+      );
+    });
+
+    it("skips the condition (fail-open) on malformed values", () => {
+      expect(matchesBetween("2026-03-05", undefined)).toBe(true);
+      expect(matchesBetween("2026-03-05", "2026-03-01")).toBe(true);
+      expect(matchesBetween("2026-03-05", ["2026-03-01"])).toBe(true);
+      expect(
+        matchesBetween("2026-03-05", ["2026-03-01", "2026-03-02", "2026-03-03"])
+      ).toBe(true);
+      expect(matchesBetween("2026-03-05", ["not a date", "2026-03-31"])).toBe(
+        true
+      );
+    });
+  });
+
+  describe("relative date windows (fixed local clock)", () => {
+    // Wednesday, March 18, 2026 at noon LOCAL time — windows derive from
+    // local date parts, matching `toIsoDatePart`.
+    const now = () => new Date(2026, 2, 18, 12, 0, 0);
+
+    function matchesRelative(
+      operator: DatabaseFilterOperator,
+      cellIso: string | undefined
+    ): boolean {
+      const row =
+        cellIso === undefined
+          ? makeRow("rr", {})
+          : makeRow("rr", { [dueField.id]: cellIso });
+      return rowMatchesCondition(row, dueField, cond(dueField.id, operator), {
+        now,
+      });
+    }
+
+    const windowCases: [DatabaseFilterOperator, string, string][] = [
+      ["pastDay", "2026-03-17", "2026-03-18"],
+      ["pastWeek", "2026-03-11", "2026-03-18"],
+      ["pastMonth", "2026-02-18", "2026-03-18"],
+      ["pastYear", "2025-03-18", "2026-03-18"],
+      // date-fns default locale: weeks run Sunday..Saturday.
+      ["thisWeek", "2026-03-15", "2026-03-21"],
+      ["thisMonth", "2026-03-01", "2026-03-31"],
+      ["nextWeek", "2026-03-22", "2026-03-28"],
+      ["nextMonth", "2026-04-01", "2026-04-30"],
+    ];
+    it.each(
+      windowCases
+    )("%s spans [%s, %s] inclusive", (operator, start, end) => {
+      expect(matchesRelative(operator, start)).toBe(true);
+      expect(matchesRelative(operator, end)).toBe(true);
+    });
+
+    it("excludes days just outside each window", () => {
+      expect(matchesRelative("pastDay", "2026-03-16")).toBe(false);
+      expect(matchesRelative("pastDay", "2026-03-19")).toBe(false);
+      expect(matchesRelative("pastWeek", "2026-03-10")).toBe(false);
+      expect(matchesRelative("pastMonth", "2026-02-17")).toBe(false);
+      expect(matchesRelative("pastYear", "2025-03-17")).toBe(false);
+      expect(matchesRelative("thisWeek", "2026-03-14")).toBe(false);
+      expect(matchesRelative("thisWeek", "2026-03-22")).toBe(false);
+      expect(matchesRelative("thisMonth", "2026-04-01")).toBe(false);
+      expect(matchesRelative("nextWeek", "2026-03-21")).toBe(false);
+      expect(matchesRelative("nextWeek", "2026-03-29")).toBe(false);
+      expect(matchesRelative("nextMonth", "2026-03-31")).toBe(false);
+      expect(matchesRelative("nextMonth", "2026-05-01")).toBe(false);
+    });
+
+    it("clamps calendar-unit subtraction at short months", () => {
+      // March 31 − 1 month clamps to Feb 28 (2026 is not a leap year).
+      const eom = () => new Date(2026, 2, 31, 12, 0, 0);
+      const inWindow = makeRow("rc", { [dueField.id]: "2026-02-28" });
+      const outside = makeRow("rc2", { [dueField.id]: "2026-02-27" });
+      expect(
+        rowMatchesCondition(
+          inWindow,
+          dueField,
+          cond(dueField.id, "pastMonth"),
+          {
+            now: eom,
+          }
+        )
+      ).toBe(true);
+      expect(
+        rowMatchesCondition(outside, dueField, cond(dueField.id, "pastMonth"), {
+          now: eom,
+        })
+      ).toBe(false);
+    });
+
+    it("never matches an empty cell", () => {
+      expect(matchesRelative("thisMonth", undefined)).toBe(false);
+      expect(matchesRelative("pastYear", undefined)).toBe(false);
+    });
+
+    it("defaults to the real clock when no now is injected", () => {
+      const todayRow = makeRow("rt", {
+        [dueField.id]: new Date().toISOString(),
+      });
+      expect(
+        rowMatchesCondition(todayRow, dueField, cond(dueField.id, "pastDay"))
+      ).toBe(true);
+    });
+  });
+
   describe("formula cells filter on display text", () => {
     // Formula values are computed and merged into row.values at read time;
     // string operators must match the text the grid renders for the cell.
@@ -375,5 +525,26 @@ describe("applyFilter", () => {
         conditions: [{ id: "g2", op: "or", conditions: [] }],
       })
     ).toEqual(["r1", "r2", "r3"]);
+  });
+
+  it("threads the injected clock down to relative date conditions", () => {
+    const datedRows = [
+      makeRow("d1", { [dueField.id]: "2026-03-02" }),
+      makeRow("d2", { [dueField.id]: "2026-04-10" }),
+    ];
+    const filter: DatabaseFilterGroup = {
+      op: "and",
+      conditions: [cond(dueField.id, "thisMonth")],
+    };
+    // March 18, 2026 → only the March row is "this month".
+    const march = applyFilter(datedRows, fields, filter, {
+      now: () => new Date(2026, 2, 18, 12, 0, 0),
+    });
+    expect(march.map((row) => row.id)).toEqual(["d1"]);
+    // One month later the same filter matches the April row instead.
+    const april = applyFilter(datedRows, fields, filter, {
+      now: () => new Date(2026, 3, 18, 12, 0, 0),
+    });
+    expect(april.map((row) => row.id)).toEqual(["d2"]);
   });
 });

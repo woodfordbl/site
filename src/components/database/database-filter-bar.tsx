@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { DateRange } from "react-day-picker";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
@@ -53,6 +54,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { useResolvedMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import {
   Popover,
   PopoverContent,
@@ -63,6 +65,7 @@ import { toIsoDatePart } from "@/lib/databases/cell-values.ts";
 import {
   FIELD_TYPE_DEFS,
   operatorLabel,
+  operatorNeedsRange,
   operatorNeedsValue,
 } from "@/lib/databases/field-defs.ts";
 import type {
@@ -422,10 +425,15 @@ function FilterConditionChip({
           <DropdownMenuRadioGroup
             onValueChange={(next) => {
               const operator = next as DatabaseFilterOperator;
+              // The stored value survives only when the new operator both
+              // takes one and reads the same shape (single scalar vs the
+              // `between` `[startIso, endIso]` pair).
+              const keepsValue =
+                operatorNeedsValue(operator) &&
+                operatorNeedsRange(operator) ===
+                  operatorNeedsRange(condition.operator);
               onPatch(
-                operatorNeedsValue(operator)
-                  ? { operator }
-                  : { operator, value: undefined }
+                keepsValue ? { operator } : { operator, value: undefined }
               );
             }}
             value={condition.operator}
@@ -543,6 +551,17 @@ function FilterValueEditor({
         />
       );
     case "date": {
+      if (operatorNeedsRange(condition.operator)) {
+        return (
+          <FilterDateRangeCalendar
+            initialValue={condition.value}
+            onCommit={(value) => {
+              onValueChange(value);
+              onClose();
+            }}
+          />
+        );
+      }
       const selected =
         typeof condition.value === "string"
           ? (isoDateToLocalDate(toIsoDatePart(condition.value)) ?? undefined)
@@ -610,6 +629,56 @@ function FilterTextValueInput({
         value={draft}
       />
     </InputGroup>
+  );
+}
+
+/** `[startIso, endIso]` condition value parsed back to a calendar range. */
+function conditionDateRange(
+  value: DatabaseCellValue | undefined
+): DateRange | undefined {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return;
+  }
+  const from = isoDateToLocalDate(toIsoDatePart(value[0]));
+  const to = isoDateToLocalDate(toIsoDatePart(value[1]));
+  if (!(from && to)) {
+    return;
+  }
+  return { from, to };
+}
+
+/**
+ * Dual-date editor for `between` conditions: one Calendar in react-day-picker
+ * range mode — first click sets the start, second the end (same-day click
+ * yields a single-day range). Commits `[startIso, endIso]` and closes once
+ * both ends are picked; a start-only selection keeps the popover open.
+ */
+function FilterDateRangeCalendar({
+  initialValue,
+  onCommit,
+}: {
+  initialValue: DatabaseCellValue | undefined;
+  onCommit: (value: [string, string]) => void;
+}): ReactNode {
+  const [range, setRange] = useState<DateRange | undefined>(() =>
+    conditionDateRange(initialValue)
+  );
+  return (
+    <Calendar
+      autoFocus
+      defaultMonth={range?.from}
+      mode="range"
+      onSelect={(next) => {
+        setRange(next);
+        if (next?.from && next.to) {
+          onCommit([
+            format(next.from, "yyyy-MM-dd"),
+            format(next.to, "yyyy-MM-dd"),
+          ]);
+        }
+      }}
+      selected={range}
+    />
   );
 }
 
@@ -692,6 +761,10 @@ function AddFilterChip({
   const [open, setOpen] = useState(false);
   const focusOnMount = useFocusOnMount();
   const [query, setQuery] = useState("");
+  // Drawer presentation owns scrolling for the whole surface (with vaul's
+  // at-top drag-to-dismiss contract): no popover max-height there, or long
+  // field lists clip mid-row while the drawer sits mostly empty.
+  const isDrawer = useResolvedMenuPresentation() === "drawer";
   const trimmed = query.trim().toLowerCase();
 
   const filtered =
@@ -749,7 +822,12 @@ function AddFilterChip({
               value={query}
             />
           </InputGroup>
-          <div className="flex max-h-56 flex-col overflow-y-auto">
+          <div
+            className={cn(
+              "flex flex-col",
+              isDrawer ? undefined : "max-h-56 overflow-y-auto"
+            )}
+          >
             {filtered.map((field) => {
               const Icon = resolveFieldIcon(field);
               return (

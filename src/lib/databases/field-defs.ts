@@ -43,6 +43,31 @@ const STRING_OPERATORS = [
   "isNotEmpty",
 ] as const satisfies readonly DatabaseFilterOperator[];
 
+/**
+ * Relative date-window operators, in menu order (past → this → next). They
+ * carry no condition value — the window is computed from the current clock at
+ * evaluation time (`row-filter.ts` documents the exact window semantics).
+ */
+const RELATIVE_DATE_OPERATORS = [
+  "pastDay",
+  "pastWeek",
+  "pastMonth",
+  "pastYear",
+  "thisWeek",
+  "thisMonth",
+  "nextWeek",
+  "nextMonth",
+] as const satisfies readonly DatabaseFilterOperator[];
+
+const RELATIVE_DATE_OPERATOR_SET: ReadonlySet<DatabaseFilterOperator> = new Set(
+  RELATIVE_DATE_OPERATORS
+);
+
+/** Whether the operator is a clock-evaluated relative date window. */
+export function isRelativeDateOperator(op: DatabaseFilterOperator): boolean {
+  return RELATIVE_DATE_OPERATOR_SET.has(op);
+}
+
 /** Per-type field definitions keyed by `DatabaseFieldType`. */
 export const FIELD_TYPE_DEFS: {
   [K in DatabaseFieldType]: DatabaseFieldTypeDef;
@@ -85,6 +110,8 @@ export const FIELD_TYPE_DEFS: {
       "after",
       "onOrBefore",
       "onOrAfter",
+      "between",
+      ...RELATIVE_DATE_OPERATORS,
       "isEmpty",
       "isNotEmpty",
     ],
@@ -174,8 +201,18 @@ export function operatorLabel(op: DatabaseFilterOperator): string {
 
 /**
  * Whether the operator compares against a value. Emptiness checks
- * (`isEmpty`/`isNotEmpty`) are complete on their own.
+ * (`isEmpty`/`isNotEmpty`) and relative date windows (evaluated against the
+ * clock) are complete on their own.
  */
 export function operatorNeedsValue(op: DatabaseFilterOperator): boolean {
-  return op !== "isEmpty" && op !== "isNotEmpty";
+  return op !== "isEmpty" && op !== "isNotEmpty" && !isRelativeDateOperator(op);
+}
+
+/**
+ * Whether the operator's condition value is a two-date range
+ * (`[startIso, endIso]`) rather than a single scalar — true only for
+ * `between`. Drives the dual-date value editor and range chip label.
+ */
+export function operatorNeedsRange(op: DatabaseFilterOperator): boolean {
+  return op === "between";
 }

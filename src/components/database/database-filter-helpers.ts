@@ -1,5 +1,8 @@
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
-import { operatorNeedsValue } from "@/lib/databases/field-defs.ts";
+import {
+  isRelativeDateOperator,
+  operatorNeedsValue,
+} from "@/lib/databases/field-defs.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -82,6 +85,27 @@ export function setFilterOp(
 }
 
 /**
+ * Whether any condition in the filter — root level or inside an inner group —
+ * uses a relative date operator (`pastDay`…`nextMonth`). Such filters change
+ * results as time passes, so the table view's display clock must tick and
+ * re-run `applyFilter` while one is active.
+ */
+export function filterHasRelativeOperator(
+  filter: DatabaseFilterGroup | undefined
+): boolean {
+  if (!filter) {
+    return false;
+  }
+  return filter.conditions.some((entry) =>
+    isFilterInnerGroup(entry)
+      ? entry.conditions.some((condition) =>
+          isRelativeDateOperator(condition.operator)
+        )
+      : isRelativeDateOperator(entry.operator)
+  );
+}
+
+/**
  * Normalize a select/multi-select condition value to a list of option ids —
  * a bare string is a single selection, anything else non-array is none.
  */
@@ -120,6 +144,26 @@ export function toggleConditionOptionId(
 
 /** Selected option names listed on a chip before collapsing to "n selected". */
 export const MAX_LISTED_OPTION_VALUES = 2;
+
+/**
+ * Date condition value label: a single date formats through the field's date
+ * display; a `between` pair (`[startIso, endIso]`) reads "Jan 5, 2026 –
+ * Feb 2, 2026". Half-formed or wrong-shaped pairs read as "no value yet".
+ */
+function dateConditionValueLabel(
+  field: DatabaseField,
+  value: DatabaseCellValue | undefined
+): string {
+  if (Array.isArray(value)) {
+    if (value.length !== 2) {
+      return "";
+    }
+    const start = formatCellValue(field, value[0]);
+    const end = formatCellValue(field, value[1]);
+    return start !== "" && end !== "" ? `${start} – ${end}` : "";
+  }
+  return formatCellValue(field, value ?? null);
+}
 
 /**
  * Chip label for a condition's value segment. Empty string means "no value
@@ -161,8 +205,9 @@ export function conditionValueLabel(
       }
       return typeof value === "string" ? value : "";
     case "number":
-    case "date":
       return formatCellValue(field, value ?? null);
+    case "date":
+      return dateConditionValueLabel(field, value);
     default:
       return "";
   }

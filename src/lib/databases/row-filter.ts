@@ -1,9 +1,23 @@
+import { addMonths } from "date-fns/addMonths";
+import { addWeeks } from "date-fns/addWeeks";
+import { endOfMonth } from "date-fns/endOfMonth";
+import { endOfWeek } from "date-fns/endOfWeek";
+import { format } from "date-fns/format";
+import { startOfMonth } from "date-fns/startOfMonth";
+import { startOfWeek } from "date-fns/startOfWeek";
+import { subDays } from "date-fns/subDays";
+import { subMonths } from "date-fns/subMonths";
+import { subYears } from "date-fns/subYears";
+
 import {
   coerceCellValue,
   isCellEmpty,
   toIsoDatePart,
 } from "@/lib/databases/cell-values.ts";
-import { FIELD_TYPE_DEFS } from "@/lib/databases/field-defs.ts";
+import {
+  FIELD_TYPE_DEFS,
+  isRelativeDateOperator,
+} from "@/lib/databases/field-defs.ts";
 import { formatExprValueDefault } from "@/lib/expr/evaluate.ts";
 import type {
   DatabaseCellValue,
@@ -147,16 +161,110 @@ function matchOptionIds(
   }
 }
 
+/** Local `yyyy-mm-dd` date part of a `Date` (consistent with `toIsoDatePart`). */
+function localIsoDatePart(date: Date): string {
+  return format(date, "yyyy-MM-dd");
+}
+
+/**
+ * Inclusive `[startIso, endIso]` window for a relative date operator,
+ * computed from the LOCAL date parts of `now` (matching `toIsoDatePart`'s
+ * local-day semantics). Exact windows, all bounds inclusive:
+ *
+ * - `pastDay` = [today − 1 day, today]
+ * - `pastWeek` = [today − 7 days, today]
+ * - `pastMonth` = [today − 1 calendar month, today]
+ * - `pastYear` = [today − 1 calendar year, today]
+ * - `thisWeek` = [start of week, end of week] (date-fns default locale —
+ *   weeks start on Sunday)
+ * - `thisMonth` = the current calendar month
+ * - `nextWeek` = this week's window shifted forward one week
+ * - `nextMonth` = the next calendar month
+ *
+ * Calendar-unit subtraction clamps at short months (date-fns `sub*`, e.g.
+ * Mar 31 − 1 month = Feb 28/29). Non-relative operators return `null`.
+ */
+function relativeDateWindow(
+  op: DatabaseFilterOperator,
+  now: Date
+): [string, string] | null {
+  switch (op) {
+    case "pastDay":
+      return [localIsoDatePart(subDays(now, 1)), localIsoDatePart(now)];
+    case "pastWeek":
+      return [localIsoDatePart(subDays(now, 7)), localIsoDatePart(now)];
+    case "pastMonth":
+      return [localIsoDatePart(subMonths(now, 1)), localIsoDatePart(now)];
+    case "pastYear":
+      return [localIsoDatePart(subYears(now, 1)), localIsoDatePart(now)];
+    case "thisWeek":
+      return [
+        localIsoDatePart(startOfWeek(now)),
+        localIsoDatePart(endOfWeek(now)),
+      ];
+    case "thisMonth":
+      return [
+        localIsoDatePart(startOfMonth(now)),
+        localIsoDatePart(endOfMonth(now)),
+      ];
+    case "nextWeek":
+      return [
+        localIsoDatePart(addWeeks(startOfWeek(now), 1)),
+        localIsoDatePart(addWeeks(endOfWeek(now), 1)),
+      ];
+    case "nextMonth": {
+      const next = addMonths(now, 1);
+      return [
+        localIsoDatePart(startOfMonth(next)),
+        localIsoDatePart(endOfMonth(next)),
+      ];
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Normalized inclusive bounds of a `between` condition value. The value must
+ * be a two-string array of parseable dates; swapped bounds normalize to
+ * min/max. Anything else is malformed — `null`, fail-open at the caller.
+ */
+function betweenBounds(
+  target: DatabaseCellValue | undefined
+): [string, string] | null {
+  if (!Array.isArray(target) || target.length !== 2) {
+    return null;
+  }
+  const first = toIsoDatePart(target[0]);
+  const second = toIsoDatePart(target[1]);
+  if (first === "" || second === "") {
+    return null;
+  }
+  return first <= second ? [first, second] : [second, first];
+}
+
 function matchIsoDate(
   cell: DatabaseCellValue,
   op: DatabaseFilterOperator,
-  target: DatabaseCellValue | undefined
+  target: DatabaseCellValue | undefined,
+  now: () => Date
 ): boolean {
+  const cellDate = typeof cell === "string" ? toIsoDatePart(cell) : "";
+  // Window operators (between + relative): inclusive start ≤ cell ≤ end over
+  // normalized yyyy-mm-dd parts. Empty cells never fall inside a window; a
+  // malformed `between` value skips the condition (fail-open).
+  if (op === "between" || isRelativeDateOperator(op)) {
+    const window =
+      op === "between" ? betweenBounds(target) : relativeDateWindow(op, now());
+    if (!window) {
+      return true;
+    }
+    return cellDate !== "" && window[0] <= cellDate && cellDate <= window[1];
+  }
   const targetDate = typeof target === "string" ? toIsoDatePart(target) : "";
   if (targetDate === "") {
     return true;
   }
-  const cellDate = typeof cell === "string" ? toIsoDatePart(cell) : "";
   if (cellDate === "") {
     return false;
   }
@@ -177,16 +285,29 @@ function matchIsoDate(
   }
 }
 
+/** Options threaded through filter evaluation. */
+export interface RowFilterOptions {
+  /**
+   * Injected clock for relative date operators (`pastDay`…`nextMonth`); omit
+   * for real time. Mirrors the injected-clock convention of
+   * `FormatCellValueOptions.now` so tests stay deterministic.
+   */
+  now?: () => Date;
+}
+
 /**
  * Whether one row satisfies one filter condition against the given field.
  * String comparisons are case-insensitive; date comparisons normalize both
- * sides to `yyyy-mm-dd` and compare lexically; emptiness follows
- * `isCellEmpty`. Operators that don't apply to the field's value kind match.
+ * sides to `yyyy-mm-dd` and compare lexically (`between` and the relative
+ * window operators check inclusive `start ≤ cell ≤ end`, relative windows
+ * against `opts.now`); emptiness follows `isCellEmpty`. Operators that don't
+ * apply to the field's value kind match.
  */
 export function rowMatchesCondition(
   row: LocalDatabaseRow,
   field: DatabaseField,
-  condition: DatabaseFilterCondition
+  condition: DatabaseFilterCondition,
+  opts?: RowFilterOptions
 ): boolean {
   const cell = coerceCellValue(field, row.values[field.id]);
   const op = condition.operator;
@@ -215,7 +336,7 @@ export function rowMatchesCondition(
     case "optionIds":
       return matchOptionIds(cell, op, target);
     case "isoDate":
-      return matchIsoDate(cell, op, target);
+      return matchIsoDate(cell, op, target, opts?.now ?? (() => new Date()));
     default:
       return true;
   }
@@ -230,7 +351,8 @@ function isInnerGroup(entry: FilterEntry): entry is DatabaseFilterInnerGroup {
 function matchesCondition(
   row: LocalDatabaseRow,
   fieldsById: Record<string, DatabaseField>,
-  condition: DatabaseFilterCondition
+  condition: DatabaseFilterCondition,
+  opts?: RowFilterOptions
 ): boolean {
   const field = fieldsById[condition.fieldId];
   // Stale field reference (field deleted, condition not yet cleaned up):
@@ -238,27 +360,28 @@ function matchesCondition(
   if (!field) {
     return true;
   }
-  return rowMatchesCondition(row, field, condition);
+  return rowMatchesCondition(row, field, condition, opts);
 }
 
 function matchesEntry(
   row: LocalDatabaseRow,
   fieldsById: Record<string, DatabaseField>,
-  entry: FilterEntry
+  entry: FilterEntry,
+  opts?: RowFilterOptions
 ): boolean {
   if (!isInnerGroup(entry)) {
-    return matchesCondition(row, fieldsById, entry);
+    return matchesCondition(row, fieldsById, entry, opts);
   }
   if (entry.conditions.length === 0) {
     return true;
   }
   if (entry.op === "and") {
     return entry.conditions.every((condition) =>
-      matchesCondition(row, fieldsById, condition)
+      matchesCondition(row, fieldsById, condition, opts)
     );
   }
   return entry.conditions.some((condition) =>
-    matchesCondition(row, fieldsById, condition)
+    matchesCondition(row, fieldsById, condition, opts)
   );
 }
 
@@ -267,11 +390,14 @@ function matchesEntry(
  * inside inner groups (the grammar's two-level cap). Conditions referencing
  * unknown field ids are skipped — treated as matching — so stale references
  * never hide rows. No filter (or an empty one) returns the input unchanged.
+ * Relative date operators evaluate against `opts.now` (default: real time) —
+ * callers with such filters must re-run on their clock tick.
  */
 export function applyFilter(
   rows: readonly LocalDatabaseRow[],
   fields: readonly DatabaseField[],
-  filter?: DatabaseFilterGroup
+  filter?: DatabaseFilterGroup,
+  opts?: RowFilterOptions
 ): LocalDatabaseRow[] {
   if (!filter || filter.conditions.length === 0) {
     return [...rows];
@@ -282,10 +408,14 @@ export function applyFilter(
   }
   if (filter.op === "and") {
     return rows.filter((row) =>
-      filter.conditions.every((entry) => matchesEntry(row, fieldsById, entry))
+      filter.conditions.every((entry) =>
+        matchesEntry(row, fieldsById, entry, opts)
+      )
     );
   }
   return rows.filter((row) =>
-    filter.conditions.some((entry) => matchesEntry(row, fieldsById, entry))
+    filter.conditions.some((entry) =>
+      matchesEntry(row, fieldsById, entry, opts)
+    )
   );
 }

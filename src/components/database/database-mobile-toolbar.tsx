@@ -98,6 +98,11 @@ export function DatabaseMobileToolbar({
         icon={<IconFilter aria-hidden />}
         label={filterCount > 0 ? `Filters (${filterCount} active)` : "Filters"}
       >
+        {/* Empty state keeps the add-filter flow reachable inside the
+            surface: muted line, then the chip strip (just "+ Filter"). */}
+        {filterCount === 0 ? (
+          <p className="px-1 pb-2 text-muted-foreground text-sm">No filters</p>
+        ) : null}
         <div className={CHIP_ROW_CLASS}>
           <DatabaseFilterChips
             className="contents"
@@ -128,9 +133,12 @@ export function DatabaseMobileToolbar({
             />
           </div>
         ) : (
-          <p className="px-1 py-0.5 text-muted-foreground text-sm">
-            No sorts. Add one from a column header menu.
-          </p>
+          <div className="flex flex-col gap-1 px-1 py-0.5">
+            <p className="text-muted-foreground text-sm">No sorts</p>
+            <p className="text-muted-foreground/70 text-xs">
+              Add one from a column header menu.
+            </p>
+          </div>
         )}
       </ToolbarPopoverButton>
     </>
