@@ -3,7 +3,6 @@ import {
   IconChartBar,
   IconChartLine,
   IconChartPie,
-  IconSettings,
 } from "@tabler/icons-react";
 import type { ComponentType, ReactNode } from "react";
 
@@ -12,11 +11,8 @@ import {
   chartConfigPatch,
   cycledColorOverrides,
 } from "@/components/database/views/database-chart-config-helpers.ts";
-import { Button } from "@/components/ui/button.tsx";
 import { ChartPaletteScope } from "@/components/ui/chart.tsx";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -24,7 +20,6 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import {
@@ -55,12 +50,12 @@ import type {
 import { cn } from "@/lib/utils.ts";
 
 /**
- * Edit-mode chart settings: a gear in the chart's top-right corner
- * (hover-revealed on fine pointers, always visible on touch via
- * `.hover-reveal`) opening a menu of chart.config patches — mark, X/Y/series
- * fields, legend, stacking, grid, palette, and per-series color overrides.
- * Every write shallow-merges through `chartConfigPatch` →
- * `updateDatabaseView`, following the settings-menu patch conventions.
+ * Chart settings menu items (mark, X/Y/series fields, legend, stacking, grid,
+ * palette, per-series color overrides), rendered inside the database ⋯
+ * settings menu's "Chart" submenu — NOT a floating gear, so every view's
+ * options live in one place. Every write shallow-merges through
+ * `chartConfigPatch` → `updateDatabaseView`, following the settings-menu patch
+ * conventions.
  */
 
 const MARK_OPTIONS: {
@@ -328,7 +323,7 @@ function ChartColorRows({
   );
 }
 
-export interface DatabaseChartConfigProps {
+export interface ChartOptionsItemsProps {
   /** Current chart dataset — series/category color rows derive from it. */
   data: ChartData;
   database: LocalDatabase;
@@ -336,12 +331,17 @@ export interface DatabaseChartConfigProps {
   view: DatabaseView;
 }
 
-export function DatabaseChartConfig({
+/**
+ * The chart settings rows themselves, mounted directly inside a
+ * `DropdownMenuSubContent` (the ⋯ menu's "Chart" submenu). No trigger /
+ * content wrapper of its own.
+ */
+export function ChartOptionsItems({
   data,
   database,
   fields,
   view,
-}: DatabaseChartConfigProps): ReactNode {
+}: ChartOptionsItemsProps): ReactNode {
   const chart = view.config.chart ?? {};
   const mark = chart.mark ?? DEFAULT_CHART_MARK;
   const aggregate = chart.yAggregate ?? DEFAULT_CHART_Y_AGGREGATE;
@@ -387,91 +387,77 @@ export function DatabaseChartConfig({
   const showLegend = chart.showLegend ?? legendDefault;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        nativeButton
-        render={
-          <Button
-            aria-label="Chart settings"
-            className="hover-reveal absolute top-1 right-1 z-10 text-muted-foreground data-popup-open:opacity-100"
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          />
-        }
-      >
-        <IconSettings aria-hidden className="stroke-[1.5px]" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 min-w-64">
+    <>
+      <div className="p-1">
         <MarkPicker mark={mark} write={write} />
-        <DropdownMenuSeparator />
+      </div>
+      <DropdownMenuSeparator />
+      <RadioSubmenu
+        currentLabel={fieldName(chart.xFieldId)}
+        label="X axis"
+        onValueChange={(value) => {
+          write({ xFieldId: value });
+        }}
+        options={xOptions}
+        value={chart.xFieldId ?? ""}
+      />
+      <RadioSubmenu
+        currentLabel={CHART_Y_AGGREGATE_LABELS[aggregate]}
+        label="Y value"
+        onValueChange={(value) => {
+          write({ yAggregate: value as ChartViewConfig["yAggregate"] });
+        }}
+        options={aggregateOptions}
+        value={aggregate}
+      />
+      {aggregate === "count" ? null : (
         <RadioSubmenu
-          currentLabel={fieldName(chart.xFieldId)}
-          label="X axis"
+          currentLabel={fieldName(chart.yFieldId)}
+          label="Y property"
           onValueChange={(value) => {
-            write({ xFieldId: value });
+            write({ yFieldId: value });
           }}
-          options={xOptions}
-          value={chart.xFieldId ?? ""}
+          options={yOptions}
+          value={chart.yFieldId ?? ""}
         />
+      )}
+      {isPie ? null : (
         <RadioSubmenu
-          currentLabel={CHART_Y_AGGREGATE_LABELS[aggregate]}
-          label="Y value"
+          currentLabel={fieldName(chart.seriesFieldId)}
+          label="Series"
           onValueChange={(value) => {
-            write({ yAggregate: value as ChartViewConfig["yAggregate"] });
+            write({
+              seriesFieldId: value === NONE_VALUE ? undefined : value,
+            });
           }}
-          options={aggregateOptions}
-          value={aggregate}
+          options={seriesOptions}
+          value={chart.seriesFieldId ?? NONE_VALUE}
         />
-        {aggregate === "count" ? null : (
-          <RadioSubmenu
-            currentLabel={fieldName(chart.yFieldId)}
-            label="Y property"
-            onValueChange={(value) => {
-              write({ yFieldId: value });
-            }}
-            options={yOptions}
-            value={chart.yFieldId ?? ""}
-          />
-        )}
-        {isPie ? null : (
-          <RadioSubmenu
-            currentLabel={fieldName(chart.seriesFieldId)}
-            label="Series"
-            onValueChange={(value) => {
-              write({
-                seriesFieldId: value === NONE_VALUE ? undefined : value,
-              });
-            }}
-            options={seriesOptions}
-            value={chart.seriesFieldId ?? NONE_VALUE}
-          />
-        )}
-        <DropdownMenuSeparator />
-        <ChartToggleItems
-          chart={chart}
-          mark={mark}
-          showLegend={showLegend}
-          write={write}
-        />
-        <DropdownMenuSeparator />
-        <RadioSubmenu
-          currentLabel={paletteId ? CHART_PALETTES[paletteId].label : "Default"}
-          label="Palette"
-          onValueChange={(value) => {
-            write({ palette: value === NONE_VALUE ? undefined : value });
-          }}
-          options={paletteOptions}
-          value={paletteId ?? NONE_VALUE}
-        />
-        <ChartColorRows
-          chart={chart}
-          isPie={isPie}
-          paletteId={paletteId}
-          targets={colorTargets}
-          write={write}
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      )}
+      <DropdownMenuSeparator />
+      <ChartToggleItems
+        chart={chart}
+        mark={mark}
+        showLegend={showLegend}
+        write={write}
+      />
+      <DropdownMenuSeparator />
+      <RadioSubmenu
+        currentLabel={paletteId ? CHART_PALETTES[paletteId].label : "Default"}
+        label="Palette"
+        onValueChange={(value) => {
+          write({ palette: value === NONE_VALUE ? undefined : value });
+        }}
+        options={paletteOptions}
+        value={paletteId ?? NONE_VALUE}
+      />
+      <ChartColorRows
+        chart={chart}
+        isPie={isPie}
+        paletteId={paletteId}
+        targets={colorTargets}
+        write={write}
+      />
+    </>
   );
 }

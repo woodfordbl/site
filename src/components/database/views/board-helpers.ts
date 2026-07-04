@@ -1,10 +1,42 @@
+import { BLOCK_COLOR_IDS } from "@/lib/blocks/block-colors.ts";
 import { groupKeyForRow } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseField,
+  DatabaseTableViewConfig,
   DatabaseView,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 import type { BlockColor } from "@/lib/schemas/rich-text.ts";
+
+/** Board column ordering strategy. */
+export type BoardColumnSort = NonNullable<
+  NonNullable<DatabaseTableViewConfig["board"]>["columnSort"]
+>;
+
+export const DEFAULT_BOARD_COLUMN_SORT: BoardColumnSort = "manual";
+
+/** Column-order menu options, in display order. */
+export const BOARD_COLUMN_SORTS = [
+  "manual",
+  "alphabetical",
+  "color",
+] as const satisfies readonly BoardColumnSort[];
+
+export const BOARD_COLUMN_SORT_LABELS: Record<BoardColumnSort, string> = {
+  manual: "Option order",
+  alphabetical: "Alphabetical",
+  color: "By color",
+};
+
+/** Palette index for color sorting; unknown/colorless columns sort last. */
+const COLOR_RANK = new Map(
+  BLOCK_COLOR_IDS.map((color, index) => [color, index])
+);
+
+function colorRank(color: BlockColor | undefined): number {
+  const rank = color ? COLOR_RANK.get(color) : undefined;
+  return rank ?? Number.MAX_SAFE_INTEGER;
+}
 
 /**
  * Pure board (kanban) view logic: group-field resolution, column building
@@ -92,20 +124,50 @@ const DEFAULT_CARD_FIELD_COUNT = 2;
 const TEXT_COLLATOR = new Intl.Collator("en-US", { sensitivity: "base" });
 
 /**
+ * Order the real option columns per the `columnSort` strategy: `manual` keeps
+ * the select field's option order; `alphabetical` sorts by option name;
+ * `color` groups by option color (palette order), name-tiebroken. Only the
+ * live-option columns are reordered — stale and empty columns keep their fixed
+ * positions (appended after / always last).
+ */
+function sortOptionColumns(
+  columns: BoardColumn[],
+  sort: BoardColumnSort
+): BoardColumn[] {
+  if (sort === "manual") {
+    return columns;
+  }
+  const ordered = [...columns];
+  if (sort === "alphabetical") {
+    ordered.sort((a, b) => TEXT_COLLATOR.compare(a.label, b.label));
+  } else {
+    ordered.sort((a, b) => {
+      const byColor = colorRank(a.color) - colorRank(b.color);
+      return byColor === 0 ? TEXT_COLLATOR.compare(a.label, b.label) : byColor;
+    });
+  }
+  return ordered;
+}
+
+/**
  * Build the board's columns from the group field's options: one column per
- * option in option order (empty columns included — every option is a drop
- * target), then columns for stale option ids still stored on rows (labelled
- * by the raw id, mirroring `row-group`'s honest stale labels), and the
- * "No <field>" column for empty values ALWAYS last. Columns whose key is in
- * `hiddenColumnIds` split out into `hidden` (the "+ n hidden" chip counts
- * real columns only — stale hidden ids are ignored).
+ * option ordered by `columnSort` (empty columns included — every option is a
+ * drop target), then columns for stale option ids still stored on rows
+ * (labelled by the raw id, mirroring `row-group`'s honest stale labels), and
+ * the "No <field>" column for empty values ALWAYS last. Columns whose key is
+ * in `hiddenColumnIds` split out into `hidden` (the "+ n hidden" chip counts
+ * real columns only — stale hidden ids are ignored). When `hideEmptyColumns`
+ * is set, columns holding no cards are dropped entirely (not counted in the
+ * hidden chip) — a pure display filter.
  */
 export function buildBoardColumns(args: {
+  columnSort?: BoardColumnSort;
   field: BoardGroupField;
   hiddenColumnIds?: readonly string[];
+  hideEmptyColumns?: boolean;
   rows: readonly LocalDatabaseRow[];
 }): { columns: BoardColumn[]; hidden: BoardColumn[] } {
-  const { field, hiddenColumnIds, rows } = args;
+  const { columnSort, field, hiddenColumnIds, hideEmptyColumns, rows } = args;
 
   const buckets = new Map<string, LocalDatabaseRow[]>();
   for (const row of rows) {
@@ -119,13 +181,18 @@ export function buildBoardColumns(args: {
   }
 
   const optionIds = new Set(field.options.map((option) => option.id));
-  const all: BoardColumn[] = field.options.map((option) => ({
+  const optionColumns: BoardColumn[] = field.options.map((option) => ({
     key: option.id,
     label: option.name,
     color: option.color,
     rows: buckets.get(option.id) ?? [],
     value: option.id,
   }));
+
+  const all: BoardColumn[] = sortOptionColumns(
+    optionColumns,
+    columnSort ?? DEFAULT_BOARD_COLUMN_SORT
+  );
 
   const staleKeys = [...buckets.keys()]
     .filter((key) => key !== "" && !optionIds.has(key))
@@ -146,14 +213,20 @@ export function buildBoardColumns(args: {
     value: null,
   });
 
-  if (!hiddenColumnIds || hiddenColumnIds.length === 0) {
-    return { columns: all, hidden: [] };
+  const hiddenSet = new Set(hiddenColumnIds ?? []);
+  const columns: BoardColumn[] = [];
+  const hidden: BoardColumn[] = [];
+  for (const column of all) {
+    if (hiddenSet.has(column.key)) {
+      hidden.push(column);
+    } else if (hideEmptyColumns && column.rows.length === 0) {
+      // Dropped from display entirely (no unhide chip) — a soft display
+      // filter, not a manual hide.
+    } else {
+      columns.push(column);
+    }
   }
-  const hiddenSet = new Set(hiddenColumnIds);
-  return {
-    columns: all.filter((column) => !hiddenSet.has(column.key)),
-    hidden: all.filter((column) => hiddenSet.has(column.key)),
-  };
+  return { columns, hidden };
 }
 
 /** Horizontal extent of one column, in viewport coordinates. */

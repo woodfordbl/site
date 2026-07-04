@@ -271,6 +271,15 @@ export const databaseTableViewConfigSchema = z.object({
       cardFieldIds: z.array(z.string()).optional(),
       /** Hide board columns for these option ids. */
       hiddenColumnIds: z.array(z.string()).optional(),
+      /**
+       * Column ordering: `manual` follows the select field's option order
+       * (default), `alphabetical` sorts columns by option name, `color`
+       * groups columns by option color (palette order). The "No <field>"
+       * empty column always stays last regardless.
+       */
+      columnSort: z.enum(["manual", "alphabetical", "color"]).optional(),
+      /** Hide columns that currently hold no cards. */
+      hideEmptyColumns: z.boolean().optional(),
     })
     .optional(),
   /** Chart settings — used when `view.type` is `chart`. */

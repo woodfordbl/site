@@ -140,7 +140,7 @@ const ROWS = [
 ];
 
 describe("DatabaseChartView", () => {
-  it("renders a series-split bar chart with a legend and the edit-mode gear", () => {
+  it("renders a series-split bar chart with a legend", () => {
     render(
       <DatabaseChartView
         database={database}
@@ -157,10 +157,12 @@ describe("DatabaseChartView", () => {
     // Legend defaults on for >1 series, one entry per owner option.
     expect(screen.getByText("Ada")).toBeDefined();
     expect(screen.getByText("Bob")).toBeDefined();
-    expect(screen.getByLabelText("Chart settings")).toBeDefined();
+    // The chart carries no inline settings control — config lives in the
+    // database ⋯ settings menu's "Chart" submenu now.
+    expect(screen.queryByLabelText("Chart settings")).toBeNull();
   });
 
-  it("hides the config gear in view mode but still renders the chart", () => {
+  it("renders the chart in view mode", () => {
     const { container } = render(
       <DatabaseChartView
         database={database}
@@ -174,7 +176,6 @@ describe("DatabaseChartView", () => {
         })}
       />
     );
-    expect(screen.queryByLabelText("Chart settings")).toBeNull();
     expect(container.querySelector("[data-chart]")).not.toBeNull();
   });
 

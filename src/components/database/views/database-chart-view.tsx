@@ -19,7 +19,6 @@ import {
   YAxis,
 } from "recharts";
 
-import { DatabaseChartConfig } from "@/components/database/views/database-chart-config.tsx";
 import {
   type ChartConfig,
   ChartContainer,
@@ -447,7 +446,6 @@ function ChartEmptyState({
 }
 
 export function DatabaseChartView({
-  database,
   fields,
   mode,
   rows,
@@ -513,17 +511,7 @@ export function DatabaseChartView({
     );
   }
 
-  return (
-    <div className="relative" data-reveal-group>
-      {mode === "edit" ? (
-        <DatabaseChartConfig
-          data={data}
-          database={database}
-          fields={fields}
-          view={view}
-        />
-      ) : null}
-      {body}
-    </div>
-  );
+  // Chart config now lives in the database ⋯ settings menu's "Chart" submenu
+  // (see `ChartOptionsItems`) — no floating gear on the chart itself.
+  return <div className="relative">{body}</div>;
 }

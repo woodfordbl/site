@@ -1,6 +1,7 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconChartBar,
   IconCheck,
   IconClock,
   IconColumns3,
@@ -11,6 +12,7 @@ import {
   IconEyeOff,
   IconFileText,
   IconLayoutGrid,
+  IconLayoutKanban,
   IconLayoutList,
   IconListDetails,
   IconRefresh,
@@ -33,6 +35,8 @@ import {
   AddDatabaseViewMenuItems,
   DATABASE_VIEW_TYPE_ICONS,
 } from "@/components/database/database-view-switcher.tsx";
+import { BoardOptionsItems } from "@/components/database/views/database-board-config.tsx";
+import { ChartOptionsItems } from "@/components/database/views/database-chart-config.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -70,6 +74,7 @@ import {
   setConnectorToken,
 } from "@/lib/connectors/token-store.ts";
 import type { ConnectorAuthSpec } from "@/lib/connectors/types.ts";
+import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseField,
@@ -846,6 +851,13 @@ export interface DatabaseSettingsMenuProps {
    * the database has no views at all (degenerate data).
    */
   activeView?: DatabaseView;
+  /**
+   * Chart dataset for the active view when it is a chart — powers the "Chart"
+   * submenu's per-series/slice color rows. Computed by the entry
+   * (`DatabaseTableView`) so it matches what the chart renders. Absent for
+   * non-chart views.
+   */
+  chartData?: ChartData;
   database: LocalDatabase;
   /** Whether the hosting block currently hides the title row text. */
   hideTitle?: boolean;
@@ -872,8 +884,16 @@ export interface DatabaseSettingsMenuProps {
  * `data-reveal-group`). Deleting only removes the database entity — blocks
  * are references and fall back to their "not found" empty state.
  */
+/** Fallback when a chart view's dataset hasn't been threaded in. */
+const EMPTY_CHART_DATA: ChartData = {
+  categories: [],
+  categoryKeys: [],
+  series: [],
+};
+
 export function DatabaseSettingsMenu({
   activeView,
+  chartData,
   database,
   hideTitle = false,
   onDeleted,
@@ -953,7 +973,39 @@ export function DatabaseSettingsMenu({
         <DropdownMenuSeparator />
         {view ? <PropertiesSubmenu database={database} view={view} /> : null}
         <ViewsSubmenu database={database} onViewIdChange={onViewIdChange} />
-        {view ? <GroupSubmenu database={database} view={view} /> : null}
+        {/* Grouping drives the table/list render; board columns and chart axes
+            have their own per-type options below, so Group is table/list-only
+            (it would silently do nothing on a board or chart). */}
+        {view && (view.type === "table" || view.type === "list") ? (
+          <GroupSubmenu database={database} view={view} />
+        ) : null}
+        {view && view.type === "board" ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <IconLayoutKanban />
+              Board options
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-64 min-w-64">
+              <BoardOptionsItems database={database} view={view} />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
+        {view && view.type === "chart" ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <IconChartBar />
+              Chart options
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-64 min-w-64">
+              <ChartOptionsItems
+                data={chartData ?? EMPTY_CHART_DATA}
+                database={database}
+                fields={database.fields}
+                view={view}
+              />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
         {onHideTitleChange ? (
           <DropdownMenuSwitchItem
             checked={hideTitle}

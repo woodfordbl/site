@@ -5,6 +5,7 @@ import { DatabaseSyncStatusChip } from "@/components/database/database-sync-stat
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
+import type { ChartData } from "@/lib/databases/chart-data.ts";
 import type { DatabaseView, LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -19,6 +20,8 @@ const TITLE_TYPOGRAPHY_CLASS = cn(
 interface DatabaseTitleProps {
   /** The resolved active view — settings menu scope (Properties/Group/…). */
   activeView: DatabaseView;
+  /** Chart dataset for a chart active view — the settings menu color rows. */
+  chartData?: ChartData;
   /** Extra right-aligned controls before the ⋯ menu (mobile filter/sort). */
   controls?: ReactNode;
   database: LocalDatabase;
@@ -49,6 +52,7 @@ interface DatabaseTitleProps {
  */
 export function DatabaseTitle({
   activeView,
+  chartData,
   controls,
   database,
   hideTitle = false,
@@ -150,6 +154,7 @@ export function DatabaseTitle({
           {controls}
           <DatabaseSettingsMenu
             activeView={activeView}
+            chartData={chartData}
             database={database}
             hideTitle={hideTitle}
             onDeleted={onDeleteDatabase}

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { buildChartData } from "@/lib/databases/chart-data.ts";
 import {
   computeFormulaOverlay,
   hasVolatileFormula,
@@ -270,6 +271,17 @@ export function DatabaseTableView({
     [database, view]
   );
 
+  // Chart dataset, computed once for chart views and threaded to the settings
+  // menu's "Chart" submenu (its per-series/slice color rows need the resolved
+  // series/category keys) so the config matches what the chart renders.
+  const chartData = useMemo(
+    () =>
+      database && view?.type === "chart"
+        ? buildChartData(database.fields, rows, view.config.chart ?? {})
+        : undefined,
+    [database, view, rows]
+  );
+
   if (!database) {
     // A block whose database was deleted (here or in another tab) has nothing
     // to render — offer to remove the now-empty reference instead of leaving a
@@ -353,6 +365,7 @@ export function DatabaseTableView({
       {showTitleRow ? (
         <DatabaseTitle
           activeView={view}
+          chartData={chartData}
           controls={
             mode === "edit" && isNarrowViewport ? (
               <DatabaseMobileToolbar

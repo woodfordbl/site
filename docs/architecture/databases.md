@@ -163,6 +163,31 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   referencing a database deleted elsewhere (another block/tab) show a "This database was
   deleted." state with a **Remove** action (edit mode) instead of a bare message.
 
+### Per-view options (in the ⋯ menu)
+
+Every view's display settings live in the ⋯ settings menu — there is **no** floating
+config control on any view. The menu adapts to the active `view.type`:
+
+- **Group** (`view.groupBy`) shows for **table/list only** — grouping drives the grid /
+  list render. Board columns and chart axes have their own drivers, so Group is hidden
+  for them (it would silently do nothing).
+- **Board options** ([`database-board-config.tsx`](../../src/components/database/views/database-board-config.tsx),
+  `BoardOptionsItems`): **Group by** (which select field's options become columns —
+  `board.groupFieldId`), **Column order** (`board.columnSort`: `manual` = option order,
+  `alphabetical`, or `color` = palette order, name-tiebroken, colorless last —
+  `buildBoardColumns` applies it; the "No &lt;field&gt;" column stays last regardless),
+  **Hide empty columns** (`board.hideEmptyColumns` — drops card-less columns from
+  display, distinct from the per-column manual hide's unhide chip), and **Card
+  properties** (`board.cardFieldIds` toggles, seeded from the resolver's default).
+- **Chart options** ([`database-chart-config.tsx`](../../src/components/database/views/database-chart-config.tsx),
+  `ChartOptionsItems`): the full chart config — mark (bar/line/area/pie), X axis, Y
+  aggregate + property, series split, legend + position, stacked, grid, palette, and
+  per-series/slice color overrides. The color-override rows need the resolved
+  series/category keys, so `DatabaseTableView` computes `buildChartData` once for chart
+  views and threads it through `DatabaseTitle` → `DatabaseSettingsMenu` (`chartData`
+  prop). Writes shallow-merge into `config.chart` / `config.board` via
+  `updateDatabaseView` (JSON round-trip drops `undefined` keys).
+
 ## Connector sync
 
 Synced databases pull rows from an external service via the client-side engine in

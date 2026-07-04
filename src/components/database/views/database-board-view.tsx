@@ -552,12 +552,20 @@ export function DatabaseBoardView({
   );
 
   const hiddenColumnIds = view.config.board?.hiddenColumnIds;
+  const columnSort = view.config.board?.columnSort;
+  const hideEmptyColumns = view.config.board?.hideEmptyColumns;
   const { columns, hidden } = useMemo(() => {
     if (!groupField) {
       return { columns: [], hidden: [] };
     }
-    return buildBoardColumns({ field: groupField, hiddenColumnIds, rows });
-  }, [groupField, hiddenColumnIds, rows]);
+    return buildBoardColumns({
+      columnSort,
+      field: groupField,
+      hiddenColumnIds,
+      hideEmptyColumns,
+      rows,
+    });
+  }, [columnSort, groupField, hiddenColumnIds, hideEmptyColumns, rows]);
 
   const isSyncedDatabase = database.source?.kind === "connector";
   // Synced-field boards are read-only: the sync engine owns the group

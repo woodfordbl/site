@@ -166,6 +166,62 @@ describe("buildBoardColumns", () => {
     ]);
     expect(hidden.map((column) => column.key)).toEqual(["opt-doing", ""]);
   });
+
+  it("sorts option columns alphabetically, keeping the empty column last", () => {
+    const rows = [makeRow("r1", {})];
+    const { columns } = buildBoardColumns({
+      columnSort: "alphabetical",
+      field: statusField,
+      rows,
+    });
+    // Doing, Done, Todo by name; "No Status" always last.
+    expect(columns.map((column) => column.label)).toEqual([
+      "Doing",
+      "Done",
+      "Todo",
+      "No Status",
+    ]);
+  });
+
+  it("orders option columns by color (palette order), colorless last", () => {
+    // Palette order is green before blue, so Done (green) precedes Todo
+    // (blue); the colorless Doing option sorts after both colored ones.
+    const { columns } = buildBoardColumns({
+      columnSort: "color",
+      field: statusField,
+      rows: [],
+    });
+    expect(columns.slice(0, 3).map((column) => column.label)).toEqual([
+      "Done",
+      "Todo",
+      "Doing",
+    ]);
+  });
+
+  it("drops empty columns entirely when hideEmptyColumns is set", () => {
+    const rows = [makeRow("r1", { "f-status": "opt-todo" })];
+    const { columns, hidden } = buildBoardColumns({
+      field: statusField,
+      hideEmptyColumns: true,
+      rows,
+    });
+    // Only the populated Todo column survives; empties are not in `hidden`.
+    expect(columns.map((column) => column.key)).toEqual(["opt-todo"]);
+    expect(hidden).toEqual([]);
+  });
+
+  it("keeps a manually-hidden empty column in the hidden bucket, not dropped", () => {
+    const { columns, hidden } = buildBoardColumns({
+      field: statusField,
+      hiddenColumnIds: ["opt-doing"],
+      hideEmptyColumns: true,
+      rows: [],
+    });
+    // Manual hide wins: opt-doing goes to `hidden` (with its unhide chip),
+    // the other empties are dropped.
+    expect(columns).toEqual([]);
+    expect(hidden.map((column) => column.key)).toEqual(["opt-doing"]);
+  });
 });
 
 describe("resolveBoardDropTarget", () => {
