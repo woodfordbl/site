@@ -631,7 +631,100 @@ architecture (Phase 3); inline tokens and time-series capture are small, high-le
 additions (Phase 4–5 candidates); published-live-data is the headline act and lands with
 the author-dev-mode/content-shipping answer.
 
-## 9. What we deliberately rejected
+## 9. Relations & parameterized databases (spec)
+
+> Status: **specced, queued for implementation**. Motivating case: a stock
+> portfolio — a local Portfolio database (Symbol, Shares, Cost basis) joined to
+> a synced Market database by symbol, with per-row pages that open onto data
+> scoped to that row.
+
+### 9.1 Relation field — two binding modes, one type
+
+```ts
+databaseFieldSchema += {
+  type: "relation",
+  targetDatabaseId: string,
+  binding:
+    | { kind: "links" }        // explicit row links; cell value = string[] of
+                               // target row ids (fits the existing cell union)
+    | { kind: "match",         // VALUE JOIN: membership is computed, never
+        localFieldId: string,  // stored — rows relate when
+        foreignFieldId: string } // local[localFieldId] === foreign[foreignFieldId]
+}
+```
+
+- **`links`** is the Notion shape: a row picker (option-combobox pattern over
+  target rows' primary values), pills in the cell, click → row page. Local
+  databases only for writes (synced rows stay read-only).
+- **`match`** is the synced-data shape and the differentiator: Portfolio.Symbol
+  ↔ Market.Symbol relates rows automatically, survives every sync refresh, and
+  costs O(1) per lookup via the existing BTree indexes + TanStack DB equality
+  joins. No cell storage at all — the relation is a live query.
+- Display identical in both modes; `match` cells are non-editable by design
+  (edit the key field instead).
+
+### 9.2 Lookup and rollup fields over relations
+
+```ts
+{ type: "lookup", relationFieldId, targetFieldId, pick: "first" | "all" }
+{ type: "rollup", relationFieldId, targetFieldId, fn: DatabaseAggregateFn }
+```
+
+Computed at read time through the same overlay pipeline as formulas (merged
+into row values → filters/sorts/groups/Calculate all work); the expression
+engine's row scope exposes them (`thisPage.Price` where Price is a lookup), so
+`thisPage.Shares * thisPage.Price` is the portfolio market-value formula with
+zero new engine work. Formula-references-formula stays deferred; lookups are
+leaves.
+
+### 9.3 Parameterized databases — context binding at open
+
+The generalization the row-page templates were built for: **a database block's
+view can be bound to the hosting row's properties, evaluated at open**.
+
+- **Row scope context**: row pages (virtual and materialized — identified by
+  `databaseRowSource`) provide an ambient `{ fields, values }` scope to their
+  block tree.
+- **Token-valued filter conditions**: a condition value may be an expression
+  token string (`{{ thisPage.Symbol }}`). Inside a row scope, view resolution
+  substitutes tokens (expression engine, errors → condition skipped) before
+  `applyFilter`; outside any scope, token conditions fail-open with an edit-mode
+  badge ("Binds to page context").
+- The canonical composition: a Projects database whose row template embeds a
+  Tasks database block filtered `Project is {{ thisPage.Name }}` — every
+  project page opens onto ITS tasks, one template, zero per-row storage. Same
+  pattern gives the portfolio: a Market-history block filtered
+  `Symbol is {{ thisPage.Symbol }}`.
+- `instantiateTemplateBlocks` keeps database-block tokens UNevaluated at
+  materialization — binding stays live in materialized pages (tokens live in
+  view filter values, resolved at render, so parent-property renames propagate).
+
+### 9.4 Parameterized connectors — virtual child synced databases (later)
+
+Prototype synced databases with token-valued connector config
+(`symbol: {{ thisPage.Symbol }}`): opening a row instantiates a virtual synced
+database keyed `(prototypeDatabaseId, rowId)` — cache, not storage, same
+philosophy as virtual row pages. Deferred behind 9.1–9.3; most portfolio needs
+are covered by match-relations + history capture (§8) without it.
+
+### 9.5 Charting across databases
+
+Chart config gains additional series sources (`databaseId, viewId, fieldId,
+aggregate` each) overlaid on a shared bucketed x-axis; with history capture
+(§8), `x: time` mode charts captured series per row (symbols as series) and an
+aggregate-across-series toggle yields portfolio-value-over-time.
+
+### 9.6 Phasing
+
+| Slice | Scope |
+|---|---|
+| R1 | Relation field (both bindings), pills, row picker, indexes |
+| R2 | Lookup/rollup fields through the computed overlay |
+| R3 | Row scope context + token filter values (parameterized linked views) |
+| R4 | Multi-source chart series; history capture + time-axis charts |
+| R5 | Parameterized connector configs (virtual child synced databases) |
+
+## 10. What we deliberately rejected
 
 | Option | Why not |
 |---|---|
