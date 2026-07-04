@@ -292,6 +292,17 @@
     --sidebar-primary-foreground: var(--primary-foreground);
   }
 
+  /*
+   * Dark-mode elevation: surfaces higher in the view plane read a step lighter
+   * (shell --sidebar darkest → --background inset → floating overlays). The
+   * peek panel floats above the inset card, so its surface takes the elevated
+   * --popover step instead of matching the --background behind it; hovered
+   * rows inside it stay on --accent (--muted), one step lighter again.
+   */
+  .dark [data-page-sidebar-hover-panel] {
+    --sidebar: var(--popover);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     [data-page-sidebar-hover-panel] {
       transform: none !important;
