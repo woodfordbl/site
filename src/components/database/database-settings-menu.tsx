@@ -762,9 +762,11 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
 /**
  * Row pages status row: whether row pages (`/db/{databaseId}/{rowId}`)
  * render from the built-in default template or the database's custom
- * `rowTemplate` (with its block count). Deliberately non-interactive —
+ * `rowTemplate` (with its block count). A real menu item (not a hand-rolled
+ * div) so its icon size, gap, and padding align with the sibling rows in
+ * both the popover and drawer presentations; it performs no action yet —
  * template AUTHORING lands with a dedicated template editor (canvas-backed,
- * writing `database.rowTemplate`); this row becomes its entry point then.
+ * writing `database.rowTemplate`), and this row becomes its entry point.
  */
 function RowPagesItem({ database }: { database: LocalDatabase }) {
   const blockCount = database.rowTemplate?.length ?? 0;
@@ -774,13 +776,13 @@ function RowPagesItem({ database }: { database: LocalDatabase }) {
       : "Default template";
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 text-sm">
-      <IconFileText className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-      <span className="shrink-0">Row pages</span>
-      <span className="min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+    <DropdownMenuItem closeOnClick={false}>
+      <IconFileText />
+      Row pages
+      <span className="ml-auto min-w-0 truncate text-muted-foreground text-xs">
         {status}
       </span>
-    </div>
+    </DropdownMenuItem>
   );
 }
 
@@ -791,6 +793,50 @@ function StatRow({ label, value }: { label: string; value: string }) {
       <span className="text-right text-foreground tabular-nums">{value}</span>
     </div>
   );
+}
+
+interface DatabaseLoadStats {
+  /** Row-shard parse time — the dominant cost of loading this database. */
+  parseMs: number;
+  /** UTF-8 byte size of the stored row shard. */
+  sizeBytes: number;
+}
+
+/**
+ * Storage/load stats for the footer, measured fresh on each menu open: the
+ * row shard's byte size and how long it takes to parse (the same work the
+ * collection layer does at startup, so it's an honest local "load speed").
+ * `null` when storage is unreadable (private-mode restrictions).
+ */
+function measureDatabaseLoadStats(
+  databaseId: string
+): DatabaseLoadStats | null {
+  try {
+    const raw = window.localStorage.getItem(`site-local-db-rows:${databaseId}`);
+    if (raw === null) {
+      return { parseMs: 0, sizeBytes: 0 };
+    }
+    const start = performance.now();
+    JSON.parse(raw);
+    const parseMs = performance.now() - start;
+    return { parseMs, sizeBytes: new Blob([raw]).size };
+  } catch {
+    return null;
+  }
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatLoadMs(ms: number): string {
+  return ms < 1 ? "<1 ms" : `${Math.round(ms)} ms`;
 }
 
 export interface DatabaseSettingsMenuProps {
@@ -832,6 +878,7 @@ export function DatabaseSettingsMenu({
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(database.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [loadStats, setLoadStats] = useState<DatabaseLoadStats | null>(null);
 
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
@@ -845,13 +892,14 @@ export function DatabaseSettingsMenu({
       if (nextOpen) {
         setDraftName(database.name);
         setConfirmingDelete(false);
+        setLoadStats(measureDatabaseLoadStats(database.id));
       } else {
         // Closing commits a pending rename (covers outside click / Escape).
         commitRename();
       }
       setOpen(nextOpen);
     },
-    [commitRename, database.name]
+    [commitRename, database.id, database.name]
   );
 
   // Per-view menu sections scope to the block's active view; `views[0]` is
@@ -935,6 +983,18 @@ export function DatabaseSettingsMenu({
         <div className="space-y-1.5 px-2 py-2">
           <StatRow label="Fields" value={String(database.fields.length)} />
           <StatRow label="Rows" value={String(rowCount)} />
+          {loadStats ? (
+            <>
+              <StatRow
+                label="Size"
+                value={formatByteSize(loadStats.sizeBytes)}
+              />
+              <StatRow
+                label="Loads in"
+                value={formatLoadMs(loadStats.parseMs)}
+              />
+            </>
+          ) : null}
           <StatRow
             label="Created at"
             value={formatTimestamp(database.createdAt)}
