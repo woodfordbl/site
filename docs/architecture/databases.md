@@ -151,7 +151,10 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's
   "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
   switch (table views only), Source section (local info, or the connector sync controls
-  below), two-step Delete database, stats footer. The per-view sections (Properties
+  below), a Row pages status item (a real menu item so it aligns with sibling rows;
+  future template-editor entry point), two-step Delete database, stats footer (fields,
+  rows, plus Size — the row shard's UTF-8 byte size — and "Loads in" — the shard's
+  JSON parse time measured fresh on each menu open). The per-view sections (Properties
   visibility, Group, Vertical separators) all write to the ACTIVE view threaded from the
   title row — never `views[0]`.
 
