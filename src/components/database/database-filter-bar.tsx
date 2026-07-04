@@ -523,6 +523,7 @@ function FilterValueEditor({
     case "multiSelect":
       return (
         <DatabaseOptionCombobox
+          fieldId={field.id}
           multiple
           onToggleOption={(optionId) => {
             onValueChange(toggleConditionOptionId(condition.value, optionId));

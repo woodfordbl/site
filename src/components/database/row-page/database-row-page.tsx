@@ -42,7 +42,9 @@ import {
   localBlocksCollection,
   localDatabaseRowsCollection,
   localDatabasesCollection,
+  localPagesCollection,
 } from "@/db/collections/local-collections.ts";
+import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { setDatabaseRowPageId } from "@/db/queries/database-collection-ops.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
@@ -76,7 +78,10 @@ import { cn } from "@/lib/utils.ts";
  * {@link useMaterializeRowPage} — after which the route redirects to it.
  *
  * Works identically for synced databases: a GitHub PR table's thousands of
- * rows each "have" a templated page with zero stored blocks.
+ * rows each "have" a templated page with zero stored blocks. Synced rows
+ * (those carrying an `externalId`) never materialize, though — the sync
+ * engine owns their lifecycle — so they render without the Edit-page
+ * affordance.
  */
 
 /** Title shown (and used for the materialized page) when the primary cell is empty. */
@@ -249,12 +254,48 @@ function RowPageSidebarToggle(): ReactNode {
   );
 }
 
+/** Poll cadence/budget while confirming the optimistic `page.create` landed. */
+const LINK_POLL_INTERVAL_MS = 50;
+/** ~5s total — `page.create` includes a page-list fetch before the insert. */
+const LINK_POLL_MAX_ATTEMPTS = 100;
+
+/**
+ * Adopt the created page onto the row only once the page ACTUALLY exists in
+ * the local pages collection — `page.create` is optimistic but async (it
+ * awaits the page-list query before inserting), and its failures surface
+ * nowhere the caller can await. Linking first would strand a dangling
+ * `pageId` on the row when the create fails. Polls the collection directly
+ * (not component state) so the link still lands if the create's own
+ * navigation unmounts the row page first; gives up after the budget.
+ */
+function linkRowOncePageExists(
+  rowId: string,
+  pageId: string,
+  onDone: (linked: boolean) => void,
+  attempt = 0
+): void {
+  if (localPagesCollection.get(pageId)) {
+    setDatabaseRowPageId(rowId, pageId);
+    onDone(true);
+    return;
+  }
+  if (attempt >= LINK_POLL_MAX_ATTEMPTS) {
+    onDone(false);
+    return;
+  }
+  window.setTimeout(() => {
+    linkRowOncePageExists(rowId, pageId, onDone, attempt + 1);
+  }, LINK_POLL_INTERVAL_MS);
+}
+
 /**
  * Copy-on-write materialization: instantiate the template with the row's
  * CURRENT values (a snapshot — live tokens inside real pages are a future
  * phase), remap block ids, create a real user page through the standard
  * `page.create` dispatch (which also navigates to it), and link the row via
- * `setDatabaseRowPageId`. The page nests under the database's **host page**
+ * `setDatabaseRowPageId` — create first, link only after the page exists
+ * (see {@link linkRowOncePageExists}). Synced rows (`externalId`) never
+ * materialize. The page nests under the database's **host page**
  * ({@link resolveDatabaseHostParentId}: local block scan, deterministic
  * first host across linked views, depth-clamped to `MAX_PAGE_DEPTH`) for
  * breadcrumb/depth semantics; the `null` top-level fallback only fires when
@@ -274,34 +315,50 @@ function useMaterializeRowPage(
   const materializingRef = useRef(false);
 
   return useCallback(() => {
-    if (materializingRef.current || alreadyLinked) {
+    if (materializingRef.current || alreadyLinked || row.externalId) {
       return;
     }
     materializingRef.current = true;
 
     const pageId = crypto.randomUUID();
-    const blocks = clonePageBlocks(
-      instantiateTemplateBlocks(
-        database.rowTemplate,
-        database.fields,
-        row.values,
-        { now: () => new Date() }
-      )
-    );
-    const parentId = resolveDatabaseHostParentId({
-      blocks: localBlocksCollection.toArray,
-      databaseId: database.id,
-      pages,
-    });
+    try {
+      const blocks = clonePageBlocks(
+        instantiateTemplateBlocks(
+          database.rowTemplate,
+          database.fields,
+          row.values,
+          { now: () => new Date() }
+        )
+      );
+      const parentId = resolveDatabaseHostParentId({
+        blocks: localBlocksCollection.toArray,
+        databaseId: database.id,
+        pages,
+      });
 
-    setDatabaseRowPageId(row.id, pageId);
-    dispatch({
-      type: "page.create",
-      pageId,
-      parentId,
-      databaseRowSource: { databaseId: database.id, rowId: row.id },
-      title,
-      initialBlocks: blocks,
+      dispatch({
+        type: "page.create",
+        pageId,
+        parentId,
+        databaseRowSource: { databaseId: database.id, rowId: row.id },
+        title,
+        initialBlocks: blocks,
+      });
+    } catch (error) {
+      // Template/parent resolution threw before the create was dispatched —
+      // re-arm the button and surface the failure.
+      materializingRef.current = false;
+      reportPersistenceError(error);
+      return;
+    }
+
+    linkRowOncePageExists(row.id, pageId, (linked) => {
+      materializingRef.current = false;
+      if (!linked) {
+        reportPersistenceError(
+          new Error("Row page creation did not complete — row left unlinked")
+        );
+      }
     });
   }, [
     alreadyLinked,
@@ -310,6 +367,7 @@ function useMaterializeRowPage(
     database.rowTemplate,
     dispatch,
     pages,
+    row.externalId,
     row.id,
     row.values,
     title,
@@ -472,17 +530,21 @@ function RowPageTitleSection({
       <div className="mt-6 border-border border-b pb-3">
         <RowPropertiesPanel database={database} row={row} />
       </div>
-      <div className="mt-2 mb-4">
-        <Button
-          className="text-muted-foreground"
-          onClick={onEditPage}
-          size="sm"
-          variant="ghost"
-        >
-          <IconPencil />
-          Edit page
-        </Button>
-      </div>
+      {row.externalId ? null : (
+        // Synced rows never materialize pages (the sync engine owns their
+        // lifecycle), so the affordance is hidden entirely for them.
+        <div className="mt-2 mb-4">
+          <Button
+            className="text-muted-foreground"
+            onClick={onEditPage}
+            size="sm"
+            variant="ghost"
+          >
+            <IconPencil />
+            Edit page
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

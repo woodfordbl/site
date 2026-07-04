@@ -99,7 +99,9 @@ export const FIELD_TYPE_DEFS: {
   },
   formula: {
     label: "Formula",
-    // Formula cells filter on their evaluated display text (v1); typed
+    // Formula cells filter on their evaluated display text (v1) —
+    // `row-filter.ts` projects the computed cell (string/number/boolean) to
+    // the text the grid renders before applying string operators. Typed
     // operator sets per result kind come with formula-aware filtering.
     operators: [
       "eq",

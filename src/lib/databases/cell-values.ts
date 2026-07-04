@@ -15,8 +15,6 @@ import type {
 
 const ISO_DATE_PART_RE = /^\d{4}-\d{2}-\d{2}/;
 
-const ISO_DATE_PART_LENGTH = 10;
-
 /**
  * Whether a cell holds no value: `null`/missing, blank string, or empty
  * array. Numbers (including 0) and booleans (including false) are values.
@@ -45,11 +43,17 @@ export function toIsoDatePart(value: string): string {
   if (match) {
     return match[0];
   }
-  const parsed = Date.parse(trimmed);
-  if (Number.isNaN(parsed)) {
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
     return "";
   }
-  return new Date(parsed).toISOString().slice(0, ISO_DATE_PART_LENGTH);
+  // `Date` parses non-ISO strings ("12/31/2024", "Dec 31, 2024") in LOCAL
+  // time, so read the date parts back in local time too — `toISOString()`
+  // converts to UTC and would shift the calendar day for users east of UTC.
+  const year = String(parsed.getFullYear()).padStart(4, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -152,14 +156,21 @@ export function cellToPlainText(
       if (!Array.isArray(coerced)) {
         return "";
       }
-      const names: string[] = [];
+      // Join names in FIELD OPTION ORDER, not stored (click) order —
+      // mirroring `row-group.ts`'s normalizedOptionIds — so identical tag
+      // sets project to identical text and countUnique/sort agree with
+      // grouping. Stale ids (deleted options) drop out.
+      const entries: { index: number; name: string }[] = [];
       for (const optionId of coerced) {
-        const name = optionName(field.options, optionId);
-        if (name !== "") {
-          names.push(name);
+        const index = field.options.findIndex(
+          (option) => option.id === optionId
+        );
+        if (index !== -1) {
+          entries.push({ index, name: field.options[index].name });
         }
       }
-      return names.join(", ");
+      entries.sort((a, b) => a.index - b.index);
+      return entries.map((entry) => entry.name).join(", ");
     }
     case "date":
       return typeof coerced === "string" ? toIsoDatePart(coerced) : "";

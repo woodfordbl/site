@@ -130,47 +130,93 @@ function throwForStatus(response: Response): never {
   });
 }
 
-async function fetchRows(
-  ctx: ConnectorFetchContext
-): Promise<ConnectorFetchResult> {
-  const { username } = parseConfig(ctx.config);
-  const url = `https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=pushed&per_page=100`;
+/**
+ * Repos beyond `MAX_PAGES × 100` are not fetched; the sync layer's tombstone
+ * grace ages them out honestly rather than truncation deleting them abruptly
+ * (same policy and Link-following pattern as the pull-requests connector).
+ */
+const MAX_PAGES = 3;
+
+/** Matches one `Link` header entry carrying `rel="next"`. */
+const NEXT_LINK_PATTERN = /<([^>]+)>\s*;[^,]*\brel="next"/;
+
+/** Extract the `rel="next"` target from a `Link` response header, if any. */
+function nextPageUrl(headers: Headers): string | undefined {
+  const link = headers.get("link");
+  if (link === null) {
+    return;
+  }
+  for (const part of link.split(",")) {
+    const match = NEXT_LINK_PATTERN.exec(part);
+    if (match) {
+      return match[1];
+    }
+  }
+  return;
+}
+
+async function fetchPage(
+  ctx: ConnectorFetchContext,
+  url: string,
+  isFirstPage: boolean
+): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
   };
-  if (ctx.etag !== undefined) {
+  // Conditional request on page 1 only: one etag covers the snapshot and a
+  // 304 short-circuits the whole poll (per-page etags are not worth storing).
+  if (isFirstPage && ctx.etag !== undefined) {
     headers["If-None-Match"] = ctx.etag;
   }
   if (ctx.token !== undefined) {
     headers.Authorization = `Bearer ${ctx.token}`;
   }
-  let response: Response;
   try {
-    response = await ctx.fetchFn(url, { headers });
+    return await ctx.fetchFn(url, { headers });
   } catch (cause) {
     throw new ConnectorError("GitHub request failed", {
       kind: "network",
       cause,
     });
   }
-  if (response.status === HTTP_STATUS_NOT_MODIFIED) {
-    return { kind: "notModified" };
-  }
-  if (!response.ok) {
-    throwForStatus(response);
-  }
-  const payload = githubRepoListSchema.safeParse(await response.json());
+}
+
+function parseRepoPage(json: unknown): ConnectorRow[] {
+  const payload = githubRepoListSchema.safeParse(json);
   if (!payload.success) {
     throw new ConnectorError("Unexpected GitHub response shape", {
       kind: "network",
       cause: payload.error,
     });
   }
-  return {
-    kind: "rows",
-    rows: payload.data.map(toConnectorRow),
-    etag: response.headers.get("etag") ?? undefined,
-  };
+  return payload.data.map(toConnectorRow);
+}
+
+async function fetchRows(
+  ctx: ConnectorFetchContext
+): Promise<ConnectorFetchResult> {
+  const { username } = parseConfig(ctx.config);
+  const firstUrl = `https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=pushed&per_page=100`;
+  const rows: ConnectorRow[] = [];
+  let etag: string | undefined;
+  let url: string | undefined = firstUrl;
+
+  for (let page = 1; page <= MAX_PAGES && url !== undefined; page += 1) {
+    const response = await fetchPage(ctx, url, page === 1);
+    if (page === 1 && response.status === HTTP_STATUS_NOT_MODIFIED) {
+      return { kind: "notModified" };
+    }
+    if (!response.ok) {
+      throwForStatus(response);
+    }
+    rows.push(...parseRepoPage(await response.json()));
+    if (page === 1) {
+      etag = response.headers.get("etag") ?? undefined;
+    }
+    url = nextPageUrl(response.headers);
+  }
+
+  return { kind: "rows", rows, etag };
 }
 
 /** GitHub public-repos connector definition. */

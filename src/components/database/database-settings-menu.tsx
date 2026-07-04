@@ -508,11 +508,19 @@ interface ConnectorTokenRowProps {
 
 /**
  * Masked token input for connectors with BYO-token auth. Commits to the
- * client-only token store on blur/Enter; an empty value clears the token.
+ * client-only token store on Enter or on blur when the draft changed; an
+ * explicitly committed empty value clears the token. Escape CANCELS: the
+ * draft reverts to the stored token before the key propagates to close the
+ * menu, so the close-triggered blur commits nothing.
  */
 function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
+  const storedToken = () => getConnectorToken(connectorId) ?? "";
   const commit = (value: string) => {
-    setConnectorToken(connectorId, value);
+    // Dirty-check so dismissal blurs of an untouched (or reverted) draft
+    // never rewrite — or delete — the working stored token.
+    if (value !== storedToken()) {
+      setConnectorToken(connectorId, value);
+    }
   };
 
   return (
@@ -527,6 +535,12 @@ function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
             commit(event.currentTarget.value);
           }}
           onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              // Cancel: revert the draft, then let Escape propagate
+              // (stopMenuKeys convention) so the menu closes without saving.
+              event.currentTarget.value = storedToken();
+              return;
+            }
             stopMenuKeys(event);
             if (event.key === "Enter") {
               event.preventDefault();

@@ -95,6 +95,23 @@ export type ParseExpressionResult =
 /** Scope roots accepted before `.property` / `["property"]` (lowercased). */
 const SCOPE_ROOTS = new Set(["thispage", "thisrow"]);
 
+/**
+ * Longest accepted expression source, in characters. Longer input becomes a
+ * parse error instead of feeding the tokenizer/parser pathological data.
+ */
+export const MAX_EXPRESSION_LENGTH = 10_000;
+
+/**
+ * Deepest accepted grammar nesting. The recursive-descent parser would blow
+ * the JS call stack on deeply nested input (~2k nested parens), and the
+ * resulting RangeError would escape {@link parseExpression}'s never-throws
+ * contract. Because every AST level costs at least one counted parser
+ * recursion, this cap also bounds AST depth — so the recursive evaluator in
+ * `evaluate.ts` (and `isVolatileExpression`) can never overflow on a parsed
+ * tree either.
+ */
+const MAX_PARSE_DEPTH = 100;
+
 /** Internal control-flow error carrying the source position; never escapes. */
 class ExprParseFailure extends Error {
   readonly position: number;
@@ -109,9 +126,31 @@ class ExprParseFailure extends Error {
 class Parser {
   private readonly tokens: ExprToken[];
   private index = 0;
+  private depth = 0;
 
   constructor(tokens: ExprToken[]) {
     this.tokens = tokens;
+  }
+
+  /**
+   * Run one recursive production with the nesting counter bumped, failing
+   * with a positioned parse error past {@link MAX_PARSE_DEPTH}. Guards the
+   * two recursion points ({@link parseOr}, {@link parseUnary}) so nesting is
+   * bounded regardless of which grammar path recursion takes.
+   */
+  private withDepth(body: () => ExprNode): ExprNode {
+    this.depth += 1;
+    try {
+      if (this.depth > MAX_PARSE_DEPTH) {
+        throw new ExprParseFailure(
+          "Expression too deeply nested",
+          this.peek().position
+        );
+      }
+      return body();
+    } finally {
+      this.depth -= 1;
+    }
   }
 
   parse(): ExprNode {
@@ -171,15 +210,17 @@ class Parser {
   }
 
   private parseOr(): ExprNode {
-    let left = this.parseAnd();
-    for (;;) {
-      const op = this.matchKeyword("or") ?? this.matchPunct("||");
-      if (op === null) {
-        return left;
+    return this.withDepth(() => {
+      let left = this.parseAnd();
+      for (;;) {
+        const op = this.matchKeyword("or") ?? this.matchPunct("||");
+        if (op === null) {
+          return left;
+        }
+        const right = this.parseAnd();
+        left = { kind: "binary", op: "or", left, right, position: op.position };
       }
-      const right = this.parseAnd();
-      left = { kind: "binary", op: "or", left, right, position: op.position };
-    }
+    });
   }
 
   private parseAnd(): ExprNode {
@@ -272,25 +313,27 @@ class Parser {
   }
 
   private parseUnary(): ExprNode {
-    const negate = this.matchPunct("-");
-    if (negate !== null) {
-      return {
-        kind: "unary",
-        op: "-",
-        operand: this.parseUnary(),
-        position: negate.position,
-      };
-    }
-    const not = this.matchKeyword("not") ?? this.matchPunct("!");
-    if (not !== null) {
-      return {
-        kind: "unary",
-        op: "not",
-        operand: this.parseUnary(),
-        position: not.position,
-      };
-    }
-    return this.parsePrimary();
+    return this.withDepth(() => {
+      const negate = this.matchPunct("-");
+      if (negate !== null) {
+        return {
+          kind: "unary",
+          op: "-",
+          operand: this.parseUnary(),
+          position: negate.position,
+        };
+      }
+      const not = this.matchKeyword("not") ?? this.matchPunct("!");
+      if (not !== null) {
+        return {
+          kind: "unary",
+          op: "not",
+          operand: this.parseUnary(),
+          position: not.position,
+        };
+      }
+      return this.parsePrimary();
+    });
   }
 
   private parsePrimary(): ExprNode {
@@ -415,6 +458,15 @@ function describeToken(token: ExprToken): string {
  * with a 0-based character position into `source`.
  */
 export function parseExpression(source: string): ParseExpressionResult {
+  if (source.length > MAX_EXPRESSION_LENGTH) {
+    return {
+      ok: false,
+      error: {
+        message: `Expression too long (max ${MAX_EXPRESSION_LENGTH} characters)`,
+        position: 0,
+      },
+    };
+  }
   const lexed = tokenize(source);
   if (!lexed.ok) {
     return { ok: false, error: lexed.error };

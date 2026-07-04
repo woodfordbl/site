@@ -433,3 +433,23 @@ describe("isVolatileExpression", () => {
     expect(volatileOf('concat("now()", "today")')).toBe(false);
   });
 });
+
+describe("date function range guards", () => {
+  it("dateAdd returns an error value for amounts that push the date out of range", () => {
+    // Beyond the ECMAScript ±8.64e15 ms date range date-fns produces an
+    // Invalid Date; formatting it would throw RangeError.
+    expect(
+      errorMessage(run('dateAdd("2020-01-01", 200000000, "days")'))
+    ).toContain("out of range");
+    expect(
+      errorMessage(run('dateAdd("2020-01-01", -200000000, "days")'))
+    ).toContain("out of range");
+    expect(
+      errorMessage(run('dateAdd("2020-01-01", 999999999, "years")'))
+    ).toContain("out of range");
+  });
+
+  it("dateAdd still works at large-but-valid offsets", () => {
+    expect(run('dateAdd("2020-01-01", 3650, "days")')).toBe("2029-12-29");
+  });
+});

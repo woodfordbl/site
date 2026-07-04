@@ -128,7 +128,13 @@ function parseDateArg(value: ExprPlainValue, fnName: string): Date | ExprError {
   const [year, month, day] = datePart.split("-").map(Number);
   // Local-time construction from parts so the calendar day never shifts
   // across timezones (same convention as `lib/databases/cell-values.ts`).
-  return new Date(year, month - 1, day);
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) {
+    // Defensive: an Invalid Date must never reach date-fns arithmetic or
+    // `format` (which throws RangeError on it).
+    return exprError(`${fnName}(): invalid date "${value}"`);
+  }
+  return parsed;
 }
 
 type DateUnit = "days" | "months" | "years";
@@ -259,6 +265,12 @@ function evalDateAdd(args: ExprPlainValue[]): ExprValue {
     shifted = addMonths(date, amount);
   } else {
     shifted = addYears(date, amount);
+  }
+  if (Number.isNaN(shifted.getTime())) {
+    // Amounts that push past the ECMAScript ±8.64e15 ms date range (or a
+    // non-finite amount) yield an Invalid Date, which date-fns `format`
+    // would throw RangeError on — surface an ExprError value instead.
+    return exprError("dateAdd(): resulting date is out of range");
   }
   return dateFnsFormat(shifted, ISO_DATE_PATTERN);
 }

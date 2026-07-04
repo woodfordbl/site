@@ -197,16 +197,26 @@ describe("merged rows in the view machinery", () => {
     );
   });
 
-  it("treats number results as non-empty but not string-matchable (v1)", () => {
-    // Mixed-type formula columns filter as strings in v1: number results
-    // satisfy emptiness operators, while text operators see them as "".
+  it("filters number results on their displayed text", () => {
+    // Mixed-type formula columns filter as strings in v1: string operators
+    // match against the display text the grid renders (here 10 * 2 → "20"),
+    // and number results satisfy emptiness operators.
     const merged = mergedWith(total);
     expect(rowMatchesCondition(merged[0], total, condition("isNotEmpty"))).toBe(
       true
     );
     expect(
       rowMatchesCondition(merged[0], total, condition("contains", "20"))
-    ).toBe(false);
+    ).toBe(true);
+    expect(rowMatchesCondition(merged[0], total, condition("eq", "20"))).toBe(
+      true
+    );
+    expect(rowMatchesCondition(merged[0], total, condition("neq", "20"))).toBe(
+      false
+    );
+    expect(rowMatchesCondition(merged[1], total, condition("eq", "20"))).toBe(
+      false
+    );
   });
 
   it("treats error and null cells as empty for filtering", () => {

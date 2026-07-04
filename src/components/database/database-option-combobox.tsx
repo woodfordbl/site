@@ -24,6 +24,11 @@ import type { DatabaseSelectOption } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface DatabaseOptionComboboxProps {
+  /**
+   * Id of the field owning `options` — option color edits are scoped by it
+   * (option ids alone are ambiguous after "Duplicate property").
+   */
+  fieldId: string;
   /** Multi keeps toggling; single is expected to close from `onToggleOption`. */
   multiple: boolean;
   /** When set, an exact-match-less query offers a "Create" row. */
@@ -47,6 +52,7 @@ const OPTION_ROW_CLASS =
  * hosting popover.
  */
 export function DatabaseOptionCombobox({
+  fieldId,
   multiple,
   onCreateOption,
   onToggleOption,
@@ -135,6 +141,7 @@ export function DatabaseOptionCombobox({
       <div className="flex max-h-56 flex-col overflow-y-auto">
         {filtered.map((option) => (
           <ComboboxOptionRow
+            fieldId={fieldId}
             key={option.id}
             onToggle={() => onToggleOption(option.id)}
             option={option}
@@ -158,6 +165,7 @@ export function DatabaseOptionCombobox({
 }
 
 interface ComboboxOptionRowProps {
+  fieldId: string;
   onToggle: () => void;
   option: DatabaseSelectOption;
   selected: boolean;
@@ -169,9 +177,10 @@ interface ComboboxOptionRowProps {
  * nested), so color edits can't commit or toggle the cell/filter value, and
  * the row is a `data-reveal-group` so the ⋯ follows the standard hover-reveal
  * affordance (always visible on no-hover pointers). Color writes address the
- * owning field schema by option id via `updateSelectOptionColor`.
+ * owning field schema by field id + option id via `updateSelectOptionColor`.
  */
 function ComboboxOptionRow({
+  fieldId,
   onToggle,
   option,
   selected,
@@ -214,7 +223,7 @@ function ComboboxOptionRow({
           <DatabaseOptionColorMenuItems
             color={option.color}
             onSelectColor={(color) => {
-              updateSelectOptionColor(option.id, color);
+              updateSelectOptionColor(fieldId, option.id, color);
             }}
           />
         </DropdownMenuContent>

@@ -21,10 +21,49 @@ const OPEN_DELIMITER = "{{";
 const CLOSE_DELIMITER = "}}";
 
 /**
+ * Find the closing `}}` of an expression span starting at `from`, skipping
+ * any `}}` inside single- or double-quoted string literals (with backslash
+ * escapes — mirroring the tokenizer's string syntax) so expressions like
+ * `replace(x, "}}", "-")` keep their literals intact. Returns -1 when no
+ * closing delimiter exists outside a string literal.
+ */
+function findCloseDelimiter(text: string, from: number): number {
+  let quote: string | null = null;
+  let index = from;
+  while (index < text.length) {
+    const char = text[index];
+    if (quote !== null) {
+      if (char === "\\") {
+        index += 2;
+        continue;
+      }
+      if (char === quote) {
+        quote = null;
+      }
+      index += 1;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      index += 1;
+      continue;
+    }
+    if (text.startsWith(CLOSE_DELIMITER, index)) {
+      return index;
+    }
+    index += 1;
+  }
+  return -1;
+}
+
+/**
  * Split a text-block string into literal text and `{{ … }}` expression
- * spans. Expression `source` is the trimmed inner text. An unterminated
- * `{{` is literal text (no escape syntax in v1). The empty string yields no
- * segments; adjacent tokens yield back-to-back `expr` segments.
+ * spans. Expression `source` is the trimmed inner text; the closing `}}` is
+ * matched string-literal-aware (a quoted `"}}"` inside the expression does
+ * not close the span). An unterminated `{{` — including one whose only `}}`
+ * sits inside an unterminated quote — is literal text (no escape syntax in
+ * v1). The empty string yields no segments; adjacent tokens yield
+ * back-to-back `expr` segments.
  */
 export function splitTemplateText(text: string): TemplateSegment[] {
   const segments: TemplateSegment[] = [];
@@ -32,9 +71,7 @@ export function splitTemplateText(text: string): TemplateSegment[] {
   while (index < text.length) {
     const open = text.indexOf(OPEN_DELIMITER, index);
     const close =
-      open === -1
-        ? -1
-        : text.indexOf(CLOSE_DELIMITER, open + OPEN_DELIMITER.length);
+      open === -1 ? -1 : findCloseDelimiter(text, open + OPEN_DELIMITER.length);
     if (open === -1 || close === -1) {
       segments.push({ kind: "text", text: text.slice(index) });
       return segments;

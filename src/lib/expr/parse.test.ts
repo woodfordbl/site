@@ -210,3 +210,31 @@ describe("parse errors", () => {
     expect(errorOf("Tasks.Score").message).toContain("Unknown identifier");
   });
 });
+
+describe("parse guards (depth and length)", () => {
+  it("returns a parse error instead of overflowing on deeply nested parens", () => {
+    const source = `${"(".repeat(2000)}1${")".repeat(2000)}`;
+    const error = errorOf(source);
+    expect(error.message).toContain("too deeply nested");
+  });
+
+  it("returns a parse error instead of overflowing on long unary chains", () => {
+    expect(errorOf(`${"-".repeat(5000)}1`).message).toContain(
+      "too deeply nested"
+    );
+    expect(errorOf(`${"!".repeat(5000)}true`).message).toContain(
+      "too deeply nested"
+    );
+  });
+
+  it("rejects over-long expression sources with a parse error", () => {
+    const error = errorOf(`1 +${" ".repeat(20_000)} 2`);
+    expect(error.message).toContain("Expression too long");
+    expect(error.position).toBe(0);
+  });
+
+  it("still parses reasonably nested groups", () => {
+    const source = `${"(".repeat(20)}1 + 2${")".repeat(20)}`;
+    expect(sexpr(astOf(source))).toBe("(+ 1 2)");
+  });
+});

@@ -312,6 +312,7 @@ function SelectCellPopoverEditor({
   return (
     <CellEditorPopover onStopEdit={onStopEdit}>
       <DatabaseOptionCombobox
+        fieldId={field.id}
         multiple={multiple}
         onCreateOption={handleCreate}
         onToggleOption={handleToggle}

@@ -143,3 +143,40 @@ describe("evaluateTemplateText", () => {
     ).toBe("Total: 2,469 (OK)");
   });
 });
+
+describe("string-literal-aware delimiter matching", () => {
+  it("does not close an expression at a }} inside a quoted literal", () => {
+    expect(
+      splitTemplateText('{{ replace(thisPage.Name, "}}", "-") }} after')
+    ).toEqual([
+      { kind: "expr", source: 'replace(thisPage.Name, "}}", "-")' },
+      { kind: "text", text: " after" },
+    ]);
+  });
+
+  it("respects single quotes and backslash escapes", () => {
+    expect(splitTemplateText("{{ '}}' }}")).toEqual([
+      { kind: "expr", source: "'}}'" },
+    ]);
+    expect(splitTemplateText('{{ "\\"}}" }}')).toEqual([
+      { kind: "expr", source: '"\\"}}"' },
+    ]);
+  });
+
+  it("evaluates expressions whose literals contain }}", () => {
+    expect(
+      evaluateTemplateText('{{ replace("a}}b", "}}", "-") }}', scope)
+    ).toBe("a-b");
+  });
+
+  it("treats a token whose only }} sits inside an unterminated quote as text", () => {
+    expect(splitTemplateText('{{ "oops }}')).toEqual([
+      { kind: "text", text: '{{ "oops }}' },
+    ]);
+  });
+
+  it("never throws on pathologically nested template expressions", () => {
+    const payload = `{{ ${"(".repeat(3000)}1${")".repeat(3000)} }}`;
+    expect(evaluateTemplateText(payload, scope)).toContain("⚠");
+  });
+});

@@ -4,6 +4,7 @@ import {
   toIsoDatePart,
 } from "@/lib/databases/cell-values.ts";
 import { FIELD_TYPE_DEFS } from "@/lib/databases/field-defs.ts";
+import { formatExprValueDefault } from "@/lib/expr/evaluate.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -20,6 +21,25 @@ import type {
  * (`DatabaseFilterGroup`). Malformed conditions never hide data — they
  * evaluate to a match.
  */
+
+/**
+ * Display-text projection of a computed formula cell for string filtering,
+ * matching what the grid renders (`exprValueToDisplay` in
+ * `lib/expr/format-result.ts`): numbers via `Intl` (en-US, grouped, trimmed),
+ * booleans "Yes"/"No", strings as-is, anything else "". Without this,
+ * numeric/boolean formula results would collapse to "" in `matchString` and
+ * be unfilterable.
+ */
+function formulaCellDisplayText(cell: DatabaseCellValue): string {
+  if (
+    typeof cell === "string" ||
+    typeof cell === "number" ||
+    typeof cell === "boolean"
+  ) {
+    return formatExprValueDefault(cell);
+  }
+  return "";
+}
 
 function matchString(
   cell: DatabaseCellValue,
@@ -179,7 +199,13 @@ export function rowMatchesCondition(
   const target = condition.value;
   switch (FIELD_TYPE_DEFS[field.type].valueKind) {
     case "string":
-      return matchString(cell, op, target);
+      // Formula results are mixed-type (string/number/boolean); filter them
+      // on the display text the grid shows for the cell.
+      return matchString(
+        field.type === "formula" ? formulaCellDisplayText(cell) : cell,
+        op,
+        target
+      );
     case "number":
       return matchNumber(cell, op, target);
     case "boolean":

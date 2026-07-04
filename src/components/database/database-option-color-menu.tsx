@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { BlockColorSwatch } from "@/components/canvas/block-color-swatch.tsx";
 import {
   recoloredSelectOptions,
+  selectFieldForOptionEdit,
   selectOptionsPatch,
 } from "@/components/database/database-column-menu-helpers.ts";
 import {
@@ -68,32 +69,30 @@ export function DatabaseOptionColorMenuItems({
 }
 
 /**
- * Write one option's color into its owning field schema, addressed by option
- * id alone. Option ids are UUIDs (unique across all databases), and the
- * option combobox is intentionally schema-location-agnostic — callers pass a
- * bare options array — so the owning database/field is point-read from the
- * collection here. Rebuilds the options array immutably via
- * `updateDatabaseField`; unknown option ids are a no-op.
+ * Write one option's color into its owning field schema, scoped by the
+ * owning field's id. An option id alone is NOT a safe address — "Duplicate
+ * property" clones can share option ids with their source field, so a scan
+ * by option id can silently recolor the wrong column. Callers pass the
+ * field id and the owning database is point-read from the collection here.
+ * Rebuilds the options array immutably via `updateDatabaseField`; unknown
+ * field/option ids are a no-op.
  */
 export function updateSelectOptionColor(
+  fieldId: string,
   optionId: string,
   color: BlockColor | undefined
 ): void {
   for (const database of localDatabasesCollection.toArray) {
-    for (const field of database.fields) {
-      if (field.type !== "select" && field.type !== "multiSelect") {
-        continue;
-      }
-      if (field.options.some((option) => option.id === optionId)) {
-        updateDatabaseField(
-          database.id,
-          field.id,
-          selectOptionsPatch(
-            recoloredSelectOptions(field.options, optionId, color)
-          )
-        );
-        return;
-      }
+    const field = selectFieldForOptionEdit(database.fields, fieldId);
+    if (field) {
+      updateDatabaseField(
+        database.id,
+        field.id,
+        selectOptionsPatch(
+          recoloredSelectOptions(field.options, optionId, color)
+        )
+      );
+      return;
     }
   }
 }

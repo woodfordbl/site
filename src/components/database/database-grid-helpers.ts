@@ -281,6 +281,26 @@ export function flattenGridItems(
   return items;
 }
 
+/**
+ * Virtualizer range with one extra row index pinned into it — the grid pins
+ * the editing row so scrolling it past the overscan window never unmounts
+ * the inline editor (whose uncommitted draft only commits on blur, which a
+ * DOM removal does not fire). `-1` (nothing to pin) or an index already in
+ * range returns the input array unchanged; otherwise the index is merged in
+ * ascending order, since the virtualizer expects sorted indexes.
+ */
+export function withPinnedRowIndex(
+  indexes: number[],
+  pinnedIndex: number
+): number[] {
+  if (pinnedIndex < 0 || indexes.includes(pinnedIndex)) {
+    return indexes;
+  }
+  const next = [...indexes, pinnedIndex];
+  next.sort((a, b) => a - b);
+  return next;
+}
+
 /** One editing cell, addressed by stable row + field ids. */
 export interface CellEditTarget {
   fieldId: string;

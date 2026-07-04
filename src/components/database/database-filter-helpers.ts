@@ -153,6 +153,12 @@ export function conditionValueLabel(
       return value === true ? "Checked" : "Unchecked";
     case "text":
     case "url":
+    // Formula conditions carry the raw typed value (the editor commits
+    // strings; older conditions may hold numbers) — label it verbatim.
+    case "formula":
+      if (typeof value === "number") {
+        return String(value);
+      }
       return typeof value === "string" ? value : "";
     case "number":
     case "date":

@@ -205,6 +205,23 @@ describe("conditionValueLabel", () => {
     ).toBe("$1,200.00");
   });
 
+  it("labels formula conditions with the raw committed value", () => {
+    const formulaField: DatabaseField = {
+      id: "f1",
+      name: "Computed",
+      type: "formula",
+      expression: "thisPage.Price * 2",
+    };
+    // The value editor commits strings; older conditions may carry numbers.
+    expect(conditionValueLabel(formulaField, condition({ value: "84" }))).toBe(
+      "84"
+    );
+    expect(conditionValueLabel(formulaField, condition({ value: 84 }))).toBe(
+      "84"
+    );
+    expect(conditionValueLabel(formulaField, condition({}))).toBe("");
+  });
+
   it("lists select option names up to two, then collapses", () => {
     expect(
       conditionValueLabel(

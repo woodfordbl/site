@@ -54,6 +54,24 @@ function commitDatabaseTransaction(tx: DatabaseTransaction): void {
 }
 
 /**
+ * Awaitable variant of {@link commitDatabaseTransaction}: still reports
+ * persistence failures via toast, but ALSO rejects so the caller can observe
+ * commit failure. The sync engine needs this — persisting a new ETag after a
+ * rolled-back row apply would freeze rows behind 304s forever.
+ */
+function commitDatabaseTransactionAwaitable(
+  tx: DatabaseTransaction
+): Promise<void> {
+  return tx.commit().then(
+    () => undefined,
+    (error: unknown) => {
+      reportPersistenceError(error);
+      throw error;
+    }
+  );
+}
+
+/**
  * Deep-copy a draft value into plain objects. TanStack DB update drafts are
  * change-tracking proxies; spreading them into the stored document makes zod
  * v4's `z.record` validation reject the NEXT write ("expected record,
@@ -95,6 +113,15 @@ export interface SyncSnapshotResult {
    * by the caller (this op never touches the meta store itself).
    */
   missingCounts: Record<string, number>;
+  /**
+   * Resolves once the row transaction has actually committed to storage
+   * (immediately when the snapshot required no writes); rejects on commit
+   * failure AFTER the failure has been reported via toast. Callers that
+   * persist sync bookkeeping (ETag, missing counts) MUST await this first —
+   * recording a new validator for rows that were rolled back would freeze
+   * the database behind 304 responses.
+   */
+  persisted: Promise<void>;
   removed: number;
   updated: number;
 }
@@ -197,6 +224,7 @@ export function applySyncSnapshot(
     }
   }
 
+  let persisted: Promise<void> = Promise.resolve();
   if (inserts.length > 0 || updates.length > 0 || deletes.length > 0) {
     const tx = createDatabaseTransaction();
     tx.mutate(() => {
@@ -214,7 +242,7 @@ export function applySyncSnapshot(
         localDatabaseRowsCollection.delete(rowId);
       }
     });
-    commitDatabaseTransaction(tx);
+    persisted = commitDatabaseTransactionAwaitable(tx);
   }
 
   return {
@@ -222,6 +250,7 @@ export function applySyncSnapshot(
     updated: updates.length,
     removed: deletes.length,
     missingCounts,
+    persisted,
   };
 }
 

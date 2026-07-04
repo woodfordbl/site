@@ -21,21 +21,38 @@ interface DatabaseSyncStatusChipProps {
  * a spinning refresh glyph while a pass is in flight, a muted destructive
  * dot (message in the tooltip) after a failed pass, and a tiny muted
  * refresh glyph when idle+healthy so click-to-refresh stays discoverable.
- * Clicking requests an immediate sync — leader-only, so in follower tabs
- * the first click that returns `false` switches the chip to a no-op look
- * (rows still arrive via storage events).
+ * Clicking requests an immediate sync. `requestImmediateSync` only succeeds
+ * in the tab that owns the schedule, so a refused click drops the hover
+ * affordance — but every click re-attempts and any status transition
+ * clears the refusal, so the chip recovers as scheduling ownership moves
+ * (rows still arrive via storage events meanwhile).
  */
 export function DatabaseSyncStatusChip({
   databaseId,
 }: DatabaseSyncStatusChipProps): ReactNode {
   const status = useSyncStatus(databaseId);
-  // False after a click was refused (follower tab) — no-op look from then on.
-  const [canRequestSync, setCanRequestSync] = useState(true);
+  // True while the LAST refresh attempt was refused (`requestImmediateSync`
+  // returned false — this tab doesn't own the database's sync schedule
+  // right now). Deliberately not a one-way latch: ownership changes over a
+  // tab's lifetime, so the chip's look derives only from the current
+  // attempt's result plus the status subscription below.
+  const [lastAttemptRefused, setLastAttemptRefused] = useState(false);
+
+  // The engine publishes a new immutable status object per state change
+  // (pass started/landed/failed). Any transition observed here means this
+  // tab is receiving sync activity, so a past refusal is stale — restore
+  // the active affordance. Render-time state adjustment (React's
+  // derive-from-props pattern) rather than an effect: no extra commit with
+  // the stale look.
+  const [seenStatus, setSeenStatus] = useState(status);
+  if (seenStatus !== status) {
+    setSeenStatus(status);
+    setLastAttemptRefused(false);
+  }
 
   const handleClick = () => {
-    if (!requestImmediateSync(databaseId)) {
-      setCanRequestSync(false);
-    }
+    // Attempt on EVERY click — never latch a past refusal.
+    setLastAttemptRefused(!requestImmediateSync(databaseId));
   };
 
   let glyph: ReactNode;
@@ -66,9 +83,9 @@ export function DatabaseSyncStatusChip({
             aria-label="Sync status — refresh now"
             className={cn(
               "inline-flex shrink-0 select-none items-center gap-1 self-center rounded-sm px-1 py-0.5 text-muted-foreground text-xs outline-none transition-colors",
-              canRequestSync && !status.syncing
-                ? "hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50"
-                : "cursor-default"
+              lastAttemptRefused || status.syncing
+                ? "cursor-default"
+                : "hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50"
             )}
             onClick={handleClick}
             type="button"

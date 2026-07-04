@@ -31,10 +31,19 @@ import type { LocalDatabase } from "@/lib/schemas/database.ts";
  * the existing localStorage shards and their cross-tab `storage`-event
  * propagation. Exactly one tab (the Web Locks leader) polls; follower tabs
  * run no timers and receive rows through storage events.
+ *
+ * Leadership is visibility-aware: tabs only REQUEST the leader lock while
+ * visible, and a leader that stays hidden past a short grace resigns (releases
+ * the lock) so a visible tab wins it and keeps polling — a backgrounded
+ * leader can never starve the tab the user is actually looking at. With every
+ * tab hidden nobody holds the lock; whichever tab is shown first acquires it.
  */
 
 const LEADER_LOCK_NAME = "site-db-sync-leader";
 const FETCH_TIMEOUT_MS = 15_000;
+/** Grace a hidden leader gets before resigning, so quick tab flips don't
+ * thrash leadership. */
+export const HIDDEN_LEADER_RESIGN_MS = 5000;
 
 export interface DatabaseSyncStatus {
   /** Last failure; cleared by the next success. */
@@ -49,6 +58,13 @@ const IDLE_STATUS: DatabaseSyncStatus = { syncing: false };
 
 interface ScheduleEntry {
   consecutiveFailures: number;
+  /**
+   * Polling stopped after a non-transient failure (`config`/`auth`): the
+   * status keeps showing the error, but no retry is scheduled. Resumes when
+   * the database's source changes (see {@link ensureSchedule}) or a manual
+   * pass is requested ({@link requestImmediateSync}).
+   */
+  halted: boolean;
   intervalMs: number;
   lastAttemptAt?: number;
   /** Connector floor (`pollPolicy.minMs`) — the watched cadence. */
@@ -58,6 +74,8 @@ interface ScheduleEntry {
   /** Timer fired while the document was hidden; run on next `visible`. */
   pendingWhileHidden: boolean;
   running: boolean;
+  /** JSON fingerprint of `database.source`; a change resumes a halted entry. */
+  sourceFingerprint: string;
   timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -72,6 +90,14 @@ const statusSubscribers = new Map<
 
 let isLeader = false;
 let engineStarted = false;
+/** Resolves the held Web Lock promise — defined only while holding the lock. */
+let releaseLeaderLock: (() => void) | undefined;
+/** Aborts a queued (not yet granted) lock request when the tab goes hidden. */
+let lockRequestAbort: AbortController | undefined;
+/** Pending hidden-leader resignation (see {@link HIDDEN_LEADER_RESIGN_MS}). */
+let hiddenResignTimer: ReturnType<typeof setTimeout> | undefined;
+/** Tears down the leader's databases subscription on resignation. */
+let unsubscribeDatabases: (() => void) | undefined;
 
 /**
  * Subscribe to a database's sync status (syncing / lastSyncedAt / error)
@@ -125,6 +151,11 @@ function setStatus(databaseId: string, status: DatabaseSyncStatus): void {
  * reach follower tabs through localStorage storage events once the leader's
  * next scheduled pass lands. Returns `true` when a pass was started or was
  * already in flight.
+ *
+ * This is also the manual RESUME path for a database halted by a
+ * non-transient (`config`/`auth`) failure: the pass runs regardless of the
+ * halt, and a success re-arms normal scheduling (the create panel fires this
+ * after token entry; "Refresh now" covers a re-saved token).
  */
 export function requestImmediateSync(databaseId: string): boolean {
   const entry = entries.get(databaseId);
@@ -318,6 +349,9 @@ async function runSync(databaseId: string): Promise<void> {
   }
 
   entry.running = true;
+  // A manual pass on a halted entry gives it a fresh chance; a success below
+  // re-arms scheduling, a repeat config/auth failure re-halts.
+  entry.halted = false;
   entry.lastAttemptAt = Date.now();
   const previous = getSyncStatus(databaseId);
   setStatus(databaseId, { ...previous, syncing: true });
@@ -363,6 +397,13 @@ async function runSync(databaseId: string): Promise<void> {
         result.rows,
         meta?.missingCounts ?? {}
       );
+      // Only record the new validator once the row transaction has actually
+      // committed. If the commit fails (e.g. storage quota) the rows were
+      // rolled back — persisting the new ETag anyway would freeze them
+      // behind 304 responses forever. The rejection lands in the catch
+      // below: lastError is written, the OLD etag/missingCounts are kept,
+      // and the retry refetches unconditionally against the stale validator.
+      await applied.persisted;
       await setSyncMeta(databaseId, {
         etag: result.etag,
         lastSyncedAt,
@@ -394,14 +435,28 @@ async function runSync(databaseId: string): Promise<void> {
       lastSyncedAt: getSyncStatus(databaseId).lastSyncedAt,
       syncing: false,
     });
-    scheduleNext(
-      databaseId,
-      computeRetryDelay({
-        consecutiveFailures: entry.consecutiveFailures,
-        intervalMs: effectiveIntervalMs(databaseId, entry),
-        retryAfterMs,
-      })
-    );
+    if (kind === "config" || kind === "auth") {
+      // Non-transient: a bad config or rejected token fails deterministically,
+      // so retrying on a timer is pure waste (and keeps replaying a revoked
+      // token). Stop scheduling; the status keeps showing the error. Polling
+      // resumes when (a) the database's source/config changes —
+      // `ensureSchedule` sees a new source fingerprint via the collection
+      // subscription, which is where `updateDatabaseSource` saves land — or
+      // (b) a manual pass runs via `requestImmediateSync` (create panel after
+      // token entry; "Refresh now" after re-saving a token in settings).
+      entry.halted = true;
+      entry.nextRunAt = undefined;
+      entry.pendingWhileHidden = false;
+    } else {
+      scheduleNext(
+        databaseId,
+        computeRetryDelay({
+          consecutiveFailures: entry.consecutiveFailures,
+          intervalMs: effectiveIntervalMs(databaseId, entry),
+          retryAfterMs,
+        })
+      );
+    }
   } finally {
     entry.running = false;
   }
@@ -437,21 +492,34 @@ function ensureSchedule(database: LocalDatabase): void {
     database.source.refreshMs,
     connector.pollPolicy
   );
+  const sourceFingerprint = JSON.stringify(database.source);
   const existing = entries.get(database.id);
   if (existing) {
     // Config/interval edits take effect on the next pass; an in-flight or
     // already-scheduled run is not interrupted.
     existing.intervalMs = intervalMs;
     existing.minIntervalMs = connector.pollPolicy.minMs;
+    const sourceChanged = existing.sourceFingerprint !== sourceFingerprint;
+    existing.sourceFingerprint = sourceFingerprint;
+    // A halted entry (non-transient config/auth failure) resumes only when
+    // the source actually changed — other database edits (rename, view
+    // tweaks) must not restart a poll loop that would fail identically.
+    if (existing.halted && sourceChanged && !existing.running) {
+      existing.halted = false;
+      existing.consecutiveFailures = 0;
+      scheduleRun(database.id, 0);
+    }
     return;
   }
 
   entries.set(database.id, {
     consecutiveFailures: 0,
+    halted: false,
     intervalMs,
     minIntervalMs: connector.pollPolicy.minMs,
     pendingWhileHidden: false,
     running: false,
+    sourceFingerprint,
   });
   // First pass runs immediately — conditional requests make cold runs cheap.
   scheduleRun(database.id, 0);
@@ -475,6 +543,11 @@ function handleVisibilityChange(): void {
   }
   const now = Date.now();
   for (const [databaseId, entry] of entries) {
+    if (entry.halted) {
+      // Halted after a config/auth failure — refocus never resumes it (only
+      // a source change or an explicit `requestImmediateSync` does).
+      continue;
+    }
     const overdue =
       entry.pendingWhileHidden ||
       (entry.nextRunAt !== undefined && entry.nextRunAt <= now) ||
@@ -505,8 +578,9 @@ function becomeLeader(): void {
   document.addEventListener("visibilitychange", handleVisibilityChange);
 
   // Watch for connector databases appearing, changing, or going away.
-  // `includeInitialState` folds the boot scan into the same code path.
-  localDatabasesCollection.subscribeChanges(
+  // `includeInitialState` folds the boot scan into the same code path (and
+  // replays the full scan when leadership is re-acquired after a resign).
+  const subscription = localDatabasesCollection.subscribeChanges(
     (changes) => {
       for (const change of changes) {
         if (change.type === "delete") {
@@ -519,14 +593,126 @@ function becomeLeader(): void {
     },
     { includeInitialState: true }
   );
+  unsubscribeDatabases = () => subscription.unsubscribe();
+}
+
+/**
+ * Hand leadership back: tear down the leader's timers and subscriptions,
+ * then resolve the held Web Lock promise so the browser grants the lock to
+ * the next waiting (visible) tab. Sync statuses are deliberately left in
+ * place — they describe the last known state in this tab and the new leader
+ * pushes fresh statuses in its own; an in-flight pass finishes harmlessly
+ * (its entry is detached, so it reschedules nothing).
+ */
+function resignLeadership(): void {
+  if (!isLeader) {
+    return;
+  }
+  isLeader = false;
+
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  unsubscribeDatabases?.();
+  unsubscribeDatabases = undefined;
+  for (const entry of entries.values()) {
+    if (entry.timer !== undefined) {
+      clearTimeout(entry.timer);
+    }
+  }
+  entries.clear();
+
+  const release = releaseLeaderLock;
+  releaseLeaderLock = undefined;
+  release?.();
+}
+
+/**
+ * Request the leader lock (only ever called while this tab is visible). The
+ * grant callback holds the lock until {@link resignLeadership} resolves it;
+ * a queued request is withdrawn via its AbortController when the tab goes
+ * hidden, so only visible tabs compete for leadership.
+ */
+function requestLeaderLock(locks: LockManager): void {
+  if (
+    isLeader ||
+    lockRequestAbort !== undefined ||
+    releaseLeaderLock !== undefined
+  ) {
+    return;
+  }
+  const controller = new AbortController();
+  lockRequestAbort = controller;
+  locks
+    .request(
+      LEADER_LOCK_NAME,
+      { mode: "exclusive", signal: controller.signal },
+      () => {
+        if (lockRequestAbort === controller) {
+          lockRequestAbort = undefined;
+        }
+        becomeLeader();
+        // Held until this tab dies (browser releases it) or the hidden-grace
+        // resign resolves it deliberately.
+        return new Promise<void>((resolve) => {
+          releaseLeaderLock = resolve;
+        });
+      }
+    )
+    .catch(() => {
+      if (lockRequestAbort === controller) {
+        lockRequestAbort = undefined;
+      }
+      if (controller.signal.aborted) {
+        // Deliberate withdrawal: the tab went hidden while queued. The next
+        // `visible` transition re-requests.
+        return;
+      }
+      // Lock request failed outright (not merely queued) — degrade to
+      // leaderless polling rather than never syncing. No lock is held in
+      // this mode, so the hidden-grace resign never fires.
+      becomeLeader();
+    });
+}
+
+/**
+ * Visibility-aware leadership (separate from the leader's own
+ * `handleVisibilityChange`, which resumes overdue polls): visible tabs
+ * request the lock, hidden tabs withdraw a queued request immediately and
+ * resign a HELD lock after {@link HIDDEN_LEADER_RESIGN_MS} — so a visible
+ * follower takes over polling instead of going stale behind a hidden leader.
+ */
+function handleLeadershipVisibility(locks: LockManager): void {
+  if (document.visibilityState === "visible") {
+    if (hiddenResignTimer !== undefined) {
+      clearTimeout(hiddenResignTimer);
+      hiddenResignTimer = undefined;
+    }
+    requestLeaderLock(locks);
+    return;
+  }
+
+  if (!isLeader && lockRequestAbort !== undefined) {
+    const controller = lockRequestAbort;
+    lockRequestAbort = undefined;
+    controller.abort();
+    return;
+  }
+  if (releaseLeaderLock !== undefined && hiddenResignTimer === undefined) {
+    hiddenResignTimer = setTimeout(() => {
+      hiddenResignTimer = undefined;
+      if (document.visibilityState !== "visible") {
+        resignLeadership();
+      }
+    }, HIDDEN_LEADER_RESIGN_MS);
+  }
 }
 
 /**
  * Boot the connector sync engine (idempotent, browser-only). Elects a single
- * polling leader across tabs via the Web Locks API; the lock is held for the
- * tab's lifetime, and when a follower inherits it (prior leader closed) it
- * starts scheduling at that moment. Environments without `navigator.locks`
- * skip election and just run.
+ * polling leader across tabs via the Web Locks API with visibility-aware
+ * hand-off: only visible tabs request the lock, and a leader hidden past a
+ * short grace resigns it so a visible tab can take over (see the module
+ * comment). Environments without `navigator.locks` skip election and just
+ * run.
  */
 export function startDatabaseSync(): void {
   if (typeof window === "undefined" || engineStarted) {
@@ -551,18 +737,14 @@ export function startDatabaseSync(): void {
     return;
   }
 
-  locks
-    .request(LEADER_LOCK_NAME, { mode: "exclusive" }, () => {
-      becomeLeader();
-      // Never resolve: the leader holds the lock until the tab dies, at
-      // which point the browser grants it to the next waiting tab.
-      return new Promise<void>(() => undefined);
-    })
-    .catch(() => {
-      // Lock request failed outright (not merely queued) — degrade to
-      // leaderless polling rather than never syncing.
-      becomeLeader();
-    });
+  document.addEventListener("visibilitychange", () => {
+    handleLeadershipVisibility(locks);
+  });
+  if (isDocumentVisible()) {
+    requestLeaderLock(locks);
+  }
+  // Hidden at boot: no request yet — the listener above issues it the moment
+  // this tab is first shown, keeping hidden tabs out of the election.
 }
 
 // Boot on import, mirroring `local-collections.ts` — the provider pulls this

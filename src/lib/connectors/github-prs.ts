@@ -19,7 +19,8 @@ import {
 
 /**
  * GitHub pull requests connector: one row per PR for a repo, newest-updated
- * first, one page (100 PRs) in v1. Same direct-from-browser conditional-GET
+ * first, following `Link rel="next"` pagination up to {@link MAX_PAGES} pages
+ * ({@link MAX_PAGES} × 100 PRs). Same direct-from-browser conditional-GET
  * discipline as `github-repos` (api.github.com sends
  * `Access-Control-Allow-Origin: *` and exposes `ETag` cross-origin).
  *
@@ -97,6 +98,35 @@ const ISO_DATE_PART_LENGTH = 10;
 const MINUTE_MS = 60_000;
 const FIVE_MINUTES_MS = 5 * MINUTE_MS;
 
+/**
+ * Pagination cap: up to 3 pages × 100 PRs = 300 PRs per snapshot. A hard cap
+ * keeps the poll budget bounded (each page is one request against the
+ * unauthenticated 60 req/hr quota). PRs beyond the cap — the 301st+ by most
+ * recent update — age out honestly: they drop from consecutive snapshots and
+ * the sync engine tombstones their rows after its grace window, exactly as
+ * if they were deleted upstream, and they re-insert when activity brings
+ * them back under the cap.
+ */
+const MAX_PAGES = 3;
+
+/** Matches one `Link` header entry carrying `rel="next"`. */
+const NEXT_LINK_PATTERN = /<([^>]+)>\s*;[^,]*\brel="next"/;
+
+/** Extract the `rel="next"` target from a `Link` response header, if any. */
+function nextPageUrl(headers: Headers): string | undefined {
+  const link = headers.get("link");
+  if (link === null) {
+    return;
+  }
+  for (const part of link.split(",")) {
+    const match = NEXT_LINK_PATTERN.exec(part);
+    if (match) {
+      return match[1];
+    }
+  }
+  return;
+}
+
 function parseConfig(config: Record<string, unknown>): GithubPrsConfig {
   const parsed = githubPrsConfigSchema.safeParse(config);
   if (!parsed.success) {
@@ -164,47 +194,79 @@ function throwForStatus(response: Response): never {
   });
 }
 
-async function fetchRows(
-  ctx: ConnectorFetchContext
-): Promise<ConnectorFetchResult> {
-  const { owner, repo, state } = parseConfig(ctx.config);
-  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=${state}&sort=updated&direction=desc&per_page=100`;
+/**
+ * Fetch the PR snapshot, following `Link rel="next"` up to {@link MAX_PAGES}
+ * pages and aggregating rows across them.
+ *
+ * ETag handling: the conditional request (`If-None-Match`) covers page 1
+ * only, and only page 1's ETag is stored. Per-page validators aren't worth
+ * the bookkeeping — page 1 holds the most-recently-updated PRs, so any
+ * activity anywhere in the repo changes page 1's ETag; a 304 on page 1 means
+ * the whole snapshot is unchanged and short-circuits without fetching
+ * further pages.
+ */
+/** Fetch one page; `conditional` attaches the stored ETag (page 1 only). */
+async function fetchPage(
+  ctx: ConnectorFetchContext,
+  url: string,
+  conditional: boolean
+): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
   };
-  if (ctx.etag !== undefined) {
+  if (conditional && ctx.etag !== undefined) {
     headers["If-None-Match"] = ctx.etag;
   }
   if (ctx.token !== undefined) {
     headers.Authorization = `Bearer ${ctx.token}`;
   }
-  let response: Response;
   try {
-    response = await ctx.fetchFn(url, { headers });
+    return await ctx.fetchFn(url, { headers });
   } catch (cause) {
     throw new ConnectorError("GitHub request failed", {
       kind: "network",
       cause,
     });
   }
-  if (response.status === HTTP_STATUS_NOT_MODIFIED) {
-    return { kind: "notModified" };
-  }
-  if (!response.ok) {
-    throwForStatus(response);
-  }
-  const payload = githubPrListSchema.safeParse(await response.json());
-  if (!payload.success) {
+}
+
+/** Parse one page's payload into connector rows (throws on shape drift). */
+function parsePrPage(payload: unknown): ConnectorRow[] {
+  const parsed = githubPrListSchema.safeParse(payload);
+  if (!parsed.success) {
     throw new ConnectorError("Unexpected GitHub response shape", {
       kind: "network",
-      cause: payload.error,
+      cause: parsed.error,
     });
   }
-  return {
-    kind: "rows",
-    rows: payload.data.map(toConnectorRow),
-    etag: response.headers.get("etag") ?? undefined,
-  };
+  return parsed.data.map(toConnectorRow);
+}
+
+async function fetchRows(
+  ctx: ConnectorFetchContext
+): Promise<ConnectorFetchResult> {
+  const { owner, repo, state } = parseConfig(ctx.config);
+  const firstUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?state=${state}&sort=updated&direction=desc&per_page=100`;
+  const rows: ConnectorRow[] = [];
+  let etag: string | undefined;
+  let url: string | undefined = firstUrl;
+
+  for (let page = 1; page <= MAX_PAGES && url !== undefined; page += 1) {
+    const response = await fetchPage(ctx, url, page === 1);
+    if (page === 1 && response.status === HTTP_STATUS_NOT_MODIFIED) {
+      return { kind: "notModified" };
+    }
+    if (!response.ok) {
+      throwForStatus(response);
+    }
+    rows.push(...parsePrPage(await response.json()));
+    if (page === 1) {
+      etag = response.headers.get("etag") ?? undefined;
+    }
+    url = nextPageUrl(response.headers);
+  }
+
+  return { kind: "rows", rows, etag };
 }
 
 /** GitHub pull-requests connector definition. */

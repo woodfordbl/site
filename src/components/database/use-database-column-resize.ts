@@ -71,6 +71,12 @@ export function useDatabaseColumnResize({
       const startY = event.clientY;
       const startWidth = resolveColumnWidthPx(viewRef.current.config, fieldId);
       const handleEl = event.currentTarget as HTMLElement;
+      // The gesture belongs to the initiating pointer only: the listeners
+      // live on document, so without this filter a second touch finger's
+      // move/up/cancel would hijack the drag — snapping the width to the
+      // wrong finger and committing garbage on its pointerup. (Same guard
+      // as `useDatabaseColumnHeaderDrag`.)
+      const pointerId = event.pointerId;
 
       setLiveWidths({ [fieldId]: startWidth });
       handleEl.setPointerCapture(event.pointerId);
@@ -85,6 +91,9 @@ export function useDatabaseColumnResize({
       };
 
       const onMove = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId) {
+          return;
+        }
         pendingDelta = moveEvent.clientX - startX;
         rafRef.current ??= requestAnimationFrame(flushMove);
       };
@@ -104,6 +113,9 @@ export function useDatabaseColumnResize({
       };
 
       const onUp = (upEvent: PointerEvent) => {
+        if (upEvent.pointerId !== pointerId) {
+          return;
+        }
         teardown(upEvent.pointerId);
 
         const traveled = Math.hypot(
@@ -146,6 +158,9 @@ export function useDatabaseColumnResize({
       };
 
       const onCancel = (cancelEvent: PointerEvent) => {
+        if (cancelEvent.pointerId !== pointerId) {
+          return;
+        }
         teardown(cancelEvent.pointerId);
       };
 

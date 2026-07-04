@@ -17,6 +17,7 @@ import {
   resolveColumnDropSpot,
   resolveColumnWidthPx,
   urlCellHref,
+  withPinnedRowIndex,
 } from "@/components/database/database-grid-helpers.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
@@ -431,5 +432,30 @@ describe("aggregateFnLabel", () => {
   it("uses sentence case", () => {
     expect(aggregateFnLabel("countNotEmpty")).toBe("Count not empty");
     expect(aggregateFnLabel("sum")).toBe("Sum");
+  });
+});
+
+describe("withPinnedRowIndex", () => {
+  it("returns the range unchanged (same identity) when nothing is pinned", () => {
+    const indexes = [3, 4, 5];
+    expect(withPinnedRowIndex(indexes, -1)).toBe(indexes);
+  });
+
+  it("returns the range unchanged when the pinned index is already in it", () => {
+    const indexes = [3, 4, 5];
+    expect(withPinnedRowIndex(indexes, 4)).toBe(indexes);
+  });
+
+  it("merges a pinned index above the window in ascending order", () => {
+    expect(withPinnedRowIndex([3, 4, 5], 0)).toEqual([0, 3, 4, 5]);
+  });
+
+  it("merges a pinned index below the window in ascending order", () => {
+    expect(withPinnedRowIndex([3, 4, 5], 42)).toEqual([3, 4, 5, 42]);
+  });
+
+  it("never duplicates window edges", () => {
+    expect(withPinnedRowIndex([0, 1, 2], 0)).toEqual([0, 1, 2]);
+    expect(withPinnedRowIndex([0, 1, 2], 2)).toEqual([0, 1, 2]);
   });
 });

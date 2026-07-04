@@ -58,6 +58,24 @@ describe("computeAggregate — counts", () => {
     expect(computeAggregate("countUnique", nameField, rows)).toBe(2);
   });
 
+  it("counts identical multi-select sets stored in different orders as one value", () => {
+    // Must agree with grouping, which normalizes ids to field option order.
+    const tagsField: DatabaseField = {
+      id: "f-tags",
+      name: "Tags",
+      type: "multiSelect",
+      options: [
+        { id: "opt-x", name: "Alpha" },
+        { id: "opt-y", name: "Beta" },
+      ],
+    };
+    const tagRows = [
+      makeRow("t1", { [tagsField.id]: ["opt-x", "opt-y"] }),
+      makeRow("t2", { [tagsField.id]: ["opt-y", "opt-x"] }),
+    ];
+    expect(computeAggregate("countUnique", tagsField, tagRows)).toBe(1);
+  });
+
   it("returns percent fractions between 0 and 1", () => {
     expect(computeAggregate("percentEmpty", nameField, rows)).toBe(0.25);
     expect(computeAggregate("percentNotEmpty", nameField, rows)).toBe(0.75);

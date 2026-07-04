@@ -279,6 +279,53 @@ describe("database sync ops", () => {
       expect(mocks.rowDelete).not.toHaveBeenCalled();
     });
 
+    it("resolves `persisted` once the row transaction commit succeeds", async () => {
+      mocks.rowState = [];
+
+      const result = ops.applySyncSnapshot(makeDatabase(), [
+        { externalId: "ext-a", values: { name: "octocat/hello" } },
+      ]);
+
+      await expect(result.persisted).resolves.toBeUndefined();
+      expect(mocks.commit).toHaveBeenCalledTimes(1);
+      expect(mocks.reportPersistenceError).not.toHaveBeenCalled();
+    });
+
+    it("rejects `persisted` on commit failure after reporting it", async () => {
+      const commitError = new Error("QuotaExceededError");
+      mocks.createTransaction.mockImplementation(() => ({
+        commit: mocks.commit.mockImplementation(() =>
+          Promise.reject(commitError)
+        ),
+        mutate: mocks.mutate.mockImplementation((callback: () => void) =>
+          callback()
+        ),
+      }));
+      mocks.rowState = [];
+
+      const result = ops.applySyncSnapshot(makeDatabase(), [
+        { externalId: "ext-a", values: { name: "octocat/hello" } },
+      ]);
+
+      await expect(result.persisted).rejects.toBe(commitError);
+      expect(mocks.reportPersistenceError).toHaveBeenCalledWith(commitError);
+    });
+
+    it("resolves `persisted` immediately when the snapshot needs no writes", async () => {
+      mocks.rowState = [
+        makeSyncedRow("row-a", "ext-a", {
+          values: { "f-name": "octocat/hello" },
+        }),
+      ];
+
+      const result = ops.applySyncSnapshot(makeDatabase(), [
+        { externalId: "ext-a", values: { name: "octocat/hello" } },
+      ]);
+
+      await expect(result.persisted).resolves.toBeUndefined();
+      expect(mocks.createTransaction).not.toHaveBeenCalled();
+    });
+
     it("never counts local (non-synced) rows as missing", async () => {
       const localRow: LocalDatabaseRow = {
         id: "row-local",

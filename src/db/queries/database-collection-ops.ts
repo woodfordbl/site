@@ -201,12 +201,24 @@ export function insertDatabaseRow(
   return row;
 }
 
-/** Merge one cell value into `row.values` and bump the row's `updatedAt`. */
+/**
+ * Merge one cell value into `row.values` and bump the row's `updatedAt`.
+ *
+ * A missing row is a silent no-op: the row can vanish between the editor
+ * opening and the commit (sync-engine tombstone in this or another tab,
+ * cross-tab delete), and `collection.update` on a missing key throws inside
+ * `mutate()` — an uncaught error in the blur handler with no persistence
+ * toast. The row is gone either way; the edit has nowhere to land.
+ */
 export function updateDatabaseCell(
   rowId: string,
   fieldId: string,
   value: DatabaseCellValue
 ): void {
+  if (!localDatabaseRowsCollection.get(rowId)) {
+    return;
+  }
+
   const timestamp = nowIso();
   const tx = createDatabaseTransaction();
 
@@ -227,11 +239,17 @@ export function updateDatabaseCell(
  * from the provider snapshot — so v1 disables synced-row deletion at the op
  * level. Whole-database deletion (`deleteDatabase`) still removes synced
  * rows, and the sync engine's own tombstone path never goes through here.
+ *
+ * Ids with no matching row are skipped too (stale selection, double-fire,
+ * cross-tab delete): `collection.delete` on a missing key throws mid-
+ * transaction, which would strand earlier deletes as uncommitted optimistic
+ * state.
  */
 export function deleteDatabaseRows(rowIds: string[]): void {
-  const deletable = rowIds.filter(
-    (rowId) => localDatabaseRowsCollection.get(rowId)?.externalId === undefined
-  );
+  const deletable = rowIds.filter((rowId) => {
+    const row = localDatabaseRowsCollection.get(rowId);
+    return row !== undefined && row.externalId === undefined;
+  });
   if (deletable.length === 0) {
     return;
   }
@@ -500,12 +518,39 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
 }
 
 /**
+ * Remap select/multiSelect option ids in a copied cell value through the
+ * duplicate field's old→new option-id map. Ids without a mapping (already
+ * stale in the source cell) are kept as-is — they render as stale in the
+ * copy exactly as they did in the original.
+ */
+function remapOptionIds(
+  value: DatabaseCellValue,
+  optionIdMap: Map<string, string>
+): DatabaseCellValue {
+  if (optionIdMap.size === 0) {
+    return value;
+  }
+  if (typeof value === "string") {
+    return optionIdMap.get(value) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((id) => optionIdMap.get(id) ?? id);
+  }
+  return value;
+}
+
+/**
  * Duplicate a field's definition (config included) under a new id named
  * "<Name> copy", inserted right after the original, and copy every row's
  * value for the source field under the new id. `sourceKey` is deliberately
  * stripped: duplicating a synced column yields a LOCAL field with the current
  * values copied — the copy must never be adopted (and overwritten) by the
  * sync engine.
+ *
+ * Select/multiSelect copies get FRESH option ids (option ids are assumed
+ * unique across all databases — e.g. the cell editor's recolor helper looks
+ * fields up by option id alone), with copied row values remapped through the
+ * old→new id map in the same transaction.
  */
 export function duplicateDatabaseField(
   databaseId: string,
@@ -520,6 +565,14 @@ export function duplicateDatabaseField(
   // Rest-destructure `sourceKey` away (the linter bans `delete`) so the copy
   // carries no provider binding at all.
   const { sourceKey: _sourceKey, ...cloned } = structuredClone(source);
+  const optionIdMap = new Map<string, string>();
+  if (cloned.type === "select" || cloned.type === "multiSelect") {
+    cloned.options = cloned.options.map((option) => {
+      const nextId = crypto.randomUUID();
+      optionIdMap.set(option.id, nextId);
+      return { ...option, id: nextId };
+    });
+  }
   const copy = {
     ...cloned,
     id: crypto.randomUUID(),
@@ -544,9 +597,12 @@ export function duplicateDatabaseField(
 
     for (const row of affectedRows) {
       localDatabaseRowsCollection.update(row.id, (draft) => {
+        // toPlain: the copied value may be a nested draft proxy (multiSelect
+        // arrays) — never store proxies in the document.
+        const copied = toPlain(draft.values[fieldId] ?? null);
         draft.values = {
           ...draft.values,
-          [copy.id]: draft.values[fieldId] ?? null,
+          [copy.id]: remapOptionIds(copied, optionIdMap),
         };
         draft.updatedAt = timestamp;
       });
@@ -669,10 +725,18 @@ export function updateDatabaseSource(
  * page was deleted, which the row route treats as virtual again).
  * Unlink/cascade semantics land with the page-delete integration
  * (databases proposal §2.5).
+ *
+ * Synced rows (carrying an `externalId`) are refused as a no-op: "synced
+ * rows never get pages" is a schema invariant (`schemas/database.ts`) — the
+ * sync engine tombstones such rows when they leave the provider snapshot,
+ * which would strand the linked page with no back-link, and a reappearing
+ * record gets a brand-new row id, silently severing the association. The
+ * row-page UI hides page materialization for synced rows; this guard is the
+ * op-level enforcement.
  */
 export function setDatabaseRowPageId(rowId: string, pageId: string): void {
   const row = localDatabaseRowsCollection.get(rowId);
-  if (!row) {
+  if (!row || row.externalId !== undefined) {
     return;
   }
 

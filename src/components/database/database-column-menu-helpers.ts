@@ -109,6 +109,36 @@ export function toggledWrapFieldIds(
 }
 
 /**
+ * The view's persisted LOGICAL column order over ALL fields (hidden
+ * included): the stored `columnOrder` ids resolved against the schema (stale
+ * ids and duplicates drop out), then every remaining field in schema order —
+ * the id-list mirror of `resolveColumnOrder` without the visibility filter.
+ * Order writes (e.g. insert left/right) must splice into this, never into
+ * the grid's display order, which is pinned-first, hidden-excluding, and
+ * viewport-dependent (auto-unpin) transient state.
+ */
+export function logicalColumnOrder(
+  columnOrder: readonly string[] | undefined,
+  allFieldIds: readonly string[]
+): string[] {
+  const known = new Set(allFieldIds);
+  const ordered: string[] = [];
+  const used = new Set<string>();
+  for (const fieldId of columnOrder ?? []) {
+    if (known.has(fieldId) && !used.has(fieldId)) {
+      ordered.push(fieldId);
+      used.add(fieldId);
+    }
+  }
+  for (const fieldId of allFieldIds) {
+    if (!used.has(fieldId)) {
+      ordered.push(fieldId);
+    }
+  }
+  return ordered;
+}
+
+/**
  * Column order after inserting a new field beside a target. When the target
  * is missing from the base order the new id appends at the end.
  */
@@ -233,6 +263,22 @@ export function recoloredSelectOptions(
   return options.map((option) =>
     option.id === optionId ? { ...option, color } : option
   );
+}
+
+/**
+ * The exact select/multi-select field an option edit is scoped to, or
+ * `undefined` when the id is unknown or not select-typed. Option edits MUST
+ * be addressed by field id — an option id alone is ambiguous, since
+ * "Duplicate property" clones can share option ids with their source field.
+ */
+export function selectFieldForOptionEdit(
+  fields: readonly DatabaseField[],
+  fieldId: string
+): Extract<DatabaseField, { type: "select" | "multiSelect" }> | undefined {
+  const field = fields.find((entry) => entry.id === fieldId);
+  return field?.type === "select" || field?.type === "multiSelect"
+    ? field
+    : undefined;
 }
 
 /** Options after deleting one (stale ids in cell values render as empty). */

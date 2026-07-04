@@ -9,7 +9,11 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  defaultRangeExtractor,
+  type Range,
+  useVirtualizer,
+} from "@tanstack/react-virtual";
 import {
   memo,
   type ReactNode,
@@ -19,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 
 import { DatabaseAddRow } from "@/components/database/database-add-row.tsx";
 import { DatabaseCalculateRow } from "@/components/database/database-calculate-row.tsx";
@@ -50,6 +55,7 @@ import {
   MIN_COLUMN_WIDTH_PX,
   nextEditTarget,
   resolveColumnWidthPx,
+  withPinnedRowIndex,
 } from "@/components/database/database-grid-helpers.ts";
 import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
 import { useDatabaseColumnResize } from "@/components/database/use-database-column-resize.ts";
@@ -62,6 +68,7 @@ import {
 } from "@/db/queries/database-collection-ops.ts";
 import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
+import { applyFilter } from "@/lib/databases/row-filter.ts";
 import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseField,
@@ -102,6 +109,13 @@ const PINNED_FADE_RAMP_PX = 24;
  */
 const WRAPPED_CELL_CONTENT_CLASS =
   "line-clamp-2 min-w-0 whitespace-normal break-words py-1.5 [&_span]:whitespace-normal";
+
+/**
+ * Stable empty pin list for auto-unpin — a fresh `[]` literal per render
+ * would invalidate the `gridColumns` memo (and every memoized row under it)
+ * on exactly the narrow viewports where pinning gets disabled.
+ */
+const EMPTY_PINNED_FIELDS: readonly DatabaseField[] = [];
 
 interface DatabaseTableGridProps {
   /** Visible fields in display order (`resolveColumnOrder`). */
@@ -181,7 +195,9 @@ export function DatabaseTableGrid({
   const pinningDisabled =
     scrollportWidth !== null &&
     pinnedTotalWidth > scrollportWidth - MIN_COLUMN_WIDTH_PX;
-  const effectivePinnedFields = pinningDisabled ? [] : pinnedFields;
+  const effectivePinnedFields = pinningDisabled
+    ? EMPTY_PINNED_FIELDS
+    : pinnedFields;
 
   // Column render metadata: width from the view config (clamped, overridden
   // by the live divider-drag width mid-resize), pinned columns first with
@@ -327,11 +343,37 @@ export function DatabaseTableGrid({
     [databaseId, view.config, view.id]
   );
 
+  // Keep the editing row mounted even when scrolled past the overscan
+  // window: the inline text editor holds its draft in local state and
+  // commits on blur/Enter, and removing a focused element fires no blur —
+  // letting the virtualizer unmount the row would silently drop the
+  // uncommitted draft. Pinning the index into the range keeps the row
+  // rendered at its true offset with no duplicate keys when it is already
+  // in the window, and row memoization is untouched.
+  const editingRowId = editing?.rowId ?? null;
+  const editingItemIndex = useMemo(
+    () =>
+      editingRowId === null
+        ? -1
+        : items.findIndex(
+            (item) => item.kind === "row" && item.row.id === editingRowId
+          ),
+    [editingRowId, items]
+  );
+  const rangeExtractor = useCallback(
+    // A fresh callback identity when the editing index changes forces the
+    // virtualizer to recompute its range (rangeExtractor is a memo dep).
+    (range: Range) =>
+      withPinnedRowIndex(defaultRangeExtractor(range), editingItemIndex),
+    [editingItemIndex]
+  );
+
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => GRID_ROW_HEIGHT_PX,
     overscan: ROW_OVERSCAN,
+    rangeExtractor,
   });
 
   const editableFieldIds = useMemo(
@@ -377,14 +419,45 @@ export function DatabaseTableGrid({
     []
   );
 
-  const handleRowInserted = useCallback(
-    (row: LocalDatabaseRow) => {
-      // Focus the new row's primary cell when it takes the inline editor.
+  /**
+   * Focus a freshly inserted row's primary cell — unless the active filter
+   * hides the row, in which case `editing` must NOT point at it (the row
+   * never renders, so the editor would silently strand); clear the edit
+   * state and say so instead. Visibility is predicted with the same
+   * `applyFilter` the view layer uses, over the visible fields and the
+   * row's post-seed values. Conditions on hidden fields count as matching
+   * (applyFilter's own lenient unknown-field convention) and formula
+   * overlays are not recomputed here, so a rare misprediction can leave
+   * `editing` on a hidden row — benign: no editor mounts and the next
+   * click recovers.
+   */
+  const focusInsertedRow = useCallback(
+    (row: LocalDatabaseRow, values: LocalDatabaseRow["values"]) => {
+      if (
+        applyFilter([{ ...row, values }], columns, view.filter).length === 0
+      ) {
+        setEditing(null);
+        toast.info("New row is hidden by the current filter");
+        return;
+      }
       if (editStateRef.current.editableFieldIds.includes(primaryFieldId)) {
         setEditing({ rowId: row.id, fieldId: primaryFieldId });
       }
     },
-    [primaryFieldId]
+    [columns, primaryFieldId, view.filter]
+  );
+
+  const handleRowInserted = useCallback(
+    (row: LocalDatabaseRow) => {
+      // A blank row always buckets into the empty ("") group on grouped
+      // views — expand it when collapsed, or the row (and its inline
+      // editor) would land invisibly inside the collapsed bucket.
+      if (groups !== null && collapsedKeySet.has("")) {
+        handleToggleGroup("");
+      }
+      focusInsertedRow(row, row.values);
+    },
+    [collapsedKeySet, focusInsertedRow, groups, handleToggleGroup]
   );
 
   const groupByFieldId = view.groupBy?.fieldId;
@@ -395,37 +468,54 @@ export function DatabaseTableGrid({
       // views bucket it correctly (the empty group inserts a blank row).
       const lastRow = group.rows.at(-1);
       const row = insertDatabaseRow(databaseId, { after: lastRow?.id });
+      let values = row.values;
       if (groupByFieldId !== undefined && group.value !== null) {
         updateDatabaseCell(row.id, groupByFieldId, group.value);
+        // Filter visibility must be judged on the seeded cell value.
+        values = { ...row.values, [groupByFieldId]: group.value };
       }
       // A collapsed bucket would swallow the new row invisibly — expand it.
       if (collapsedKeySet.has(group.key)) {
         handleToggleGroup(group.key);
       }
-      handleRowInserted(row);
+      focusInsertedRow(row, values);
     },
     [
       collapsedKeySet,
       databaseId,
+      focusInsertedRow,
       groupByFieldId,
-      handleRowInserted,
       handleToggleGroup,
     ]
   );
 
-  // Keep the editing row mounted: keyboard navigation and freshly inserted
-  // rows may land outside the virtual window.
+  // Scroll the editing cell into view — but only when the editing TARGET
+  // changes (start edit, Tab/Enter navigation, fresh insert). `items`
+  // identity also churns on background sync ticks and cross-tab writes;
+  // re-firing scrollToIndex then would yank the viewport back mid-typing
+  // after the user scrolled away (the editing row itself stays mounted via
+  // the pinned range extractor above).
+  const scrolledEditTargetRef = useRef<CellEditTarget | null>(null);
   useEffect(() => {
     if (!editing) {
+      scrolledEditTargetRef.current = null;
       return;
     }
-    const index = items.findIndex(
-      (item) => item.kind === "row" && item.row.id === editing.rowId
-    );
-    if (index >= 0) {
-      virtualizer.scrollToIndex(index);
+    const scrolled = scrolledEditTargetRef.current;
+    if (
+      scrolled &&
+      scrolled.rowId === editing.rowId &&
+      scrolled.fieldId === editing.fieldId
+    ) {
+      return;
     }
-  }, [editing, items, virtualizer]);
+    // -1 (row not yet in items, e.g. an insert the live query hasn't
+    // emitted) stays unmarked so the next items change retries the scroll.
+    if (editingItemIndex >= 0) {
+      virtualizer.scrollToIndex(editingItemIndex);
+      scrolledEditTargetRef.current = editing;
+    }
+  }, [editing, editingItemIndex, virtualizer]);
 
   const calculations = view.config.calculations;
   const hasCalculations =

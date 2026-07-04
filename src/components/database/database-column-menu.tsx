@@ -38,6 +38,7 @@ import {
   fieldTypeChangePatch,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
+  logicalColumnOrder,
   numberFormatPatch,
   recoloredSelectOptions,
   renamedSelectOptions,
@@ -85,6 +86,7 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
+import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
 import {
   addDatabaseField,
   duplicateDatabaseField,
@@ -731,12 +733,16 @@ export function DatabaseColumnMenu({
   };
 
   const insertField = (side: "left" | "right") => {
+    // Splice against the view's persisted LOGICAL order (stored columnOrder
+    // completed with the remaining schema fields, hidden included) — never
+    // the pinned-first, hidden-excluding, viewport-dependent display order,
+    // which would permanently bake transient display state into the view.
+    const allFieldIds = (
+      localDatabasesCollection.get(databaseId)?.fields ?? []
+    ).map((existing) => existing.id);
+    const baseOrder = logicalColumnOrder(config.columnOrder, allFieldIds);
     const newField = createDatabaseField("text", "Text");
     addDatabaseField(databaseId, newField);
-    const storedOrder = config.columnOrder;
-    const baseOrder = storedOrder?.includes(field.id)
-      ? storedOrder
-      : displayFieldIds;
     updateDatabaseView(databaseId, viewId, {
       // A materialized visible list must adopt the new field explicitly.
       visibleFieldIds: view.visibleFieldIds

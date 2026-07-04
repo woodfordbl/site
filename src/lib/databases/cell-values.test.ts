@@ -75,6 +75,23 @@ describe("toIsoDatePart", () => {
     expect(toIsoDatePart("not a date")).toBe("");
     expect(toIsoDatePart("")).toBe("");
   });
+
+  it("keeps the local calendar day for non-ISO dates east of UTC", () => {
+    // Date parses non-ISO strings in local time; reading the parts back via
+    // toISOString (UTC) used to shift the day for timezones east of UTC.
+    const previousTz = process.env.TZ;
+    process.env.TZ = "Asia/Tokyo";
+    try {
+      expect(toIsoDatePart("12/31/2024")).toBe("2024-12-31");
+      expect(toIsoDatePart("Dec 31, 2024")).toBe("2024-12-31");
+    } finally {
+      if (previousTz === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = previousTz;
+      }
+    }
+  });
 });
 
 describe("coerceCellValue", () => {
@@ -130,6 +147,17 @@ describe("cellToPlainText", () => {
     expect(cellToPlainText(selectField, "opt-gone")).toBe("");
     expect(cellToPlainText(multiSelectField, ["opt-gone", "opt-y"])).toBe(
       "Beta"
+    );
+  });
+
+  it("joins multi-select names in field option order regardless of stored order", () => {
+    // Mirrors row-group's normalization so countUnique/sort agree with
+    // grouping when the same tag set was clicked in a different order.
+    expect(cellToPlainText(multiSelectField, ["opt-y", "opt-x"])).toBe(
+      "Alpha, Beta"
+    );
+    expect(cellToPlainText(multiSelectField, ["opt-x", "opt-y"])).toBe(
+      "Alpha, Beta"
     );
   });
 

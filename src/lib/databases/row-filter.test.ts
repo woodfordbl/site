@@ -49,6 +49,13 @@ const tagsField: DatabaseField = {
 
 const dueField: DatabaseField = { id: "f-due", name: "Due", type: "date" };
 
+const formulaField: DatabaseField = {
+  id: "f-calc",
+  name: "Calc",
+  type: "formula",
+  expression: "thisPage.Amount * 2",
+};
+
 const fields = [
   nameField,
   amountField,
@@ -220,6 +227,52 @@ describe("rowMatchesCondition", () => {
     expect(
       rowMatchesCondition(due, dueField, cond(dueField.id, operator, value))
     ).toBe(expected);
+  });
+
+  describe("formula cells filter on display text", () => {
+    // Formula values are computed and merged into row.values at read time;
+    // string operators must match the text the grid renders for the cell.
+    const numeric = makeRow("rf1", { [formulaField.id]: 84 });
+    const grouped = makeRow("rf2", { [formulaField.id]: 1234.5 });
+    const boolTrue = makeRow("rf3", { [formulaField.id]: true });
+    const text = makeRow("rf4", { [formulaField.id]: "Hello World" });
+
+    function matches(
+      row: LocalDatabaseRow,
+      operator: DatabaseFilterOperator,
+      value?: DatabaseCellValue
+    ): boolean {
+      return rowMatchesCondition(
+        row,
+        formulaField,
+        cond(formulaField.id, operator, value)
+      );
+    }
+
+    it("matches numeric results against their displayed text", () => {
+      expect(matches(numeric, "eq", "84")).toBe(true);
+      expect(matches(numeric, "neq", "84")).toBe(false);
+      expect(matches(numeric, "contains", "8")).toBe(true);
+      expect(matches(numeric, "startsWith", "8")).toBe(true);
+      expect(matches(numeric, "eq", "85")).toBe(false);
+    });
+
+    it("matches grouped number display (Intl en-US, like the grid)", () => {
+      expect(matches(grouped, "eq", "1,234.5")).toBe(true);
+      expect(matches(grouped, "contains", "234")).toBe(true);
+    });
+
+    it("matches boolean results as Yes/No, case-insensitively", () => {
+      expect(matches(boolTrue, "eq", "yes")).toBe(true);
+      expect(matches(boolTrue, "eq", "no")).toBe(false);
+      expect(matches(boolTrue, "neq", "no")).toBe(true);
+    });
+
+    it("keeps string results and emptiness semantics unchanged", () => {
+      expect(matches(text, "contains", "world")).toBe(true);
+      expect(matches(numeric, "isNotEmpty")).toBe(true);
+      expect(matches(makeRow("rf5", {}), "isEmpty")).toBe(true);
+    });
   });
 
   it("handles isEmpty / isNotEmpty across types", () => {

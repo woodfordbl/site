@@ -228,6 +228,7 @@ describe("database collection ops", () => {
 
   it("updateDatabaseCell merges the value into row.values and bumps updatedAt", async () => {
     const row = makeRow("row-1", { values: { "f-title": "keep" } });
+    mocks.rowGet.mockReturnValue(row);
     const captured = captureRowDrafts([row]);
 
     ops.updateDatabaseCell("row-1", "f-extra", 42);
@@ -237,6 +238,18 @@ describe("database collection ops", () => {
     expect(draft?.values).toEqual({ "f-extra": 42, "f-title": "keep" });
     expect(draft?.updatedAt).not.toBe(row.updatedAt);
     expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("updateDatabaseCell is a silent no-op when the row no longer exists", async () => {
+    // A sync tombstone (or cross-tab delete) can remove the row while its
+    // cell editor is open; update() on a missing key would throw uncaught.
+    mocks.rowGet.mockReturnValue(undefined);
+
+    ops.updateDatabaseCell("row-deleted", "f-extra", 42);
+    await flushAsync();
+
+    expect(mocks.rowUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 
   it("insertDatabaseRow appends with sparse order after the last row", async () => {
@@ -509,6 +522,32 @@ describe("database collection ops", () => {
     expect(mocks.rowDelete).toHaveBeenCalledWith("row-local");
   });
 
+  it("deleteDatabaseRows skips ids with no matching row", async () => {
+    // `get(id)?.externalId === undefined` is true for a MISSING row too —
+    // deleting a nonexistent key would throw mid-transaction and strand the
+    // earlier deletes as uncommitted optimistic state.
+    const localRow = makeRow("row-local");
+    mocks.rowGet.mockImplementation((id: string) =>
+      id === "row-local" ? localRow : undefined
+    );
+
+    ops.deleteDatabaseRows(["row-local", "row-gone"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).toHaveBeenCalledTimes(1);
+    expect(mocks.rowDelete).toHaveBeenCalledWith("row-local");
+  });
+
+  it("deleteDatabaseRows with only missing ids never opens a transaction", async () => {
+    mocks.rowGet.mockReturnValue(undefined);
+
+    ops.deleteDatabaseRows(["row-gone-1", "row-gone-2"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("deleteDatabaseRows with only synced rows never opens a transaction", async () => {
     mocks.rowGet.mockReturnValue({
       ...makeRow("row-synced"),
@@ -621,5 +660,116 @@ describe("database collection ops", () => {
 
     expect(mocks.rowUpdate).not.toHaveBeenCalled();
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("setDatabaseRowPageId refuses synced rows (externalId present)", async () => {
+    // Invariant: synced rows never get pages — the sync engine tombstones
+    // them, which would orphan the linked page.
+    mocks.rowGet.mockReturnValue({
+      ...makeRow("row-synced"),
+      externalId: "ext-1",
+    });
+
+    ops.setDatabaseRowPageId("row-synced", "page-9");
+    await flushAsync();
+
+    expect(mocks.rowUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("duplicateDatabaseField regenerates select option ids and remaps row values", async () => {
+    const database = makeDatabase();
+    database.fields = [
+      { id: "f-title", name: "Name", type: "text" },
+      {
+        id: "f-status",
+        name: "Status",
+        type: "select",
+        options: [
+          { id: "opt-a", name: "Alpha", color: "green" },
+          { id: "opt-b", name: "Beta", color: "red" },
+        ],
+      },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowState = [
+      makeRow("row-1", { values: { "f-status": "opt-b" } }),
+      makeRow("row-2", { values: { "f-status": "opt-ghost" } }),
+    ];
+    const databaseDrafts = captureDatabaseDrafts(database);
+    const rowDrafts = captureRowDrafts(mocks.rowState as LocalDatabaseRow[]);
+
+    ops.duplicateDatabaseField(databaseId, "f-status");
+    await flushAsync();
+
+    const copy = databaseDrafts[0]?.fields[2];
+    expect(copy?.type).toBe("select");
+    if (copy?.type !== "select") {
+      return;
+    }
+    // Fresh option ids, same names/colors, same order — never the source ids
+    // (shared ids would break the option-id-uniqueness assumption that the
+    // recolor helper relies on).
+    expect(copy.options.map((option) => option.name)).toEqual([
+      "Alpha",
+      "Beta",
+    ]);
+    expect(copy.options.map((option) => option.color)).toEqual([
+      "green",
+      "red",
+    ]);
+    expect(copy.options[0]?.id).not.toBe("opt-a");
+    expect(copy.options[1]?.id).not.toBe("opt-b");
+    expect(copy.options[0]?.id).not.toBe(copy.options[1]?.id);
+
+    // Row values are remapped through the old→new id map in the same commit.
+    const newBetaId = copy.options[1]?.id;
+    expect(rowDrafts.get("row-1")?.values[copy.id]).toBe(newBetaId);
+    expect(rowDrafts.get("row-1")?.values["f-status"]).toBe("opt-b");
+    // Ids that were already stale in the source stay as-is in the copy.
+    expect(rowDrafts.get("row-2")?.values[copy.id]).toBe("opt-ghost");
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplicateDatabaseField remaps multiSelect arrays through fresh option ids", async () => {
+    const database = makeDatabase();
+    database.fields = [
+      { id: "f-title", name: "Name", type: "text" },
+      {
+        id: "f-tags",
+        name: "Tags",
+        type: "multiSelect",
+        options: [
+          { id: "opt-x", name: "X", color: "blue" },
+          { id: "opt-y", name: "Y", color: "yellow" },
+        ],
+      },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowState = [
+      makeRow("row-1", { values: { "f-tags": ["opt-y", "opt-x"] } }),
+    ];
+    const databaseDrafts = captureDatabaseDrafts(database);
+    const rowDrafts = captureRowDrafts(mocks.rowState as LocalDatabaseRow[]);
+
+    ops.duplicateDatabaseField(databaseId, "f-tags");
+    await flushAsync();
+
+    const copy = databaseDrafts[0]?.fields[2];
+    expect(copy?.type).toBe("multiSelect");
+    if (copy?.type !== "multiSelect") {
+      return;
+    }
+    const newXId = copy.options[0]?.id;
+    const newYId = copy.options[1]?.id;
+    expect(newXId).not.toBe("opt-x");
+    expect(newYId).not.toBe("opt-y");
+
+    // Stored (click) order is preserved; each id maps old → new.
+    expect(rowDrafts.get("row-1")?.values[copy.id]).toEqual([newYId, newXId]);
+    expect(rowDrafts.get("row-1")?.values["f-tags"]).toEqual([
+      "opt-y",
+      "opt-x",
+    ]);
   });
 });

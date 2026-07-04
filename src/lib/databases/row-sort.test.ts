@@ -85,6 +85,26 @@ describe("compareCellValues", () => {
   it("treats wrong-shaped values as empty", () => {
     expect(compareCellValues(amountField, "10", 5)).toBe(1);
   });
+
+  it("compares identical multi-select sets stored in different orders as equal", () => {
+    // Plain-text projection normalizes to field option order, matching
+    // grouping's bucket keys.
+    const tagsField: DatabaseField = {
+      id: "f-tags",
+      name: "Tags",
+      type: "multiSelect",
+      options: [
+        { id: "opt-x", name: "Alpha" },
+        { id: "opt-y", name: "Beta" },
+      ],
+    };
+    expect(
+      compareCellValues(tagsField, ["opt-y", "opt-x"], ["opt-x", "opt-y"])
+    ).toBe(0);
+    expect(
+      compareCellValues(tagsField, ["opt-y"], ["opt-y", "opt-x"])
+    ).toBeGreaterThan(0);
+  });
 });
 
 describe("applySorts", () => {

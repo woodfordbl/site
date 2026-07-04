@@ -71,6 +71,37 @@ function createFetchStub(response: Response) {
   return { calls, fetchFn };
 }
 
+/** Serves one queued response per call, recording each request. */
+function createPagedFetchStub(responses: Response[]) {
+  const calls: { url: string; headers: Headers }[] = [];
+  const fetchFn: typeof fetch = (input, init) => {
+    calls.push({ url: String(input), headers: new Headers(init?.headers) });
+    const next = responses[calls.length - 1];
+    if (!next) {
+      throw new Error(`Unexpected request #${calls.length}`);
+    }
+    return Promise.resolve(next);
+  };
+  return { calls, fetchFn };
+}
+
+/** A minimal parseable PR payload entry with a distinct id/number. */
+function makePr(id: number) {
+  return {
+    id,
+    number: id,
+    title: `PR ${id}`,
+    state: "open",
+    draft: false,
+    merged_at: null,
+    created_at: "2026-06-01T00:00:00Z",
+    updated_at: "2026-06-02T00:00:00Z",
+    html_url: `https://github.com/octocat/hello-world/pull/${id}`,
+    user: { login: "octocat" },
+    head: { ref: `branch-${id}` },
+  };
+}
+
 async function expectConnectorError(
   promise: Promise<unknown>
 ): Promise<ConnectorError> {
@@ -225,6 +256,67 @@ describe("githubPrsConnector.fetchRows", () => {
         },
       ],
     });
+  });
+
+  it('follows Link rel="next" pagination and aggregates rows across pages', async () => {
+    const page2Url = `${PULLS_URL}&page=2`;
+    const { calls, fetchFn } = createPagedFetchStub([
+      new Response(JSON.stringify([makePr(1), makePr(2)]), {
+        status: 200,
+        headers: {
+          etag: 'W/"page-1"',
+          link: `<${page2Url}>; rel="next", <${PULLS_URL}&page=9>; rel="last"`,
+        },
+      }),
+      new Response(JSON.stringify([makePr(3)]), {
+        status: 200,
+        headers: { etag: 'W/"page-2"' },
+      }),
+    ]);
+
+    const result = await githubPrsConnector.fetchRows({
+      config: { owner: "octocat", repo: "hello-world" },
+      etag: 'W/"stale"',
+      fetchFn,
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].url).toBe(PULLS_URL);
+    expect(calls[1].url).toBe(page2Url);
+    // Conditional request covers page 1 only.
+    expect(calls[0].headers.get("if-none-match")).toBe('W/"stale"');
+    expect(calls[1].headers.has("if-none-match")).toBe(false);
+    if (result.kind !== "rows") {
+      throw new Error("expected rows");
+    }
+    expect(result.rows.map((row) => row.externalId)).toEqual(["1", "2", "3"]);
+    // Only page 1's ETag is stored as the snapshot validator.
+    expect(result.etag).toBe('W/"page-1"');
+  });
+
+  it("stops following pagination at the 3-page cap", async () => {
+    const withNext = (page: number) =>
+      new Response(JSON.stringify([makePr(page)]), {
+        status: 200,
+        headers: { link: `<${PULLS_URL}&page=${page + 1}>; rel="next"` },
+      });
+    const { calls, fetchFn } = createPagedFetchStub([
+      withNext(1),
+      withNext(2),
+      // Page 3 still advertises a next page; the cap must stop the walk.
+      withNext(3),
+    ]);
+
+    const result = await githubPrsConnector.fetchRows({
+      config: { owner: "octocat", repo: "hello-world" },
+      fetchFn,
+    });
+
+    expect(calls).toHaveLength(3);
+    if (result.kind !== "rows") {
+      throw new Error("expected rows");
+    }
+    expect(result.rows.map((row) => row.externalId)).toEqual(["1", "2", "3"]);
   });
 
   it("returns notModified on 304", async () => {
