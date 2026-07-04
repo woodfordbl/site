@@ -18,6 +18,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsSectionRouteImport } from './routes/settings.$section'
 import { Route as PSplatRouteImport } from './routes/p.$'
 import { Route as DevCanvasRouteImport } from './routes/dev_.canvas'
+import { Route as DbDatabaseIdRowIdRouteImport } from './routes/db.$databaseId.$rowId'
 
 const TemplateRoute = TemplateRouteImport.update({
   id: '/template',
@@ -64,6 +65,11 @@ const DevCanvasRoute = DevCanvasRouteImport.update({
   path: '/dev/canvas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DbDatabaseIdRowIdRoute = DbDatabaseIdRowIdRouteImport.update({
+  id: '/db/$databaseId/$rowId',
+  path: '/db/$databaseId/$rowId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
+  '/db/$databaseId/$rowId': typeof DbDatabaseIdRowIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings': typeof SettingsIndexRoute
+  '/db/$databaseId/$rowId': typeof DbDatabaseIdRowIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,6 +105,7 @@ export interface FileRoutesById {
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
   '/settings/': typeof SettingsIndexRoute
+  '/db/$databaseId/$rowId': typeof DbDatabaseIdRowIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,6 +119,7 @@ export interface FileRouteTypes {
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
+    | '/db/$databaseId/$rowId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/p/$'
     | '/settings/$section'
     | '/settings'
+    | '/db/$databaseId/$rowId'
   id:
     | '__root__'
     | '/'
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/p/$'
     | '/settings/$section'
     | '/settings/'
+    | '/db/$databaseId/$rowId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -141,6 +153,7 @@ export interface RootRouteChildren {
   TemplateRoute: typeof TemplateRoute
   DevCanvasRoute: typeof DevCanvasRoute
   PSplatRoute: typeof PSplatRoute
+  DbDatabaseIdRowIdRoute: typeof DbDatabaseIdRowIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevCanvasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/db/$databaseId/$rowId': {
+      id: '/db/$databaseId/$rowId'
+      path: '/db/$databaseId/$rowId'
+      fullPath: '/db/$databaseId/$rowId'
+      preLoaderRoute: typeof DbDatabaseIdRowIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -233,6 +253,7 @@ const rootRouteChildren: RootRouteChildren = {
   TemplateRoute: TemplateRoute,
   DevCanvasRoute: DevCanvasRoute,
   PSplatRoute: PSplatRoute,
+  DbDatabaseIdRowIdRoute: DbDatabaseIdRowIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

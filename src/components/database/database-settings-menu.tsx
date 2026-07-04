@@ -8,6 +8,7 @@ import {
   IconDots,
   IconEye,
   IconEyeOff,
+  IconFileText,
   IconLayoutGrid,
   IconLayoutList,
   IconListDetails,
@@ -690,6 +691,31 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
   );
 }
 
+/**
+ * Row pages status row: whether row pages (`/db/{databaseId}/{rowId}`)
+ * render from the built-in default template or the database's custom
+ * `rowTemplate` (with its block count). Deliberately non-interactive —
+ * template AUTHORING lands with a dedicated template editor (canvas-backed,
+ * writing `database.rowTemplate`); this row becomes its entry point then.
+ */
+function RowPagesItem({ database }: { database: LocalDatabase }) {
+  const blockCount = database.rowTemplate?.length ?? 0;
+  const status =
+    blockCount > 0
+      ? `Custom template · ${blockCount} ${blockCount === 1 ? "block" : "blocks"}`
+      : "Default template";
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 text-sm">
+      <IconFileText className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+      <span className="shrink-0">Row pages</span>
+      <span className="min-w-0 flex-1 truncate text-right text-muted-foreground text-xs">
+        {status}
+      </span>
+    </div>
+  );
+}
+
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-xs">
@@ -815,6 +841,7 @@ export function DatabaseSettingsMenu({
         ) : null}
         <DropdownMenuSeparator />
         <SourceSubmenu database={database} rowCount={rowCount} />
+        <RowPagesItem database={database} />
         <DropdownMenuSeparator />
         <DropdownMenuItem
           closeOnClick={false}

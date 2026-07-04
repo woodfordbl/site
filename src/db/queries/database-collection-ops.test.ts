@@ -598,4 +598,28 @@ describe("database collection ops", () => {
     expect(mocks.rowDelete).toHaveBeenCalledWith("row-2");
     expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
+
+  it("setDatabaseRowPageId links the page id and bumps updatedAt", async () => {
+    const row = makeRow("row-1");
+    mocks.rowGet.mockReturnValue(row);
+    const drafts = captureRowDrafts([row]);
+
+    ops.setDatabaseRowPageId("row-1", "page-9");
+    await flushAsync();
+
+    const draft = drafts.get("row-1");
+    expect(draft?.pageId).toBe("page-9");
+    expect(draft?.updatedAt).not.toBe(row.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("setDatabaseRowPageId is a no-op for unknown rows", async () => {
+    mocks.rowGet.mockReturnValue(undefined);
+
+    ops.setDatabaseRowPageId("row-missing", "page-9");
+    await flushAsync();
+
+    expect(mocks.rowUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
 });

@@ -220,10 +220,37 @@ see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirror
 media/embed pickers. Deleting a database block does **not**
 delete the database entity (blocks are references; entity lifecycle UI is future work).
 
+## Row pages (virtual + copy-on-write)
+
+Every row "has" a page with **zero per-row storage**: the `/db/$databaseId/$rowId`
+route ([`db.$databaseId.$rowId.tsx`](../../src/routes/db.$databaseId.$rowId.tsx),
+client-only — SSR renders a neutral shell like `/p/$`) renders
+[`DatabaseRowPage`](../../src/components/database/row-page/database-row-page.tsx):
+title = primary field value, a properties panel reusing the grid's cell editors
+(local fields inline-editable, synced fields read-only, formulas computed), and a body
+instantiated per render from the shared `database.rowTemplate` via
+[`instantiateTemplateBlocks`](../../src/lib/databases/row-template.ts) —
+`{{ thisPage.X }}` tokens in text-bearing props (`text`, tab `label`, embed `caption`;
+`code` stays literal) evaluate through `evaluateTemplateText` + `createRowScope`,
+rendered read-only with `CanvasBlocksReadOnly`. Absent template = one muted default
+text block. The grid's primary cells carry a hover-revealed "Open" pill (both modes)
+navigating there; the ⋯ settings menu shows the template status (authoring UI is
+deferred).
+
+**Copy-on-write:** the first "Edit page" (or body click) instantiates the template
+(a snapshot — live tokens inside real pages are a future phase), remaps ids
+(`clonePageBlocks`), creates a REAL top-level user page via `page.create`, links it
+with `setDatabaseRowPageId(rowId, pageId)`, and navigates. Subsequent opens of the
+row URL redirect to the page; a dangling `pageId` (page deleted) falls back to the
+virtual render. Host-page nesting and a navigating breadcrumb host crumb arrive with
+host-page resolution.
+
 ## Deferred (see proposal phases)
 
 Row drag-reorder UI, linked-view/`viewId` threading and multi-view switching ("Add view"
-and view styles), row pages (`pageId` is schema-ready), relations/rollups,
+and view styles), row-page template authoring UI and host-page nesting/live tokens
+(virtual pages + copy-on-write shipped — see [Row pages](#row-pages-virtual--copy-on-write)),
+relations/rollups,
 formula-aware typed filter operators and formula→formula references,
 board/gallery/list/chart views, workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push

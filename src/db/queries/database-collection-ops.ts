@@ -659,6 +659,36 @@ export function updateDatabaseSource(
   commitDatabaseTransaction(tx);
 }
 
+/**
+ * Link a row to its lazily-materialized page: set `row.pageId` and bump
+ * `updatedAt`. This is the copy-on-write commit point for rows-as-pages —
+ * the id references a REAL user page created from the database's row
+ * template (see `lib/databases/row-template.ts`); until this runs the row's
+ * page exists only virtually. v1 never CLEARS a link — callers only invoke
+ * this from the virtual state (pageId unset, or dangling after the target
+ * page was deleted, which the row route treats as virtual again).
+ * Unlink/cascade semantics land with the page-delete integration
+ * (databases proposal §2.5).
+ */
+export function setDatabaseRowPageId(rowId: string, pageId: string): void {
+  const row = localDatabaseRowsCollection.get(rowId);
+  if (!row) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabaseRowsCollection.update(rowId, (draft) => {
+      draft.pageId = pageId;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
 /** Delete a database definition and all of its rows in one transaction. */
 export function deleteDatabase(databaseId: string): void {
   const database = localDatabasesCollection.get(databaseId);

@@ -1,4 +1,9 @@
-import { IconChevronRight, IconPlus } from "@tabler/icons-react";
+import {
+  IconArrowsDiagonal,
+  IconChevronRight,
+  IconPlus,
+} from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
 import {
   type ColumnDef,
   getCoreRowModel,
@@ -534,6 +539,7 @@ export function DatabaseTableGrid({
                   return (
                     <GridRow
                       columns={gridColumns}
+                      databaseId={databaseId}
                       editingFieldId={
                         editing?.rowId === row.id ? editing.fieldId : null
                       }
@@ -543,6 +549,7 @@ export function DatabaseTableGrid({
                       onNavigate={handleNavigate}
                       onStartEdit={handleStartEdit}
                       onStopEdit={handleStopEdit}
+                      primaryFieldId={primaryFieldId}
                       row={row}
                       rowIndex={virtualRow.index}
                       top={virtualRow.start}
@@ -789,6 +796,8 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
 
 interface GridRowProps {
   columns: readonly GridColumn[];
+  /** Addressed by the primary cell's "Open" pill (`/db/{databaseId}/{rowId}`). */
+  databaseId: string;
   /** The field currently editing in this row, `null` otherwise. */
   editingFieldId: string | null;
   /** `virtualizer.measureElement` — rows auto-size when content wraps. */
@@ -797,6 +806,8 @@ interface GridRowProps {
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   onStartEdit: (target: CellEditTarget) => void;
   onStopEdit: () => void;
+  /** Primary-field cells carry the hover-revealed row-page "Open" pill. */
+  primaryFieldId: string;
   row: LocalDatabaseRow;
   /** Zero-based data row index (drives measurement + ARIA row index). */
   rowIndex: number;
@@ -812,12 +823,14 @@ interface GridRowProps {
  */
 const GridRow = memo(function GridRowInner({
   columns,
+  databaseId,
   editingFieldId,
   measureRow,
   mode,
   onNavigate,
   onStartEdit,
   onStopEdit,
+  primaryFieldId,
   row,
   rowIndex,
   top,
@@ -829,6 +842,7 @@ const GridRow = memo(function GridRowInner({
       aria-rowindex={rowIndex + 2}
       className="absolute top-0 left-0 flex w-full border-border border-b"
       data-index={rowIndex}
+      data-reveal-group=""
       ref={measureRow}
       role="row"
       style={{
@@ -840,7 +854,9 @@ const GridRow = memo(function GridRowInner({
         <GridCell
           ariaColIndex={columnIndex + 1}
           column={column}
+          databaseId={databaseId}
           isEditing={editingFieldId === column.field.id}
+          isPrimary={column.field.id === primaryFieldId}
           key={column.field.id}
           mode={mode}
           onNavigate={onNavigate}
@@ -856,7 +872,10 @@ const GridRow = memo(function GridRowInner({
 interface GridCellProps {
   ariaColIndex: number;
   column: GridColumn;
+  databaseId: string;
   isEditing: boolean;
+  /** Primary-field cell — renders the row-page "Open" pill. */
+  isPrimary: boolean;
   mode: "view" | "edit";
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   onStartEdit: (target: CellEditTarget) => void;
@@ -864,10 +883,46 @@ interface GridCellProps {
   row: LocalDatabaseRow;
 }
 
+/**
+ * Hover-revealed "Open" pill at the primary cell's right edge, navigating to
+ * the row's (virtual or materialized) page at `/db/{databaseId}/{rowId}`.
+ * Present in BOTH modes — published (view-mode) pages must still open row
+ * pages. Reveals on row hover/focus on fine pointers and stays visible on
+ * coarse pointers (`.hover-reveal` under the row's `data-reveal-group`);
+ * click stops propagation so it never starts a cell edit.
+ */
+function GridCellOpenPill({
+  databaseId,
+  rowId,
+}: {
+  databaseId: string;
+  rowId: string;
+}) {
+  return (
+    <Button
+      className="hover-reveal absolute inset-y-0 right-1 z-10 my-auto h-6 border border-border bg-background text-muted-foreground shadow-xs"
+      nativeButton={false}
+      onClick={(event) => {
+        event.stopPropagation();
+      }}
+      render={
+        <Link params={{ databaseId, rowId }} to="/db/$databaseId/$rowId" />
+      }
+      size="xs"
+      variant="ghost"
+    >
+      <IconArrowsDiagonal />
+      Open
+    </Button>
+  );
+}
+
 function GridCell({
   ariaColIndex,
   column,
+  databaseId,
   isEditing,
+  isPrimary,
   mode,
   onNavigate,
   onStartEdit,
@@ -945,6 +1000,9 @@ function GridCell({
       ) : (
         content
       )}
+      {isPrimary ? (
+        <GridCellOpenPill databaseId={databaseId} rowId={row.id} />
+      ) : null}
       {isEditing && inlineEditable ? (
         <DatabaseCellInlineEditor
           field={field}
