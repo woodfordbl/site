@@ -62,14 +62,32 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
 
 - [`database-table-view.tsx`](../../src/components/database/database-table-view.tsx) —
   entry: resolves database + first view, applies `applyFilter` → `sortRowsForView` →
-  `resolveColumnOrder`, mounts title, filter bar (edit mode), grid.
+  `resolveColumnOrder`, mounts title row, filter bar (edit mode, wide viewports), grid.
+  On narrow viewports the chip bar collapses into funnel/sort icon buttons inline with
+  the title ([`database-mobile-toolbar.tsx`](../../src/components/database/database-mobile-toolbar.tsx)),
+  each opening a popover that reuses the extracted chip strips.
 - [`database-table-grid.tsx`](../../src/components/database/database-table-grid.tsx) —
   TanStack Table in **fully manual mode** (core row model only; data computation stays in
   the lib layer) + TanStack Virtual rows (36px, overscan 12, `max-h-[600px]` scrollport);
-  sticky header with field-type icons and column-menu triggers; pinned columns as
-  cumulative-offset `position: sticky` with a scroll-gated edge fade; grid ARIA roles;
-  memoized rows (stable callbacks via a latest-values ref; row identity from the
-  collection layer's structural sharing).
+  sticky header with field icons ([`resolveFieldIcon`](../../src/components/database/database-field-icons.ts):
+  custom emoji/`tabler:` glyph → type-icon fallback) and column-menu triggers; pinned
+  columns as cumulative-offset `position: sticky` with a scroll-gated edge fade (pinned
+  columns auto-unpin visually when the frozen span exceeds the scrollport so phones can
+  always reach unfrozen columns); grid ARIA roles; memoized rows (stable callbacks via a
+  latest-values ref; row identity from the collection layer's structural sharing).
+  **Column resizing** ([`use-database-column-resize.ts`](../../src/components/database/use-database-column-resize.ts) +
+  [`database-column-resize-zone.tsx`](../../src/components/database/database-column-resize-zone.tsx)):
+  edge hit zones (wider on coarse pointers, `touch-none` scoped to the zone), hover-reveal
+  `bg-selection` dividers, live rAF widths committed to `view.config.columnWidths`,
+  double-click/tap reset. **Header drag-reorder**
+  ([`use-database-column-drag.ts`](../../src/components/database/use-database-column-drag.ts) +
+  [`database-column-dnd.tsx`](../../src/components/database/database-column-dnd.tsx)):
+  press-threshold drag on fine pointers (click still opens the menu, on release),
+  450ms long-press lift on coarse; full-grid-height `bg-selection-primary` drop lines;
+  drop writes `columnOrder` and derives `pinnedFieldIds` from the freeze-boundary rule
+  (left of the boundary pins, right unpins, exactly on it keeps state). Vertical cell
+  separators are per view (`config.showVerticalLines`, absent = shown); the last column
+  never draws a right border so the add-field strip sits flush.
 - Cells/editors: display renderers per type
   ([`database-cell.tsx`](../../src/components/database/database-cell.tsx), option pills on
   block color tokens), inline input editors for text/url/number + checkbox toggle,
@@ -79,13 +97,34 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   (`nextEditTarget` in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts)).
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —
-  Notion-style property menu: rename, Edit property (per-type config), Change type, Sort
-  (single-key toggle), Calculate picker, Freeze up to column, Hide, Wrap, Insert
-  left/right, Duplicate/Delete (primary-field guarded).
+  Notion-style property menu: rename, Edit property (per-type config incl. select-option
+  rename/add/delete and color via the shared block-color palette,
+  [`database-option-color-menu.tsx`](../../src/components/database/database-option-color-menu.tsx)),
+  Change type, Change/Remove icon (shared `GlyphIconPicker`, intent-preloaded), Sort
+  (multi-key append/toggle/flip with 1-based priority numbers), Calculate picker, Freeze
+  up to column, Hide, Wrap, Insert left/right, Duplicate/Delete (primary-field guarded).
+  `DropdownMenuLabel` must sit inside `DropdownMenuGroup` (Base UI context — naked labels
+  crash at render).
 - [`database-filter-bar.tsx`](../../src/components/database/database-filter-bar.tsx) —
   Linear-style chips (`field · operator · value` segment popovers), type-ahead add-filter
-  picker, match all/any control, sort chips; pure mutations in
+  picker, match all/any control, and per-sort priority chips (flip direction, remove,
+  move left/right); exports the chip strips (`DatabaseFilterChips`, `DatabaseSortChips`,
+  `DatabaseFilterMatchOp`) reused by the mobile toolbar popovers; pure mutations in
   [`database-filter-helpers.ts`](../../src/components/database/database-filter-helpers.ts).
+- [`database-title.tsx`](../../src/components/database/database-title.tsx) — h3-equivalent
+  title (shares `headingTypographyClassNames[3]`), rename-in-place, filtered row count,
+  and the ⋯ [`database-settings-menu.tsx`](../../src/components/database/database-settings-menu.tsx):
+  rename, Properties (reorder via `reorderDatabaseFields`, hide/show, Title badge), Views
+  (inline rename), Hide title switch (block prop `hideTitle`, per placement), Vertical
+  separators switch, Source info, two-step Delete database, stats footer.
+
+## Draft-proxy invariant (mutations)
+
+TanStack DB `update` drafts are change-tracking proxies. **Never spread draft objects
+into the stored document** — zod v4's `z.record` validation rejects proxied records on
+the next write (`updateDatabaseView`/`removeDatabaseField` JSON-flatten via `toPlain`
+before rebuilding `views`; regression-tested with proxied drafts in
+[`database-collection-ops.test.ts`](../../src/db/queries/database-collection-ops.test.ts)).
 
 ## Block integration
 
@@ -98,7 +137,7 @@ delete the database entity (blocks are references; entity lifecycle UI is future
 
 ## Deferred (see proposal phases)
 
-Row drag-reorder UI, linked-view/`viewId` threading and multi-view switching, row pages
-(`pageId` is schema-ready), relations/rollups/formulas, board/gallery/list/chart views,
-connectors/sync, workspace backup inclusion, SQLite scale tier, dynamic row heights for
-wrapped cells (line-clamped today), keyboard Tab-into-cell entry.
+Row drag-reorder UI, linked-view/`viewId` threading and multi-view switching ("Add view"
+and view styles), row pages (`pageId` is schema-ready), relations/rollups/formulas,
+board/gallery/list/chart views, connectors/sync, workspace backup inclusion, SQLite scale
+tier, keyboard Tab-into-cell entry, on-screen-keyboard layout testing.

@@ -120,6 +120,13 @@ UI-hint cookies share read/write helpers in [`document-cookie.ts`](../../src/lib
 
 `applyPageBlockDiff` / `replacePageBlocks` are the durable-order boundary for bulk canvas structure. They must update `localPagesCollection.blockOrder` and the page's `localBlocksCollection` rows in the same TanStack DB transaction, and that transaction must accept mutations for both collections. Incremental hot-path ops follow the same rule inside `runBlockTransaction`. If the block rows are accepted without the page metadata mutation, later reads can combine new rows with stale `blockOrder` and render inserts or moves out of order.
 
+## Draft-proxy invariant
+
+TanStack DB `update` drafts are change-tracking proxies. Mutations must never spread
+draft objects back into stored documents — zod v4 `z.record` keys reject proxied values
+on the next write. Database view ops JSON-flatten drafts before rebuilding
+(see [databases — Draft-proxy invariant](./databases.md#draft-proxy-invariant-mutations)).
+
 ## Persistence error surfacing
 
 All block-collection transactions are created with `autoCommit: false` — the TanStack DB default auto-commits on the first `mutate()`, which would close the transaction mid-batch and make the explicit commit reject. Collection commits do not swallow errors. `commitAndMarkDirty` in [`block-collection-ops.ts`](../../src/db/queries/block-collection-ops.ts) commits the transaction, runs `markPageDirty` only after a **successful** commit, and reports failures to the central sink in [`persistence-errors.ts`](../../src/db/persistence-errors.ts) (`reportPersistenceError`, with quota detection for `QuotaExceededError`). [`AppProviders`](../../src/db/provider.tsx) mounts Sonner's [`Toaster`](../../src/components/ui/sonner.tsx); `reportPersistenceError` shows a persistent dismissible error toast when local saves fail — without it, a failed save leaves the optimistic in-memory state rendering as if everything persisted.
