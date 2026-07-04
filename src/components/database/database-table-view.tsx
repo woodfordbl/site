@@ -1,9 +1,11 @@
 import { type ReactNode, useMemo } from "react";
 
 import { DatabaseFilterBar } from "@/components/database/database-filter-bar.tsx";
+import { DatabaseMobileToolbar } from "@/components/database/database-mobile-toolbar.tsx";
 import { DatabaseTableGrid } from "@/components/database/database-table-grid.tsx";
 import { DatabaseTitle } from "@/components/database/database-title.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import { sortRowsForView } from "@/lib/databases/row-sort.ts";
 import {
@@ -15,7 +17,15 @@ import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
 /** Props contract for the database grid rendered by `database` blocks. */
 export interface DatabaseTableViewProps {
   databaseId: string;
+  /**
+   * Block-level "hide title" flag. Edit mode keeps the toolbar row (settings
+   * ⋯ and mobile filter/sort buttons) without the name; view mode drops the
+   * whole row.
+   */
+  hideTitle?: boolean;
   mode: "view" | "edit";
+  /** Persists the settings menu's "Hide title" toggle onto the block. */
+  onHideTitleChange?: (hideTitle: boolean) => void;
 }
 
 function EmptyState({ message }: { message: string }) {
@@ -34,10 +44,13 @@ function EmptyState({ message }: { message: string }) {
  */
 export function DatabaseTableView({
   databaseId,
+  hideTitle = false,
   mode,
+  onHideTitleChange,
 }: DatabaseTableViewProps): ReactNode {
   const database = useDatabase(databaseId);
   const allRows = useDatabaseRows(databaseId);
+  const isNarrowViewport = useIsNarrowViewport();
   const view = database?.views[0];
 
   const rows = useMemo<LocalDatabaseRow[]>(() => {
@@ -65,15 +78,32 @@ export function DatabaseTableView({
     return <EmptyState message="No views" />;
   }
 
+  // View mode with a hidden title has no controls left, so the whole row
+  // disappears; edit mode keeps the collapsed row as the toolbar's home.
+  const showTitleRow = mode === "edit" || !hideTitle;
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
-      <DatabaseTitle
-        database={database}
-        mode={mode}
-        rowCount={rows.length}
-        totalRowCount={allRows.length}
-      />
-      {mode === "edit" ? (
+      {showTitleRow ? (
+        <DatabaseTitle
+          controls={
+            mode === "edit" && isNarrowViewport ? (
+              <DatabaseMobileToolbar
+                databaseId={databaseId}
+                fields={database.fields}
+                view={view}
+              />
+            ) : null
+          }
+          database={database}
+          hideTitle={hideTitle}
+          mode={mode}
+          onHideTitleChange={onHideTitleChange}
+          rowCount={rows.length}
+          totalRowCount={allRows.length}
+        />
+      ) : null}
+      {mode === "edit" && !isNarrowViewport ? (
         <DatabaseFilterBar
           databaseId={databaseId}
           fields={database.fields}

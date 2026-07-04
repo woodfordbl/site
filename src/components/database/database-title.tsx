@@ -3,11 +3,27 @@ import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { DatabaseSettingsMenu } from "@/components/database/database-settings-menu.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
+import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
+
+// Same typography as the canvas `heading` block at level 3 so a database
+// title reads as an h3 in the page hierarchy (edit button, view h3, and the
+// rename input all share it so entering edit mode doesn't jump).
+const TITLE_TYPOGRAPHY_CLASS = cn(
+  headingTypographyClassNames[3],
+  "text-foreground"
+);
 
 interface DatabaseTitleProps {
+  /** Extra right-aligned controls before the ⋯ menu (mobile filter/sort). */
+  controls?: ReactNode;
   database: LocalDatabase;
+  /** Hide the name + row count; the row keeps only right-aligned controls. */
+  hideTitle?: boolean;
   mode: "view" | "edit";
+  /** Threads the block's `hideTitle` toggle into the settings menu. */
+  onHideTitleChange?: (hideTitle: boolean) => void;
   /** Count of the active view's filtered rows. */
   rowCount: number;
   /** Total (unfiltered) row count — settings menu stats and Source section. */
@@ -15,15 +31,19 @@ interface DatabaseTitleProps {
 }
 
 /**
- * Database name above the grid plus a muted row count. In edit mode the name
- * is inline-editable (click to edit, commit via `renameDatabase` on
- * blur/Enter, Escape reverts) and the ⋯ settings menu mounts after the row
- * count — revealed on row hover/focus on fine pointers, always visible on
+ * Database name above the grid (h3-equivalent typography) plus a muted row
+ * count. In edit mode the name is inline-editable (click to edit, commit via
+ * `renameDatabase` on blur/Enter, Escape reverts) and the right-aligned
+ * control cluster holds optional mobile toolbar buttons plus the ⋯ settings
+ * menu — revealed on row hover/focus on fine pointers, always visible on
  * coarse pointers (`.hover-reveal` + `data-reveal-group`).
  */
 export function DatabaseTitle({
+  controls,
   database,
+  hideTitle = false,
   mode,
+  onHideTitleChange,
   rowCount,
   totalRowCount,
 }: DatabaseTitleProps): ReactNode {
@@ -61,7 +81,10 @@ export function DatabaseTitle({
   if (mode === "edit") {
     nameDisplay = (
       <button
-        className="min-w-0 truncate rounded-sm text-left font-medium text-foreground text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+        className={cn(
+          "min-w-0 truncate rounded-sm text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50",
+          TITLE_TYPOGRAPHY_CLASS
+        )}
         onClick={() => {
           finishedRef.current = false;
           setDraft(name);
@@ -73,39 +96,52 @@ export function DatabaseTitle({
     );
   } else {
     nameDisplay = (
-      <span className="min-w-0 truncate font-medium text-foreground text-sm">
-        {name}
-      </span>
+      <h3 className={cn("min-w-0 truncate", TITLE_TYPOGRAPHY_CLASS)}>{name}</h3>
     );
   }
 
   return (
     <div className="flex min-w-0 items-baseline gap-2" data-reveal-group>
-      {draft === null ? (
-        nameDisplay
-      ) : (
-        <input
-          aria-label="Database name"
-          className="min-w-0 flex-1 rounded-none border-none bg-transparent p-0 font-medium text-foreground text-sm outline-none placeholder:text-muted-foreground"
-          onBlur={(event) => {
-            if (finishedRef.current) {
-              return;
-            }
-            commit(event.currentTarget.value);
-          }}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Untitled"
-          ref={focusOnMount}
-          type="text"
-          value={draft}
-        />
+      {hideTitle ? null : (
+        <>
+          {draft === null ? (
+            nameDisplay
+          ) : (
+            <input
+              aria-label="Database name"
+              className={cn(
+                "min-w-0 flex-1 rounded-none border-none bg-transparent p-0 outline-none placeholder:text-muted-foreground",
+                TITLE_TYPOGRAPHY_CLASS
+              )}
+              onBlur={(event) => {
+                if (finishedRef.current) {
+                  return;
+                }
+                commit(event.currentTarget.value);
+              }}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Untitled"
+              ref={focusOnMount}
+              type="text"
+              value={draft}
+            />
+          )}
+          <span className="shrink-0 text-muted-foreground text-xs">
+            {countLabel}
+          </span>
+        </>
       )}
-      <span className="shrink-0 text-muted-foreground text-xs">
-        {countLabel}
-      </span>
       {mode === "edit" ? (
-        <DatabaseSettingsMenu database={database} rowCount={totalRowCount} />
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 self-center">
+          {controls}
+          <DatabaseSettingsMenu
+            database={database}
+            hideTitle={hideTitle}
+            onHideTitleChange={onHideTitleChange}
+            rowCount={totalRowCount}
+          />
+        </div>
       ) : null}
     </div>
   );

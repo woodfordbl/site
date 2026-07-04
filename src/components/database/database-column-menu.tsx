@@ -26,7 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
-
+import { BlockColorSwatch } from "@/components/canvas/block-color-swatch.tsx";
 import {
   aggregateFnsForFieldType,
   calculationsWithSelection,
@@ -35,6 +35,7 @@ import {
   freezePrefixEndingAt,
   isFrozenExactlyAt,
   numberFormatPatch,
+  recoloredSelectOptions,
   renamedSelectOptions,
   selectOptionsPatch,
   toggledWrapFieldIds,
@@ -52,6 +53,7 @@ import {
   toggledSorts,
 } from "@/components/database/database-filter-helpers.ts";
 import { aggregateFnLabel } from "@/components/database/database-grid-helpers.ts";
+import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -95,6 +97,7 @@ import {
   type DatabaseView,
   databaseFieldTypeSchema,
 } from "@/lib/schemas/database.ts";
+import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 
 /**
  * Column header menu for the database table grid — mirrors the Notion
@@ -219,11 +222,21 @@ function ColumnRenameInput({
 interface SelectOptionRowProps {
   onDelete: () => void;
   onRename: (name: string) => void;
+  onSelectColor: (color: BlockColor | undefined) => void;
   option: DatabaseSelectOption;
 }
 
-/** One editable option row: inline rename input + delete button. */
-function SelectOptionRow({ onDelete, onRename, option }: SelectOptionRowProps) {
+/**
+ * One editable option row: leading color-swatch submenu (the block-color
+ * palette shared with the canvas highlight picker), inline rename input, and
+ * a delete button.
+ */
+function SelectOptionRow({
+  onDelete,
+  onRename,
+  onSelectColor,
+  option,
+}: SelectOptionRowProps) {
   const commit = (value: string) => {
     const trimmed = value.trim();
     if (trimmed !== "" && trimmed !== option.name) {
@@ -233,6 +246,22 @@ function SelectOptionRow({ onDelete, onRename, option }: SelectOptionRowProps) {
 
   return (
     <div className="flex items-center gap-1">
+      <DropdownMenuSub>
+        {/* Compact swatch-only trigger: the swatch is the label, so the
+            wrapper's trailing chevron is hidden. */}
+        <DropdownMenuSubTrigger
+          aria-label={`Change color for option ${option.name}`}
+          className="size-7 shrink-0 justify-center p-0 [&>svg]:hidden"
+        >
+          <BlockColorSwatch color={option.color} variant="background" />
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <DatabaseOptionColorMenuItems
+            color={option.color}
+            onSelectColor={onSelectColor}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
       <InputGroup className="h-8 flex-1">
         <InputGroupInput
           aria-label={`Rename option ${option.name}`}
@@ -268,8 +297,9 @@ interface SelectOptionsEditorProps {
 }
 
 /**
- * Option list editor for select/multi-select fields: rename inline, add via
- * the trailing input, delete per row. Option colors stay default this wave.
+ * Option list editor for select/multi-select fields: rename inline, recolor
+ * via each row's leading swatch submenu, add via the trailing input, delete
+ * per row.
  */
 function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
   const [newOptionName, setNewOptionName] = useState("");
@@ -299,6 +329,11 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
           }}
           onRename={(name) => {
             writeOptions(renamedSelectOptions(field.options, option.id, name));
+          }}
+          onSelectColor={(color) => {
+            writeOptions(
+              recoloredSelectOptions(field.options, option.id, color)
+            );
           }}
           option={option}
         />

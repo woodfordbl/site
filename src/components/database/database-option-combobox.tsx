@@ -1,8 +1,18 @@
-import { IconCheck, IconPlus, IconSearch } from "@tabler/icons-react";
+import { IconCheck, IconDots, IconPlus, IconSearch } from "@tabler/icons-react";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { DatabaseOptionPill } from "@/components/database/database-cell.tsx";
+import {
+  DatabaseOptionColorMenuItems,
+  updateSelectOptionColor,
+} from "@/components/database/database-option-color-menu.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
+import { Button } from "@/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
 import {
   InputGroup,
   InputGroupAddon,
@@ -23,11 +33,18 @@ interface DatabaseOptionComboboxProps {
   selectedIds: readonly string[];
 }
 
+const OPTION_ROW_CLASS =
+  "flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted";
+
 /**
  * Search-first option list shared by the select/multi-select cell editors and
  * the filter bar's option checklists: type-ahead filtering, check marks on
  * selected options, selected pills atop the list in multi mode, and an
- * optional "Create" row appending a new option for unmatched queries.
+ * optional "Create" row appending a new option for unmatched queries. Each
+ * option row carries a trailing ⋯ menu (hover/focus-revealed on fine
+ * pointers, always visible on touch) holding the option color palette —
+ * opening or picking inside it never toggles the option or dismisses the
+ * hosting popover.
  */
 export function DatabaseOptionCombobox({
   multiple,
@@ -116,37 +133,16 @@ export function DatabaseOptionCombobox({
         />
       </InputGroup>
       <div className="flex max-h-56 flex-col overflow-y-auto">
-        {filtered.map((option) => {
-          const selected = selectedIds.includes(option.id);
-          return (
-            <button
-              className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
-              key={option.id}
-              onClick={() => onToggleOption(option.id)}
-              type="button"
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "size-2 shrink-0 rounded-full bg-current",
-                  option.color
-                    ? BLOCK_COLOR_DEFS[option.color].textClass
-                    : "text-muted-foreground"
-                )}
-              />
-              <span className="min-w-0 flex-1 truncate">{option.name}</span>
-              {selected ? (
-                <IconCheck className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-              ) : null}
-            </button>
-          );
-        })}
+        {filtered.map((option) => (
+          <ComboboxOptionRow
+            key={option.id}
+            onToggle={() => onToggleOption(option.id)}
+            option={option}
+            selected={selectedIds.includes(option.id)}
+          />
+        ))}
         {canCreate ? (
-          <button
-            className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
-            onClick={create}
-            type="button"
-          >
+          <button className={OPTION_ROW_CLASS} onClick={create} type="button">
             <IconPlus className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">Create "{trimmed}"</span>
           </button>
@@ -157,6 +153,72 @@ export function DatabaseOptionCombobox({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+interface ComboboxOptionRowProps {
+  onToggle: () => void;
+  option: DatabaseSelectOption;
+  selected: boolean;
+}
+
+/**
+ * One option row: the main button toggles the value; the trailing ⋯ opens the
+ * option color palette. The ⋯ is a sibling of the toggle button (never
+ * nested), so color edits can't commit or toggle the cell/filter value, and
+ * the row is a `data-reveal-group` so the ⋯ follows the standard hover-reveal
+ * affordance (always visible on no-hover pointers). Color writes address the
+ * owning field schema by option id via `updateSelectOptionColor`.
+ */
+function ComboboxOptionRow({
+  onToggle,
+  option,
+  selected,
+}: ComboboxOptionRowProps): ReactNode {
+  return (
+    <div className="flex shrink-0 items-center gap-1" data-reveal-group="">
+      <button
+        className={cn(OPTION_ROW_CLASS, "min-w-0 flex-1")}
+        onClick={onToggle}
+        type="button"
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "size-2 shrink-0 rounded-full bg-current",
+            option.color
+              ? BLOCK_COLOR_DEFS[option.color].textClass
+              : "text-muted-foreground"
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate">{option.name}</span>
+        {selected ? (
+          <IconCheck className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+        ) : null}
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              aria-label={`Change color for ${option.name}`}
+              className="hover-reveal shrink-0 aria-expanded:opacity-100"
+              size="icon-xs"
+              variant="ghost"
+            />
+          }
+        >
+          <IconDots />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="bottom">
+          <DatabaseOptionColorMenuItems
+            color={option.color}
+            onSelectColor={(color) => {
+              updateSelectOptionColor(option.id, color);
+            }}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

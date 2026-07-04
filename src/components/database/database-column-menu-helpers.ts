@@ -5,6 +5,7 @@ import type {
   DatabaseNumberFormat,
   DatabaseSelectOption,
 } from "@/lib/schemas/database.ts";
+import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 
 /**
  * Pure helpers behind the column header menu: Calculate-fn filtering per
@@ -209,6 +210,21 @@ export function withAddedSelectOption(
     return [...options];
   }
   return [...options, { id: crypto.randomUUID(), name: trimmed }];
+}
+
+/**
+ * Options after setting one option's color — `undefined` clears it back to
+ * the default (colorless) pill. The color ids are the block-color palette
+ * (`blockColorSchema`), shared with the canvas highlight picker.
+ */
+export function recoloredSelectOptions(
+  options: readonly DatabaseSelectOption[],
+  optionId: string,
+  color: BlockColor | undefined
+): DatabaseSelectOption[] {
+  return options.map((option) =>
+    option.id === optionId ? { ...option, color } : option
+  );
 }
 
 /** Options after deleting one (stale ids in cell values render as empty). */

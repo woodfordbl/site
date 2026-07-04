@@ -146,6 +146,8 @@ export const databasePropsSchema = z.object({
   databaseId: z.string(),
   /** Saved view to render; defaults to the database's first view. */
   viewId: z.string().optional(),
+  /** Hide the title row for this block (per placement, like Notion). */
+  hideTitle: z.boolean().optional(),
 });
 
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */

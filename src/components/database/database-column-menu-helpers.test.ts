@@ -7,6 +7,7 @@ import {
   fieldTypeChangePatch,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
+  recoloredSelectOptions,
   renamedSelectOptions,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
@@ -213,5 +214,27 @@ describe("select option list edits", () => {
     expect(withoutSelectOption(options, "o1")).toEqual([
       { id: "o2", name: "Done" },
     ]);
+  });
+
+  it("recolors an option in place without touching siblings", () => {
+    expect(recoloredSelectOptions(options, "o2", "blue")).toEqual([
+      { id: "o1", name: "Todo" },
+      { id: "o2", name: "Done", color: "blue" },
+    ]);
+  });
+
+  it("clears an option color with undefined", () => {
+    const colored: DatabaseSelectOption[] = [
+      { id: "o1", name: "Todo", color: "red" },
+    ];
+    expect(recoloredSelectOptions(colored, "o1", undefined)[0].color).toBe(
+      undefined
+    );
+  });
+
+  it("leaves the list unchanged for unknown option ids", () => {
+    expect(recoloredSelectOptions(options, "missing", "green")).toEqual(
+      options
+    );
   });
 });

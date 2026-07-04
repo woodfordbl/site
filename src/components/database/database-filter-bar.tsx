@@ -79,11 +79,13 @@ import { cn } from "@/lib/utils.ts";
 
 /**
  * Linear-style filter chip bar rendered between the database title and the
- * grid (edit mode only). One chip per root-level condition — field, operator,
- * and value are separate click targets editing in place via popovers — plus a
- * "+ Filter" type-ahead field picker, a Match all/any control once two or
- * more root entries exist, and one sort chip per view sort in priority order
- * (flip direction, reorder priority, remove).
+ * grid (edit mode, non-narrow viewports; narrow viewports render the same
+ * chip strips inside the title row's toolbar popovers — see
+ * `database-mobile-toolbar.tsx`). One chip per root-level condition — field,
+ * operator, and value are separate click targets editing in place via
+ * popovers — plus a "+ Filter" type-ahead field picker, a Match all/any
+ * control once two or more root entries exist, and one sort chip per view
+ * sort in priority order (flip direction, reorder priority, remove).
  *
  * Deferred (per §5.2 of the databases proposal):
  * - All writes mutate the saved view directly through `updateDatabaseView`;
@@ -105,18 +107,28 @@ const CHIP_BUTTON_CLASS = cn(
   "hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
 );
 
-interface DatabaseFilterBarProps {
+interface ChipStripProps {
+  /**
+   * Wrapper class. The desktop bar passes `contents` so the chips join its
+   * single flex-wrap row; the mobile popovers pass their own flex container.
+   */
+  className?: string;
   databaseId: string;
   fields: readonly DatabaseField[];
   view: DatabaseView;
 }
 
-/** Filter + sort chip bar for one database table view. */
-export function DatabaseFilterBar({
+/**
+ * The filter half of the chip bar: one chip per root filter entry plus the
+ * "+ Filter" type-ahead picker. Reused by the desktop inline bar and the
+ * mobile funnel popover.
+ */
+export function DatabaseFilterChips({
+  className,
   databaseId,
   fields,
   view,
-}: DatabaseFilterBarProps): ReactNode {
+}: ChipStripProps): ReactNode {
   // Condition whose value popover should open as soon as its chip mounts —
   // set when "+ Filter" appends a fresh condition.
   const [autoOpenId, setAutoOpenId] = useState<string | null>(null);
@@ -158,18 +170,10 @@ export function DatabaseFilterBar({
     }
   };
 
-  const sorts = view.sorts ?? [];
-
-  const applySortsChange = (next: readonly DatabaseSort[] | undefined) => {
-    updateDatabaseView(databaseId, view.id, {
-      sorts: next && next.length > 0 ? [...next] : undefined,
-    });
-  };
-
   const rootEntries = view.filter?.conditions ?? [];
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div className={className}>
       {rootEntries.map((entry) =>
         isFilterInnerGroup(entry) ? (
           <FilterGroupChip
@@ -190,6 +194,43 @@ export function DatabaseFilterBar({
         )
       )}
       <AddFilterChip fields={fields} onPick={handleAddField} />
+    </div>
+  );
+}
+
+/**
+ * The sort half of the chip bar: one chip per view sort in priority order.
+ * Renders nothing when the view has no sorts. Reused by the desktop inline
+ * bar and the mobile sort popover.
+ */
+export function DatabaseSortChips({
+  className,
+  databaseId,
+  fields,
+  view,
+}: ChipStripProps): ReactNode {
+  const fieldsById = useMemo(() => {
+    const byId: Record<string, DatabaseField> = {};
+    for (const field of fields) {
+      byId[field.id] = field;
+    }
+    return byId;
+  }, [fields]);
+
+  const sorts = view.sorts ?? [];
+
+  const applySortsChange = (next: readonly DatabaseSort[] | undefined) => {
+    updateDatabaseView(databaseId, view.id, {
+      sorts: next && next.length > 0 ? [...next] : undefined,
+    });
+  };
+
+  if (sorts.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={className}>
       {sorts.map((sort, index) => (
         <SortChip
           canMoveLeft={index > 0}
@@ -208,16 +249,63 @@ export function DatabaseFilterBar({
           priority={sorts.length > 1 ? index + 1 : null}
         />
       ))}
-      {view.filter && rootEntries.length >= 2 ? (
-        <MatchOpControl
-          onChange={(op) => {
-            if (view.filter) {
-              applyFilterChange(setFilterOp(view.filter, op));
-            }
-          }}
-          op={view.filter.op}
-        />
-      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Match all/any control, shown only once the root filter group has two or
+ * more entries. Kept separate from `DatabaseFilterChips` so the desktop bar
+ * can place it after the sort chips (trailing, `ml-auto`) exactly as before.
+ */
+export function DatabaseFilterMatchOp({
+  databaseId,
+  view,
+}: Pick<ChipStripProps, "databaseId" | "view">): ReactNode {
+  const filter = view.filter;
+  if (!filter || filter.conditions.length < 2) {
+    return null;
+  }
+
+  return (
+    <MatchOpControl
+      onChange={(op) => {
+        updateDatabaseView(databaseId, view.id, {
+          filter: setFilterOp(filter, op),
+        });
+      }}
+      op={filter.op}
+    />
+  );
+}
+
+interface DatabaseFilterBarProps {
+  databaseId: string;
+  fields: readonly DatabaseField[];
+  view: DatabaseView;
+}
+
+/** Filter + sort chip bar for one database table view (desktop inline bar). */
+export function DatabaseFilterBar({
+  databaseId,
+  fields,
+  view,
+}: DatabaseFilterBarProps): ReactNode {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <DatabaseFilterChips
+        className="contents"
+        databaseId={databaseId}
+        fields={fields}
+        view={view}
+      />
+      <DatabaseSortChips
+        className="contents"
+        databaseId={databaseId}
+        fields={fields}
+        view={view}
+      />
+      <DatabaseFilterMatchOp databaseId={databaseId} view={view} />
     </div>
   );
 }

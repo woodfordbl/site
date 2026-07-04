@@ -15,5 +15,11 @@ export function DatabaseView({ props }: DatabaseViewProps) {
     );
   }
 
-  return <DatabaseTableView databaseId={props.databaseId} mode="view" />;
+  return (
+    <DatabaseTableView
+      databaseId={props.databaseId}
+      hideTitle={props.hideTitle}
+      mode="view"
+    />
+  );
 }

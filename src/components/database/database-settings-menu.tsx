@@ -30,6 +30,7 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
+  DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import {
@@ -403,6 +404,13 @@ function StatRow({ label, value }: { label: string; value: string }) {
 
 export interface DatabaseSettingsMenuProps {
   database: LocalDatabase;
+  /** Whether the hosting block currently hides the title row text. */
+  hideTitle?: boolean;
+  /**
+   * Toggles the block's `hideTitle` prop. When absent (no block context to
+   * write to) the "Hide title" switch row is not rendered.
+   */
+  onHideTitleChange?: (hideTitle: boolean) => void;
   /** Total (unfiltered) row count — stats footer and Source section. */
   rowCount: number;
 }
@@ -416,6 +424,8 @@ export interface DatabaseSettingsMenuProps {
  */
 export function DatabaseSettingsMenu({
   database,
+  hideTitle = false,
+  onHideTitleChange,
   rowCount,
 }: DatabaseSettingsMenuProps): ReactNode {
   const [open, setOpen] = useState(false);
@@ -481,6 +491,15 @@ export function DatabaseSettingsMenu({
         <DropdownMenuSeparator />
         <PropertiesSubmenu database={database} />
         <ViewsSubmenu database={database} />
+        {onHideTitleChange ? (
+          <DropdownMenuSwitchItem
+            checked={hideTitle}
+            onCheckedChange={onHideTitleChange}
+          >
+            <IconEyeOff />
+            Hide title
+          </DropdownMenuSwitchItem>
+        ) : null}
         <DropdownMenuSeparator />
         <SourceSubmenu database={database} rowCount={rowCount} />
         <DropdownMenuSeparator />

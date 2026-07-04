@@ -97,7 +97,12 @@ export function DatabaseEdit({
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
       tabIndex={0}
     >
-      <DatabaseTableView databaseId={props.databaseId} mode="edit" />
+      <DatabaseTableView
+        databaseId={props.databaseId}
+        hideTitle={props.hideTitle}
+        mode="edit"
+        onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+      />
     </div>
   );
 }
