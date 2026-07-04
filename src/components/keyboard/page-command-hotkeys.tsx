@@ -59,7 +59,9 @@ function PageCommandHotkeysLive({
         actions.deletePage();
       }
     },
-    "duplicate-page": actions.duplicate,
+    // Wrapped: handlers receive the keydown event, which must not leak into
+    // duplicate()'s optional withContent parameter.
+    "duplicate-page": () => actions.duplicate(),
     "new-subpage": () =>
       dispatch({
         parentId: pageId,

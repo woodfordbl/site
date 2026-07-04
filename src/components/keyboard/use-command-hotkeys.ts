@@ -12,7 +12,14 @@ import {
   useResolvedKeybindings,
 } from "@/lib/settings/use-keybindings.ts";
 
-export type CommandHandlers = Partial<Record<CommandId, () => void>>;
+/**
+ * Handlers receive the matched keydown so commands registered with
+ * `preventDefault: false` can claim the event conditionally (e.g. undo-edit
+ * only preventDefaults inside canvas fields).
+ */
+export type CommandHandlers = Partial<
+  Record<CommandId, (event: KeyboardEvent) => void>
+>;
 
 export interface UseCommandHotkeysOptions {
   /** Master switch — when false, all handlers are registered but suppressed. */
@@ -40,7 +47,7 @@ function buildCommandDefinitions(
     for (const hotkey of combos) {
       defs.push({
         hotkey,
-        callback: () => handler(),
+        callback: (event) => handler(event),
         options: {
           enabled: active,
           target,

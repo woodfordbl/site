@@ -33,6 +33,23 @@ function isBlockFieldFocused(event?: KeyboardEvent): boolean {
   );
 }
 
+/**
+ * True when focus sits in an editable field that is NOT part of a canvas block
+ * row (page title, dialogs, sidebar rename). Canvas undo/redo must skip these
+ * and leave the keystroke to the browser's own default behavior.
+ */
+export function isNonCanvasEditableFocused(): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) {
+    return false;
+  }
+  const editable =
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLTextAreaElement ||
+    active.isContentEditable;
+  return editable && active.closest("[data-canvas-row-shell]") == null;
+}
+
 export function handleCanvasSelectionArrowKeyDown(
   event: KeyboardEvent,
   handlers: CanvasSelectionArrowHandlers

@@ -23,6 +23,11 @@ import {
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import { normalizeEditablePageBlocks } from "@/lib/blocks/ensure-minimum-blocks.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
+import {
+  popPageRedoEntry,
+  popPageUndoEntry,
+  recordPageEditHistory,
+} from "@/lib/canvas/page-edit-history.ts";
 import { CanvasPageSession } from "@/lib/canvas/page-session.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
@@ -48,6 +53,17 @@ function blockIds(blocks: Block[]): string[] {
 
 function existingBlockIds(blocks: Array<{ id: string }>): Set<string> {
   return new Set(blocks.map((block) => block.id));
+}
+
+/**
+ * Cheap change check for undo capture: blocks are immutable (every mutation
+ * swaps in a new object), so reference + order equality means "unchanged".
+ */
+function pageBlocksDiffer(before: Block[], after: Block[]): boolean {
+  if (before.length !== after.length) {
+    return true;
+  }
+  return before.some((block, index) => block !== after[index]);
 }
 
 export function usePageCanvas(
@@ -107,6 +123,10 @@ export function usePageCanvas(
   const collectionTxRef = useRef<PageBlockTransaction | null>(null);
   const inBlockTransactionRef = useRef(false);
   const transactionStartBlocksRef = useRef<Block[] | null>(null);
+  // True while a transaction must not record undo history: applying an
+  // undo/redo entry, or reverting to the server baseline (whose history is
+  // cleared — "cannot be undone" must stay true for Ctrl+Z as well).
+  const suppressHistoryCaptureRef = useRef(false);
 
   const createBlankBlock = useCallback((): Extract<Block, { type: "text" }> => {
     const generated = generatedBlankBlockRef.current;
@@ -336,7 +356,7 @@ export function usePageCanvas(
   );
 
   const runBlockTransaction = useCallback(
-    (run: () => void) => {
+    (run: () => void, options?: { historyCoalesceKey?: string }) => {
       const session = getSession();
       transactionBlocksRef.current = null;
       transactionStartBlocksRef.current = session.getBlocks();
@@ -385,6 +405,20 @@ export function usePageCanvas(
           commitPageBlockTransaction(collectionTxRef.current);
         }
 
+        // Session-long Ctrl+Z: record the pre-transaction state whenever the
+        // transaction actually changed blocks (typing bursts coalesce by key).
+        const startBlocks = transactionStartBlocksRef.current;
+        if (
+          !suppressHistoryCaptureRef.current &&
+          startBlocks &&
+          pageBlocksDiffer(startBlocks, getSession().getBlocks())
+        ) {
+          recordPageEditHistory(pageId, startBlocks, {
+            coalesceKey: options?.historyCoalesceKey,
+          });
+        }
+        suppressHistoryCaptureRef.current = false;
+
         collectionTxRef.current = null;
         transactionBlocksRef.current = null;
         transactionStartBlocksRef.current = null;
@@ -400,6 +434,36 @@ export function usePageCanvas(
       pageId,
     ]
   );
+
+  // Replaces the whole page with a history entry's blocks without recording
+  // the replacement itself (the pop already moved state between the stacks).
+  const applyEditHistoryBlocks = useCallback(
+    (blocks: Block[]) => {
+      suppressHistoryCaptureRef.current = true;
+      runBlockTransaction(() => {
+        persistPageBlocks(blocks);
+      });
+    },
+    [persistPageBlocks, runBlockTransaction]
+  );
+
+  const undoEdit = useCallback((): boolean => {
+    const entry = popPageUndoEntry(pageId, getSession().getBlocks());
+    if (!entry) {
+      return false;
+    }
+    applyEditHistoryBlocks(entry.blocks);
+    return true;
+  }, [applyEditHistoryBlocks, getSession, pageId]);
+
+  const redoEdit = useCallback((): boolean => {
+    const entry = popPageRedoEntry(pageId, getSession().getBlocks());
+    if (!entry) {
+      return false;
+    }
+    applyEditHistoryBlocks(entry.blocks);
+    return true;
+  }, [applyEditHistoryBlocks, getSession, pageId]);
 
   const saveRowById = useCallback(
     (rowId: string, block: Block) => {
@@ -530,6 +594,11 @@ export function usePageCanvas(
   }, [rows]);
 
   const revertToServer = useCallback(() => {
+    // resetPageToRemote clears the page's undo history; keep the enclosing
+    // transaction from re-recording the pre-revert state.
+    if (inBlockTransactionRef.current) {
+      suppressHistoryCaptureRef.current = true;
+    }
     resetPageToRemote(pageId);
     sessionRef.current = CanvasPageSession.hydrate(serverPage.blocks);
   }, [pageId, serverPage.blocks]);
@@ -547,6 +616,9 @@ export function usePageCanvas(
   }, [localPage, pageId, serverBaselineHash, serverMetadataBaseline]);
 
   const resetToServer = useCallback(() => {
+    if (inBlockTransactionRef.current) {
+      suppressHistoryCaptureRef.current = true;
+    }
     resetPageToRemote(pageId);
     sessionRef.current = CanvasPageSession.hydrate(serverPage.blocks);
   }, [pageId, serverPage.blocks]);
@@ -572,6 +644,8 @@ export function usePageCanvas(
       resetToServer,
       persistPageBlocks,
       runBlockTransaction,
+      undoEdit,
+      redoEdit,
     }),
     [
       rows,
@@ -591,6 +665,8 @@ export function usePageCanvas(
       resetToServer,
       persistPageBlocks,
       runBlockTransaction,
+      undoEdit,
+      redoEdit,
     ]
   );
 }
