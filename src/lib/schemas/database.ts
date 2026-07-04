@@ -280,6 +280,12 @@ export const localDatabaseRowSchema = z.object({
   order: z.number().optional(),
   /** Lazily-created nested page; null until the row is first opened as a page. */
   pageId: z.string().nullable().optional(),
+  /**
+   * Connector row identity: the provider's stable id for this record. Present
+   * only on rows written by the sync engine (which diffs snapshots by this
+   * key); local user-authored rows omit it. Synced rows never get pages.
+   */
+  externalId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
