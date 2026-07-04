@@ -112,9 +112,10 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   `DatabaseFilterMatchOp`) reused by the mobile toolbar popovers; pure mutations in
   [`database-filter-helpers.ts`](../../src/components/database/database-filter-helpers.ts).
 - [`database-title.tsx`](../../src/components/database/database-title.tsx) — h3-equivalent
-  title (shares `headingTypographyClassNames[3]`), rename-in-place, filtered row count,
-  a sync-status chip for connector databases
-  ([`database-sync-status-chip.tsx`](../../src/components/database/database-sync-status-chip.tsx)),
+  title (shares `headingTypographyClassNames[3]`), rename-in-place, a minimal sync
+  chip for connector databases
+  ([`database-sync-status-chip.tsx`](../../src/components/database/database-sync-status-chip.tsx));
+  no row-count label (counts live in the settings menu's stats footer / Source section),
   and the ⋯ [`database-settings-menu.tsx`](../../src/components/database/database-settings-menu.tsx):
   rename, Properties (reorder via `reorderDatabaseFields`, hide/show, Title badge), Views
   (inline rename), Hide title switch (block prop `hideTitle`, per placement), Vertical
@@ -126,7 +127,7 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
 Synced databases pull rows from an external service via the client-side engine in
 [`database-sync-engine.ts`](../../src/db/sync/database-sync-engine.ts) (Web Locks leader
 election, per-database scheduling clamped to connector minimums, push-based
-`subscribeSyncStatus`) over the connector SDK in
+`subscribeSyncStatus`, and **watch mode** — see below) over the connector SDK in
 [`src/lib/connectors/`](../../src/lib/connectors/) (registry `listConnectors`/
 `getConnector`; GitHub repos, CoinGecko markets, Frankfurter FX). Snapshot diffing lives
 in [`database-sync-ops.ts`](../../src/db/queries/database-sync-ops.ts): keyed by
@@ -146,10 +147,23 @@ UI surfaces:
   `buildSyncedDatabaseSeed` → `createDatabaseWithDefaults`, links the block, and fires a
   best-effort `requestImmediateSync` (the engine also adopts the database via its
   collection subscription).
+- **Watch mode** — mounting any view of a synced database (edit mode and published
+  view mode alike) registers `watchDatabaseSync(databaseId)` from
+  [`database-table-view.tsx`](../../src/components/database/database-table-view.tsx)
+  (ref-counted; unsubscribe on unmount). While a database has ≥1 watcher AND the tab
+  is visible AND it is the polling leader, its interval becomes the connector floor
+  (`pollPolicy.minMs` via [`resolveWatchedInterval`](../../src/db/sync/sync-schedule.ts))
+  instead of `source.refreshMs`/`defaultMs`, and watch start kicks an immediate pass
+  when the last attempt is older than the watched interval. Unwatching restores the
+  configured cadence. Failure backoff always wins over acceleration; follower-tab
+  watches are engine no-ops v1 (rows arrive via storage events — a cross-tab nudge is
+  the sketched upgrade).
 - **Status chip** — [`use-sync-status.ts`](../../src/hooks/use-sync-status.ts)
-  (`useSyncExternalStore` over `subscribeSyncStatus`) drives the title-row chip: spinner
-  while syncing, "Synced x ago" (30s relative-time tick), destructive dot + message
-  tooltip on error. Click = `requestImmediateSync`; a refused click (follower tab —
+  (`useSyncExternalStore` over `subscribeSyncStatus`) drives the title-row chip, now a
+  minimal glyph with **no relative-time label** (tables update live under watch mode;
+  diagnostics moved to Settings → Source): spinner while syncing, destructive dot +
+  message tooltip on error, tiny muted refresh glyph when idle+healthy. Click =
+  `requestImmediateSync` ("Refresh now" tooltip); a refused click (follower tab —
   leader-only by design) switches the chip to a no-op look.
 - **Settings → Source** — connector identity + config summary, last sync/error, Refresh
   now, refresh-interval override submenu (Default/1m/5m/15m/1h/6h → `updateDatabaseSource`
@@ -239,19 +253,39 @@ deferred).
 
 **Copy-on-write:** the first "Edit page" (or body click) instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids
-(`clonePageBlocks`), creates a REAL top-level user page via `page.create`, links it
-with `setDatabaseRowPageId(rowId, pageId)`, and navigates. Subsequent opens of the
-row URL redirect to the page; a dangling `pageId` (page deleted) falls back to the
-virtual render. Host-page nesting and a navigating breadcrumb host crumb arrive with
-host-page resolution.
+(`clonePageBlocks`), creates a REAL user page via `page.create`, links it with
+`setDatabaseRowPageId(rowId, pageId)`, and navigates. The page's `parentId` is the
+database's **host page**, resolved by
+[`resolveDatabaseHostParentId`](../../src/lib/databases/resolve-database-host-page.ts):
+scan `localBlocksCollection` for `database` blocks referencing the database (pristine
+shipped pages are out of scope — every UI flow has the host's blocks in the local
+shard), pick the lexicographically smallest hosting `pageId` across linked views
+(deterministic), and walk up ancestors when nesting would exceed `MAX_PAGE_DEPTH`;
+top-level (`null`) only when no host exists (unreachable via the UI). The page also
+carries **`databaseRowSource: { databaseId, rowId }`** (threaded
+`page.create` → `page.persist` → `localPagesCollection`), which **hides it from the
+sidebar tree entirely** — the database's own sidebar entry is the navigation surface
+(see [pages — Page list](./pages.md#page-list)); the page stays resolvable for
+routing, search, and breadcrumbs. Subsequent opens of the row URL redirect to the
+page; a dangling `pageId` (page deleted) falls back to the virtual render.
+
+**Sidebar presence:** the sidebar shows a synthetic child row under each page hosting
+a `database` block — database icon (`IconDatabase` fallback) + name, navigating to
+the HOST page v1 (scroll-to-block later). Built by
+[`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx)
+(live block/database collection scan, client-only — rows appear after hydration);
+no context menu, drag, or chevron on the row itself. A navigating breadcrumb host
+crumb on the row page is still future work.
 
 ## Deferred (see proposal phases)
 
 Row drag-reorder UI, linked-view/`viewId` threading and multi-view switching ("Add view"
-and view styles), row-page template authoring UI and host-page nesting/live tokens
-(virtual pages + copy-on-write shipped — see [Row pages](#row-pages-virtual--copy-on-write)),
-relations/rollups,
+and view styles), row-page template authoring UI and live tokens
+(virtual pages + copy-on-write with host-page nesting shipped — see
+[Row pages](#row-pages-virtual--copy-on-write)), sidebar database-row
+scroll-to-block navigation, relations/rollups,
 formula-aware typed filter operators and formula→formula references,
 board/gallery/list/chart views, workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push
-connectors, the server proxy route, and a `/settings` Connections panel.
+connectors, the follower-tab watch nudge (cross-tab "poll faster" ping to the leader),
+the server proxy route, and a `/settings` Connections panel.

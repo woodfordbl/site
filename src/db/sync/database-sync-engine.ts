@@ -15,6 +15,7 @@ import {
   computeRetryDelay,
   isSyncOverdue,
   resolveSyncInterval,
+  resolveWatchedInterval,
 } from "@/db/sync/sync-schedule.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
@@ -50,6 +51,8 @@ interface ScheduleEntry {
   consecutiveFailures: number;
   intervalMs: number;
   lastAttemptAt?: number;
+  /** Connector floor (`pollPolicy.minMs`) — the watched cadence. */
+  minIntervalMs: number;
   /** Epoch ms the pending timer aims at; drives overdue checks on refocus. */
   nextRunAt?: number;
   /** Timer fired while the document was hidden; run on next `visible`. */
@@ -59,6 +62,8 @@ interface ScheduleEntry {
 }
 
 const entries = new Map<string, ScheduleEntry>();
+/** Ref-counted watchers per database (see {@link watchDatabaseSync}). */
+const watcherCounts = new Map<string, number>();
 const statusByDatabase = new Map<string, DatabaseSyncStatus>();
 const statusSubscribers = new Map<
   string,
@@ -130,6 +135,101 @@ export function requestImmediateSync(databaseId: string): boolean {
     runSync(databaseId).catch(() => undefined);
   }
   return true;
+}
+
+function isDocumentVisible(): boolean {
+  return (
+    typeof document === "undefined" || document.visibilityState === "visible"
+  );
+}
+
+/** Effective cadence for a database: the connector floor while watched in a
+ * visible tab, the resolved interval otherwise. */
+function effectiveIntervalMs(databaseId: string, entry: ScheduleEntry): number {
+  return resolveWatchedInterval({
+    intervalMs: entry.intervalMs,
+    minMs: entry.minIntervalMs,
+    watched: (watcherCounts.get(databaseId) ?? 0) > 0 && isDocumentVisible(),
+  });
+}
+
+/**
+ * Watch a synced database while its view is on screen: while it has ≥1
+ * watcher AND the tab is visible AND this tab is the polling leader, the
+ * database polls at the connector's floor (`pollPolicy.minMs`) instead of
+ * its configured cadence; on watch start an immediate pass runs when the
+ * last attempt is older than the watched interval. Returns an idempotent
+ * unsubscribe that restores the normal cadence at zero watchers.
+ *
+ * Follower-tab limitation (v1, deliberate): watching in a follower tab only
+ * registers locally — rows still arrive via the leader's storage events at
+ * the leader's cadence. A cross-tab "nudge the leader" ping (localStorage)
+ * is the sketched upgrade. If a watching follower later inherits leadership,
+ * its registered watchers take effect immediately.
+ *
+ * Failure backoff wins over watch acceleration: a database in backoff
+ * (`consecutiveFailures > 0`) is never sped up by watch start/stop, so a
+ * rate-limited connector cannot be hammered by mounting views.
+ */
+export function watchDatabaseSync(databaseId: string): () => void {
+  const next = (watcherCounts.get(databaseId) ?? 0) + 1;
+  watcherCounts.set(databaseId, next);
+  if (next === 1) {
+    applyWatchedCadence(databaseId);
+  }
+
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    const count = watcherCounts.get(databaseId) ?? 0;
+    if (count <= 1) {
+      watcherCounts.delete(databaseId);
+      restoreConfiguredCadence(databaseId);
+    } else {
+      watcherCounts.set(databaseId, count - 1);
+    }
+  };
+}
+
+/** First watcher arrived: sync now if stale at the watched cadence, else pull
+ * the pending timer forward to it (never pushing a sooner run later). */
+function applyWatchedCadence(databaseId: string): void {
+  const entry = entries.get(databaseId);
+  if (
+    !(isLeader && entry) ||
+    entry.running ||
+    entry.consecutiveFailures > 0 ||
+    !isDocumentVisible()
+  ) {
+    return;
+  }
+
+  const watchedMs = effectiveIntervalMs(databaseId, entry);
+  const now = Date.now();
+  if (isSyncOverdue(entry.lastAttemptAt, watchedMs, now)) {
+    runSync(databaseId).catch(() => undefined);
+    return;
+  }
+
+  const dueAt = (entry.lastAttemptAt ?? now) + watchedMs;
+  if (entry.nextRunAt === undefined || dueAt < entry.nextRunAt) {
+    scheduleRun(databaseId, Math.max(0, dueAt - now));
+  }
+}
+
+/** Last watcher left: re-aim the pending timer at the configured cadence. */
+function restoreConfiguredCadence(databaseId: string): void {
+  const entry = entries.get(databaseId);
+  if (!(isLeader && entry) || entry.running || entry.consecutiveFailures > 0) {
+    return;
+  }
+
+  const now = Date.now();
+  const dueAt = (entry.lastAttemptAt ?? now) + entry.intervalMs;
+  scheduleRun(databaseId, Math.max(0, dueAt - now));
 }
 
 /** Registry lookup hardened against unknown ids, whether the registry
@@ -278,7 +378,8 @@ async function runSync(databaseId: string): Promise<void> {
 
     entry.consecutiveFailures = 0;
     setStatus(databaseId, { lastSyncedAt, syncing: false });
-    scheduleNext(databaseId, entry.intervalMs);
+    // Watched databases reschedule at the connector floor (watch mode).
+    scheduleNext(databaseId, effectiveIntervalMs(databaseId, entry));
   } catch (error) {
     entry.consecutiveFailures += 1;
     const { kind, message, retryAfterMs } = readConnectorError(error);
@@ -297,7 +398,7 @@ async function runSync(databaseId: string): Promise<void> {
       databaseId,
       computeRetryDelay({
         consecutiveFailures: entry.consecutiveFailures,
-        intervalMs: entry.intervalMs,
+        intervalMs: effectiveIntervalMs(databaseId, entry),
         retryAfterMs,
       })
     );
@@ -341,12 +442,14 @@ function ensureSchedule(database: LocalDatabase): void {
     // Config/interval edits take effect on the next pass; an in-flight or
     // already-scheduled run is not interrupted.
     existing.intervalMs = intervalMs;
+    existing.minIntervalMs = connector.pollPolicy.minMs;
     return;
   }
 
   entries.set(database.id, {
     consecutiveFailures: 0,
     intervalMs,
+    minIntervalMs: connector.pollPolicy.minMs,
     pendingWhileHidden: false,
     running: false,
   });
@@ -375,7 +478,13 @@ function handleVisibilityChange(): void {
     const overdue =
       entry.pendingWhileHidden ||
       (entry.nextRunAt !== undefined && entry.nextRunAt <= now) ||
-      isSyncOverdue(entry.lastAttemptAt, entry.intervalMs, now);
+      // Effective interval: a watched database refreshed on refocus counts
+      // as overdue at the watched cadence, not just the configured one.
+      isSyncOverdue(
+        entry.lastAttemptAt,
+        effectiveIntervalMs(databaseId, entry),
+        now
+      );
     if (overdue && !entry.running) {
       entry.pendingWhileHidden = false;
       if (entry.timer !== undefined) {

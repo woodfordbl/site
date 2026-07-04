@@ -1,6 +1,7 @@
 import type { ContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
+import type { DatabaseRowSource } from "@/lib/schemas/local-page.ts";
 import type {
   PageFont,
   PageHeaderImage,
@@ -164,6 +165,8 @@ export type PageCommand =
       title?: string;
       slug?: string;
       parentId?: string | null;
+      /** Marks a row-page materialization; hides the page from the sidebar. */
+      databaseRowSource?: DatabaseRowSource;
       /** Inserts the new page after this sibling in the same `parentId` scope. */
       insertAfterPageId?: string;
       pageId?: string;

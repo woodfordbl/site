@@ -5,6 +5,12 @@ import { getShippedPages } from "@/lib/content/page-store.server.ts";
 export interface PageSummary {
   /** `hashPageBlocks(page.blocks)` of the shipped page; absent for local-only rows. Drives global stale detection. */
   contentHash?: string;
+  /**
+   * Present on pages materialized from a database row: excluded from the
+   * sidebar tree (the database owns the sidebar entry) but resolvable
+   * everywhere else (routing, search, breadcrumbs).
+   */
+  databaseRowSource?: { databaseId: string; rowId: string };
   icon?: string;
   id: string;
   parentId: string | null;

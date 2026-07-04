@@ -23,6 +23,29 @@ export function resolveSyncInterval(
   return Math.max(policy.minMs, refreshMs ?? policy.defaultMs);
 }
 
+export interface WatchedIntervalOptions {
+  /** Effective poll interval (see {@link resolveSyncInterval}). */
+  intervalMs: number;
+  /** Connector floor (`pollPolicy.minMs`) — the watched cadence. */
+  minMs: number;
+  /** True while the database is watched in a visible leader tab. */
+  watched: boolean;
+}
+
+/**
+ * Poll interval with watch mode applied: a watched database polls at the
+ * connector's floor (`minMs`); unwatched keeps the resolved interval. The
+ * `min` guard means an interval already at/below the floor never gets
+ * slower by being watched.
+ */
+export function resolveWatchedInterval(
+  options: WatchedIntervalOptions
+): number {
+  return options.watched
+    ? Math.min(options.intervalMs, options.minMs)
+    : options.intervalMs;
+}
+
 export interface RetryDelayOptions {
   /** Failures since the last success, counting the one just recorded (≥ 1). */
   consecutiveFailures: number;

@@ -20,24 +20,23 @@ interface DatabaseTitleProps {
   /** Extra right-aligned controls before the ⋯ menu (mobile filter/sort). */
   controls?: ReactNode;
   database: LocalDatabase;
-  /** Hide the name + row count; the row keeps only right-aligned controls. */
+  /** Hide the name; the row keeps only right-aligned controls. */
   hideTitle?: boolean;
   mode: "view" | "edit";
   /** Threads the block's `hideTitle` toggle into the settings menu. */
   onHideTitleChange?: (hideTitle: boolean) => void;
-  /** Count of the active view's filtered rows. */
-  rowCount: number;
   /** Total (unfiltered) row count — settings menu stats and Source section. */
   totalRowCount: number;
 }
 
 /**
- * Database name above the grid (h3-equivalent typography) plus a muted row
- * count. In edit mode the name is inline-editable (click to edit, commit via
- * `renameDatabase` on blur/Enter, Escape reverts) and the right-aligned
- * control cluster holds optional mobile toolbar buttons plus the ⋯ settings
- * menu — revealed on row hover/focus on fine pointers, always visible on
- * coarse pointers (`.hover-reveal` + `data-reveal-group`).
+ * Database name above the grid (h3-equivalent typography). In edit mode the
+ * name is inline-editable (click to edit, commit via `renameDatabase` on
+ * blur/Enter, Escape reverts) and the right-aligned control cluster holds
+ * optional mobile toolbar buttons plus the ⋯ settings menu — revealed on row
+ * hover/focus on fine pointers, always visible on coarse pointers
+ * (`.hover-reveal` + `data-reveal-group`). Row counts live in the settings
+ * menu (stats footer / Source section), not in the title row.
  */
 export function DatabaseTitle({
   controls,
@@ -45,7 +44,6 @@ export function DatabaseTitle({
   hideTitle = false,
   mode,
   onHideTitleChange,
-  rowCount,
   totalRowCount,
 }: DatabaseTitleProps): ReactNode {
   const { id: databaseId, name } = database;
@@ -75,8 +73,6 @@ export function DatabaseTitle({
       setDraft(null);
     }
   };
-
-  const countLabel = `${rowCount} ${rowCount === 1 ? "row" : "rows"}`;
 
   let nameDisplay: ReactNode;
   if (mode === "edit") {
@@ -128,9 +124,6 @@ export function DatabaseTitle({
               value={draft}
             />
           )}
-          <span className="shrink-0 text-muted-foreground text-xs">
-            {countLabel}
-          </span>
           {database.source?.kind === "connector" ? (
             <DatabaseSyncStatusChip databaseId={databaseId} />
           ) : null}

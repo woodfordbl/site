@@ -137,7 +137,7 @@ Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** i
 
 | Command | Role |
 |---------|------|
-| `page.create` | New user page; `page.persist` (purges same-scope slug tombstones, then insert; optional `insertAfterPageId` → `sidebarOrder` immediately after that sibling) + `navigate` (`userPage: true` → `/p/$` for allocated slug) unless `navigate: false` (slash **New Page**, sidebar **Duplicate page** with `initialBlocks`); `/p/$` load uses [`resolveActiveUserPageBySlug`](../../src/lib/pages/resolve-user-page-by-slug.ts) |
+| `page.create` | New user page; `page.persist` (purges same-scope slug tombstones, then insert; optional `insertAfterPageId` → `sidebarOrder` immediately after that sibling; optional `databaseRowSource` marker for database row-page materializations — see [page-commands](./page-commands.md)) + `navigate` (`userPage: true` → `/p/$` for allocated slug) unless `navigate: false` (slash **New Page**, sidebar **Duplicate page** with `initialBlocks`); `/p/$` load uses [`resolveActiveUserPageBySlug`](../../src/lib/pages/resolve-user-page-by-slug.ts) |
 | `page.update` | Title/slug/icon metadata via `page.persist` (no `navigate` effect; active-tab URL sync on blur via `syncUrl` in [`persistPageMetadata`](../../src/lib/pages/persist-page-metadata.ts), `userPage` when `routeBy === "id"`) |
 | `page.delete` | Hard delete user pages or local tombstone for shipped pages |
 | `page.reposition` | Sidebar DnD: `parentId`, `sidebarOrder`, metadata `slug` (+ descendant cascade via [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts)); optional `appendPageLinkOnParent` on nest drops; optional `seed` / `parentSeed` before first local write; invalid plan → no effects |

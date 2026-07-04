@@ -86,7 +86,7 @@ Native HTML5 DnD never starts on touch, so on coarse primary pointers (`(pointer
 
 Drop indicators:
 
-- Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight.
+- Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight. Synthetic hosted-database rows ([`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx)) carry no `data-page-list-row-id`, so they are invisible to drag sources and drop resolution — pages-only DnD.
 - Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), [`TabView`](../../src/components/blocks/types/tabs/tab-view.tsx) (tab content shares the column-child drop model), [`ToggleHeadingView`](../../src/components/blocks/types/toggle-heading/toggle-heading-view.tsx) (its `data-toggle-content` region shows the `atScopeStart` line), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-selection-primary` horizontal/vertical lines).
 - **Toggle heading drops:** a toggle heading's children render inline, so the generic `resolveVerticalRowDrop` already resolves drops between them. `resolveToggleHeadingDrop` in [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) adds the empty-toggle case (drop becomes the first child, `atScopeStart`). A **collapsed** toggle hides its children, so it is treated as an ordinary before/after target — no nesting, no auto-expand.
 

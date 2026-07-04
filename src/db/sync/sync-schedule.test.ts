@@ -5,6 +5,7 @@ import {
   isSyncOverdue,
   MAX_BACKOFF_MS,
   resolveSyncInterval,
+  resolveWatchedInterval,
 } from "@/db/sync/sync-schedule.ts";
 
 const policy = { defaultMs: 60_000, minMs: 10_000 };
@@ -26,6 +27,48 @@ describe("resolveSyncInterval", () => {
     expect(
       resolveSyncInterval(undefined, { defaultMs: 5000, minMs: 10_000 })
     ).toBe(10_000);
+  });
+});
+
+describe("resolveWatchedInterval", () => {
+  it("keeps the resolved interval when unwatched", () => {
+    expect(
+      resolveWatchedInterval({
+        intervalMs: 300_000,
+        minMs: 60_000,
+        watched: false,
+      })
+    ).toBe(300_000);
+  });
+
+  it("drops to the connector floor while watched", () => {
+    expect(
+      resolveWatchedInterval({
+        intervalMs: 300_000,
+        minMs: 60_000,
+        watched: true,
+      })
+    ).toBe(60_000);
+  });
+
+  it("never slows an interval already at the floor", () => {
+    expect(
+      resolveWatchedInterval({
+        intervalMs: 60_000,
+        minMs: 60_000,
+        watched: true,
+      })
+    ).toBe(60_000);
+  });
+
+  it("keeps an interval below the floor intact while watched", () => {
+    expect(
+      resolveWatchedInterval({
+        intervalMs: 30_000,
+        minMs: 60_000,
+        watched: true,
+      })
+    ).toBe(30_000);
   });
 });
 

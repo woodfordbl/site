@@ -21,6 +21,10 @@ import {
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
+import {
+  PageListDatabaseRows,
+  useHostedDatabases,
+} from "@/components/pages/page-list-database-rows.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
 import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
 import { Button, iconSlotClassName } from "@/components/ui/button.tsx";
@@ -342,6 +346,11 @@ function PageListChildren({
           row={childRow}
         />
       ))}
+      <PageListDatabaseRows
+        depth={depth + 1}
+        hostPageId={row.page.id}
+        pages={pages}
+      />
     </SidebarMenuSub>
   );
 }
@@ -421,7 +430,10 @@ export function PageListItem({
   row,
 }: PageListItemProps) {
   const page = row.page;
-  const hasChildren = row.children.length > 0;
+  // Hosted databases count as children so the host page gets an expand
+  // chevron even with no child pages (the database row is the only child).
+  const hostedDatabases = useHostedDatabases(page.id);
+  const hasChildren = row.children.length > 0 || hostedDatabases.length > 0;
   const isExpanded = expandedIds.has(page.id);
   const dispatch = usePageDispatch(pages);
   const reposition = usePageReposition(pages, dispatch);

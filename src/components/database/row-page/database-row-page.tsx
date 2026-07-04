@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/empty.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import {
+  localBlocksCollection,
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
@@ -51,6 +52,7 @@ import {
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
 import { cellToPlainText } from "@/lib/databases/cell-values.ts";
+import { resolveDatabaseHostParentId } from "@/lib/databases/resolve-database-host-page.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
 import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import {
@@ -252,9 +254,14 @@ function RowPageSidebarToggle(): ReactNode {
  * CURRENT values (a snapshot — live tokens inside real pages are a future
  * phase), remap block ids, create a real user page through the standard
  * `page.create` dispatch (which also navigates to it), and link the row via
- * `setDatabaseRowPageId`. The page is created top-level (`parentId: null`)
- * in v1 — nesting under the database's host page arrives with host-page
- * resolution (see {@link RowPageHeader}).
+ * `setDatabaseRowPageId`. The page nests under the database's **host page**
+ * ({@link resolveDatabaseHostParentId}: local block scan, deterministic
+ * first host across linked views, depth-clamped to `MAX_PAGE_DEPTH`) for
+ * breadcrumb/depth semantics; the `null` top-level fallback only fires when
+ * no host page exists — should be unreachable via the UI, where row pages
+ * open from a `database` block. Regardless of parent, the page carries
+ * `databaseRowSource`, which keeps it out of the sidebar tree entirely —
+ * the database's own sidebar entry is the navigation surface.
  */
 function useMaterializeRowPage(
   database: LocalDatabase,
@@ -281,14 +288,28 @@ function useMaterializeRowPage(
         { now: () => new Date() }
       )
     );
+    const parentId = resolveDatabaseHostParentId({
+      blocks: localBlocksCollection.toArray,
+      databaseId: database.id,
+      pages,
+    });
 
     setDatabaseRowPageId(row.id, pageId);
-    dispatch({ type: "page.create", pageId, title, initialBlocks: blocks });
+    dispatch({
+      type: "page.create",
+      pageId,
+      parentId,
+      databaseRowSource: { databaseId: database.id, rowId: row.id },
+      title,
+      initialBlocks: blocks,
+    });
   }, [
     alreadyLinked,
     database.fields,
+    database.id,
     database.rowTemplate,
     dispatch,
+    pages,
     row.id,
     row.values,
     title,

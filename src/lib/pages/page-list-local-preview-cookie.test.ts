@@ -66,6 +66,18 @@ describe("localPagePreviewEntriesFromPages", () => {
   it("excludes pristine shipped pages with no local overlay", () => {
     expect(localPagePreviewEntriesFromPages([])).toEqual([]);
   });
+
+  it("excludes materialized row pages (databaseRowSource) from the mirror", () => {
+    const entries = localPagePreviewEntriesFromPages([
+      {
+        ...localPage({ id: "row-page", serverBaselineHash: null }),
+        databaseRowSource: { databaseId: "db-1", rowId: "row-1" },
+      },
+      localPage({ id: "notes", slug: "/notes", serverBaselineHash: null }),
+    ]);
+
+    expect(entries.map((entry) => entry.id)).toEqual(["notes"]);
+  });
 });
 
 describe("parsePageListLocalPreviewCookie", () => {

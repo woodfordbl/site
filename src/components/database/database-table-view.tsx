@@ -5,6 +5,7 @@ import { DatabaseMobileToolbar } from "@/components/database/database-mobile-too
 import { DatabaseTableGrid } from "@/components/database/database-table-grid.tsx";
 import { DatabaseTitle } from "@/components/database/database-title.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import {
   computeFormulaOverlay,
@@ -123,6 +124,18 @@ export function DatabaseTableView({
   const fields = database?.fields ?? NO_FIELDS;
   const formulaNow = useFormulaClock(fields);
 
+  // Watch mode: while ANY view of a synced database is mounted (edit mode
+  // and published view mode alike), the sync engine polls at the connector's
+  // floor so the table changes in near-real-time on screen. Ref-counted with
+  // cleanup on unmount; a no-op for local databases.
+  const isSyncedDatabase = database?.source?.kind === "connector";
+  useEffect(() => {
+    if (!isSyncedDatabase) {
+      return;
+    }
+    return watchDatabaseSync(databaseId);
+  }, [databaseId, isSyncedDatabase]);
+
   // Formula overlay: computed values merged into row COPIES so formulas ride
   // the whole existing pipeline — filter, sort, group, Calculate row, and the
   // grid's cells all read merged values. No formula fields → rows pass
@@ -190,7 +203,6 @@ export function DatabaseTableView({
           hideTitle={hideTitle}
           mode={mode}
           onHideTitleChange={onHideTitleChange}
-          rowCount={rows.length}
           totalRowCount={allRows.length}
         />
       ) : null}
@@ -205,7 +217,7 @@ export function DatabaseTableView({
         columns={columns}
         databaseId={databaseId}
         groups={groups}
-        isSyncedDatabase={database.source?.kind === "connector"}
+        isSyncedDatabase={isSyncedDatabase}
         mode={mode}
         pinnedFields={pinnedFields}
         primaryFieldId={database.primaryFieldId}

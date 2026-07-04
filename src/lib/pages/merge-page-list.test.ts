@@ -68,6 +68,26 @@ describe("mergePageList", () => {
     expect(merged.find((page) => page.id === "about")?.routeBy).toBe("slug");
   });
 
+  it("carries databaseRowSource onto summaries so the sidebar can filter", () => {
+    const merged = mergePageList(serverPages, [
+      {
+        ...localPage({ id: "row-page", slug: "/task-1", title: "Task 1" }),
+        serverBaselineHash: null,
+        databaseRowSource: { databaseId: "db-1", rowId: "row-1" },
+      },
+    ]);
+
+    expect(merged.find((page) => page.id === "row-page")).toEqual(
+      expect.objectContaining({
+        databaseRowSource: { databaseId: "db-1", rowId: "row-1" },
+        routeBy: "id",
+      })
+    );
+    expect(
+      merged.find((page) => page.id === "home")?.databaseRowSource
+    ).toBeUndefined();
+  });
+
   it("keeps server icon when local doc has no icon override", () => {
     const merged = mergePageList(serverPages, [
       localPage({
