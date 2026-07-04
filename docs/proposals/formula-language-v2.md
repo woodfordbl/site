@@ -252,18 +252,25 @@ becomes the primary path — matching the databases §5.3 `{{`-autocomplete UX.
 
 Each phase is independently mergeable and ships user-visible value.
 
-| Phase | Scope | Key deliverables |
-|---|---|---|
-| **A — Quick wins** | Bigger catalog, no-zoom editor | Mobile font fix (§6.1); the pure functions (logic/text/math/date-parts, §4) as `EXPR_FUNCTIONS` + catalog entries, drift test green |
-| **B — Ergonomics** | Nicer single-row formulas | `let`/`lets` (§3.2), method-chaining sugar (§3.3), `switch`/`ifs` (§3.5) — parser-side, evaluator mostly untouched |
-| **C — Types + editor** | Chip-first, guided authoring | `inferType` pass (§3.1); chips bound to field ids (§6.2); inline type-aware autocomplete (§6.3); format pipes (§3.6) |
-| **D — Lists** | `count()` tier 1 | `list<T>` type + higher-order ops (§3.4); list aggregates over `multiSelect`/literals (§5 tier 1) |
-| **E — Relations** | `count()` tier 2 (the payoff) | relation-backed `list<row>` + aggregates, sharing the Phase 6 rollup engine (§5 tier 2) |
+| Phase | Status | Scope | Key deliverables |
+|---|---|---|---|
+| **A — Quick wins** | ✅ shipped | Bigger catalog, no-zoom editor | Mobile font fix (§6.1); the pure functions (logic/text/math/date-parts, §4) as `EXPR_FUNCTIONS` + catalog entries, drift test green |
+| **B — Ergonomics** | ✅ shipped | Nicer single-row formulas | `let`/`lets` (§3.2), method-chaining sugar (§3.3), `switch`/`ifs` (§3.5) — parser-side, evaluator mostly untouched |
+| **C — Types + editor** | ◑ partial | Typed, guided authoring | `inferType` pass (§3.1) ✅; format pipes (§3.6) ✅; result-type badge + Pipes section in the builder ✅. Still open: chips bound to field ids (§6.2) and inline caret autocomplete (§6.3) — the larger contenteditable-adjacent UI slice |
+| **D — Lists** | ✅ shipped | `count()` tier 1 | `list` type + higher-order ops (§3.4); list aggregates over `multiSelect`/literals (§5 tier 1) |
+| **E — Relations** | ⛔ blocked | `count()` tier 2 (the payoff) | relation-backed `list<row>` + aggregates, sharing the Phase 6 rollup engine (§5 tier 2) |
 
 Dependencies: A stands alone. B needs only v1. C needs B (chaining) for autocomplete to be
-worth it. D needs the list type from C's checker. E needs databases Phases 2 + 6. Suggested
-first PR: **Phase A** — a strictly-additive catalog + the one-line mobile fix is a standalone
-win that touches only `evaluate.ts`, `function-catalog.ts`, and one className.
+worth it. D needs the list type from C's checker.
+
+**Phase E is blocked on prerequisites outside the formula language.** It needs (1) a
+`relation` field type in `schemas/database.ts` (`databaseFieldTypeSchema` has none today) that
+resolves to a `list<row>`, and (2) member access on a row value (`current.Status`) — the
+parser's postfix handles `.name(args)` method calls but not bare `.field` on an arbitrary
+expression. Both arrive with databases Phase 2 (relations) + Phase 6 (rollup DAG). The list
+machinery from Phase D (`count`/`countIf`/`map`/`filter`) is already the execution layer those
+aggregates will reuse — so E becomes "resolve a relation to a `list<row>` and add row-member
+access," not new aggregate logic.
 
 ---
 
