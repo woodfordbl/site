@@ -850,6 +850,11 @@ export interface DatabaseSettingsMenuProps {
   /** Whether the hosting block currently hides the title row text. */
   hideTitle?: boolean;
   /**
+   * Runs AFTER `deleteDatabase` on confirm — lets the hosting block remove
+   * itself so a deleted database leaves no empty shell. Absent outside a block.
+   */
+  onDeleted?: () => void;
+  /**
    * Toggles the block's `hideTitle` prop. When absent (no block context to
    * write to) the "Hide title" switch row is not rendered.
    */
@@ -871,6 +876,7 @@ export function DatabaseSettingsMenu({
   activeView,
   database,
   hideTitle = false,
+  onDeleted,
   onHideTitleChange,
   onViewIdChange,
   rowCount,
@@ -913,6 +919,9 @@ export function DatabaseSettingsMenu({
     }
     deleteDatabase(database.id);
     setOpen(false);
+    // Remove the now-empty hosting block (if any) so the deletion leaves no
+    // "not found" shell behind.
+    onDeleted?.();
   };
 
   return (

@@ -1,3 +1,4 @@
+import { IconTrash } from "@tabler/icons-react";
 import {
   type ReactNode,
   useCallback,
@@ -15,6 +16,7 @@ import { DatabaseViewSwitcher } from "@/components/database/database-view-switch
 import { DatabaseBoardView } from "@/components/database/views/database-board-view.tsx";
 import { DatabaseChartView } from "@/components/database/views/database-chart-view.tsx";
 import { DatabaseListView } from "@/components/database/views/database-list-view.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
@@ -50,8 +52,20 @@ export interface DatabaseTableViewProps {
    */
   hideTitle?: boolean;
   mode: "view" | "edit";
+  /**
+   * Invoked by the settings menu AFTER deleting the database, so the hosting
+   * block can remove itself (the block is only a reference — a deleted
+   * database has nothing to render). Absent outside a block (row page).
+   */
+  onDeleteDatabase?: () => void;
   /** Persists the settings menu's "Hide title" toggle onto the block. */
   onHideTitleChange?: (hideTitle: boolean) => void;
+  /**
+   * Removes the hosting block when its database can no longer be resolved
+   * (deleted from another block / tab). Powers the "Remove" action in the
+   * dangling-reference state. Absent outside a block (row page).
+   */
+  onRemoveBlock?: () => void;
   /**
    * Persists a view switch onto the hosting block (`props.viewId`) — the
    * active view is per BLOCK, like Notion linked views. Absent in view mode
@@ -63,10 +77,17 @@ export interface DatabaseTableViewProps {
   viewId?: string;
 }
 
-function EmptyState({ message }: { message: string }) {
+function EmptyState({
+  action,
+  message,
+}: {
+  action?: ReactNode;
+  message: string;
+}) {
   return (
-    <div className="rounded-lg border border-border border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
-      {message}
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-border border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
+      <span>{message}</span>
+      {action}
     </div>
   );
 }
@@ -160,7 +181,9 @@ export function DatabaseTableView({
   databaseId,
   hideTitle = false,
   mode,
+  onDeleteDatabase,
   onHideTitleChange,
+  onRemoveBlock,
   onViewIdChange,
   viewId,
 }: DatabaseTableViewProps): ReactNode {
@@ -248,7 +271,23 @@ export function DatabaseTableView({
   );
 
   if (!database) {
-    return <EmptyState message="Database not found" />;
+    // A block whose database was deleted (here or in another tab) has nothing
+    // to render — offer to remove the now-empty reference instead of leaving a
+    // permanent "not found" shell. Read-only/row-page contexts (no
+    // `onRemoveBlock`) keep the neutral message.
+    return (
+      <EmptyState
+        action={
+          onRemoveBlock ? (
+            <Button onClick={onRemoveBlock} size="sm" variant="outline">
+              <IconTrash />
+              Remove
+            </Button>
+          ) : undefined
+        }
+        message="This database was deleted."
+      />
+    );
   }
   if (!view) {
     return <EmptyState message="No views" />;
@@ -326,6 +365,7 @@ export function DatabaseTableView({
           database={database}
           hideTitle={hideTitle}
           mode={mode}
+          onDeleteDatabase={onDeleteDatabase}
           onHideTitleChange={onHideTitleChange}
           onViewIdChange={handleViewIdChange}
           totalRowCount={allRows.length}

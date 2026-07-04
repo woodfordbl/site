@@ -30,9 +30,8 @@ function blockDatabaseId(props: unknown): string | undefined {
 }
 
 /**
- * Resolves the `parentId` a materialized row page should be created under:
- * the database's **host page** — the page whose blocks contain a `database`
- * block referencing this database.
+ * The database's **host page** id — the page whose blocks contain a
+ * `database` block referencing this database.
  *
  * - Scans locally-edited block rows only. Pristine shipped pages keep their
  *   blocks in shipped JSON reachable through an async per-slug server fn, so
@@ -41,14 +40,9 @@ function blockDatabaseId(props: unknown): string | undefined {
  * - **Multiple hosts** (linked views render one database from several pages):
  *   the candidate with the lexicographically smallest `pageId` wins, so the
  *   choice is deterministic across renders and tabs.
- * - **Depth clamp**: if nesting under the host would exceed
- *   {@link MAX_PAGE_DEPTH}, walks up the host's ancestors to the deepest page
- *   that can still take a child.
- * - Returns `null` (create top-level) only when no host page exists in
- *   `pages` — unreachable through the UI, where a row page is always opened
- *   from a `database` block on some page.
+ * - Returns `null` when no host page exists in `pages`.
  */
-export function resolveDatabaseHostParentId(
+export function findDatabaseHostPageId(
   options: ResolveDatabaseHostParentOptions
 ): string | null {
   const { blocks, databaseId, pages } = options;
@@ -68,7 +62,27 @@ export function resolveDatabaseHostParentId(
     .filter((pageId) => pageMap.has(pageId))
     .sort();
 
-  let candidate = hostPageIds[0] ? pageMap.get(hostPageIds[0]) : undefined;
+  return hostPageIds[0] ?? null;
+}
+
+/**
+ * Resolves the `parentId` a materialized row page should be created under:
+ * the database's {@link findDatabaseHostPageId host page}, with a depth clamp.
+ *
+ * - **Depth clamp**: if nesting under the host would exceed
+ *   {@link MAX_PAGE_DEPTH}, walks up the host's ancestors to the deepest page
+ *   that can still take a child.
+ * - Returns `null` (create top-level) only when no host page exists in
+ *   `pages` — unreachable through the UI, where a row page is always opened
+ *   from a `database` block on some page.
+ */
+export function resolveDatabaseHostParentId(
+  options: ResolveDatabaseHostParentOptions
+): string | null {
+  const pageMap = pagesById(options.pages as PageSummary[]);
+  const hostPageId = findDatabaseHostPageId(options);
+
+  let candidate = hostPageId ? pageMap.get(hostPageId) : undefined;
 
   // Walk up until the candidate is shallow enough to take a child page.
   while (candidate && getPageDepth(candidate, pageMap) >= MAX_PAGE_DEPTH) {

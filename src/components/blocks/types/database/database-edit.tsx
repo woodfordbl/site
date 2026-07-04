@@ -1,6 +1,7 @@
 import { IconDatabase } from "@tabler/icons-react";
 import { useCallback, useRef, useState } from "react";
 
+import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { DatabaseCreatePanel } from "@/components/database/database-create-panel.tsx";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
@@ -34,10 +35,24 @@ export function DatabaseEdit({
   onNavigateDown,
   onNavigateUp,
   onStructuralKey,
+  row,
 }: DatabaseEditProps) {
   const focusRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const hasDatabase = props.databaseId !== "";
+  const canvas = useCanvasEditorContext();
+
+  // Deleting the database (or opening a block whose database was deleted
+  // elsewhere) removes this hosting block rather than leaving a "not found"
+  // shell — the block only holds a `databaseId` reference, so once the
+  // database is gone the block has nothing to show. Goes through the canvas
+  // command bus so the removal is a normal, undoable structural edit.
+  const removeSelf = useCallback(() => {
+    const rowId = row?.rowId;
+    if (rowId) {
+      canvas.dispatch({ type: "row.delete", rowId });
+    }
+  }, [canvas, row?.rowId]);
 
   const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
@@ -121,7 +136,9 @@ export function DatabaseEdit({
         databaseId={props.databaseId}
         hideTitle={props.hideTitle}
         mode="edit"
+        onDeleteDatabase={removeSelf}
         onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+        onRemoveBlock={removeSelf}
         onViewIdChange={(viewId) => onChange({ ...props, viewId })}
         viewId={props.viewId}
       />

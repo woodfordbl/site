@@ -63,7 +63,7 @@ Schema-driven block items from `BLOCK_SPECS` in [`src/components/blocks/registry
 | `*View` / `*Edit` | Per-type UI under `src/components/blocks/types/`; `pageLink` rows show the target page icon via `PageIconDisplay` + `usePageSummary` |
 | Container `Shell` | Registered as `Container` on the spec (e.g. list → `ListView`) |
 
-Leaf edit components receive canvas keyboard wiring from `useBlockFieldActions` according to their `behavior.editStrategy`. Block and container specs live in [`registry.ts`](../../src/components/blocks/registry.ts); container helpers in [`block-container-config.ts`](../../src/lib/canvas/block-container-config.ts). See [block-types](./block-types.md).
+Leaf edit components receive canvas keyboard wiring from `useBlockFieldActions` according to their `behavior.editStrategy`. A composite leaf may also consume the canvas context directly for structural self-edits: the `database` block's `Edit` calls `useCanvasEditorContext().dispatch({ type: "row.delete", rowId })` to remove itself when its database is deleted (or was deleted elsewhere), so a dangling reference never lingers as a "not found" shell — see [databases](./databases.md) and [block-types](./block-types.md). Block and container specs live in [`registry.ts`](../../src/components/blocks/registry.ts); container helpers in [`block-container-config.ts`](../../src/lib/canvas/block-container-config.ts). See [block-types](./block-types.md).
 
 ## Device signals
 

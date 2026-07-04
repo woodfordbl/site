@@ -156,7 +156,12 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   rows, plus Size — the row shard's UTF-8 byte size — and "Loads in" — the shard's
   JSON parse time measured fresh on each menu open). The per-view sections (Properties
   visibility, Group, Vertical separators) all write to the ACTIVE view threaded from the
-  title row — never `views[0]`.
+  title row — never `views[0]`. **Delete database** (`deleteDatabase`) removes the
+  definition + rows, then invokes the block's `onDeleted` hook so the hosting `database`
+  block removes ITSELF through the canvas command bus (an undoable `row.delete`) rather
+  than leaving a "not found" shell — a deleted database has nothing to render. Blocks
+  referencing a database deleted elsewhere (another block/tab) show a "This database was
+  deleted." state with a **Remove** action (edit mode) instead of a bare message.
 
 ## Connector sync
 
@@ -343,8 +348,18 @@ a `database` block — database icon (`IconDatabase` fallback) + name, navigatin
 the HOST page v1 (scroll-to-block later). Built by
 [`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx)
 (live block/database collection scan, client-only — rows appear after hydration);
-no context menu, drag, or chevron on the row itself. A navigating breadcrumb host
-crumb on the row page is still future work.
+no context menu, drag, or chevron on the row itself.
+
+**Row-page breadcrumb:** the row page header renders the full
+**host-page ancestors / host page / database / row** chain, mirroring the normal page
+header. [`findDatabaseHostPageId`](../../src/lib/databases/resolve-database-host-page.ts)
+(the raw host page — the sibling of `resolveDatabaseHostParentId`'s depth-clamped
+create-parent) resolves the page whose canvas holds the `database` block; its
+ancestors and itself render as navigable [`PageBreadcrumbAncestorCrumb`](../../src/components/pages/page-breadcrumb-ancestor-crumb.tsx)
+crumbs (sibling/children hover menus included), then a database crumb linking back to
+the host page, then the current row title. Collapses to database / row on narrow
+viewports; falls back to a non-navigating database crumb only when no host page is
+resolvable.
 
 ## Deferred (see proposal phases)
 

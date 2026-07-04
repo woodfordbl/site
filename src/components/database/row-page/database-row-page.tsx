@@ -21,6 +21,7 @@ import {
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
+import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -54,8 +55,12 @@ import {
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
 import { cellToPlainText } from "@/lib/databases/cell-values.ts";
-import { resolveDatabaseHostParentId } from "@/lib/databases/resolve-database-host-page.ts";
+import {
+  findDatabaseHostPageId,
+  resolveDatabaseHostParentId,
+} from "@/lib/databases/resolve-database-host-page.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
+import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import {
   pageTitleEditorLayoutClassName,
@@ -188,12 +193,21 @@ function RowPageNotFoundBody(): ReactNode {
   );
 }
 
+const BREADCRUMB_SEPARATOR = (
+  <IconSlash aria-hidden className="size-4 shrink-0 text-muted-foreground/40" />
+);
+
 /**
- * Breadcrumb host crumb + current row title. The host crumb shows the
- * database icon + name and is deliberately NON-navigating in v1: a database
- * can be referenced by any number of `database` blocks, so "the page
- * containing this database" is ambiguous. Future host-page resolution
- * (tracking a canonical host page per database) turns it into a link.
+ * Row-page breadcrumb: **host-page ancestors / host page / database / row**,
+ * mirroring the normal page header's ancestor crumbs. The host page is the
+ * page whose canvas contains the `database` block ({@link findDatabaseHostPageId},
+ * lexicographically-smallest when a database is embedded on several pages), so
+ * a row page reads as nested under its real parent. Ancestor + host crumbs are
+ * navigable (reusing {@link PageBreadcrumbAncestorCrumb} with its sibling /
+ * children hover menus); the database crumb links back to the host page. On
+ * narrow viewports the chain collapses to database / row. When no host page is
+ * resolvable (database not on any locally-edited page) the database crumb is
+ * non-navigating and no ancestors show — the pre-nesting v1 behavior.
  */
 function RowPageHeader({
   database,
@@ -202,6 +216,49 @@ function RowPageHeader({
   database: LocalDatabase;
   rowTitle: string;
 }): ReactNode {
+  const isNarrowViewport = useIsNarrowViewport();
+  const { pages } = useMergedPageListItems();
+
+  const hostPageId = useMemo(
+    () =>
+      findDatabaseHostPageId({
+        blocks: localBlocksCollection.toArray,
+        databaseId: database.id,
+        pages,
+      }),
+    [database.id, pages]
+  );
+
+  // Host-page ancestors (root-first) plus the host page itself. Collapsed on
+  // narrow viewports, matching the normal page header.
+  const ancestorCrumbs = useMemo(() => {
+    if (!hostPageId || isNarrowViewport) {
+      return [];
+    }
+    const chain = [
+      ...getAncestorPageIds(hostPageId, pages).reverse(),
+      hostPageId,
+    ];
+    return chain
+      .map((id) => pages.find((page) => page.id === id))
+      .filter((page): page is NonNullable<typeof page> => Boolean(page));
+  }, [hostPageId, isNarrowViewport, pages]);
+
+  const databaseNavTarget = hostPageId
+    ? resolvePageNavTarget(hostPageId, pages)
+    : null;
+
+  const databaseLabel = (
+    <>
+      {database.icon ? (
+        <PageIconDisplay className="[&_svg]:size-4" icon={database.icon} />
+      ) : (
+        <IconDatabase className="size-4 shrink-0 stroke-[1.5px]" />
+      )}
+      <span className="max-w-48 truncate">{database.name}</span>
+    </>
+  );
+
   return (
     <header className="flex shrink-0 items-center gap-1 border-sidebar-border border-b bg-background px-3 py-1">
       <RowPageSidebarToggle />
@@ -209,18 +266,29 @@ function RowPageHeader({
         aria-label="Breadcrumb"
         className="flex h-8 min-w-0 flex-1 items-center gap-0.5 text-muted-foreground text-sm"
       >
-        <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1.5">
-          {database.icon ? (
-            <PageIconDisplay className="[&_svg]:size-4" icon={database.icon} />
-          ) : (
-            <IconDatabase className="size-4 shrink-0 stroke-[1.5px]" />
-          )}
-          <span className="max-w-48 truncate">{database.name}</span>
-        </span>
-        <IconSlash
-          aria-hidden
-          className="size-4 shrink-0 text-muted-foreground/40"
-        />
+        {ancestorCrumbs.map((ancestor) => (
+          <span className="contents" key={ancestor.id}>
+            <PageBreadcrumbAncestorCrumb
+              activePageId={hostPageId ?? ancestor.id}
+              ancestor={ancestor}
+              pages={pages}
+            />
+            {BREADCRUMB_SEPARATOR}
+          </span>
+        ))}
+        {databaseNavTarget ? (
+          <Link
+            className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/60"
+            {...databaseNavTarget}
+          >
+            {databaseLabel}
+          </Link>
+        ) : (
+          <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1.5">
+            {databaseLabel}
+          </span>
+        )}
+        {BREADCRUMB_SEPARATOR}
         <span className="min-w-0 truncate px-1.5 text-foreground">
           {rowTitle}
         </span>

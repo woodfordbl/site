@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import {
+  findDatabaseHostPageId,
   type HostScanBlock,
   resolveDatabaseHostParentId,
 } from "@/lib/databases/resolve-database-host-page.ts";
@@ -132,5 +133,41 @@ describe("resolveDatabaseHostParentId", () => {
         pages,
       })
     ).toBe("mid");
+  });
+});
+
+describe("findDatabaseHostPageId", () => {
+  it("returns the raw host page without the parent depth clamp", () => {
+    // A depth-3 host: resolveDatabaseHostParentId walks up to "mid", but the
+    // host page itself (for the breadcrumb) is still "leaf".
+    const pages = [
+      page("root", "/root"),
+      page("mid", "/root/mid", "root"),
+      page("leaf", "/root/mid/leaf", "mid"),
+    ];
+    const blocks = [databaseBlock("leaf", DB_ID)];
+    expect(findDatabaseHostPageId({ blocks, databaseId: DB_ID, pages })).toBe(
+      "leaf"
+    );
+    expect(
+      resolveDatabaseHostParentId({ blocks, databaseId: DB_ID, pages })
+    ).toBe("mid");
+  });
+
+  it("picks the smallest pageId across linked views and null when absent", () => {
+    const pages = [page("b-host", "/b"), page("a-host", "/a")];
+    expect(
+      findDatabaseHostPageId({
+        blocks: [
+          databaseBlock("b-host", DB_ID),
+          databaseBlock("a-host", DB_ID),
+        ],
+        databaseId: DB_ID,
+        pages,
+      })
+    ).toBe("a-host");
+    expect(
+      findDatabaseHostPageId({ blocks: [], databaseId: DB_ID, pages })
+    ).toBeNull();
   });
 });
