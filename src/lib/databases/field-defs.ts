@@ -97,6 +97,23 @@ export const FIELD_TYPE_DEFS: {
     defaultOperator: "contains",
     valueKind: "string",
   },
+  formula: {
+    label: "Formula",
+    // Formula cells filter on their evaluated display text (v1); typed
+    // operator sets per result kind come with formula-aware filtering.
+    operators: [
+      "eq",
+      "neq",
+      "contains",
+      "notContains",
+      "startsWith",
+      "endsWith",
+      "isEmpty",
+      "isNotEmpty",
+    ],
+    defaultOperator: "contains",
+    valueKind: "string",
+  },
 };
 
 /**
@@ -113,6 +130,8 @@ export function createDatabaseField(
       return { id, name, type, options: [] };
     case "multiSelect":
       return { id, name, type, options: [] };
+    case "formula":
+      return { id, name, type, expression: "" };
     default:
       return { id, name, type };
   }

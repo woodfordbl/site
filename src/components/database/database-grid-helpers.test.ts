@@ -291,10 +291,15 @@ describe("resolveColumnDropSpot", () => {
 });
 
 describe("isInlineEditableField", () => {
-  const field = (type: DatabaseField["type"]): DatabaseField =>
-    type === "select" || type === "multiSelect"
-      ? { id: "f", name: "F", type, options: [] }
-      : { id: "f", name: "F", type };
+  const field = (type: DatabaseField["type"]): DatabaseField => {
+    if (type === "select" || type === "multiSelect") {
+      return { id: "f", name: "F", type, options: [] };
+    }
+    if (type === "formula") {
+      return { id: "f", name: "F", type, expression: "" };
+    }
+    return { id: "f", name: "F", type };
+  };
 
   it("marks every editor-backed type editable", () => {
     expect(isInlineEditableField(field("text"))).toBe(true);

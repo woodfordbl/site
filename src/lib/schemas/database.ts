@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blockSchema } from "./block.ts";
 import { blockColorSchema } from "./rich-text.ts";
 
 /**
@@ -17,6 +18,7 @@ export const databaseFieldTypeSchema = z.enum([
   "multiSelect",
   "date",
   "url",
+  "formula",
 ]);
 
 export type DatabaseFieldType = z.infer<typeof databaseFieldTypeSchema>;
@@ -81,6 +83,15 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
   }),
   databaseFieldBaseSchema.extend({ type: z.literal("date") }),
   databaseFieldBaseSchema.extend({ type: z.literal("url") }),
+  databaseFieldBaseSchema.extend({
+    type: z.literal("formula"),
+    /**
+     * Expression source (`lib/expr` grammar) evaluated per row with
+     * `thisRow`/`thisPage` property scope. Computed at read time — formula
+     * values never live in `row.values`, and formula cells are read-only.
+     */
+    expression: z.string().default(""),
+  }),
 ]);
 
 export type DatabaseField = z.infer<typeof databaseFieldSchema>;
@@ -211,6 +222,8 @@ export const databaseTableViewConfigSchema = z.object({
   wrapFieldIds: z.array(z.string()).optional(),
   /** Vertical cell separators; absent means shown. */
   showVerticalLines: z.boolean().optional(),
+  /** Collapsed group keys (groupBy value keys) for this view. */
+  collapsedGroupKeys: z.array(z.string()).optional(),
 });
 
 export type DatabaseTableViewConfig = z.infer<
@@ -223,6 +236,11 @@ export const databaseViewSchema = z.object({
   type: databaseViewTypeSchema,
   filter: databaseFilterGroupSchema.optional(),
   sorts: z.array(databaseSortSchema).optional(),
+  /**
+   * Row grouping: rows bucket by this field's value (select option order
+   * respected; empty values group last). Sorts apply within each group.
+   */
+  groupBy: z.object({ fieldId: z.string() }).optional(),
   /** Hidden fields stay in the schema and other views. */
   visibleFieldIds: z.array(z.string()).optional(),
   config: databaseTableViewConfigSchema.default({}),
@@ -259,6 +277,14 @@ export const localDatabaseSchema = z.object({
   primaryFieldId: z.string(),
   /** Row origin; absent means a local (user-authored) database. */
   source: databaseSourceSchema.optional(),
+  /**
+   * Shared page template for rows-as-pages: blocks (with `{{ thisPage.X }}`
+   * expression tokens in text) rendered VIRTUALLY when a row page opens.
+   * Nothing is stored per row — a real page materializes copy-on-write only
+   * when the user first edits a specific row's page. Absent = default
+   * template (title + properties section).
+   */
+  rowTemplate: z.array(blockSchema).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   createdAt: z.string(),
