@@ -1,0 +1,127 @@
+/** @vitest-environment jsdom */
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DatabaseCellInlineEditor } from "@/components/database/database-cell-editor.tsx";
+import type { DatabaseField } from "@/lib/schemas/database.ts";
+
+const updateDatabaseCell = vi.hoisted(() => vi.fn());
+
+vi.mock("@/db/queries/database-collection-ops.ts", () => ({
+  updateDatabaseCell,
+  updateDatabaseField: vi.fn(),
+}));
+
+// Only the select editor's "create option" path reads the collection; stub it
+// so the module imports without booting the local DB.
+vi.mock("@/db/collections/local-collections.ts", () => ({
+  localDatabaseRowsCollection: { get: () => undefined },
+}));
+
+const TEXT_FIELD: DatabaseField = { id: "f-note", name: "Note", type: "text" };
+const ROW_ID = "row-1";
+
+function renderEditor(overrides?: {
+  onNavigate?: () => void;
+  onStopEdit?: () => void;
+  value?: string;
+}) {
+  const onNavigate = overrides?.onNavigate ?? vi.fn();
+  const onStopEdit = overrides?.onStopEdit ?? vi.fn();
+  render(
+    <DatabaseCellInlineEditor
+      field={TEXT_FIELD}
+      onNavigate={onNavigate}
+      onStopEdit={onStopEdit}
+      rowId={ROW_ID}
+      value={overrides?.value ?? "hello"}
+    />
+  );
+  return { onNavigate, onStopEdit };
+}
+
+beforeEach(() => {
+  updateDatabaseCell.mockClear();
+  // Base UI's positioner observes size; jsdom lacks ResizeObserver.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {
+        /* no-op */
+      }
+      unobserve() {
+        /* no-op */
+      }
+      disconnect() {
+        /* no-op */
+      }
+    }
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("TextCellPopoverEditor", () => {
+  it("mounts the overflow popover focused on the current value", async () => {
+    renderEditor({ value: "hello" });
+    const textarea = screen.getByLabelText("Note") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("hello");
+    // Base UI settles initial focus in a post-mount effect.
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
+  });
+
+  it("commits the edited value and moves down on Enter", () => {
+    const { onNavigate, onStopEdit } = renderEditor({ value: "hello" });
+    const textarea = screen.getByLabelText("Note");
+    fireEvent.change(textarea, { target: { value: "hello world" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(updateDatabaseCell).toHaveBeenCalledWith(
+      ROW_ID,
+      "f-note",
+      "hello world"
+    );
+    expect(onNavigate).toHaveBeenCalledWith("down", {
+      rowId: ROW_ID,
+      fieldId: "f-note",
+    });
+    expect(onStopEdit).not.toHaveBeenCalled();
+  });
+
+  it("reverts without writing on Escape", () => {
+    const { onStopEdit } = renderEditor({ value: "hello" });
+    const textarea = screen.getByLabelText("Note");
+    fireEvent.change(textarea, { target: { value: "changed" } });
+    fireEvent.keyDown(textarea, { key: "Escape" });
+
+    expect(updateDatabaseCell).not.toHaveBeenCalled();
+    expect(onStopEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the cell when emptied", () => {
+    renderEditor({ value: "hello" });
+    const textarea = screen.getByLabelText("Note");
+    fireEvent.change(textarea, { target: { value: "" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(updateDatabaseCell).toHaveBeenCalledWith(ROW_ID, "f-note", null);
+  });
+
+  it("does not write when the value is unchanged", () => {
+    const { onStopEdit } = renderEditor({ value: "hello" });
+    const textarea = screen.getByLabelText("Note");
+    fireEvent.blur(textarea);
+
+    expect(updateDatabaseCell).not.toHaveBeenCalled();
+    expect(onStopEdit).toHaveBeenCalledTimes(1);
+  });
+});

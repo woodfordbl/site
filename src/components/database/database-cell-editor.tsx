@@ -1,7 +1,9 @@
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -64,8 +66,9 @@ interface DatabaseCellInlineEditorProps {
 /**
  * The editing-state cell editor the grid mounts for every editable field
  * type: select/multi-select and date get popover editors anchored to the
- * cell (opening immediately, closing back to `onStopEdit`); everything else
- * gets the borderless input overlay.
+ * cell; text/url open the auto-growing popover editor (so long values escape
+ * the cell's `overflow-hidden` clip instead of being truncated); number keeps
+ * the borderless numeric input overlay.
  */
 export function DatabaseCellInlineEditor({
   field,
@@ -94,9 +97,19 @@ export function DatabaseCellInlineEditor({
           value={value}
         />
       );
-    default:
+    case "number":
       return (
         <TextCellInlineEditor
+          field={field}
+          onNavigate={onNavigate}
+          onStopEdit={onStopEdit}
+          rowId={rowId}
+          value={value}
+        />
+      );
+    default:
+      return (
+        <TextCellPopoverEditor
           field={field}
           onNavigate={onNavigate}
           onStopEdit={onStopEdit}
@@ -108,10 +121,11 @@ export function DatabaseCellInlineEditor({
 }
 
 /**
- * Borderless input overlay filling a text/url/number cell. Commits through
- * `updateDatabaseCell` on blur/Enter/Tab; Escape reverts without writing.
- * EditableSurface philosophy: native input, transparent chrome, only a subtle
- * inset ring marks the editing cell.
+ * Borderless input overlay filling a number cell (right-aligned, tabular).
+ * Commits through `updateDatabaseCell` on blur/Enter/Tab; Escape reverts
+ * without writing. EditableSurface philosophy: native input, transparent
+ * chrome, only a subtle inset ring marks the editing cell. Text/url cells
+ * route through `TextCellPopoverEditor` instead so overflow escapes the clip.
  */
 function TextCellInlineEditor({
   field,
@@ -188,6 +202,153 @@ function TextCellInlineEditor({
       type="text"
       value={draft}
     />
+  );
+}
+
+/** Cap the auto-growing text editor so a huge value scrolls instead of filling the viewport. */
+const MAX_TEXT_EDITOR_HEIGHT_PX = 320;
+
+/** Grow a textarea to fit its content, capped at `MAX_TEXT_EDITOR_HEIGHT_PX`. */
+function autosizeTextarea(el: HTMLTextAreaElement): void {
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight, MAX_TEXT_EDITOR_HEIGHT_PX)}px`;
+}
+
+/**
+ * Text/url cell editor that escapes the cell's `overflow-hidden` clip via a
+ * portaled popover perfectly aligned to the cell: a zero-height anchor pinned
+ * to the cell's top edge makes the popover open flush with the cell's top-left
+ * corner (`side="bottom"`, `align="start"`, no offset), matching the cell width
+ * (`--anchor-width`) with a comfortable minimum, then growing wider and taller
+ * as the value overflows. Uses the Base UI primitive directly rather than the
+ * shared `Popover` wrapper so it stays an aligned popover on touch devices too
+ * (the wrapper swaps to a bottom drawer, which would break the alignment).
+ * Commits on blur/Enter/Tab; Escape reverts. Enter commits and moves down —
+ * these are single-line database strings, so newlines are never inserted.
+ */
+function TextCellPopoverEditor({
+  field,
+  onNavigate,
+  onStopEdit,
+  rowId,
+  value,
+}: DatabaseCellInlineEditorProps): ReactNode {
+  const initial = initialDraft(field, value);
+  const [draft, setDraft] = useState(initial);
+  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Set once an exit path has run so the trailing blur/close is a no-op.
+  const finishedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+      autosizeTextarea(el);
+    }
+  }, []);
+
+  const commit = () => {
+    if (draft === initial) {
+      return;
+    }
+    updateDatabaseCell(rowId, field.id, draft === "" ? null : draft);
+  };
+
+  const finish = (move?: CellEditMove) => {
+    if (finishedRef.current) {
+      return;
+    }
+    finishedRef.current = true;
+    commit();
+    if (move) {
+      onNavigate(move, { rowId, fieldId: field.id });
+      return;
+    }
+    onStopEdit();
+  };
+
+  const cancel = () => {
+    if (finishedRef.current) {
+      return;
+    }
+    finishedRef.current = true;
+    onStopEdit();
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finish("down");
+      return;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      finish(event.shiftKey ? "previous" : "next");
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancel();
+    }
+  };
+
+  return (
+    <>
+      {/* Full-cell inset ring marks the editing cell beneath the popover. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-10 ring-1 ring-border ring-inset"
+      />
+      {/* Zero-height anchor at the cell's top edge → popover opens flush with it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0"
+        ref={setAnchor}
+      />
+      <PopoverPrimitive.Root
+        onOpenChange={(open: boolean) => {
+          // Escape is handled on the textarea (reverting); any other dismissal
+          // (outside press) commits. `finishedRef` dedupes the trailing blur.
+          if (!open) {
+            finish();
+          }
+        }}
+        // Open as soon as the anchor exists so positioning never flashes.
+        open={anchor !== null}
+      >
+        <PopoverPrimitive.Portal>
+          <PopoverPrimitive.Positioner
+            align="start"
+            anchor={anchor}
+            className="isolate z-50"
+            side="bottom"
+            sideOffset={0}
+          >
+            <PopoverPrimitive.Popup
+              className="overlay-popover-surface flex w-[var(--anchor-width)] min-w-48 max-w-[min(var(--available-width),32rem)] flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              finalFocus={false}
+              initialFocus={textareaRef}
+            >
+              <textarea
+                aria-label={field.name}
+                className="min-h-9 w-full resize-none bg-transparent px-2 py-2 text-foreground text-sm outline-none placeholder:text-muted-foreground"
+                onBlur={() => finish()}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  autosizeTextarea(event.currentTarget);
+                }}
+                onKeyDown={handleKeyDown}
+                ref={textareaRef}
+                rows={1}
+                value={draft}
+              />
+            </PopoverPrimitive.Popup>
+          </PopoverPrimitive.Positioner>
+        </PopoverPrimitive.Portal>
+      </PopoverPrimitive.Root>
+    </>
   );
 }
 
