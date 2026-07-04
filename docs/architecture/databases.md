@@ -210,8 +210,13 @@ so formulas participate in the view machinery like stored columns:
 - **Volatile clocks** — when any expression uses `now()`/`today()`
   (`hasVolatileFormula`), the table view re-evaluates every 60s, pausing while the tab
   is hidden and refreshing on visibility return.
-- **Editing** — the column menu's Edit property submenu becomes a monospace expression
-  editor with live parse feedback (positioned error / "✓ Valid") and an explicit Save;
+- **Editing** — the column menu's Edit property submenu becomes a formula **builder**
+  ([`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx),
+  width-fluid for the desktop submenu and the touch menu drawer alike): monospace
+  expression textarea with live parse feedback (positioned error / "✓ Valid") and a live
+  first-row preview, over a searchable Properties / Functions / Operators reference
+  (docs sourced from [`function-catalog.ts`](../../src/lib/expr/function-catalog.ts),
+  drift-tested against the evaluator) that inserts at the caret, plus an explicit Save;
   broken expressions show a warning badge on the column header (`formulaDisplayInfo`).
   Formula→formula references are per-cell errors v1 (cycle safety without a dependency
   graph); the dependency-DAG upgrade is sketched in `createRowScope`'s docs.

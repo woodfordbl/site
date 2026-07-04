@@ -213,6 +213,16 @@ function reduceNumbers(
   return result;
 }
 
+/**
+ * `average()` / `avg()`: arithmetic mean of the numeric arguments. Same
+ * coercion rules as `min`/`max` — every argument must already be a number
+ * (no string coercion), and the first non-number aborts with its error.
+ */
+function evalAverage(fnName: string, args: ExprPlainValue[]): ExprValue {
+  const total = reduceNumbers(fnName, args, (a, b) => a + b);
+  return typeof total === "number" ? total / args.length : total;
+}
+
 function evalRound(args: ExprPlainValue[]): ExprValue {
   const value = requireNumber(args[0], "round");
   if (typeof value !== "number") {
@@ -358,6 +368,31 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
       apply: (args) => reduceNumbers("max", args, Math.max),
     },
   ],
+  [
+    "sum",
+    {
+      minArgs: 1,
+      maxArgs: Number.POSITIVE_INFINITY,
+      apply: (args) => reduceNumbers("sum", args, (a, b) => a + b),
+    },
+  ],
+  [
+    "average",
+    {
+      minArgs: 1,
+      maxArgs: Number.POSITIVE_INFINITY,
+      apply: (args) => evalAverage("average", args),
+    },
+  ],
+  [
+    // Alias for `average` (kept as its own entry so errors name "avg()").
+    "avg",
+    {
+      minArgs: 1,
+      maxArgs: Number.POSITIVE_INFINITY,
+      apply: (args) => evalAverage("avg", args),
+    },
+  ],
   ["len", { minArgs: 1, maxArgs: 1, apply: (args) => toText(args[0]).length }],
   [
     "lower",
@@ -430,6 +465,16 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
   ["dateadd", { minArgs: 3, maxArgs: 3, apply: (args) => evalDateAdd(args) }],
   ["datediff", { minArgs: 3, maxArgs: 3, apply: (args) => evalDateDiff(args) }],
 ]);
+
+/**
+ * Every implemented function name (lowercased), lazily-evaluated `if`
+ * included. The drift anchor for the UI catalog in `function-catalog.ts` —
+ * its test asserts catalog coverage against this list so adding a function
+ * here without documenting it (or vice versa) fails loudly.
+ */
+export function implementedExprFunctionNames(): string[] {
+  return ["if", ...EXPR_FUNCTIONS.keys()];
+}
 
 /** Function names whose results depend on the clock (see {@link isVolatileExpression}). */
 const VOLATILE_FUNCTION_NAMES = new Set(["now", "today"]);

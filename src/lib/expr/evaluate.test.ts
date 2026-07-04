@@ -255,6 +255,45 @@ describe("functions", () => {
     );
   });
 
+  it("sum / average are variadic", () => {
+    expect(run("sum(1, 2, 3)")).toBe(6);
+    expect(run("sum(5)")).toBe(5);
+    expect(run("average(2, 4, 6)")).toBe(4);
+    expect(run("average(5)")).toBe(5);
+  });
+
+  it("avg is an alias for average", () => {
+    expect(run("avg(2, 4)")).toBe(3);
+    expect(errorMessage(run("avg(true)"))).toBe(
+      "avg() expects a number, got boolean"
+    );
+  });
+
+  it("sum / average reject non-numbers like min/max (no string coercion)", () => {
+    expect(errorMessage(run('sum(1, "2")'))).toBe(
+      "sum() expects a number, got text"
+    );
+    expect(errorMessage(run("average(1, null)"))).toBe(
+      "average() expects a number, got empty"
+    );
+  });
+
+  it("sum / average error on empty argument lists", () => {
+    expect(errorMessage(run("sum()"))).toBe(
+      "sum() expects at least 1 argument(s), got 0"
+    );
+    expect(errorMessage(run("average()"))).toBe(
+      "average() expects at least 1 argument(s), got 0"
+    );
+  });
+
+  it("sum / average propagate argument errors", () => {
+    expect(errorMessage(run("sum(1, 1 / 0)"))).toBe("Division by zero");
+    expect(errorMessage(run("average(1, thisPage.Nope)"))).toBe(
+      'Unknown property "Nope"'
+    );
+  });
+
   it("len coerces its argument to text", () => {
     expect(run('len("abc")')).toBe(3);
     expect(run("len(null)")).toBe(0);

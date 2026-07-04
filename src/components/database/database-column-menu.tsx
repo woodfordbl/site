@@ -26,6 +26,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -62,6 +63,7 @@ import {
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
+import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -85,7 +87,6 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
-import { Textarea } from "@/components/ui/textarea.tsx";
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
 import {
   addDatabaseField,
@@ -94,13 +95,14 @@ import {
   updateDatabaseField,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
+import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
-import { parseExpression } from "@/lib/expr/parse.ts";
+import { compareManualOrder } from "@/lib/databases/row-sort.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
@@ -384,86 +386,46 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
 interface FormulaExpressionEditorProps {
   databaseId: string;
   field: DatabaseField & { type: "formula" };
-  /** Closes the whole column menu after a successful Save. */
+  /** Closes the whole column menu after Save. */
   onSaved: () => void;
 }
 
 /**
- * Formula editor inside the Edit property submenu: a monospace textarea over
- * the field's expression with live parse feedback (positioned error message,
- * muted "✓ Valid" when the draft parses), a `thisPage.Property` reference
- * hint, and an explicit Save (evaluation is read-time — saving simply
- * rewrites the expression and the overlay recomputes).
+ * Formula builder inside the Edit property submenu: threads the live schema
+ * and the FIRST row's values (manual/table order) into the shared
+ * `FormulaEditorPanel` so it can render the Properties section and the live
+ * preview. Mounted only while the submenu is open, so the live queries here
+ * cost nothing for non-formula columns. Save writes the expression only when
+ * it changed (evaluation is read-time — the overlay recomputes on write).
  */
 function FormulaExpressionEditor({
   databaseId,
   field,
   onSaved,
 }: FormulaExpressionEditorProps) {
-  const [draft, setDraft] = useState(field.expression);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Mounted only while the submenu is open — steal focus from the popup
-  // after Base UI's initial focus pass (same rAF pattern as the rename input).
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-
-  const trimmed = draft.trim();
-  const parsed = trimmed === "" ? null : parseExpression(draft);
-
-  let feedback: ReactNode = null;
-  if (parsed !== null) {
-    feedback = parsed.ok ? (
-      <span className="px-0.5 text-muted-foreground text-xs">✓ Valid</span>
-    ) : (
-      <span className="px-0.5 text-destructive text-xs">
-        {parsed.error.message} (at character {parsed.error.position + 1})
-      </span>
-    );
-  }
+  const database = useDatabase(databaseId);
+  const rows = useDatabaseRows(databaseId);
+  const firstRow = useMemo(
+    () => (rows.length > 0 ? [...rows].sort(compareManualOrder)[0] : null),
+    [rows]
+  );
 
   return (
-    <div className="flex w-72 flex-col gap-1.5 p-1">
-      <span className="px-0.5 font-medium text-muted-foreground text-xs">
-        Formula
-      </span>
-      <Textarea
-        aria-label="Formula expression"
-        autoComplete="off"
-        className="min-h-20 font-mono text-xs md:text-xs"
-        onChange={(event) => {
-          setDraft(event.target.value);
-        }}
-        onKeyDown={stopMenuKeys}
-        placeholder="thisPage.Price * 1.1"
-        ref={textareaRef}
-        spellCheck={false}
-        value={draft}
-      />
-      {feedback}
-      <span className="px-0.5 text-muted-foreground text-xs">
-        Use thisPage.Property — e.g. thisPage.Price * 1.1
-      </span>
-      <Button
-        className="self-end"
-        onClick={() => {
-          if (draft !== field.expression) {
-            updateDatabaseField(databaseId, field.id, expressionPatch(draft));
-          }
-          onSaved();
-        }}
-        size="xs"
-        variant="outline"
-      >
-        Save
-      </Button>
-    </div>
+    <FormulaEditorPanel
+      expression={field.expression}
+      fields={database?.fields ?? []}
+      firstRowValues={firstRow?.values ?? null}
+      onSave={(expression) => {
+        if (expression !== field.expression) {
+          updateDatabaseField(
+            databaseId,
+            field.id,
+            expressionPatch(expression)
+          );
+        }
+        onSaved();
+      }}
+    />
   );
 }
 
@@ -491,7 +453,9 @@ function EditPropertySubmenu({
           <IconSettings />
           Edit property
         </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent>
+        {/* Wider than the standard submenu so the builder's reference list
+            breathes; ignored in drawer presentation (panel is width-fluid). */}
+        <DropdownMenuSubContent className="w-[360px] min-w-[360px]">
           <FormulaExpressionEditor
             databaseId={databaseId}
             field={field}
