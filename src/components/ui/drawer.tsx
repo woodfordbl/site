@@ -10,17 +10,19 @@ type DrawerVariant = "auto" | "menu";
 
 /**
  * When a nested drawer opens, vaul scales the parent drawer back
- * (`transform: scale(...)`) but leaves its opacity untouched — so the receding
- * drawer stays fully opaque behind the one pulling up. These drive a fade that
- * tracks that scale: fully opaque at rest, easing linearly to
- * `NESTED_BACKDROP_MIN_OPACITY` at vaul's fully-nested scale. The values mirror
- * vaul's own displacement and transition so the fade and the scale move as one.
+ * (`transform: scale(...)`) but leaves it undimmed — so the receding drawer
+ * stays fully lit behind the one pulling up. These drive a darkening that tracks
+ * that scale: full brightness at rest, dimming linearly to
+ * `NESTED_BACKDROP_MIN_BRIGHTNESS` at vaul's fully-nested scale. Dimming (a
+ * `brightness()` filter) rather than fading opacity keeps the drawer opaque —
+ * it recedes into shadow instead of turning see-through. The values mirror
+ * vaul's own displacement and transition so the dim and the scale move as one.
  */
-const NESTED_BACKDROP_MIN_OPACITY = 0.6;
+const NESTED_BACKDROP_MIN_BRIGHTNESS = 0.6;
 /** Mirrors vaul's internal `NESTED_DISPLACEMENT` (px a parent is pushed back). */
 const VAUL_NESTED_DISPLACEMENT = 16;
-/** Mirrors vaul's `TRANSITIONS` (0.5s + its ease), for the opacity side. */
-const VAUL_NESTED_TRANSITION = "opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1)";
+/** Mirrors vaul's `TRANSITIONS` (0.5s + its ease), for the brightness side. */
+const VAUL_NESTED_TRANSITION = "filter 0.5s cubic-bezier(0.32, 0.72, 0, 1)";
 const DRAWER_SCALE_PATTERN = /scale\(([\d.]+)\)/;
 
 /**
@@ -190,15 +192,17 @@ function useDrawerBoundaryTouchGuard(): (node: HTMLDivElement | null) => void {
 }
 
 /**
- * Fades a drawer proportionally to the scale vaul applies while a nested drawer
- * is stacked on top of it, so the background drawer recedes as the new one pulls
- * up: opaque at rest, easing to `NESTED_BACKDROP_MIN_OPACITY` at the fully-nested
- * scale. vaul mutates the element's inline `transform` for every phase — the
- * eased rise on open, the finger-proportional drag while the nested drawer is
- * swiped away, and the settle on release — so mirroring its live scale onto
- * opacity tracks all of them with no extra state. A top-level drawer with no
- * nested child never gets a `scale()` (its own drag is a pure translate), so it
- * stays fully opaque.
+ * Dims a drawer proportionally to the scale vaul applies while a nested drawer
+ * is stacked on top of it, so the background drawer recedes into shadow as the
+ * new one pulls up: full brightness at rest, easing to
+ * `NESTED_BACKDROP_MIN_BRIGHTNESS` at the fully-nested scale. A `brightness()`
+ * filter (rather than opacity) keeps the drawer opaque — it darkens instead of
+ * turning see-through. vaul mutates the element's inline `transform` for every
+ * phase — the eased rise on open, the finger-proportional drag while the nested
+ * drawer is swiped away, and the settle on release — so mirroring its live scale
+ * onto brightness tracks all of them with no extra state. A top-level drawer
+ * with no nested child never gets a `scale()` (its own drag is a pure
+ * translate), so it stays fully lit.
  */
 function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -210,32 +214,33 @@ function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
       return;
     }
 
-    // Baseline is fully opaque; only diverge once vaul actually scales the
+    // Baseline is full brightness; only diverge once vaul actually scales the
     // drawer back, so a resting (unscaled) drawer is never touched.
-    let lastOpacity = 1;
+    let lastBrightness = 1;
     const sync = () => {
       const scaleMatch = DRAWER_SCALE_PATTERN.exec(node.style.transform);
       const scale = scaleMatch ? Number.parseFloat(scaleMatch[1]) : 1;
       // vaul's fully-nested scale is `(innerWidth - 16) / innerWidth`, i.e. a
       // scale delta of `16 / innerWidth`. Normalize the live delta onto 0..1 so
-      // the fade finishes exactly at the final (fully-nested) scale.
+      // the dim finishes exactly at the final (fully-nested) scale.
       const maxDelta = VAUL_NESTED_DISPLACEMENT / (window.innerWidth || 1);
       const progress = Math.min(Math.max((1 - scale) / maxDelta, 0), 1);
-      const opacity = 1 - progress * (1 - NESTED_BACKDROP_MIN_OPACITY);
-      // Ignore the mutations our own opacity/transition writes trigger.
-      if (Math.abs(opacity - lastOpacity) < 0.001) {
+      const brightness = 1 - progress * (1 - NESTED_BACKDROP_MIN_BRIGHTNESS);
+      // Ignore the mutations our own filter/transition writes trigger.
+      if (Math.abs(brightness - lastBrightness) < 0.001) {
         return;
       }
-      lastOpacity = opacity;
+      lastBrightness = brightness;
       // While vaul animates the scale (open / close / release) it sets a
-      // `transform` transition; give opacity the matching curve so they move
+      // `transform` transition; give the filter the matching curve so they move
       // together. While the nested drawer is dragged vaul sets `none`, and the
-      // fade should likewise track the finger 1:1.
+      // dim should likewise track the finger 1:1.
       const scaleTransition = node.style.transition;
       if (scaleTransition && scaleTransition !== "none") {
         node.style.transition = `${scaleTransition}, ${VAUL_NESTED_TRANSITION}`;
       }
-      node.style.opacity = opacity >= 0.999 ? "" : opacity.toFixed(3);
+      node.style.filter =
+        brightness >= 0.999 ? "" : `brightness(${brightness.toFixed(3)})`;
     };
 
     const observer = new MutationObserver(sync);
@@ -244,7 +249,7 @@ function useNestedBackdropFade(): (node: HTMLDivElement | null) => void {
 
     cleanupRef.current = () => {
       observer.disconnect();
-      node.style.opacity = "";
+      node.style.filter = "";
     };
   }, []);
 }
