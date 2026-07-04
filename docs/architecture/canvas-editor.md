@@ -106,7 +106,7 @@ On coarse primary pointers, [`MobileEditorToolbar`](../../src/components/canvas/
 | Table | `table` (`table.create`, default 3×3) |
 | Media | `media` (muted placeholder trigger → popover with Link \| Upload; local uploads in IndexedDB) |
 | Embed | `embed` (muted placeholder trigger → link popover; YouTube/Vimeo iframe, direct image URL, or OG bookmark preview) |
-| Database | `database` (placeholder trigger creates and links a workspace database, rendered as a table grid with an optional hidden title per block — see [databases](./databases.md)) |
+| Database | `database` (placeholder trigger → creation popover: New table \| Sync from source connector gallery; links a workspace database rendered as a table grid with an optional hidden title per block — see [databases](./databases.md)) |
 | Divider | `divider` |
 
 ## Block selection

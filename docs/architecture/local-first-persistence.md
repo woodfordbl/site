@@ -13,8 +13,10 @@
 | Local database rows | `localDatabaseRowsCollection` (`site-local-db-rows:<databaseId>` shards; quarantine `site-local-db-rows-quarantine`) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
 | Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
+| Database sync bookkeeping | IndexedDB `site-db-sync-meta` / `meta` ([`sync-meta-store.ts`](../../src/db/sync/sync-meta-store.ts): etag, last sync/error, tombstone counts) | No |
+| Connector tokens | `site-connector-tokens` (localStorage, client-only — [`token-store.ts`](../../src/lib/connectors/token-store.ts)) | No |
 
-The database collections sync in `startLocalCollectionsSync` ([`local-collections.ts`](../../src/db/collections/local-collections.ts)) like the others; the rows collection carries a BTree index on `databaseId`. Row sharding, quarantine, ops, and reads: [databases — Storage](./databases.md#storage).
+The database collections sync in `startLocalCollectionsSync` ([`local-collections.ts`](../../src/db/collections/local-collections.ts)) like the others; the rows collection carries a BTree index on `databaseId`. Row sharding, quarantine, ops, and reads: [databases — Storage](./databases.md#storage). Connector-synced rows are written by the client-side sync engine ([`database-sync-engine.ts`](../../src/db/sync/database-sync-engine.ts)) into the same row shards, so they propagate cross-tab via the existing storage events: [databases — Connector sync](./databases.md#connector-sync).
 
 ## Local media assets (IndexedDB, not TanStack collections)
 
