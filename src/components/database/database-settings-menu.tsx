@@ -81,6 +81,9 @@ import type {
 
 const VIEW_TYPE_LABELS: Record<DatabaseViewType, string> = {
   table: "Table",
+  list: "List",
+  board: "Board",
+  chart: "Chart",
 };
 
 /** Timestamps in menu copy: "Jan 5, 2026 3:24 PM". */

@@ -226,7 +226,12 @@ export const databaseAggregateFnSchema = z.enum([
 
 export type DatabaseAggregateFn = z.infer<typeof databaseAggregateFnSchema>;
 
-export const databaseViewTypeSchema = z.enum(["table"]);
+export const databaseViewTypeSchema = z.enum([
+  "table",
+  "list",
+  "board",
+  "chart",
+]);
 
 export type DatabaseViewType = z.infer<typeof databaseViewTypeSchema>;
 
@@ -246,6 +251,38 @@ export const databaseTableViewConfigSchema = z.object({
   showVerticalLines: z.boolean().optional(),
   /** Collapsed group keys (groupBy value keys) for this view. */
   collapsedGroupKeys: z.array(z.string()).optional(),
+  /** Board (kanban) settings — used when `view.type` is `board`. */
+  board: z
+    .object({
+      /** Select field whose options become the columns. */
+      groupFieldId: z.string().optional(),
+      /** Fields shown on cards besides the primary title. */
+      cardFieldIds: z.array(z.string()).optional(),
+      /** Hide board columns for these option ids. */
+      hiddenColumnIds: z.array(z.string()).optional(),
+    })
+    .optional(),
+  /** Chart settings — used when `view.type` is `chart`. */
+  chart: z
+    .object({
+      mark: z.enum(["bar", "line", "area", "pie"]).optional(),
+      /** X axis / category field. */
+      xFieldId: z.string().optional(),
+      /** Y aggregate: count of rows, or an aggregate over a number field. */
+      yAggregate: z.enum(["count", "sum", "average", "min", "max"]).optional(),
+      yFieldId: z.string().optional(),
+      /** Optional series split (one line/bar-stack segment per value). */
+      seriesFieldId: z.string().optional(),
+      showLegend: z.boolean().optional(),
+      legendPosition: z.enum(["top", "bottom", "right"]).optional(),
+      /** Chart palette id from lib/charts (absent = site default). */
+      palette: z.string().optional(),
+      /** Per-series color overrides: series key → chart token index 1-5. */
+      colorOverrides: z.record(z.string(), z.number()).optional(),
+      showGrid: z.boolean().optional(),
+      stacked: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export type DatabaseTableViewConfig = z.infer<
