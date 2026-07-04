@@ -75,6 +75,29 @@ describe("planColumnsCreate", () => {
   });
 });
 
+describe("planColumnsCreate dashboard seed", () => {
+  it("seeds each column with an unlinked database block", () => {
+    const text = textBlock("row-1", null, "");
+    const rows = buildBlockTree([text]);
+    const effects = planColumnsCreate(rows, "row-1", 2, "", "database");
+
+    const inserts = effects.filter((e) => e.type === "insert");
+    const databaseInserts = inserts.filter(
+      (e) => e.type === "insert" && e.block.type === "database"
+    );
+    const textInserts = inserts.filter(
+      (e) => e.type === "insert" && e.block.type === "text"
+    );
+    expect(databaseInserts).toHaveLength(2);
+    expect(textInserts).toHaveLength(0);
+    for (const insert of databaseInserts) {
+      if (insert.type === "insert" && insert.block.type === "database") {
+        expect(insert.block.props.databaseId).toBe("");
+      }
+    }
+  });
+});
+
 describe("canvasReducer columns.create", () => {
   it("emits a single columns.apply effect with column children", () => {
     const text = textBlock("row-1", null);
@@ -120,6 +143,28 @@ describe("buildBlocksForColumnsCreate", () => {
     expect(tree[0]?.effectiveBlock.type).toBe("columns");
     expect(tree[0]?.children).toHaveLength(2);
     expect(focusRowId).toBe(tree[0]?.children[0]?.children[0]?.rowId);
+  });
+
+  it("builds the dashboard scaffold: a database placeholder per column, first focused", () => {
+    const text = textBlock("row-1", null, "");
+    const rows = buildBlockTree([text]);
+    const { blocks, focusRowId } = buildBlocksForColumnsCreate(
+      [text],
+      rows,
+      "row-1",
+      2,
+      "",
+      "database"
+    );
+    const tree = buildBlockTree(blocks);
+    const firstChild = tree[0]?.children[0]?.children[0];
+    const secondChild = tree[0]?.children[1]?.children[0];
+
+    expect(firstChild?.effectiveBlock.type).toBe("database");
+    expect(secondChild?.effectiveBlock.type).toBe("database");
+    // Focus lands on the first placeholder — its edit component auto-opens
+    // the create/link picker.
+    expect(focusRowId).toBe(firstChild?.rowId);
   });
 });
 

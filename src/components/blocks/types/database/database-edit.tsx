@@ -122,6 +122,8 @@ export function DatabaseEdit({
         hideTitle={props.hideTitle}
         mode="edit"
         onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+        onViewIdChange={(viewId) => onChange({ ...props, viewId })}
+        viewId={props.viewId}
       />
     </div>
   );

@@ -66,6 +66,12 @@ export type CanvasCommand =
       rowId: string;
       count: 2 | 3 | 4;
       text?: string;
+      /**
+       * Per-column seed block: absent = one empty `text` row per column;
+       * `"database"` = one unlinked `database` block per column (the
+       * Dashboard slash scaffold). Database seeds ignore `text`.
+       */
+      seedChildType?: "database";
     }
   | { type: "columns.addColumn"; columnsRowId: string }
   | { type: "columns.removeColumn"; columnRowId: string }

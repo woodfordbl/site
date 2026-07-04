@@ -13,7 +13,9 @@ import type {
   DatabaseFilterGroup,
   DatabaseFilterInnerGroup,
   DatabaseSource,
+  DatabaseTableViewConfig,
   DatabaseView,
+  DatabaseViewType,
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
@@ -358,6 +360,168 @@ export function updateDatabaseView(
   });
 
   commitDatabaseTransaction(tx);
+}
+
+/** Default view names per type; deduped with a numeric suffix on collision. */
+const VIEW_TYPE_DEFAULT_NAMES: Record<DatabaseViewType, string> = {
+  table: "Table",
+  list: "List",
+  board: "Board",
+  chart: "Chart",
+};
+
+/**
+ * `base` when free, else the first free `base 2`, `base 3`, … among the
+ * database's existing view names (exact match, case-sensitive — cheap and
+ * predictable; a rename can always create a duplicate on purpose).
+ */
+function dedupeViewName(
+  views: readonly { name: string }[],
+  base: string
+): string {
+  const taken = new Set(views.map((view) => view.name));
+  if (!taken.has(base)) {
+    return base;
+  }
+  let suffix = 2;
+  while (taken.has(`${base} ${suffix}`)) {
+    suffix += 1;
+  }
+  return `${base} ${suffix}`;
+}
+
+/**
+ * Per-type starting config for a fresh view: `table`/`list` start empty;
+ * `board` picks the first select field as the column source when one exists
+ * (multiSelect can't be a kanban lane — a card would sit in several columns);
+ * `chart` starts as a bar chart counting rows over the first select or date
+ * field. All picks are optional — the view editors handle the unset state.
+ */
+function defaultViewConfig(
+  type: DatabaseViewType,
+  fields: readonly DatabaseField[]
+): DatabaseTableViewConfig {
+  if (type === "board") {
+    const groupField = fields.find((field) => field.type === "select");
+    return groupField ? { board: { groupFieldId: groupField.id } } : {};
+  }
+  if (type === "chart") {
+    const xField = fields.find(
+      (field) => field.type === "select" || field.type === "date"
+    );
+    return {
+      chart: { mark: "bar", xFieldId: xField?.id, yAggregate: "count" },
+    };
+  }
+  return {};
+}
+
+/**
+ * Append a new saved view of the given type (default per-type config, name
+ * defaulting to the type label with a dedupe suffix) and bump `updatedAt`.
+ * Returns the created view so callers can activate it, or `undefined` when
+ * the database doesn't exist.
+ */
+export function addDatabaseView(
+  databaseId: string,
+  options: { type: DatabaseViewType; name?: string }
+): DatabaseView | undefined {
+  const database = localDatabasesCollection.get(databaseId);
+  if (!database) {
+    return;
+  }
+
+  const view: DatabaseView = {
+    id: crypto.randomUUID(),
+    name: dedupeViewName(
+      database.views,
+      options.name ?? VIEW_TYPE_DEFAULT_NAMES[options.type]
+    ),
+    type: options.type,
+    // toPlain: drop undefined-valued keys (e.g. an unset chart xFieldId) so
+    // the stored document never carries explicit `undefined`s.
+    config: toPlain(defaultViewConfig(options.type, database.fields)),
+  };
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.views = [...toPlain(draft.views), view];
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+  return view;
+}
+
+/**
+ * Remove a saved view. Refuses to remove the LAST view — a database must
+ * always keep at least one view (blocks resolve `viewId ?? views[0]`, so an
+ * empty `views` array would dead-end every linked block). Unknown ids no-op.
+ */
+export function removeDatabaseView(databaseId: string, viewId: string): void {
+  const database = localDatabasesCollection.get(databaseId);
+  if (
+    !database ||
+    database.views.length <= 1 ||
+    !database.views.some((view) => view.id === viewId)
+  ) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.views = toPlain(draft.views).filter((view) => view.id !== viewId);
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Duplicate a saved view (deep config copy) under a new id named
+ * "<Name> copy", inserted right after the original. Returns the copy so
+ * callers can activate it, or `undefined` when the view doesn't exist.
+ */
+export function duplicateDatabaseView(
+  databaseId: string,
+  viewId: string
+): DatabaseView | undefined {
+  const database = localDatabasesCollection.get(databaseId);
+  const source = database?.views.find((view) => view.id === viewId);
+  if (!source) {
+    return;
+  }
+
+  const copy: DatabaseView = {
+    // toPlain: the source may hold nested proxies from a prior draft merge;
+    // the copy must be plain data (and deep-copied — shared filter/config
+    // objects would make edits in one view leak into the other).
+    ...toPlain(source),
+    id: crypto.randomUUID(),
+    name: `${source.name} copy`,
+  };
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      const views = toPlain(draft.views);
+      const sourceIndex = views.findIndex((view) => view.id === viewId);
+      views.splice(sourceIndex + 1, 0, copy);
+      draft.views = views;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+  return copy;
 }
 
 /** Append a new field to the database schema. */

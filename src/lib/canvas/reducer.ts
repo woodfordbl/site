@@ -729,7 +729,8 @@ export function canvasReducer(
         state.rows,
         command.rowId,
         command.count,
-        command.text
+        command.text,
+        command.seedChildType
       );
       if (!focusRowId) {
         return { state, effects };

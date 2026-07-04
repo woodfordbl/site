@@ -731,6 +731,204 @@ describe("database collection ops", () => {
     expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
 
+  it("addDatabaseView appends an empty table view with a deduped default name", async () => {
+    // makeDatabase already has a view named "Table" — the new one suffixes.
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "table" });
+    await flushAsync();
+
+    expect(created?.name).toBe("Table 2");
+    expect(created?.type).toBe("table");
+    expect(created?.config).toEqual({});
+    const draft = databaseDrafts[0];
+    expect(draft?.views).toHaveLength(2);
+    expect(draft?.views[1]?.id).toBe(created?.id);
+    expect(draft?.updatedAt).not.toBe(database.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("addDatabaseView dedupes across numeric suffixes and honors a custom name", () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "List" },
+      { ...database.views[0], id: "view-2", name: "List 2" },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "list" });
+    expect(created?.name).toBe("List 3");
+
+    const named = ops.addDatabaseView(databaseId, {
+      type: "list",
+      name: "Reading list",
+    });
+    expect(named?.name).toBe("Reading list");
+  });
+
+  it("addDatabaseView seeds a board with the first select field as groupFieldId", () => {
+    const database = makeDatabase();
+    database.fields = [
+      { id: "f-title", name: "Name", type: "text" },
+      { id: "f-tags", name: "Tags", type: "multiSelect", options: [] },
+      { id: "f-status", name: "Status", type: "select", options: [] },
+      { id: "f-stage", name: "Stage", type: "select", options: [] },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "board" });
+
+    expect(created?.name).toBe("Board");
+    // multiSelect is skipped — the FIRST select field becomes the lane source.
+    expect(created?.config).toEqual({ board: { groupFieldId: "f-status" } });
+  });
+
+  it("addDatabaseView seeds an empty board config when no select field exists", () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "board" });
+
+    expect(created?.config).toEqual({});
+  });
+
+  it("addDatabaseView seeds a chart with bar/count over the first select-or-date field", () => {
+    const database = makeDatabase();
+    database.fields = [
+      { id: "f-title", name: "Name", type: "text" },
+      { id: "f-due", name: "Due", type: "date" },
+      { id: "f-status", name: "Status", type: "select", options: [] },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "chart" });
+
+    expect(created?.name).toBe("Chart");
+    expect(created?.config).toEqual({
+      chart: { mark: "bar", xFieldId: "f-due", yAggregate: "count" },
+    });
+  });
+
+  it("addDatabaseView chart config omits xFieldId when no select/date field exists", () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "chart" });
+
+    // The unset pick must be ABSENT, not an explicit undefined key.
+    expect(created?.config).toEqual({
+      chart: { mark: "bar", yAggregate: "count" },
+    });
+    expect(created && "xFieldId" in (created.config.chart ?? {})).toBe(false);
+  });
+
+  it("addDatabaseView no-ops for an unknown database", async () => {
+    mocks.databaseGet.mockReturnValue(undefined);
+
+    const created = ops.addDatabaseView(databaseId, { type: "table" });
+    await flushAsync();
+
+    expect(created).toBeUndefined();
+    expect(mocks.databaseUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("removeDatabaseView removes the matching view", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "Table" },
+      { ...database.views[0], id: "view-2", name: "Board" },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.removeDatabaseView(databaseId, "view-2");
+    await flushAsync();
+
+    const draft = databaseDrafts[0];
+    expect(draft?.views.map((view) => view.id)).toEqual(["view-1"]);
+    expect(draft?.updatedAt).not.toBe(database.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("removeDatabaseView refuses to remove the last view", async () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+
+    ops.removeDatabaseView(databaseId, "view-1");
+    await flushAsync();
+
+    expect(mocks.databaseUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("removeDatabaseView no-ops for an unknown view id", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1" },
+      { ...database.views[0], id: "view-2" },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+
+    ops.removeDatabaseView(databaseId, "view-ghost");
+    await flushAsync();
+
+    expect(mocks.databaseUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("duplicateDatabaseView deep-copies the view after the original as '<name> copy'", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "Table" },
+      {
+        id: "view-2",
+        name: "Board",
+        type: "board",
+        config: { board: { groupFieldId: "f-status" } },
+      },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    const copy = ops.duplicateDatabaseView(databaseId, "view-1");
+    await flushAsync();
+
+    expect(copy?.name).toBe("Table copy");
+    expect(copy?.id).not.toBe("view-1");
+    expect(copy?.filter).toEqual(database.views[0]?.filter);
+    expect(copy?.config).toEqual(database.views[0]?.config);
+    // Deep copy — the source's nested config must not be shared by reference.
+    expect(copy?.config).not.toBe(database.views[0]?.config);
+
+    // Inserted right after the original, before the board view.
+    const draft = databaseDrafts[0];
+    expect(draft?.views.map((view) => view.id)).toEqual([
+      "view-1",
+      copy?.id,
+      "view-2",
+    ]);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplicateDatabaseView no-ops for an unknown view id", async () => {
+    mocks.databaseGet.mockReturnValue(makeDatabase());
+
+    const copy = ops.duplicateDatabaseView(databaseId, "view-ghost");
+    await flushAsync();
+
+    expect(copy).toBeUndefined();
+    expect(mocks.databaseUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("duplicateDatabaseField remaps multiSelect arrays through fresh option ids", async () => {
     const database = makeDatabase();
     database.fields = [

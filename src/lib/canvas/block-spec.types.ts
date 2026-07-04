@@ -130,6 +130,13 @@ export type BlockSpec<T extends BlockType> = T extends LeafBlockType
 export interface SlashMenuItem {
   aliases: string[];
   columnCount?: 2 | 3 | 4;
+  /**
+   * What `columns.create` seeds each new column with. Default (`undefined`)
+   * is one empty `text` row; `"database"` seeds one unlinked `database`
+   * block per column — the Dashboard scaffold (side-by-side database views;
+   * see docs/architecture/databases.md § Dashboards).
+   */
+  columnSeed?: "database";
   headingLevel?: 1 | 2 | 3 | 4;
   icon: ComponentType<{ className?: string }>;
   id: BlockType;

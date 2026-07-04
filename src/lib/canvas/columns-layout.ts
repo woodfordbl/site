@@ -96,12 +96,20 @@ export function buildColumnsBlock(
   };
 }
 
+/**
+ * What each new column is seeded with: one empty `text` row (default) or one
+ * unlinked `database` block (the Dashboard slash scaffold — its placeholder
+ * trigger opens the create/link picker on focus).
+ */
+export type ColumnsSeedChildType = "text" | "database";
+
 /** Effects to replace a canvas row with a multi-column layout. */
 export function planColumnsCreate(
   rows: CanvasRow[],
   rowId: string,
   count: 2 | 3 | 4,
-  seedTextOverride?: string
+  seedTextOverride?: string,
+  seedChildType: ColumnsSeedChildType = "text"
 ): CanvasEffect[] {
   const ctx = findRowContext(rows, rowId);
   if (!ctx) {
@@ -143,20 +151,25 @@ export function planColumnsCreate(
     });
     lastColumnId = columnBlock.id;
 
-    const textBlock = createEmptyBlock("text");
-    textBlock.parentId = columnBlock.id;
+    // Database seeds drop the source text (the scaffold is invoked from an
+    // empty slash row; a database placeholder has no text slot to keep it).
+    const seedBlock: Block =
+      seedChildType === "database"
+        ? createEmptyBlock("database")
+        : createEmptyBlock("text");
+    seedBlock.parentId = columnBlock.id;
     if (index === 0) {
       const seedText = seedTextOverride ?? getTextFromBlock(sourceBlock);
-      if (seedText.length > 0) {
-        textBlock.props = { text: seedText };
+      if (seedBlock.type === "text" && seedText.length > 0) {
+        seedBlock.props = { text: seedText };
       }
-      firstTextRowId = textBlock.id;
+      firstTextRowId = seedBlock.id;
     }
 
     effects.push({
       type: "insert",
       position: { parentId: columnBlock.id, atScopeStart: true },
-      block: textBlock,
+      block: seedBlock,
       focus: index === 0,
     });
   }
@@ -179,9 +192,16 @@ export function buildBlocksForColumnsCreate(
   rows: CanvasRow[],
   rowId: string,
   count: 2 | 3 | 4,
-  seedTextOverride?: string
+  seedTextOverride?: string,
+  seedChildType?: ColumnsSeedChildType
 ): { blocks: Block[]; focusRowId: string | null } {
-  const effects = planColumnsCreate(rows, rowId, count, seedTextOverride);
+  const effects = planColumnsCreate(
+    rows,
+    rowId,
+    count,
+    seedTextOverride,
+    seedChildType
+  );
   let workingBlocks = blocks;
   let workingRows = rows;
   let focusRowId: string | null = null;

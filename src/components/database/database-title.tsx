@@ -5,7 +5,7 @@ import { DatabaseSyncStatusChip } from "@/components/database/database-sync-stat
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
-import type { LocalDatabase } from "@/lib/schemas/database.ts";
+import type { DatabaseView, LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
 // Same typography as the canvas `heading` block at level 3 so a database
@@ -17,6 +17,8 @@ const TITLE_TYPOGRAPHY_CLASS = cn(
 );
 
 interface DatabaseTitleProps {
+  /** The resolved active view — settings menu scope (Properties/Group/…). */
+  activeView: DatabaseView;
   /** Extra right-aligned controls before the ⋯ menu (mobile filter/sort). */
   controls?: ReactNode;
   database: LocalDatabase;
@@ -25,8 +27,12 @@ interface DatabaseTitleProps {
   mode: "view" | "edit";
   /** Threads the block's `hideTitle` toggle into the settings menu. */
   onHideTitleChange?: (hideTitle: boolean) => void;
+  /** Activates a view (settings menu Add/Duplicate switch to the new view). */
+  onViewIdChange?: (viewId: string) => void;
   /** Total (unfiltered) row count — settings menu stats and Source section. */
   totalRowCount: number;
+  /** The saved-view tabs (`DatabaseViewSwitcher`), mounted after the name. */
+  viewSwitcher?: ReactNode;
 }
 
 /**
@@ -36,15 +42,19 @@ interface DatabaseTitleProps {
  * optional mobile toolbar buttons plus the ⋯ settings menu — revealed on row
  * hover/focus on fine pointers, always visible on coarse pointers
  * (`.hover-reveal` + `data-reveal-group`). Row counts live in the settings
- * menu (stats footer / Source section), not in the title row.
+ * menu (stats footer / Source section), not in the title row. The saved-view
+ * switcher tabs mount between the name and the control cluster.
  */
 export function DatabaseTitle({
+  activeView,
   controls,
   database,
   hideTitle = false,
   mode,
   onHideTitleChange,
+  onViewIdChange,
   totalRowCount,
+  viewSwitcher,
 }: DatabaseTitleProps): ReactNode {
   const { id: databaseId, name } = database;
   // `null` = display mode; a string is the in-flight draft.
@@ -129,13 +139,18 @@ export function DatabaseTitle({
           ) : null}
         </>
       )}
+      {viewSwitcher ? (
+        <div className="min-w-0 shrink self-center">{viewSwitcher}</div>
+      ) : null}
       {mode === "edit" ? (
         <div className="ml-auto flex shrink-0 items-center gap-0.5 self-center">
           {controls}
           <DatabaseSettingsMenu
+            activeView={activeView}
             database={database}
             hideTitle={hideTitle}
             onHideTitleChange={onHideTitleChange}
+            onViewIdChange={onViewIdChange}
             rowCount={totalRowCount}
           />
         </div>

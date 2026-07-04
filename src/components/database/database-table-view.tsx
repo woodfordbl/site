@@ -1,9 +1,20 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { DatabaseFilterBar } from "@/components/database/database-filter-bar.tsx";
+import { filterHasRelativeOperator } from "@/components/database/database-filter-helpers.ts";
 import { DatabaseMobileToolbar } from "@/components/database/database-mobile-toolbar.tsx";
 import { DatabaseTableGrid } from "@/components/database/database-table-grid.tsx";
 import { DatabaseTitle } from "@/components/database/database-title.tsx";
+import { DatabaseViewSwitcher } from "@/components/database/database-view-switcher.tsx";
+import { DatabaseBoardView } from "@/components/database/views/database-board-view.tsx";
+import { DatabaseChartView } from "@/components/database/views/database-chart-view.tsx";
+import { DatabaseListView } from "@/components/database/views/database-list-view.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
@@ -25,10 +36,11 @@ import {
 } from "@/lib/databases/view-config.ts";
 import type {
   DatabaseField,
+  DatabaseFilterGroup,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
-/** Props contract for the database grid rendered by `database` blocks. */
+/** Props contract for the database surface rendered by `database` blocks. */
 export interface DatabaseTableViewProps {
   databaseId: string;
   /**
@@ -40,6 +52,15 @@ export interface DatabaseTableViewProps {
   mode: "view" | "edit";
   /** Persists the settings menu's "Hide title" toggle onto the block. */
   onHideTitleChange?: (hideTitle: boolean) => void;
+  /**
+   * Persists a view switch onto the hosting block (`props.viewId`) — the
+   * active view is per BLOCK, like Notion linked views. Absent in view mode
+   * (published pages can't write block props): switching falls back to
+   * ephemeral local state.
+   */
+  onViewIdChange?: (viewId: string) => void;
+  /** Block-level saved-view pick; unset or stale ids fall back to the first view. */
+  viewId?: string;
 }
 
 function EmptyState({ message }: { message: string }) {
@@ -50,23 +71,47 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-/** Re-evaluation cadence for clock-dependent (`now()`/`today()`) formulas. */
-const VOLATILE_FORMULA_REFRESH_MS = 60_000;
+/**
+ * Refresh cadence for clock-dependent display: volatile (`now()`/`today()`)
+ * formulas and `relative`-format date columns.
+ */
+const DISPLAY_CLOCK_REFRESH_MS = 60_000;
 
 const NO_FIELDS: DatabaseField[] = [];
 
+/** Whether any of the given (visible) date fields displays relatively. */
+function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
+  return fields.some(
+    (field) => field.type === "date" && field.format === "relative"
+  );
+}
+
 /**
- * Clock driving volatile formula re-evaluation: ticks every minute while any
- * formula uses `now()`/`today()`, pausing entirely while the tab is hidden
- * (and refreshing immediately when it becomes visible again). Non-volatile
- * schemas keep the mount-time instant — their results never read the clock.
+ * The single visible clock behind time-dependent display AND filtering:
+ * ticks every minute while any formula uses `now()`/`today()`, any visible
+ * date column uses the `relative` format ("3 days ago" must not go stale on
+ * screen), OR the active view's filter contains a relative date operator
+ * (`pastDay`…`nextMonth` windows shift as time passes — `applyFilter` re-runs
+ * on the tick). Pauses entirely while the tab is hidden (refreshing
+ * immediately when it becomes visible again). Non-clock-dependent schemas
+ * keep the mount-time instant — their renders never read the clock.
  */
-function useFormulaClock(fields: readonly DatabaseField[]): Date {
-  const volatile = useMemo(() => hasVolatileFormula(fields), [fields]);
+function useDisplayClock(
+  fields: readonly DatabaseField[],
+  visibleFields: readonly DatabaseField[],
+  filter: DatabaseFilterGroup | undefined
+): Date {
+  const ticking = useMemo(
+    () =>
+      hasVolatileFormula(fields) ||
+      hasRelativeDateField(visibleFields) ||
+      filterHasRelativeOperator(filter),
+    [fields, visibleFields, filter]
+  );
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    if (!volatile) {
+    if (!ticking) {
       return;
     }
     let intervalId: number | undefined;
@@ -80,7 +125,7 @@ function useFormulaClock(fields: readonly DatabaseField[]): Date {
       if (intervalId === undefined) {
         intervalId = window.setInterval(() => {
           setNow(new Date());
-        }, VOLATILE_FORMULA_REFRESH_MS);
+        }, DISPLAY_CLOCK_REFRESH_MS);
       }
     };
     const handleVisibility = () => {
@@ -99,30 +144,58 @@ function useFormulaClock(fields: readonly DatabaseField[]): Date {
       stop();
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [volatile]);
+  }, [ticking]);
 
   return now;
 }
 
 /**
- * Table view for one workspace database: resolves the definition and rows via
- * live queries, applies the first view's filter/sorts, and renders the
- * virtualized grid with its title, Calculate row, and add-row strip.
- * View-id threading (which saved view a block shows) arrives later.
+ * Entry for one workspace database surface: resolves the definition and rows
+ * via live queries, resolves the ACTIVE view (`block.viewId`, falling back to
+ * the first view for unset/stale ids), applies that view's filter/sorts, and
+ * renders the per-type view body — the virtualized table grid, or the
+ * list/board/chart renderers — under the shared title row + view switcher.
  */
 export function DatabaseTableView({
   databaseId,
   hideTitle = false,
   mode,
   onHideTitleChange,
+  onViewIdChange,
+  viewId,
 }: DatabaseTableViewProps): ReactNode {
   const database = useDatabase(databaseId);
   const allRows = useDatabaseRows(databaseId);
   const isNarrowViewport = useIsNarrowViewport();
-  const view = database?.views[0];
+
+  // Ephemeral fallback for surfaces that can't persist the pick (view mode
+  // has no block-prop write path); when `onViewIdChange` exists the block
+  // prop is the single source of truth and local state stays unused.
+  const [ephemeralViewId, setEphemeralViewId] = useState<string | undefined>();
+  const requestedViewId = onViewIdChange ? viewId : (ephemeralViewId ?? viewId);
+  const view =
+    database?.views.find((candidate) => candidate.id === requestedViewId) ??
+    database?.views[0];
+
+  const handleViewIdChange = useCallback(
+    (nextViewId: string) => {
+      if (onViewIdChange) {
+        onViewIdChange(nextViewId);
+      } else {
+        setEphemeralViewId(nextViewId);
+      }
+    },
+    [onViewIdChange]
+  );
 
   const fields = database?.fields ?? NO_FIELDS;
-  const formulaNow = useFormulaClock(fields);
+
+  const columns = useMemo(
+    () => (database && view ? resolveColumnOrder(database.fields, view) : []),
+    [database, view]
+  );
+
+  const clockNow = useDisplayClock(fields, columns, view?.filter);
 
   // Watch mode: while ANY view of a synced database is mounted (edit mode
   // and published view mode alike), the sync engine polls at the connector's
@@ -142,18 +215,22 @@ export function DatabaseTableView({
   // through untouched.
   const mergedRows = useMemo<LocalDatabaseRow[]>(() => {
     const overlay = computeFormulaOverlay(fields, allRows, {
-      now: () => formulaNow,
+      now: () => clockNow,
     });
     return withFormulaValues(allRows, overlay);
-  }, [allRows, fields, formulaNow]);
+  }, [allRows, fields, clockNow]);
 
   const rows = useMemo<LocalDatabaseRow[]>(() => {
     if (!(database && view)) {
       return [];
     }
-    const filtered = applyFilter(mergedRows, database.fields, view.filter);
+    // `clockNow` in the deps keeps relative-window filters live: each display
+    // clock tick recomputes the filter against the fresh instant.
+    const filtered = applyFilter(mergedRows, database.fields, view.filter, {
+      now: () => clockNow,
+    });
     return sortRowsForView(filtered, database.fields, view);
-  }, [mergedRows, database, view]);
+  }, [mergedRows, database, view, clockNow]);
 
   // Row buckets for grouped views, built AFTER filter + sort so buckets
   // preserve the view's row order; `null` keeps the grid ungrouped (also the
@@ -164,11 +241,6 @@ export function DatabaseTableView({
     }
     return groupRowsForView(rows, database.fields, view);
   }, [database, rows, view]);
-
-  const columns = useMemo(
-    () => (database && view ? resolveColumnOrder(database.fields, view) : []),
-    [database, view]
-  );
 
   const pinnedFields = useMemo(
     () => (database && view ? resolvePinnedFields(database.fields, view) : []),
@@ -186,10 +258,62 @@ export function DatabaseTableView({
   // disappears; edit mode keeps the collapsed row as the toolbar's home.
   const showTitleRow = mode === "edit" || !hideTitle;
 
+  // Per-type view body. `table` keeps the existing grid; the other types
+  // mount the dedicated renderers with the shared contract (the same
+  // filtered + sorted + formula-merged rows the grid consumes).
+  let viewBody: ReactNode;
+  if (view.type === "list") {
+    viewBody = (
+      <DatabaseListView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  } else if (view.type === "board") {
+    viewBody = (
+      <DatabaseBoardView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  } else if (view.type === "chart") {
+    viewBody = (
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  } else {
+    viewBody = (
+      <DatabaseTableGrid
+        columns={columns}
+        databaseId={databaseId}
+        groups={groups}
+        isSyncedDatabase={isSyncedDatabase}
+        mode={mode}
+        now={clockNow}
+        pinnedFields={pinnedFields}
+        primaryFieldId={database.primaryFieldId}
+        rows={rows}
+        view={view}
+      />
+    );
+  }
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
       {showTitleRow ? (
         <DatabaseTitle
+          activeView={view}
           controls={
             mode === "edit" && isNarrowViewport ? (
               <DatabaseMobileToolbar
@@ -203,7 +327,17 @@ export function DatabaseTableView({
           hideTitle={hideTitle}
           mode={mode}
           onHideTitleChange={onHideTitleChange}
+          onViewIdChange={handleViewIdChange}
           totalRowCount={allRows.length}
+          viewSwitcher={
+            <DatabaseViewSwitcher
+              activeViewId={view.id}
+              databaseId={databaseId}
+              mode={mode}
+              onViewIdChange={handleViewIdChange}
+              views={database.views}
+            />
+          }
         />
       ) : null}
       {mode === "edit" && !isNarrowViewport ? (
@@ -213,17 +347,7 @@ export function DatabaseTableView({
           view={view}
         />
       ) : null}
-      <DatabaseTableGrid
-        columns={columns}
-        databaseId={databaseId}
-        groups={groups}
-        isSyncedDatabase={isSyncedDatabase}
-        mode={mode}
-        pinnedFields={pinnedFields}
-        primaryFieldId={database.primaryFieldId}
-        rows={rows}
-        view={view}
-      />
+      {viewBody}
     </div>
   );
 }
