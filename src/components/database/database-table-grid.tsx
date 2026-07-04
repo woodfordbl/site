@@ -133,6 +133,12 @@ interface DatabaseTableGridProps {
    */
   isSyncedDatabase?: boolean;
   mode: "view" | "edit";
+  /**
+   * The table view's visible display clock (ticks per minute only while a
+   * volatile formula or a relative-format date column needs it). A changed
+   * instant re-renders the memoized rows so relative dates keep up with time.
+   */
+  now: Date;
   /** Left-frozen fields in pin order (`resolvePinnedFields`). */
   pinnedFields: readonly DatabaseField[];
   primaryFieldId: string;
@@ -148,6 +154,7 @@ export function DatabaseTableGrid({
   groups = null,
   isSyncedDatabase = false,
   mode,
+  now,
   pinnedFields,
   primaryFieldId,
   rows,
@@ -155,6 +162,7 @@ export function DatabaseTableGrid({
 }: DatabaseTableGridProps): ReactNode {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const pinnedShadowRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState<CellEditTarget | null>(null);
 
   // Divider resize: live pixel widths during a drag, committed to
@@ -269,14 +277,25 @@ export function DatabaseTableGrid({
     mode === "edit" ? totalWidth + ADD_FIELD_CELL_WIDTH_PX : totalWidth;
   const hasPinnedColumns = effectivePinnedFields.length > 0;
 
+  // Pinned-edge boundary in scrollport coordinates: the last frozen column's
+  // right edge (pinned cells stick at these exact offsets, so the boundary is
+  // viewport-stable regardless of scrollLeft). Tracks live divider drags via
+  // `gridColumns` widths.
+  const pinnedEdgeLeft = useMemo(() => {
+    const last = gridColumns.find((column) => column.isLastPinned);
+    return last && last.left !== null ? last.left + last.width : null;
+  }, [gridColumns]);
+
   // Pinned-edge fade: a rAF-throttled scroll listener writes the fade
   // opacity (0 at scrollLeft 0, ramping over PINNED_FADE_RAMP_PX, and only
-  // while real horizontal overflow exists) into a CSS custom property; the
-  // `.database-grid-pinned-edge` rule in styles.css does the rest — the
-  // horizontal analogue of `.scroll-fade-y`/`--scroll-area-overflow-*`.
+  // while real horizontal overflow exists) onto the single full-height
+  // `.database-grid-pinned-shadow` overlay — one gradient spanning header,
+  // rows, and calculate row, so it cannot break at row borders the way a
+  // per-cell box-shadow did.
   useEffect(() => {
     const element = scrollRef.current;
-    if (!(element && hasPinnedColumns)) {
+    const shadow = pinnedShadowRef.current;
+    if (!(element && shadow && hasPinnedColumns)) {
       return;
     }
     let frame = 0;
@@ -286,7 +305,7 @@ export function DatabaseTableGrid({
       const fade = overflowing
         ? Math.min(element.scrollLeft / PINNED_FADE_RAMP_PX, 1)
         : 0;
-      element.style.setProperty("--database-grid-pinned-fade", String(fade));
+      shadow.style.opacity = String(fade);
     };
     const handleScroll = () => {
       if (frame === 0) {
@@ -300,7 +319,6 @@ export function DatabaseTableGrid({
       if (frame !== 0) {
         cancelAnimationFrame(frame);
       }
-      element.style.removeProperty("--database-grid-pinned-fade");
     };
   }, [gridWidth, hasPinnedColumns]);
 
@@ -532,134 +550,148 @@ export function DatabaseTableGrid({
       view={view}
     >
       <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg border border-border">
-        <div
-          className={cn("relative overflow-auto", GRID_MAX_HEIGHT_CLASS)}
-          ref={scrollRef}
-        >
-          {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
+        {/* Positioning parent for the pinned-edge shadow: exactly the
+            scrollport (header through calculate row), not the add-row strip
+            below it. */}
+        <div className="relative">
           <div
-            aria-colcount={gridColumns.length}
-            aria-rowcount={items.length + 1}
-            className="relative"
-            ref={gridRef}
-            role="grid"
-            style={{ width: gridWidth, minWidth: "100%" }}
+            className={cn("relative overflow-auto", GRID_MAX_HEIGHT_CLASS)}
+            ref={scrollRef}
           >
-            {/* biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above. */}
-            {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
+            {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
             <div
-              aria-rowindex={1}
-              className="sticky top-0 z-20 flex border-border border-b bg-background"
-              role="row"
+              aria-colcount={gridColumns.length}
+              aria-rowcount={items.length + 1}
+              className="relative"
+              ref={gridRef}
+              role="grid"
+              style={{ width: gridWidth, minWidth: "100%" }}
             >
-              {table.getHeaderGroups().map((headerGroup) =>
-                headerGroup.headers.map((header, headerIndex) => {
-                  const column = gridColumns.find(
-                    (entry) => entry.field.id === header.column.id
-                  );
-                  if (!column) {
-                    return null;
-                  }
-                  const sort = view.sorts?.find(
-                    (entry) => entry.fieldId === column.field.id
-                  );
-                  return (
-                    <GridHeaderCell
-                      ariaColIndex={headerIndex + 1}
-                      column={column}
-                      databaseId={databaseId}
-                      displayFieldIds={displayFieldIds}
-                      key={header.id}
-                      mode={mode}
-                      onResizeStart={startResize}
-                      primaryFieldId={primaryFieldId}
-                      sortDirection={sort?.direction}
-                      view={view}
-                      width={header.getSize()}
-                    />
-                  );
-                })
-              )}
-              {mode === "edit" ? (
-                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-                  <Button
-                    aria-label="Add property"
-                    // Hit area covers the whole 36px header cell (anchored to
-                    // the relative wrapper) — the visual 24px button alone is
-                    // too small a touch target.
-                    className="static after:absolute after:inset-0"
-                    onClick={handleAddField}
-                    size="icon-xs"
-                    variant="ghost"
-                  >
-                    <IconPlus />
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-            {items.length === 0 ? (
-              <div className="flex h-9 items-center px-2 text-muted-foreground text-sm">
-                <span className="sticky left-2">No rows</span>
-              </div>
-            ) : (
-              // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
+              {/* biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above. */}
+              {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
               <div
-                className="relative"
-                role="rowgroup"
-                style={{ height: virtualizer.getTotalSize() }}
+                aria-rowindex={1}
+                className="sticky top-0 z-20 flex border-border border-b bg-background"
+                role="row"
               >
-                {virtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = items[virtualRow.index];
-                  if (item.kind === "groupHeader") {
+                {table.getHeaderGroups().map((headerGroup) =>
+                  headerGroup.headers.map((header, headerIndex) => {
+                    const column = gridColumns.find(
+                      (entry) => entry.field.id === header.column.id
+                    );
+                    if (!column) {
+                      return null;
+                    }
+                    const sort = view.sorts?.find(
+                      (entry) => entry.fieldId === column.field.id
+                    );
                     return (
-                      <GridGroupHeaderRow
-                        collapsed={collapsedKeySet.has(item.group.key)}
-                        group={item.group}
-                        key={`group:${item.group.key}`}
+                      <GridHeaderCell
+                        ariaColIndex={headerIndex + 1}
+                        column={column}
+                        databaseId={databaseId}
+                        displayFieldIds={displayFieldIds}
+                        key={header.id}
+                        mode={mode}
+                        onResizeStart={startResize}
+                        primaryFieldId={primaryFieldId}
+                        sortDirection={sort?.direction}
+                        view={view}
+                        width={header.getSize()}
+                      />
+                    );
+                  })
+                )}
+                {mode === "edit" ? (
+                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+                    <Button
+                      aria-label="Add property"
+                      // Hit area covers the whole 36px header cell (anchored to
+                      // the relative wrapper) — the visual 24px button alone is
+                      // too small a touch target.
+                      className="static after:absolute after:inset-0"
+                      onClick={handleAddField}
+                      size="icon-xs"
+                      variant="ghost"
+                    >
+                      <IconPlus />
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              {items.length === 0 ? (
+                <div className="flex h-9 items-center px-2 text-muted-foreground text-sm">
+                  <span className="sticky left-2">No rows</span>
+                </div>
+              ) : (
+                // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
+                <div
+                  className="relative"
+                  role="rowgroup"
+                  style={{ height: virtualizer.getTotalSize() }}
+                >
+                  {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const item = items[virtualRow.index];
+                    if (item.kind === "groupHeader") {
+                      return (
+                        <GridGroupHeaderRow
+                          collapsed={collapsedKeySet.has(item.group.key)}
+                          group={item.group}
+                          key={`group:${item.group.key}`}
+                          measureRow={virtualizer.measureElement}
+                          onAddRow={handleAddRowToGroup}
+                          onToggle={handleToggleGroup}
+                          rowIndex={virtualRow.index}
+                          showAddRow={mode === "edit" && !isSyncedDatabase}
+                          top={virtualRow.start}
+                        />
+                      );
+                    }
+                    const row = item.row;
+                    return (
+                      <GridRow
+                        columns={gridColumns}
+                        databaseId={databaseId}
+                        editingFieldId={
+                          editing?.rowId === row.id ? editing.fieldId : null
+                        }
+                        key={row.id}
                         measureRow={virtualizer.measureElement}
-                        onAddRow={handleAddRowToGroup}
-                        onToggle={handleToggleGroup}
+                        mode={mode}
+                        now={now}
+                        onNavigate={handleNavigate}
+                        onStartEdit={handleStartEdit}
+                        onStopEdit={handleStopEdit}
+                        primaryFieldId={primaryFieldId}
+                        row={row}
                         rowIndex={virtualRow.index}
-                        showAddRow={mode === "edit" && !isSyncedDatabase}
                         top={virtualRow.start}
                       />
                     );
-                  }
-                  const row = item.row;
-                  return (
-                    <GridRow
-                      columns={gridColumns}
-                      databaseId={databaseId}
-                      editingFieldId={
-                        editing?.rowId === row.id ? editing.fieldId : null
-                      }
-                      key={row.id}
-                      measureRow={virtualizer.measureElement}
-                      mode={mode}
-                      onNavigate={handleNavigate}
-                      onStartEdit={handleStartEdit}
-                      onStopEdit={handleStopEdit}
-                      primaryFieldId={primaryFieldId}
-                      row={row}
-                      rowIndex={virtualRow.index}
-                      top={virtualRow.start}
-                    />
-                  );
-                })}
-              </div>
-            )}
-            {hasCalculations ? (
-              <DatabaseCalculateRow
-                calculations={calculations}
-                columns={gridColumns}
-                rows={rows}
-                totalWidth={totalWidth}
-              />
-            ) : null}
-            {mode === "edit" ? (
-              <DatabaseColumnDropIndicator gridRef={gridRef} />
-            ) : null}
+                  })}
+                </div>
+              )}
+              {hasCalculations ? (
+                <DatabaseCalculateRow
+                  calculations={calculations}
+                  columns={gridColumns}
+                  rows={rows}
+                  totalWidth={totalWidth}
+                />
+              ) : null}
+              {mode === "edit" ? (
+                <DatabaseColumnDropIndicator gridRef={gridRef} />
+              ) : null}
+            </div>
           </div>
+          {pinnedEdgeLeft === null ? null : (
+            <div
+              aria-hidden
+              className="database-grid-pinned-shadow pointer-events-none absolute inset-y-0 z-30"
+              ref={pinnedShadowRef}
+              style={{ left: pinnedEdgeLeft }}
+            />
+          )}
         </div>
         {mode === "edit" && !isSyncedDatabase ? (
           <div className="border-border border-t">
@@ -734,11 +766,13 @@ function GridHeaderCell({
         sortDirection && (sortDirection === "asc" ? "ascending" : "descending")
       }
       className={cn(
-        "relative flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
+        // `isolate`: the cell's internal z-20 resize zone must not escape into
+        // the header row's stacking context, where it would paint above the
+        // sticky pinned header (z-10) while scrolling underneath it.
+        "relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
         column.showVerticalLine && "border-border/60 border-r",
         column.pinned && "sticky z-10",
-        column.isLastPinned &&
-          "database-grid-pinned-edge border-r border-r-border",
+        column.isLastPinned && "border-r border-r-border",
         isDragging && "opacity-50"
       )}
       role="columnheader"
@@ -893,6 +927,8 @@ interface GridRowProps {
   /** `virtualizer.measureElement` — rows auto-size when content wraps. */
   measureRow: (node: HTMLDivElement | null) => void;
   mode: "view" | "edit";
+  /** Display clock instant — a tick re-renders the row (relative dates). */
+  now: Date;
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   onStartEdit: (target: CellEditTarget) => void;
   onStopEdit: () => void;
@@ -908,8 +944,11 @@ interface GridRowProps {
  * One virtualized grid row. Memoized so scrolling and unrelated cell edits
  * never re-render it — the collection layer's structural sharing keeps `row`
  * identity stable, callbacks are stable, and `editingFieldId` only changes
- * for the affected row. Height is `min-h` rather than fixed so wrapped cells
- * can grow the row; the virtualizer measures the real height per row.
+ * for the affected row. `now` only changes identity on the display-clock
+ * tick (gated on volatile formulas / relative date columns), so the memo
+ * holds for clock-free schemas. Height is `min-h` rather than fixed so
+ * wrapped cells can grow the row; the virtualizer measures the real height
+ * per row.
  */
 const GridRow = memo(function GridRowInner({
   columns,
@@ -917,6 +956,7 @@ const GridRow = memo(function GridRowInner({
   editingFieldId,
   measureRow,
   mode,
+  now,
   onNavigate,
   onStartEdit,
   onStopEdit,
@@ -949,6 +989,7 @@ const GridRow = memo(function GridRowInner({
           isPrimary={column.field.id === primaryFieldId}
           key={column.field.id}
           mode={mode}
+          now={now}
           onNavigate={onNavigate}
           onStartEdit={onStartEdit}
           onStopEdit={onStopEdit}
@@ -967,6 +1008,8 @@ interface GridCellProps {
   /** Primary-field cell — renders the row-page "Open" pill. */
   isPrimary: boolean;
   mode: "view" | "edit";
+  /** Display clock instant for relative date rendering. */
+  now: Date;
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   onStartEdit: (target: CellEditTarget) => void;
   onStopEdit: () => void;
@@ -1014,6 +1057,7 @@ function GridCell({
   isEditing,
   isPrimary,
   mode,
+  now,
   onNavigate,
   onStartEdit,
   onStopEdit,
@@ -1027,10 +1071,15 @@ function GridCell({
 
   const valueView = wrapsContent ? (
     <span className={WRAPPED_CELL_CONTENT_CLASS}>
-      <DatabaseCellValueView field={field} mode={mode} value={value} />
+      <DatabaseCellValueView
+        field={field}
+        mode={mode}
+        now={now}
+        value={value}
+      />
     </span>
   ) : (
-    <DatabaseCellValueView field={field} mode={mode} value={value} />
+    <DatabaseCellValueView field={field} mode={mode} now={now} value={value} />
   );
 
   let content: ReactNode;
@@ -1073,14 +1122,15 @@ function GridCell({
       className={cn(
         // No fixed height: cells stretch with the row so wrapped content can
         // grow it past GRID_ROW_HEIGHT_PX.
-        "relative flex shrink-0 items-center overflow-hidden text-foreground text-sm",
+        // `isolate` mirrors the header cell: positioned children keep their
+        // z-index inside the cell instead of leaking above pinned siblings.
+        "relative isolate flex shrink-0 items-center overflow-hidden text-foreground text-sm",
         column.showVerticalLine && "border-border/60 border-r",
         inlineEditable ? "p-0" : "px-2",
         field.type === "number" && "justify-end",
         isCheckbox && "justify-center",
         column.pinned && "sticky z-10 bg-background",
-        column.isLastPinned &&
-          "database-grid-pinned-edge border-r border-r-border"
+        column.isLastPinned && "border-r border-r-border"
       )}
       role="gridcell"
       style={{ width: column.width, left: column.left ?? undefined }}

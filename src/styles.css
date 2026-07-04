@@ -337,15 +337,22 @@
 
   /*
    * Database grid: horizontal analogue of the .scroll-fade-y edge fade for
-   * the pinned-column boundary. The last left-pinned cell casts a soft
-   * shadow over content scrolled beneath it, driven by
-   * --database-grid-pinned-fade (0 at scrollLeft 0, ramping to 1; written by
-   * a rAF-throttled scroll listener in database-table-grid.tsx and only
-   * while real horizontal overflow exists).
+   * the pinned-column boundary. One full-height overlay (header through
+   * calculate row — per-cell box-shadows broke at every row border) casts a
+   * soft gradient over content scrolled beneath the frozen columns; its
+   * opacity (0 at scrollLeft 0, ramping to 1) is written by a rAF-throttled
+   * scroll listener in database-table-grid.tsx and only while real
+   * horizontal overflow exists.
    */
-  .database-grid-pinned-edge {
-    box-shadow: 6px 0 8px -6px
-      rgb(0 0 0 / calc(var(--database-grid-pinned-fade, 0) * 0.35));
+  .database-grid-pinned-shadow {
+    width: 8px;
+    background: linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.18),
+      rgb(0 0 0 / 0.05) 55%,
+      transparent
+    );
+    opacity: 0;
   }
 
   /* Show scrollbars while scrolling that axis or when hovering the track. */

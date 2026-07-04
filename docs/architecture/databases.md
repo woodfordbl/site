@@ -18,9 +18,9 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | Entity | Shape |
 |--------|-------|
 | `LocalDatabase` | `id`, `name`, `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, timestamps |
-| `DatabaseField` | Discriminated union on `type`: `text`, `number` (format), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date`, `url`. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
+| `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`. All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, `externalId?` (connector row identity), timestamps |
-| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`) |
+| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
@@ -52,7 +52,8 @@ stripping, view patches). Live reads:
 Pure domain logic lives in [`src/lib/databases/`](../../src/lib/databases/) (React-free):
 field-type defs and operator sets (`field-defs.ts`), cell
 coercion/formatting/plain-text (`cell-values.ts`), filter evaluation (`row-filter.ts` —
-fail-open on stale field references), type-aware sorting with empties-last
+fail-open on stale field references and malformed `between` values; relative date
+windows read an injectable clock, `RowFilterOptions.now`), type-aware sorting with empties-last
 (`row-sort.ts`), the Calculate aggregate taxonomy (`row-aggregate.ts`), view column
 resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
 
@@ -61,20 +62,42 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
 [`components/database/`](../../src/components/database/) renders the grid:
 
 - [`database-table-view.tsx`](../../src/components/database/database-table-view.tsx) —
-  entry: resolves database + first view, applies `applyFilter` → `sortRowsForView` →
-  `resolveColumnOrder`, mounts title row, filter bar (edit mode, wide viewports), grid.
+  entry: resolves database + the **active view** (`views.find(v => v.id === block.viewId)
+  ?? views[0]` — the pick is per BLOCK, like Notion linked views: edit mode persists a
+  switch onto `props.viewId` through the block `onChange` flow; view mode can't write
+  block props, so switching falls back to ephemeral local state), applies `applyFilter` →
+  `sortRowsForView` → `resolveColumnOrder`, mounts title row and filter bar (edit mode,
+  wide viewports), then the per-type body: `table` renders the grid below, while
+  `list`/`board`/`chart` mount the renderers in
+  [`views/`](../../src/components/database/views/) with the shared contract
+  `{ database, view, fields, rows, mode }` (rows arrive filtered + sorted +
+  formula-merged). Filter/sort/group UI always writes to the active view's id.
   On narrow viewports the chip bar collapses into funnel/sort icon buttons inline with
   the title ([`database-mobile-toolbar.tsx`](../../src/components/database/database-mobile-toolbar.tsx)),
   each opening a popover that reuses the extracted chip strips.
+- [`database-view-switcher.tsx`](../../src/components/database/database-view-switcher.tsx) —
+  saved-view tabs in the title row: `TabsList` **`indicator`** variant, one compact tab
+  per view (type icon + name, truncated), horizontally scrollable on overflow. Edit mode
+  appends a "+" opening the Add-view menu (Table/List/Board/Chart), which creates via
+  `addDatabaseView` (per-type defaults: board adopts the first select field as
+  `groupFieldId`; chart starts `bar`/`count` over the first select-or-date field; names
+  dedupe with a numeric suffix) and activates the new view. View mode is switch-only and
+  hides the tabs entirely for single-view databases.
 - [`database-table-grid.tsx`](../../src/components/database/database-table-grid.tsx) —
   TanStack Table in **fully manual mode** (core row model only; data computation stays in
   the lib layer) + TanStack Virtual rows (36px, overscan 12, `max-h-[600px]` scrollport);
   sticky header with field icons ([`resolveFieldIcon`](../../src/components/database/database-field-icons.ts):
   custom emoji/`tabler:` glyph → type-icon fallback) and column-menu triggers; pinned
-  columns as cumulative-offset `position: sticky` with a scroll-gated edge fade (pinned
-  columns auto-unpin visually when the frozen span exceeds the scrollport so phones can
-  always reach unfrozen columns); grid ARIA roles; memoized rows (stable callbacks via a
-  latest-values ref; row identity from the collection layer's structural sharing).
+  columns as cumulative-offset `position: sticky` with a scroll-gated edge shadow — one
+  full-height `.database-grid-pinned-shadow` overlay at the frozen boundary spanning
+  header through calculate row (per-cell box-shadows broke at row borders), positioned
+  against a wrapper around the scrollport only; header and body cells are `isolate`
+  stacking contexts so per-cell z-indexed children (the z-20 resize zones, always
+  visible on touch) cannot paint above the sticky pinned cells scrolling over them
+  (pinned columns auto-unpin visually when the frozen span exceeds the scrollport so
+  phones can always reach unfrozen columns); grid ARIA roles; memoized rows (stable
+  callbacks via a latest-values ref; row identity from the collection layer's
+  structural sharing).
   **Column resizing** ([`use-database-column-resize.ts`](../../src/components/database/use-database-column-resize.ts) +
   [`database-column-resize-zone.tsx`](../../src/components/database/database-column-resize-zone.tsx)):
   edge hit zones (wider on coarse pointers, `touch-none` scoped to the zone), hover-reveal
@@ -123,9 +146,14 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   no row-count label (counts live in the settings menu's stats footer / Source section),
   and the ⋯ [`database-settings-menu.tsx`](../../src/components/database/database-settings-menu.tsx):
   rename, Properties (reorder via `reorderDatabaseFields`, hide/show, Title badge), Views
-  (inline rename), Hide title switch (block prop `hideTitle`, per placement), Vertical
-  separators switch, Source section (local info, or the connector sync controls below),
-  two-step Delete database, stats footer.
+  (inline rename with type icon, per-view Duplicate — `duplicateDatabaseView`, "<name>
+  copy" activated on create — and Delete, disabled on the last view and refused at the op
+  level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's
+  "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
+  switch (table views only), Source section (local info, or the connector sync controls
+  below), two-step Delete database, stats footer. The per-view sections (Properties
+  visibility, Group, Vertical separators) all write to the ACTIVE view threaded from the
+  title row — never `views[0]`.
 
 ## Connector sync
 
@@ -243,6 +271,20 @@ shared placeholder trigger opening the creation popover (New table / Sync from s
 see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirroring the
 media/embed pickers. Deleting a database block does **not**
 delete the database entity (blocks are references; entity lifecycle UI is future work).
+`props.viewId` holds the block's saved-view pick (absent/stale → first view): the edit
+component persists switcher changes through `onChange`, the view component passes
+`viewId` read-only — several blocks can show DIFFERENT views of the SAME database.
+
+## Dashboards
+
+Dashboards are a **composition pattern**, not a block type: place `database` blocks —
+each with its own `viewId` (chart here, board there) and/or different databases —
+inside a `columns` layout. The slash menu's **Dashboard** entry scaffolds this: a
+2-column `columns` block with one unlinked `database` placeholder per column
+(`columns.create` with `seedChildType: "database"`, see
+[canvas-commands](../reference/canvas-commands.md)); the first placeholder is focused,
+auto-opening its create/link picker. From there, link a database per column and pick
+each block's view with the title-row switcher.
 
 ## Review-hardening invariants
 
@@ -303,13 +345,14 @@ crumb on the row page is still future work.
 
 ## Deferred (see proposal phases)
 
-Row drag-reorder UI, linked-view/`viewId` threading and multi-view switching ("Add view"
-and view styles), row-page template authoring UI and live tokens
+Row drag-reorder UI (table grid — board card drag shipped),
+row-page template authoring UI and live tokens
 (virtual pages + copy-on-write with host-page nesting shipped — see
 [Row pages](#row-pages-virtual--copy-on-write)), sidebar database-row
 scroll-to-block navigation, relations/rollups,
 formula-aware typed filter operators and formula→formula references,
-board/gallery/list/chart views, workspace backup inclusion, SQLite scale tier, keyboard
+gallery view (multi-view switching, `viewId` threading, and list/board/chart views
+shipped — see [Table view](#table-view)), workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push
 connectors, the follower-tab watch nudge (cross-tab "poll faster" ping to the leader),
 the server proxy route, and a `/settings` Connections panel.
