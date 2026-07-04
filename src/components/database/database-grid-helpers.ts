@@ -27,6 +27,13 @@ export interface GridColumn {
   /** Sticky `left` offset in px when pinned, `null` otherwise. */
   left: number | null;
   pinned: boolean;
+  /**
+   * Render this column's right border. False for the last column (the
+   * add-field control sits flush against it) and for every column when the
+   * view disables vertical separators; the freeze-boundary border on the
+   * last pinned column is applied separately and always wins.
+   */
+  showVerticalLine: boolean;
   width: number;
   /** Cell content wraps (clamped to two lines) instead of truncating. */
   wrap: boolean;

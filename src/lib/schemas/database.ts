@@ -201,6 +201,8 @@ export const databaseTableViewConfigSchema = z.object({
   calculations: z.record(z.string(), databaseAggregateFnSchema).optional(),
   /** Per-column wrap (true) vs single-line truncate (default). */
   wrapFieldIds: z.array(z.string()).optional(),
+  /** Vertical cell separators; absent means shown. */
+  showVerticalLines: z.boolean().optional(),
 });
 
 export type DatabaseTableViewConfig = z.infer<

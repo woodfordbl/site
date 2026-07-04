@@ -163,6 +163,7 @@ export function DatabaseTableGrid({
       ...effectivePinnedFields,
       ...columns.filter((field) => !pinnedIds.has(field.id)),
     ];
+    const verticalLines = view.config.showVerticalLines !== false;
     let offset = 0;
     return ordered.map((field, index) => {
       const width =
@@ -174,6 +175,7 @@ export function DatabaseTableGrid({
         pinned,
         left: pinned ? offset : null,
         isLastPinned: pinned && index === pinnedIds.size - 1,
+        showVerticalLine: verticalLines && index < ordered.length - 1,
         wrap: view.config.wrapFieldIds?.includes(field.id) ?? false,
       };
       if (pinned) {
@@ -533,9 +535,11 @@ function GridHeaderCell({
         sortDirection && (sortDirection === "asc" ? "ascending" : "descending")
       }
       className={cn(
-        "relative flex h-9 shrink-0 items-stretch overflow-hidden border-border/60 border-r bg-background text-muted-foreground",
+        "relative flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
+        column.showVerticalLine && "border-border/60 border-r",
         column.pinned && "sticky z-10",
-        column.isLastPinned && "database-grid-pinned-edge border-r-border",
+        column.isLastPinned &&
+          "database-grid-pinned-edge border-r border-r-border",
         isDragging && "opacity-50"
       )}
       role="columnheader"
@@ -713,12 +717,14 @@ function GridCell({
       className={cn(
         // No fixed height: cells stretch with the row so wrapped content can
         // grow it past GRID_ROW_HEIGHT_PX.
-        "relative flex shrink-0 items-center overflow-hidden border-border/60 border-r text-foreground text-sm",
+        "relative flex shrink-0 items-center overflow-hidden text-foreground text-sm",
+        column.showVerticalLine && "border-border/60 border-r",
         inlineEditable ? "p-0" : "px-2",
         field.type === "number" && "justify-end",
         isCheckbox && "justify-center",
         column.pinned && "sticky z-10 bg-background",
-        column.isLastPinned && "database-grid-pinned-edge border-r-border"
+        column.isLastPinned &&
+          "database-grid-pinned-edge border-r border-r-border"
       )}
       role="gridcell"
       style={{ width: column.width, left: column.left ?? undefined }}

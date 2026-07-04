@@ -1,6 +1,7 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconColumns3,
   IconDatabase,
   IconDots,
   IconEye,
@@ -453,6 +454,8 @@ export function DatabaseSettingsMenu({
     [commitRename, database.name]
   );
 
+  const firstView: DatabaseView | undefined = database.views[0];
+
   const handleDeleteClick = () => {
     if (!confirmingDelete) {
       setConfirmingDelete(true);
@@ -498,6 +501,19 @@ export function DatabaseSettingsMenu({
           >
             <IconEyeOff />
             Hide title
+          </DropdownMenuSwitchItem>
+        ) : null}
+        {firstView ? (
+          <DropdownMenuSwitchItem
+            checked={firstView.config.showVerticalLines !== false}
+            onCheckedChange={(next) => {
+              updateDatabaseView(database.id, firstView.id, {
+                config: { ...firstView.config, showVerticalLines: next },
+              });
+            }}
+          >
+            <IconColumns3 />
+            Vertical separators
           </DropdownMenuSwitchItem>
         ) : null}
         <DropdownMenuSeparator />

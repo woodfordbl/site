@@ -69,10 +69,11 @@ export function DatabaseCalculateRow({
         return (
           <div
             className={cn(
-              "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden border-border/60 border-r px-2 py-2",
+              "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden px-2 py-2",
+              column.showVerticalLine && "border-border/60 border-r",
               alignEnd && "justify-end",
               column.pinned && "sticky z-10 bg-background",
-              column.isLastPinned && "border-r-border"
+              column.isLastPinned && "border-r border-r-border"
             )}
             key={column.field.id}
             style={{
