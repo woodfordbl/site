@@ -1,11 +1,20 @@
+import { IconDatabase } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 
 import { DatabaseSettingsMenu } from "@/components/database/database-settings-menu.tsx";
 import { DatabaseSyncStatusChip } from "@/components/database/database-sync-status-chip.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
-import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
+import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import {
+  renameDatabase,
+  setDatabaseIcon,
+} from "@/db/queries/database-collection-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
+import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import type { DatabaseView, LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -38,6 +47,77 @@ interface DatabaseTitleProps {
   totalRowCount: number;
   /** The saved-view tabs (`DatabaseViewSwitcher`), mounted after the name. */
   viewSwitcher?: ReactNode;
+}
+
+/**
+ * The database's icon beside its name. Edit mode renders a picker trigger
+ * (emoji or `tabler:` glyph, falling back to the database glyph when unset)
+ * that opens the shared {@link GlyphIconPicker} to set/change/remove it,
+ * writing through `setDatabaseIcon`. View mode renders the icon only when one
+ * is actually set, so published databases without an icon stay clean.
+ */
+function DatabaseTitleIcon({
+  database,
+  mode,
+}: {
+  database: LocalDatabase;
+  mode: "view" | "edit";
+}): ReactNode {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const queryClient = useQueryClient();
+
+  const writeIcon = (icon: string | undefined) => {
+    setDatabaseIcon(database.id, icon);
+  };
+
+  const iconDisplay = database.icon ? (
+    <PageIconDisplay className="[&_svg]:size-5" icon={database.icon} />
+  ) : (
+    <IconDatabase className="size-5 shrink-0 stroke-[1.5px] text-muted-foreground" />
+  );
+
+  if (mode === "view") {
+    return database.icon ? (
+      <span className="flex size-6 shrink-0 items-center justify-center self-center">
+        {iconDisplay}
+      </span>
+    ) : null;
+  }
+
+  return (
+    <>
+      <Button
+        aria-label="Change database icon"
+        className="shrink-0 self-center text-muted-foreground"
+        onClick={() => {
+          setPickerOpen(true);
+        }}
+        onPointerEnter={() => {
+          // Warm the picker chunks + icon catalogs on intent (AGENTS.md).
+          ensurePageIconPickerReady(queryClient);
+        }}
+        ref={triggerRef}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        {iconDisplay}
+      </Button>
+      <GlyphIconPicker
+        anchor={triggerRef}
+        ariaLabel="Change database icon"
+        hideTrigger
+        icon={database.icon}
+        onOpenChange={setPickerOpen}
+        onRemove={() => {
+          writeIcon(undefined);
+        }}
+        onSelect={writeIcon}
+        open={pickerOpen}
+      />
+    </>
+  );
 }
 
 /**
@@ -118,6 +198,7 @@ export function DatabaseTitle({
     <div className="flex min-w-0 items-baseline gap-2" data-reveal-group>
       {hideTitle ? null : (
         <>
+          <DatabaseTitleIcon database={database} mode={mode} />
           {draft === null ? (
             nameDisplay
           ) : (

@@ -148,7 +148,10 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   `DatabaseFilterMatchOp`) reused by the mobile toolbar popovers; pure mutations in
   [`database-filter-helpers.ts`](../../src/components/database/database-filter-helpers.ts).
 - [`database-title.tsx`](../../src/components/database/database-title.tsx) — h3-equivalent
-  title (shares `headingTypographyClassNames[3]`), rename-in-place, a minimal sync
+  title (shares `headingTypographyClassNames[3]`), rename-in-place, a database **icon**
+  beside the name (edit mode opens the shared `GlyphIconPicker` — emoji or `tabler:` glyph
+  — writing `database.icon` via `setDatabaseIcon`, falling back to the database glyph when
+  unset; view mode shows the icon only when one is set), a minimal sync
   chip for connector databases
   ([`database-sync-status-chip.tsx`](../../src/components/database/database-sync-status-chip.tsx));
   no row-count label (counts live in the settings menu's stats footer / Source section),
@@ -158,7 +161,8 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   copy" activated on create — and Delete, disabled on the last view and refused at the op
   level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's
   "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
-  switch (table views only), Source section (local info, or the connector sync controls
+  and Page icons switches (table views only — `showVerticalLines` / `showPageIcons` on the
+  active view's config, both absent = shown), Source section (local info, or the connector sync controls
   below), a Row pages status item (a real menu item so it aligns with sibling rows;
   future template-editor entry point), two-step Delete database, stats footer (fields,
   rows, plus Size — the row shard's UTF-8 byte size — and "Loads in" — the shard's
@@ -353,12 +357,14 @@ instantiated per render from the shared `database.rowTemplate` via
 [`instantiateTemplateBlocks`](../../src/lib/databases/row-template.ts) —
 `{{ thisPage.X }}` tokens in text-bearing props (`text`, tab `label`, embed `caption`;
 `code` stays literal) evaluate through `evaluateTemplateText` + `createRowScope`,
-rendered read-only with `CanvasBlocksReadOnly`. Absent template = one muted default
-text block. The grid's primary cells carry a hover-revealed "Open" pill (both modes)
-navigating there; the ⋯ settings menu shows the template status (authoring UI is
-deferred).
+rendered read-only with `CanvasBlocksReadOnly`. Absent template = one **empty** text
+block, so a row with no custom template opens as a normal blank page — there is
+deliberately no "Edit page" button or placeholder copy. The grid's primary cells show a
+Notion-style page icon (the default document glyph, toggled per view by the ⋯ menu's
+**Page icons** switch) plus a hover-revealed "Open" pill (both modes) navigating there;
+the ⋯ settings menu shows the template status (authoring UI is deferred).
 
-**Copy-on-write:** the first "Edit page" (or body click) instantiates the template
+**Copy-on-write:** the first body click instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids
 (`clonePageBlocks`), creates a REAL user page via `page.create`, links it with
 `setDatabaseRowPageId(rowId, pageId)`, and navigates. The page's `parentId` is the

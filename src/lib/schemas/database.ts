@@ -260,6 +260,8 @@ export const databaseTableViewConfigSchema = z.object({
   wrapFieldIds: z.array(z.string()).optional(),
   /** Vertical cell separators; absent means shown. */
   showVerticalLines: z.boolean().optional(),
+  /** Page icon in the primary (title) column cells; absent means shown. */
+  showPageIcons: z.boolean().optional(),
   /** Collapsed group keys (groupBy value keys) for this view. */
   collapsedGroupKeys: z.array(z.string()).optional(),
   /** Board (kanban) settings — used when `view.type` is `board`. */
