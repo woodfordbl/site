@@ -478,8 +478,10 @@ export function DatabaseSettingsMenu({
             setOpen(false);
           }}
         />
+        <DropdownMenuSeparator />
         <PropertiesSubmenu database={database} />
         <ViewsSubmenu database={database} />
+        <DropdownMenuSeparator />
         <SourceSubmenu database={database} rowCount={rowCount} />
         <DropdownMenuSeparator />
         <DropdownMenuItem

@@ -601,6 +601,7 @@ export function DatabaseColumnMenu({
           <DropdownMenuLabel>
             {FIELD_TYPE_DEFS[field.type].label}
           </DropdownMenuLabel>
+          <DropdownMenuSeparator />
           <EditPropertySubmenu databaseId={databaseId} field={field} />
           <ChangeTypeSubmenu databaseId={databaseId} field={field} />
           <DropdownMenuItem
