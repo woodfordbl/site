@@ -74,7 +74,15 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   formula-merged). Filter/sort/group UI always writes to the active view's id.
   On narrow viewports the chip bar collapses into funnel/sort icon buttons inline with
   the title ([`database-mobile-toolbar.tsx`](../../src/components/database/database-mobile-toolbar.tsx)),
-  each opening a popover that reuses the extracted chip strips.
+  each opening a popover (drawer on touch) that reuses the extracted chip strips. Empty
+  states use the shared centered-icon [`Empty`](../../src/components/ui/empty.tsx)
+  component (funnel / sort-arrows icon + title + description), and both add triggers
+  render **full width** inside the drawer's own padding (`AddFilterChip` /
+  `AddSortButton` with `fullWidth`, dashed `w-full` buttons). `AddSortButton` is a
+  standalone type-ahead picker that appends an ascending sort (already-sorted fields
+  drop out) — sorts no longer require the column header menu to add. Both add triggers
+  share a `FieldPickerPopover` (search + field list; drops its max-height in drawer
+  presentation so the single outer scroller owns scrolling).
 - [`database-view-switcher.tsx`](../../src/components/database/database-view-switcher.tsx) —
   saved-view tabs in the title row: `TabsList` **`indicator`** variant, one compact tab
   per view (type icon + name, truncated), horizontally scrollable on overflow. Edit mode

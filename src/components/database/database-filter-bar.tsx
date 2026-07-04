@@ -13,6 +13,7 @@ import {
 import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
+  type ReactElement,
   type ReactNode,
   useMemo,
   useRef,
@@ -111,6 +112,18 @@ const CHIP_BUTTON_CLASS = cn(
   "hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
 );
 
+/** Small dashed "+ Filter"/"+ Sort" chip trigger (inline bars). */
+const ADD_CHIP_CLASS =
+  "flex h-6 pointer-coarse:h-8 shrink-0 items-center gap-1 rounded-md border border-border border-dashed pointer-coarse:px-2 px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground";
+
+/**
+ * Full-width dashed add trigger for the mobile filter/sort drawers — fills the
+ * surface width inside the container's own padding (`w-full` under the
+ * popover/drawer `p-2`).
+ */
+const ADD_FULL_WIDTH_CLASS =
+  "flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border border-dashed px-2 text-muted-foreground text-sm outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground";
+
 interface ChipStripProps {
   /**
    * Wrapper class. The desktop bar passes `contents` so the chips join its
@@ -128,11 +141,12 @@ interface ChipStripProps {
  * mobile funnel popover.
  */
 export function DatabaseFilterChips({
+  addFullWidth = false,
   className,
   databaseId,
   fields,
   view,
-}: ChipStripProps): ReactNode {
+}: ChipStripProps & { addFullWidth?: boolean }): ReactNode {
   // Condition whose value popover should open as soon as its chip mounts —
   // set when "+ Filter" appends a fresh condition.
   const [autoOpenId, setAutoOpenId] = useState<string | null>(null);
@@ -197,7 +211,11 @@ export function DatabaseFilterChips({
           />
         )
       )}
-      <AddFilterChip fields={fields} onPick={handleAddField} />
+      <AddFilterChip
+        fields={fields}
+        fullWidth={addFullWidth}
+        onPick={handleAddField}
+      />
     </div>
   );
 }
@@ -751,19 +769,27 @@ function RemoveChipButton({
 }
 
 /** "+ Filter" chip opening the type-ahead field picker. */
-function AddFilterChip({
+/**
+ * Shared field type-ahead popover behind the "+ Filter" and "+ Sort" add
+ * triggers: a search input + field list. `trigger` is the element the popover
+ * anchors to (small chip or full-width button). In drawer presentation the
+ * list drops its own max-height so the single outer drawer scroller owns
+ * scrolling (vaul at-top drag-to-dismiss contract).
+ */
+function FieldPickerPopover({
   fields,
   onPick,
+  placeholder,
+  trigger,
 }: {
   fields: readonly DatabaseField[];
   onPick: (field: DatabaseField) => void;
+  placeholder: string;
+  trigger: ReactElement;
 }): ReactNode {
   const [open, setOpen] = useState(false);
   const focusOnMount = useFocusOnMount();
   const [query, setQuery] = useState("");
-  // Drawer presentation owns scrolling for the whole surface (with vaul's
-  // at-top drag-to-dismiss contract): no popover max-height there, or long
-  // field lists clip mid-row while the drawer sits mostly empty.
   const isDrawer = useResolvedMenuPresentation() === "drawer";
   const trimmed = query.trim().toLowerCase();
 
@@ -787,17 +813,7 @@ function AddFilterChip({
       }}
       open={open}
     >
-      <PopoverTrigger
-        render={
-          <button
-            className="flex h-6 pointer-coarse:h-8 shrink-0 items-center gap-1 rounded-md border border-border border-dashed pointer-coarse:px-2 px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
-            type="button"
-          >
-            <IconPlus className="size-3.5 stroke-[1.5px]" />
-            Filter
-          </button>
-        }
-      />
+      <PopoverTrigger render={trigger} />
       <PopoverContent align="start" className="w-64 p-2">
         <div className="flex flex-col gap-1.5">
           <InputGroup className="h-8">
@@ -817,7 +833,7 @@ function AddFilterChip({
                   pick(filtered[0]);
                 }
               }}
-              placeholder="Filter by…"
+              placeholder={placeholder}
               ref={focusOnMount}
               value={query}
             />
@@ -851,6 +867,75 @@ function AddFilterChip({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * Dashed add trigger element for `FieldPickerPopover`'s `render` prop — a raw
+ * `<button>` (not a component wrapper) so Base UI can clone the popover's
+ * onClick/ref onto it. Small inline chip, or full-width for the drawers.
+ */
+function addTriggerButton(fullWidth: boolean, label: string): ReactElement {
+  return (
+    <button
+      className={fullWidth ? ADD_FULL_WIDTH_CLASS : ADD_CHIP_CLASS}
+      type="button"
+    >
+      <IconPlus
+        className={cn("stroke-[1.5px]", fullWidth ? "size-4" : "size-3.5")}
+      />
+      {label}
+    </button>
+  );
+}
+
+function AddFilterChip({
+  fields,
+  fullWidth = false,
+  onPick,
+}: {
+  fields: readonly DatabaseField[];
+  fullWidth?: boolean;
+  onPick: (field: DatabaseField) => void;
+}): ReactNode {
+  return (
+    <FieldPickerPopover
+      fields={fields}
+      onPick={onPick}
+      placeholder="Filter by…"
+      trigger={addTriggerButton(fullWidth, fullWidth ? "Add filter" : "Filter")}
+    />
+  );
+}
+
+/**
+ * "+ Sort" add trigger: picks a field and appends an ascending sort to the
+ * view (already-sorted fields drop out of the picker). Standalone so the
+ * mobile sort drawer can offer adding a sort without the column header menu.
+ */
+export function AddSortButton({
+  databaseId,
+  fields,
+  fullWidth = false,
+  view,
+}: ChipStripProps & { fullWidth?: boolean }): ReactNode {
+  const sorts = view.sorts ?? [];
+  const sortedIds = new Set(sorts.map((sort) => sort.fieldId));
+  const available = fields.filter((field) => !sortedIds.has(field.id));
+
+  const handlePick = (field: DatabaseField) => {
+    updateDatabaseView(databaseId, view.id, {
+      sorts: [...sorts, { fieldId: field.id, direction: "asc" }],
+    });
+  };
+
+  return (
+    <FieldPickerPopover
+      fields={available}
+      onPick={handlePick}
+      placeholder="Sort by…"
+      trigger={addTriggerButton(fullWidth, fullWidth ? "Add sort" : "Sort")}
+    />
   );
 }
 

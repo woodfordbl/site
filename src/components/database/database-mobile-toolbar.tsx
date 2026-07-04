@@ -2,12 +2,20 @@ import { IconArrowsSort, IconFilter } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import {
+  AddSortButton,
   DatabaseFilterChips,
   DatabaseFilterMatchOp,
   DatabaseGroupByChip,
   DatabaseSortChips,
 } from "@/components/database/database-filter-bar.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty.tsx";
 import {
   Popover,
   PopoverContent,
@@ -27,6 +35,27 @@ import type { DatabaseField, DatabaseView } from "@/lib/schemas/database.ts";
 const TOOLBAR_POPOVER_CLASS = "w-80 max-w-[calc(100vw-1rem)] p-2";
 
 const CHIP_ROW_CLASS = "flex min-w-0 flex-wrap items-center gap-1.5";
+
+/** Centered-icon empty state for the filter/sort drawers. */
+function ToolbarEmptyState({
+  description,
+  icon,
+  title,
+}: {
+  description: string;
+  icon: ReactNode;
+  title: string;
+}): ReactNode {
+  return (
+    <Empty className="border-0 p-2">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{icon}</EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  );
+}
 
 /** Small accent dot marking an icon button as "has active state". */
 function ActiveDot(): ReactNode {
@@ -98,19 +127,37 @@ export function DatabaseMobileToolbar({
         icon={<IconFilter aria-hidden />}
         label={filterCount > 0 ? `Filters (${filterCount} active)` : "Filters"}
       >
-        {/* Empty state keeps the add-filter flow reachable inside the
-            surface: muted line, then the chip strip (just "+ Filter"). */}
-        {filterCount === 0 ? (
-          <p className="px-1 pb-2 text-muted-foreground text-sm">No filters</p>
-        ) : null}
-        <div className={CHIP_ROW_CLASS}>
-          <DatabaseFilterChips
-            className="contents"
-            databaseId={databaseId}
-            fields={fields}
-            view={view}
-          />
-          <DatabaseFilterMatchOp databaseId={databaseId} view={view} />
+        <div className="flex flex-col gap-2">
+          {filterCount === 0 ? (
+            <ToolbarEmptyState
+              description="Filter rows by a property's value."
+              icon={<IconFilter />}
+              title="No filters"
+            />
+          ) : (
+            <div className={CHIP_ROW_CLASS}>
+              <DatabaseFilterChips
+                addFullWidth
+                className="contents"
+                databaseId={databaseId}
+                fields={fields}
+                view={view}
+              />
+              <DatabaseFilterMatchOp databaseId={databaseId} view={view} />
+            </div>
+          )}
+          {/* Empty state hides the chips' inline add, so surface a full-width
+              add here; when filters exist the strip renders its own full-width
+              add and this stays hidden. */}
+          {filterCount === 0 ? (
+            <DatabaseFilterChips
+              addFullWidth
+              className="contents"
+              databaseId={databaseId}
+              fields={fields}
+              view={view}
+            />
+          ) : null}
         </div>
       </ToolbarPopoverButton>
       <ToolbarPopoverButton
@@ -118,28 +165,35 @@ export function DatabaseMobileToolbar({
         icon={<IconArrowsSort aria-hidden />}
         label={sortCount > 0 ? `Sorts (${sortCount} active)` : "Sorts"}
       >
-        {sortCount > 0 || isGrouped ? (
-          <div className={CHIP_ROW_CLASS}>
-            <DatabaseSortChips
-              className="contents"
-              databaseId={databaseId}
-              fields={fields}
-              view={view}
+        <div className="flex flex-col gap-2">
+          {sortCount > 0 || isGrouped ? (
+            <div className={CHIP_ROW_CLASS}>
+              <DatabaseSortChips
+                className="contents"
+                databaseId={databaseId}
+                fields={fields}
+                view={view}
+              />
+              <DatabaseGroupByChip
+                databaseId={databaseId}
+                fields={fields}
+                view={view}
+              />
+            </div>
+          ) : (
+            <ToolbarEmptyState
+              description="Order rows by a property."
+              icon={<IconArrowsSort />}
+              title="No sorts"
             />
-            <DatabaseGroupByChip
-              databaseId={databaseId}
-              fields={fields}
-              view={view}
-            />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1 px-1 py-0.5">
-            <p className="text-muted-foreground text-sm">No sorts</p>
-            <p className="text-muted-foreground/70 text-xs">
-              Add one from a column header menu.
-            </p>
-          </div>
-        )}
+          )}
+          <AddSortButton
+            databaseId={databaseId}
+            fields={fields}
+            fullWidth
+            view={view}
+          />
+        </div>
       </ToolbarPopoverButton>
     </>
   );
