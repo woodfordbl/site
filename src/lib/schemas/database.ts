@@ -41,6 +41,20 @@ export const databaseNumberFormatSchema = z.enum([
 
 export type DatabaseNumberFormat = z.infer<typeof databaseNumberFormatSchema>;
 
+/**
+ * Date display format: `default` = "Jan 5, 2026", `long` = "January 5, 2026",
+ * `relative` = "3 days ago" (re-rendered on the visible clock tick), `iso` =
+ * the stored yyyy-mm-dd. Display-only — stored values stay ISO date strings.
+ */
+export const databaseDateFormatSchema = z.enum([
+  "default",
+  "long",
+  "relative",
+  "iso",
+]);
+
+export type DatabaseDateFormat = z.infer<typeof databaseDateFormatSchema>;
+
 const databaseFieldBaseSchema = z.object({
   /** Stable id — row values key on this, so renames never rewrite rows. */
   id: z.string(),
@@ -71,6 +85,10 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
   databaseFieldBaseSchema.extend({
     type: z.literal("number"),
     format: databaseNumberFormatSchema.optional(),
+    /** Fixed fraction digits (0-6); absent = format's natural precision. */
+    decimals: z.number().int().min(0).max(6).optional(),
+    /** Thousands separators in plain/integer displays; absent = on. */
+    useGrouping: z.boolean().optional(),
   }),
   databaseFieldBaseSchema.extend({ type: z.literal("checkbox") }),
   databaseFieldBaseSchema.extend({
@@ -81,7 +99,11 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
     type: z.literal("multiSelect"),
     options: z.array(databaseSelectOptionSchema).default([]),
   }),
-  databaseFieldBaseSchema.extend({ type: z.literal("date") }),
+  databaseFieldBaseSchema.extend({
+    type: z.literal("date"),
+    /** Display format; absent = `default`. */
+    format: databaseDateFormatSchema.optional(),
+  }),
   databaseFieldBaseSchema.extend({ type: z.literal("url") }),
   databaseFieldBaseSchema.extend({
     type: z.literal("formula"),
