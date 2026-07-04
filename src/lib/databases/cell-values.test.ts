@@ -189,11 +189,87 @@ describe("formatCellValue", () => {
     ).toBe("$1,234.50");
   });
 
+  it("pins fraction digits when decimals is set, across all formats", () => {
+    expect(formatCellValue({ ...numberField, decimals: 2 }, 1234.5)).toBe(
+      "1,234.50"
+    );
+    expect(formatCellValue({ ...numberField, decimals: 0 }, 1234.5678)).toBe(
+      "1,235"
+    );
+    // Decimals override the integer preset's whole-number rounding.
+    expect(
+      formatCellValue({ ...numberField, format: "integer", decimals: 2 }, 3.7)
+    ).toBe("3.70");
+    // Percent decimals apply to the percent digits (after the ×100 scaling).
+    expect(
+      formatCellValue(
+        { ...numberField, format: "percent", decimals: 1 },
+        0.4256
+      )
+    ).toBe("42.6%");
+    expect(
+      formatCellValue(
+        { ...numberField, format: "currency", decimals: 0 },
+        1234.5
+      )
+    ).toBe("$1,235");
+  });
+
+  it("drops thousands separators when useGrouping is false", () => {
+    expect(
+      formatCellValue({ ...numberField, useGrouping: false }, 1234.5)
+    ).toBe("1234.5");
+    expect(
+      formatCellValue(
+        { ...numberField, format: "currency", useGrouping: false },
+        1234.5
+      )
+    ).toBe("$1234.50");
+    expect(
+      formatCellValue(
+        { ...numberField, format: "percent", useGrouping: false },
+        12.345
+      )
+    ).toBe("1234.5%");
+    // Absent means on.
+    expect(formatCellValue(numberField, 1234.5)).toBe("1,234.5");
+  });
+
   it("formats dates for display", () => {
     expect(formatCellValue(dateField, "2026-03-05")).toBe("Mar 5, 2026");
     expect(formatCellValue(dateField, "2026-03-05T23:59:00.000Z")).toBe(
       "Mar 5, 2026"
     );
+  });
+
+  it("formats dates per the field's date format", () => {
+    expect(
+      formatCellValue({ ...dateField, format: "long" }, "2026-03-05")
+    ).toBe("March 5, 2026");
+    expect(formatCellValue({ ...dateField, format: "iso" }, "2026-03-05")).toBe(
+      "2026-03-05"
+    );
+    // ISO reduces timestamps to the stored date part.
+    expect(
+      formatCellValue({ ...dateField, format: "iso" }, "2026-03-05T23:59:00Z")
+    ).toBe("2026-03-05");
+    expect(
+      formatCellValue({ ...dateField, format: "default" }, "2026-03-05")
+    ).toBe("Mar 5, 2026");
+  });
+
+  it("formats relative dates against the injected clock", () => {
+    const relativeField: DatabaseField = { ...dateField, format: "relative" };
+    // Both sides construct in local time (the cell as local midnight, the
+    // clock literally), so the distance is exact and deterministic.
+    const now = () => new Date(2026, 2, 5);
+    expect(formatCellValue(relativeField, "2026-03-02", { now })).toBe(
+      "3 days ago"
+    );
+    expect(formatCellValue(relativeField, "2026-03-08", { now })).toBe(
+      "in 3 days"
+    );
+    expect(formatCellValue(relativeField, "not a date", { now })).toBe("");
   });
 
   it("falls back to plain text and empty strings", () => {

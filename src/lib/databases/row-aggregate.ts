@@ -208,7 +208,11 @@ export function computeAggregate(
 /**
  * Display formatting for an aggregate result: percents render as whole-number
  * percentages ("42%"), counts as plain integers, numeric reducers via the
- * field's number format, and earliest/latest via the field's date format.
+ * field's FULL number display config (`format` + `decimals` + `useGrouping` —
+ * a decimals-2 column's sum/average/min/max/range shows 2 decimals), and
+ * earliest/latest via the field's date format — except `relative`, which
+ * falls back to the default absolute display: "3 days ago" beside an
+ * "Earliest" label reads oddly in the footer, and would need the clock tick.
  * `null` results render as `""`.
  */
 export function formatAggregateValue(
@@ -237,9 +241,15 @@ export function formatAggregateValue(
     case "min":
     case "max":
     case "range":
+      return formatCellValue(field, result);
     case "earliest":
     case "latest":
-      return formatCellValue(field, result);
+      return formatCellValue(
+        field.type === "date" && field.format === "relative"
+          ? { ...field, format: undefined }
+          : field,
+        result
+      );
     default:
       return "";
   }

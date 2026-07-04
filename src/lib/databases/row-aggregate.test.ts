@@ -159,8 +159,36 @@ describe("formatAggregateValue", () => {
     );
   });
 
+  it("inherits the field's decimals and grouping display config", () => {
+    const twoDecimals: DatabaseField = { ...amountField, decimals: 2 };
+    expect(formatAggregateValue("sum", twoDecimals, 1234.5)).toBe("1,234.50");
+    expect(formatAggregateValue("average", twoDecimals, 20)).toBe("20.00");
+    expect(formatAggregateValue("range", twoDecimals, 0.125)).toBe("0.13");
+    const ungrouped: DatabaseField = { ...amountField, useGrouping: false };
+    expect(formatAggregateValue("max", ungrouped, 1234.5)).toBe("1234.5");
+  });
+
   it("formats earliest/latest via the field's date format", () => {
     expect(formatAggregateValue("earliest", dueField, "2026-05-01")).toBe(
+      "May 1, 2026"
+    );
+    const longField: DatabaseField = { ...dueField, format: "long" };
+    expect(formatAggregateValue("earliest", longField, "2026-01-15")).toBe(
+      "January 15, 2026"
+    );
+    const isoField: DatabaseField = { ...dueField, format: "iso" };
+    expect(formatAggregateValue("latest", isoField, "2026-05-01")).toBe(
+      "2026-05-01"
+    );
+  });
+
+  it("falls back to the default date display for relative-format fields", () => {
+    // "3 days ago" beside an Earliest label reads oddly in the footer.
+    const relativeField: DatabaseField = { ...dueField, format: "relative" };
+    expect(formatAggregateValue("earliest", relativeField, "2026-05-01")).toBe(
+      "May 1, 2026"
+    );
+    expect(formatAggregateValue("latest", relativeField, "2026-05-01")).toBe(
       "May 1, 2026"
     );
   });

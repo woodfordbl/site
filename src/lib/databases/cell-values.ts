@@ -1,6 +1,8 @@
 import { format } from "date-fns/format";
+import { formatDistance } from "date-fns/formatDistance";
 import type {
   DatabaseCellValue,
+  DatabaseDateFormat,
   DatabaseField,
   DatabaseNumberFormat,
   DatabaseSelectOption,
@@ -200,55 +202,126 @@ function formulaPlainText(coerced: DatabaseCellValue): string {
 }
 
 /**
- * Shared number formatters, constructed once at module scope —
- * `Intl.NumberFormat` construction is expensive relative to `format` calls.
- * Percent follows `Intl` semantics: the stored number is a fraction
- * (0.42 → "42%").
+ * Base `Intl.NumberFormat` options per number format. Percent follows `Intl`
+ * semantics: the stored number is a fraction (0.42 → "42%"). `decimals`
+ * (when set) pins min+max fraction digits over the format's natural
+ * precision — for percent that means the digits AFTER the ×100 scaling;
+ * currency stays USD. `useGrouping: false` drops thousands separators
+ * (absent = on) in every format.
  */
-const NUMBER_FORMATTERS: Record<DatabaseNumberFormat, Intl.NumberFormat> = {
-  plain: new Intl.NumberFormat("en-US"),
-  integer: new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }),
-  percent: new Intl.NumberFormat("en-US", {
-    style: "percent",
-    maximumFractionDigits: 2,
-  }),
-  currency: new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }),
+function numberFormatOptions(
+  format: DatabaseNumberFormat,
+  decimals: number | undefined,
+  useGrouping: boolean
+): Intl.NumberFormatOptions {
+  const options: Intl.NumberFormatOptions = { useGrouping };
+  if (format === "integer") {
+    options.maximumFractionDigits = 0;
+  } else if (format === "percent") {
+    options.style = "percent";
+    options.maximumFractionDigits = 2;
+  } else if (format === "currency") {
+    options.style = "currency";
+    options.currency = "USD";
+  }
+  if (decimals !== undefined) {
+    options.minimumFractionDigits = decimals;
+    options.maximumFractionDigits = decimals;
+  }
+  return options;
+}
+
+/**
+ * Module-scope formatter cache keyed by the option tuple —
+ * `Intl.NumberFormat` construction is expensive relative to `format` calls
+ * (same convention as the previous static formatter table). The key space is
+ * tiny and bounded: 4 formats × 8 decimals states × 2 grouping states.
+ */
+const NUMBER_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
+
+function numberFormatterFor(
+  field: DatabaseField & { type: "number" }
+): Intl.NumberFormat {
+  const format = field.format ?? "plain";
+  const useGrouping = field.useGrouping !== false;
+  const key = `${format}|${field.decimals ?? "auto"}|${useGrouping ? "group" : "plain"}`;
+  let formatter = NUMBER_FORMATTER_CACHE.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(
+      "en-US",
+      numberFormatOptions(format, field.decimals, useGrouping)
+    );
+    NUMBER_FORMATTER_CACHE.set(key, formatter);
+  }
+  return formatter;
+}
+
+/** date-fns patterns for the absolute date display formats. */
+const DATE_DISPLAY_PATTERNS: Record<"default" | "long", string> = {
+  default: "MMM d, yyyy",
+  long: "MMMM d, yyyy",
 };
 
-const DATE_DISPLAY_PATTERN = "MMM d, yyyy";
+/** Options for {@link formatCellValue}. */
+export interface FormatCellValueOptions {
+  /**
+   * Injected clock for `relative` date fields; omit for real time. Mirrors
+   * the expr engine's injected-clock convention
+   * (`ComputeFormulaOverlayOptions.now`) so tests stay deterministic.
+   */
+  now?: () => Date;
+}
 
-function formatIsoDate(value: string): string {
+function formatIsoDate(
+  value: string,
+  dateFormat: DatabaseDateFormat,
+  opts?: FormatCellValueOptions
+): string {
   const datePart = toIsoDatePart(value);
   if (datePart === "") {
     return "";
   }
+  if (dateFormat === "iso") {
+    return datePart;
+  }
   const [year, month, day] = datePart.split("-").map(Number);
   // Construct in local time from date parts so the rendered day never shifts
   // across timezones (new Date("yyyy-mm-dd") would parse as UTC midnight).
-  return format(new Date(year, month - 1, day), DATE_DISPLAY_PATTERN);
+  const date = new Date(year, month - 1, day);
+  if (dateFormat === "relative") {
+    // `formatDistanceToNow` minus the hardwired clock: identical output,
+    // with the base instant injectable via `opts.now`. Cells re-render on
+    // the table view's visible clock tick so the text keeps up with time.
+    return formatDistance(date, opts?.now?.() ?? new Date(), {
+      addSuffix: true,
+    });
+  }
+  return format(date, DATE_DISPLAY_PATTERNS[dateFormat]);
 }
 
 /**
  * Display formatting for a cell: numbers honor the field's number format
- * (plain/integer/percent/currency, en-US), dates render via date-fns
- * ("Mar 5, 2026"), everything else falls back to `cellToPlainText`.
+ * (plain/integer/percent/currency, en-US) plus its `decimals` (fixed
+ * fraction digits) and `useGrouping` (thousands separators, absent = on)
+ * config; dates render per the field's date format (`default` "Mar 5, 2026",
+ * `long` "March 5, 2026", `relative` "3 days ago" against `opts.now`, `iso`
+ * the stored yyyy-mm-dd part); everything else falls back to
+ * `cellToPlainText`. Display-only — stored values are never touched.
  */
 export function formatCellValue(
   field: DatabaseField,
-  value: DatabaseCellValue | undefined
+  value: DatabaseCellValue | undefined,
+  opts?: FormatCellValueOptions
 ): string {
   const coerced = coerceCellValue(field, value);
   if (coerced === null) {
     return "";
   }
   if (field.type === "number" && typeof coerced === "number") {
-    return NUMBER_FORMATTERS[field.format ?? "plain"].format(coerced);
+    return numberFormatterFor(field).format(coerced);
   }
   if (field.type === "date" && typeof coerced === "string") {
-    return formatIsoDate(coerced);
+    return formatIsoDate(coerced, field.format ?? "default", opts);
   }
   return cellToPlainText(field, coerced);
 }
