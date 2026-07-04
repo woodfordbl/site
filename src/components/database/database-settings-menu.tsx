@@ -1028,6 +1028,19 @@ export function DatabaseSettingsMenu({
             Vertical separators
           </DropdownMenuSwitchItem>
         ) : null}
+        {view && view.type === "table" ? (
+          <DropdownMenuSwitchItem
+            checked={view.config.showPageIcons !== false}
+            onCheckedChange={(next) => {
+              updateDatabaseView(database.id, view.id, {
+                config: { ...view.config, showPageIcons: next },
+              });
+            }}
+          >
+            <IconFileText />
+            Page icons
+          </DropdownMenuSwitchItem>
+        ) : null}
         <DropdownMenuSeparator />
         <SourceSubmenu database={database} rowCount={rowCount} />
         <RowPagesItem database={database} />

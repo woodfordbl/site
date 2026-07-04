@@ -1,6 +1,7 @@
 import {
   IconArrowsDiagonal,
   IconChevronRight,
+  IconFileText,
   IconPlus,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
@@ -539,6 +540,10 @@ export function DatabaseTableGrid({
   const hasCalculations =
     calculations !== undefined && Object.keys(calculations).length > 0;
 
+  // Page icon in the primary (title) cells — a per-view toggle (⋯ menu),
+  // shown unless explicitly disabled.
+  const showPageIcon = view.config.showPageIcons !== false;
+
   return (
     // The DnD wrapper stays outside the scroll container (the table block's
     // hard-won wrapper-placement rule) so header sources, the drop zone, and
@@ -665,6 +670,7 @@ export function DatabaseTableGrid({
                         primaryFieldId={primaryFieldId}
                         row={row}
                         rowIndex={virtualRow.index}
+                        showPageIcon={showPageIcon}
                         top={virtualRow.start}
                       />
                     );
@@ -937,6 +943,8 @@ interface GridRowProps {
   row: LocalDatabaseRow;
   /** Zero-based data row index (drives measurement + ARIA row index). */
   rowIndex: number;
+  /** Render a page icon in the primary (title) cell (per-view toggle). */
+  showPageIcon: boolean;
   top: number;
 }
 
@@ -963,6 +971,7 @@ const GridRow = memo(function GridRowInner({
   primaryFieldId,
   row,
   rowIndex,
+  showPageIcon,
   top,
 }: GridRowProps) {
   return (
@@ -994,6 +1003,7 @@ const GridRow = memo(function GridRowInner({
           onStartEdit={onStartEdit}
           onStopEdit={onStopEdit}
           row={row}
+          showPageIcon={showPageIcon}
         />
       ))}
     </div>
@@ -1014,6 +1024,8 @@ interface GridCellProps {
   onStartEdit: (target: CellEditTarget) => void;
   onStopEdit: () => void;
   row: LocalDatabaseRow;
+  /** Prepend a page icon to the primary (title) cell (per-view toggle). */
+  showPageIcon: boolean;
 }
 
 /**
@@ -1050,6 +1062,81 @@ function GridCellOpenPill({
   );
 }
 
+/**
+ * Builds a grid cell's inner content: the checkbox editor (edit mode), the
+ * inline-edit trigger button, or the plain value view. Primary (title) cells
+ * prepend a Notion-style page icon when `showPageIcon` is set. Extracted from
+ * `GridCell` to keep that component's branching under the complexity budget.
+ */
+function renderGridCellContent({
+  field,
+  inlineEditable,
+  isCheckbox,
+  mode,
+  onStartEdit,
+  row,
+  showPageIcon,
+  value,
+  valueView,
+}: {
+  field: DatabaseField;
+  inlineEditable: boolean;
+  isCheckbox: boolean;
+  mode: "view" | "edit";
+  onStartEdit: (target: CellEditTarget) => void;
+  row: LocalDatabaseRow;
+  showPageIcon: boolean;
+  value: LocalDatabaseRow["values"][string];
+  valueView: ReactNode;
+}): ReactNode {
+  if (mode === "edit" && isCheckbox) {
+    return (
+      <DatabaseCheckboxCellEditor
+        // Synced checkbox columns render the checkbox but never write — the
+        // sync engine owns their values.
+        disabled={isSyncedField(field)}
+        field={field}
+        rowId={row.id}
+        value={value}
+      />
+    );
+  }
+
+  // The default document glyph — rows carry no per-row icon; the whole cell
+  // still opens the row page via the hover "Open" pill.
+  const label = showPageIcon ? (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <IconFileText
+        aria-hidden
+        className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground/70"
+      />
+      {valueView}
+    </span>
+  ) : (
+    valueView
+  );
+
+  if (inlineEditable) {
+    return (
+      <button
+        className={cn(
+          "flex size-full min-w-0 cursor-default items-center overflow-hidden text-left outline-none",
+          field.type === "number" && "justify-end"
+        )}
+        onClick={() => {
+          onStartEdit({ rowId: row.id, fieldId: field.id });
+        }}
+        tabIndex={-1}
+        type="button"
+      >
+        {label}
+      </button>
+    );
+  }
+
+  return label;
+}
+
 function GridCell({
   ariaColIndex,
   column,
@@ -1062,6 +1149,7 @@ function GridCell({
   onStartEdit,
   onStopEdit,
   row,
+  showPageIcon,
 }: GridCellProps) {
   const { field } = column;
   const value = row.values[field.id];
@@ -1082,37 +1170,19 @@ function GridCell({
     <DatabaseCellValueView field={field} mode={mode} now={now} value={value} />
   );
 
-  let content: ReactNode;
-  if (mode === "edit" && isCheckbox) {
-    content = (
-      <DatabaseCheckboxCellEditor
-        // Synced checkbox columns render the checkbox but never write — the
-        // sync engine owns their values.
-        disabled={isSyncedField(field)}
-        field={field}
-        rowId={row.id}
-        value={value}
-      />
-    );
-  } else if (inlineEditable) {
-    content = (
-      <button
-        className={cn(
-          "flex size-full min-w-0 cursor-default items-center overflow-hidden text-left outline-none",
-          field.type === "number" && "justify-end"
-        )}
-        onClick={() => {
-          onStartEdit({ rowId: row.id, fieldId: field.id });
-        }}
-        tabIndex={-1}
-        type="button"
-      >
-        {valueView}
-      </button>
-    );
-  } else {
-    content = valueView;
-  }
+  const content = renderGridCellContent({
+    field,
+    inlineEditable,
+    isCheckbox,
+    mode,
+    onStartEdit,
+    row,
+    // Notion-style page icon at the head of the title cell — every row "is" a
+    // page, so the primary cell reads as a page link (a per-view toggle).
+    showPageIcon: isPrimary && showPageIcon,
+    value,
+    valueView,
+  });
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: virtualized div grid — see the grid container note.
