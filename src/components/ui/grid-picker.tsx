@@ -70,6 +70,10 @@ interface GridPickerProps<T> {
   onSelect: (item: T) => void;
   /** Extra rows rendered above/below the viewport. Raise for cheap cells to smooth fast scrolling. */
   overscan?: number;
+  /** Recently used items surfaced in a labeled row above the grid; hidden while searching. */
+  recentItems?: readonly T[];
+  /** Small caption shown above the recents row. Defaults to "Recently used". */
+  recentLabel?: string;
   renderItem: (item: T) => ReactNode;
   rowHeight?: number;
   searchAriaLabel: string;
@@ -94,9 +98,14 @@ export function GridPicker<T>({
   columns = DEFAULT_COLUMNS,
   rowHeight = DEFAULT_ROW_HEIGHT,
   overscan = DEFAULT_OVERSCAN,
+  recentItems,
+  recentLabel = "Recently used",
   className,
 }: GridPickerProps<T>) {
   const [query, setQuery] = useState("");
+  // Recents are a quick-access shortcut, not part of the search space — hide them
+  // the moment the user types so results aren't split across two grids.
+  const showRecents = query.length === 0 && (recentItems?.length ?? 0) > 0;
   const virtualizerRef = useRef<RowVirtualizer | null>(null);
   // In drawer presentation (touch) the picker gets a tall surface, so grow to
   // fill it instead of capping the viewport at GRID_VIEWPORT_MAX_HEIGHT_PX.
@@ -148,6 +157,17 @@ export function GridPicker<T>({
               render={<InputGroupInput aria-label={searchAriaLabel} />}
             />
           </InputGroup>
+          {showRecents && recentItems ? (
+            <RecentGrid
+              columns={columns}
+              getItemLabel={getItemLabel}
+              getKey={getKey}
+              items={recentItems}
+              label={recentLabel}
+              onSelect={onSelect}
+              renderItem={renderItem}
+            />
+          ) : null}
           <Autocomplete.List
             className={cn(
               "relative w-full",
@@ -205,6 +225,55 @@ const cellClassName = cn(
   buttonVariants({ variant: "ghost", size: "icon-lg" }),
   "h-9 w-full cursor-default text-base data-highlighted:bg-muted data-highlighted:text-foreground"
 );
+
+interface RecentGridProps<T> {
+  columns: number;
+  getItemLabel: (item: T) => string;
+  getKey: (item: T) => string;
+  items: readonly T[];
+  label: string;
+  onSelect: (item: T) => void;
+  renderItem: (item: T) => ReactNode;
+}
+
+/**
+ * Recently used items shown above the search grid when the query is empty. A small
+ * non-virtualized row (capped upstream) that sits outside the `Autocomplete` list, so it
+ * isn't part of keyboard grid navigation — a mouse/touch quick-access shortcut only.
+ */
+function RecentGrid<T>({
+  columns,
+  getItemLabel,
+  getKey,
+  items,
+  label,
+  onSelect,
+  renderItem,
+}: RecentGridProps<T>) {
+  return (
+    <div className="mb-2 shrink-0">
+      <p className="mb-1 px-1 font-medium text-muted-foreground text-xs">
+        {label}
+      </p>
+      <div
+        className="grid gap-0.5 px-px"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {items.map((item) => (
+          <button
+            aria-label={getItemLabel(item)}
+            className={cellClassName}
+            key={getKey(item)}
+            onClick={() => onSelect(item)}
+            type="button"
+          >
+            {renderItem(item)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface GridCellProps<T> {
   handle: TooltipPrimitive.Handle<string>;
