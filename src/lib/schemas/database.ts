@@ -149,6 +149,17 @@ export const databaseFilterOperatorSchema = z.enum([
   "after",
   "onOrBefore",
   "onOrAfter",
+  /** Date range: condition value is `[startIso, endIso]` (inclusive). */
+  "between",
+  /** Relative date windows — no value; evaluated against the current clock. */
+  "pastDay",
+  "pastWeek",
+  "pastMonth",
+  "pastYear",
+  "thisWeek",
+  "thisMonth",
+  "nextWeek",
+  "nextMonth",
   "isEmpty",
   "isNotEmpty",
 ]);
