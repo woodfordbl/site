@@ -33,8 +33,11 @@ export interface ExprError {
   readonly type: "expr-error";
 }
 
+/** An ordered list value (multiSelect fields, `[…]` literals, list ops). */
+export type ExprList = ExprPlainValue[];
+
 /** A successfully computed expression value (no error). */
-export type ExprPlainValue = number | string | boolean | null;
+export type ExprPlainValue = number | string | boolean | null | ExprList;
 
 /**
  * Any expression result. ISO date strings are plain strings; comparison
@@ -60,9 +63,18 @@ export function exprError(message: string): ExprError {
   return { type: "expr-error", message };
 }
 
-/** Whether an expression result is an {@link ExprError}. */
+/** Whether an expression result is a list value. */
+export function isExprList(value: ExprValue): value is ExprList {
+  return Array.isArray(value);
+}
+
+/**
+ * Whether an expression result is an {@link ExprError}. Lists are objects too,
+ * so they must be excluded — only the `{ type: "expr-error" }` shape is an
+ * error.
+ */
 export function isExprError(value: ExprValue): value is ExprError {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -87,6 +99,9 @@ export function formatExprValueDefault(value: ExprPlainValue): string {
   if (value === null) {
     return "";
   }
+  if (Array.isArray(value)) {
+    return value.map(formatExprValueDefault).join(", ");
+  }
   if (typeof value === "boolean") {
     return value ? "Yes" : "No";
   }
@@ -100,6 +115,9 @@ export function formatExprValueDefault(value: ExprPlainValue): string {
 function typeName(value: ExprPlainValue): string {
   if (value === null) {
     return "empty";
+  }
+  if (Array.isArray(value)) {
+    return "list";
   }
   if (typeof value === "string") {
     return "text";
@@ -115,6 +133,9 @@ function typeName(value: ExprPlainValue): string {
 function toText(value: ExprPlainValue): string {
   if (value === null) {
     return "";
+  }
+  if (Array.isArray(value)) {
+    return value.map(toText).join(", ");
   }
   if (typeof value === "string") {
     return value;
@@ -215,13 +236,22 @@ function applyNumeric(
   return typeof n === "number" ? apply(n) : n;
 }
 
+/**
+ * Numeric aggregate operands: `sum`/`min`/`max`/`average` accept either
+ * varargs (`sum(1, 2, 3)`) or a single list (`sum(thisPage.Scores)`) — a lone
+ * list argument is spread to its elements.
+ */
+function numericOperands(args: ExprPlainValue[]): ExprPlainValue[] {
+  return args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
+}
+
 function reduceNumbers(
   fnName: string,
   args: ExprPlainValue[],
   reduce: (a: number, b: number) => number
 ): ExprValue {
   let result: number | null = null;
-  for (const arg of args) {
+  for (const arg of numericOperands(args)) {
     const n = requireNumber(arg, fnName);
     if (typeof n !== "number") {
       return n;
@@ -232,13 +262,23 @@ function reduceNumbers(
 }
 
 /**
- * `average()` / `avg()`: arithmetic mean of the numeric arguments. Same
- * coercion rules as `min`/`max` — every argument must already be a number
- * (no string coercion), and the first non-number aborts with its error.
+ * `average()` / `avg()`: arithmetic mean of the numeric operands (varargs or a
+ * single list). Same coercion rules as `min`/`max` — every operand must
+ * already be a number, and the first non-number aborts with its error.
  */
 function evalAverage(fnName: string, args: ExprPlainValue[]): ExprValue {
-  const total = reduceNumbers(fnName, args, (a, b) => a + b);
-  return typeof total === "number" ? total / args.length : total;
+  const operands = numericOperands(args);
+  let total = 0;
+  for (const arg of operands) {
+    const n = requireNumber(arg, fnName);
+    if (typeof n !== "number") {
+      return n;
+    }
+    total += n;
+  }
+  return operands.length === 0
+    ? exprError(`${fnName}() of an empty list`)
+    : total / operands.length;
 }
 
 function evalRound(args: ExprPlainValue[]): ExprValue {
@@ -626,6 +666,82 @@ function evalIsSameDay(args: ExprPlainValue[]): ExprValue {
     return b;
   }
   return differenceInCalendarDays(a, b) === 0;
+}
+
+/** Coerce a value to a list, or name the function in the type error. */
+function requireList(
+  value: ExprPlainValue,
+  fnName: string
+): ExprList | ExprError {
+  return Array.isArray(value)
+    ? value
+    : exprError(`${fnName}() expects a list, got ${typeName(value)}`);
+}
+
+/** Apply a list operation after checking the first argument is a list. */
+function withList(
+  fnName: string,
+  args: ExprPlainValue[],
+  apply: (list: ExprList) => ExprValue
+): ExprValue {
+  const list = requireList(args[0], fnName);
+  return Array.isArray(list) ? apply(list) : list;
+}
+
+/** Ordering for `sort`: numeric when both are numbers, else by display text. */
+function compareForSort(a: ExprPlainValue, b: ExprPlainValue): number {
+  if (typeof a === "number" && typeof b === "number") {
+    return a - b;
+  }
+  return toText(a).localeCompare(toText(b));
+}
+
+/** `at(list, index)` — element at a 0-based (or negative) index, else empty. */
+function evalListAt(args: ExprPlainValue[]): ExprValue {
+  return withList("at", args, (list) => {
+    const index = requireNumber(args[1], "at");
+    if (typeof index !== "number") {
+      return index;
+    }
+    return list.at(Math.trunc(index)) ?? null;
+  });
+}
+
+/** `join(list, separator?)` — text of the elements joined by `separator`. */
+function evalListJoin(args: ExprPlainValue[]): ExprValue {
+  return withList("join", args, (list) => {
+    const separator = args.length > 1 ? toText(args[1]) : ", ";
+    return list.map(toText).join(separator);
+  });
+}
+
+/** `unique(list)` — elements with duplicates removed (by value equality). */
+function evalListUnique(list: ExprList): ExprList {
+  const result: ExprList = [];
+  for (const element of list) {
+    if (!result.some((seen) => valuesEqual(seen, element))) {
+      result.push(element);
+    }
+  }
+  return result;
+}
+
+/** `slice(list, start, end?)` — sublist by 0-based indices (end exclusive). */
+function evalListSlice(args: ExprPlainValue[]): ExprValue {
+  return withList("slice", args, (list) => {
+    const start = requireNumber(args[1], "slice");
+    if (typeof start !== "number") {
+      return start;
+    }
+    if (args.length === 2) {
+      return list.slice(Math.trunc(start));
+    }
+    const end = requireNumber(args[2], "slice");
+    if (typeof end !== "number") {
+      return end;
+    }
+    return list.slice(Math.trunc(start), Math.trunc(end));
+  });
 }
 
 interface ExprFunctionDef {
@@ -1041,6 +1157,79 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
     "issameday",
     { minArgs: 2, maxArgs: 2, apply: (args) => evalIsSameDay(args) },
   ],
+  // List operations (eager). The higher-order ones (map/filter/…) that take a
+  // lambda live in LAZY_CALLS so `current` binds per element.
+  [
+    "count",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => withList("count", args, (l) => l.length),
+    },
+  ],
+  [
+    "length",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => withList("length", args, (l) => l.length),
+    },
+  ],
+  [
+    "first",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => withList("first", args, (l) => l[0] ?? null),
+    },
+  ],
+  [
+    "last",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => withList("last", args, (l) => l.at(-1) ?? null),
+    },
+  ],
+  ["at", { minArgs: 2, maxArgs: 2, apply: (args) => evalListAt(args) }],
+  [
+    "includes",
+    {
+      minArgs: 2,
+      maxArgs: 2,
+      apply: (args) =>
+        withList("includes", args, (l) =>
+          l.some((element) => valuesEqual(element, args[1]))
+        ),
+    },
+  ],
+  ["join", { minArgs: 1, maxArgs: 2, apply: (args) => evalListJoin(args) }],
+  [
+    "unique",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => withList("unique", args, evalListUnique),
+    },
+  ],
+  [
+    "reverse",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) => withList("reverse", args, (l) => [...l].reverse()),
+    },
+  ],
+  ["slice", { minArgs: 2, maxArgs: 3, apply: (args) => evalListSlice(args) }],
+  [
+    "sort",
+    {
+      minArgs: 1,
+      maxArgs: 1,
+      apply: (args) =>
+        withList("sort", args, (l) => [...l].sort(compareForSort)),
+    },
+  ],
 ]);
 
 /**
@@ -1191,8 +1380,22 @@ const VOLATILE_PIPE_NAMES = new Set(["ago", "fromnow"]);
  * here without documenting it (or vice versa) fails loudly.
  */
 export function implementedExprFunctionNames(): string[] {
-  // Lazy special forms (if/ifs/switch/let/lets) live outside EXPR_FUNCTIONS.
-  return ["if", "ifs", "switch", "let", "lets", ...EXPR_FUNCTIONS.keys()];
+  // Lazy special forms (control flow + higher-order list ops) live outside
+  // EXPR_FUNCTIONS.
+  return [
+    "if",
+    "ifs",
+    "switch",
+    "let",
+    "lets",
+    "map",
+    "filter",
+    "find",
+    "some",
+    "every",
+    "countif",
+    ...EXPR_FUNCTIONS.keys(),
+  ];
 }
 
 /** Function names whose results depend on the clock (see {@link isVolatileExpression}). */
@@ -1212,6 +1415,15 @@ function arityMessage(name: string, def: ExprFunctionDef, got: number): string {
 function valuesEqual(left: ExprPlainValue, right: ExprPlainValue): boolean {
   if (left === null || right === null) {
     return left === right;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    // Lists are equal element-by-element; a list never equals a scalar.
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((element, index) => valuesEqual(element, right[index]))
+    );
   }
   if (typeof left !== typeof right) {
     // Type-aware equality: mismatched types are unequal, not an error, so
@@ -1513,6 +1725,155 @@ function evalLets(
     : evalNode(body, scope, frame);
 }
 
+/**
+ * Evaluate the list argument of a higher-order call (`map`/`filter`/…),
+ * checking arity and that the first argument is a list.
+ */
+function higherOrderList(
+  fnName: string,
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprList | ExprError {
+  if (args.length !== 2) {
+    return exprError(`${fnName}() expects 2 arguments, got ${args.length}`);
+  }
+  const value = evalNode(args[0], scope, bindings);
+  if (isExprError(value)) {
+    return value;
+  }
+  return requireList(value, fnName);
+}
+
+/** Child binding frame exposing `current` (element) and `index` to a lambda. */
+function lambdaFrame(
+  bindings: Bindings,
+  element: ExprPlainValue,
+  index: number
+): BindingFrame {
+  return {
+    name: "current",
+    value: element,
+    parent: { name: "index", value: index, parent: bindings },
+  };
+}
+
+/**
+ * Evaluate a boolean predicate lambda over every element (binding `current`),
+ * returning the per-element results or the first error / non-boolean.
+ */
+function predicateResults(
+  fnName: string,
+  list: ExprList,
+  lambda: ExprNode,
+  scope: ExprScope,
+  bindings: Bindings
+): boolean[] | ExprError {
+  const results: boolean[] = [];
+  for (const [index, element] of list.entries()) {
+    const value = requireBoolean(
+      evalNode(lambda, scope, lambdaFrame(bindings, element, index)),
+      fnName
+    );
+    if (typeof value !== "boolean") {
+      return value;
+    }
+    results.push(value);
+  }
+  return results;
+}
+
+/** `map(list, expr)` — apply `expr` (with `current` bound) to each element. */
+function evalMap(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  const list = higherOrderList("map", args, scope, bindings);
+  if (isExprError(list)) {
+    return list;
+  }
+  const mapped: ExprList = [];
+  for (const [index, element] of list.entries()) {
+    const value = evalNode(
+      args[1],
+      scope,
+      lambdaFrame(bindings, element, index)
+    );
+    if (isExprError(value)) {
+      return value;
+    }
+    mapped.push(value);
+  }
+  return mapped;
+}
+
+/** `filter(list, predicate)` — keep the elements whose predicate is true. */
+function evalFilter(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  const list = higherOrderList("filter", args, scope, bindings);
+  if (isExprError(list)) {
+    return list;
+  }
+  const results = predicateResults("filter", list, args[1], scope, bindings);
+  return Array.isArray(results)
+    ? list.filter((_, index) => results[index])
+    : results;
+}
+
+/** `find(list, predicate)` — the first element whose predicate is true, else empty. */
+function evalFind(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  const list = higherOrderList("find", args, scope, bindings);
+  if (isExprError(list)) {
+    return list;
+  }
+  const results = predicateResults("find", list, args[1], scope, bindings);
+  if (isExprError(results)) {
+    return results;
+  }
+  const at = results.indexOf(true);
+  return at === -1 ? null : list[at];
+}
+
+/** `some(list, predicate)` / `every(list, predicate)` — boolean quantifiers. */
+function evalQuantifier(
+  fnName: "some" | "every",
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  const list = higherOrderList(fnName, args, scope, bindings);
+  if (isExprError(list)) {
+    return list;
+  }
+  const results = predicateResults(fnName, list, args[1], scope, bindings);
+  if (isExprError(results)) {
+    return results;
+  }
+  return fnName === "some" ? results.includes(true) : !results.includes(false);
+}
+
+/** `countIf(list, predicate)` — number of elements whose predicate is true. */
+function evalCountIf(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  const list = higherOrderList("countIf", args, scope, bindings);
+  if (isExprError(list)) {
+    return list;
+  }
+  const results = predicateResults("countIf", list, args[1], scope, bindings);
+  return Array.isArray(results) ? results.filter(Boolean).length : results;
+}
+
 /** Lazy special forms whose arguments must not be eagerly evaluated. */
 const LAZY_CALLS = new Map<
   string,
@@ -1523,6 +1884,18 @@ const LAZY_CALLS = new Map<
   ["switch", evalSwitch],
   ["let", evalLet],
   ["lets", evalLets],
+  ["map", evalMap],
+  ["filter", evalFilter],
+  ["find", evalFind],
+  [
+    "some",
+    (args, scope, bindings) => evalQuantifier("some", args, scope, bindings),
+  ],
+  [
+    "every",
+    (args, scope, bindings) => evalQuantifier("every", args, scope, bindings),
+  ],
+  ["countif", evalCountIf],
 ]);
 
 function evalCall(
@@ -1594,6 +1967,17 @@ function evalNode(
       return lookupBinding(bindings, ast.name);
     case "pipe":
       return evalPipe(ast, scope, bindings);
+    case "list": {
+      const elements: ExprList = [];
+      for (const element of ast.elements) {
+        const value = evalNode(element, scope, bindings);
+        if (isExprError(value)) {
+          return value;
+        }
+        elements.push(value);
+      }
+      return elements;
+    }
     case "unary":
       return evalUnary(ast.op, evalNode(ast.operand, scope, bindings));
     case "binary": {
@@ -1653,6 +2037,8 @@ export function isVolatileExpression(ast: ExprNode): boolean {
         isVolatileExpression(ast.input) ||
         ast.args.some(isVolatileExpression)
       );
+    case "list":
+      return ast.elements.some(isVolatileExpression);
     default:
       return false;
   }

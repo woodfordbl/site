@@ -37,5 +37,12 @@ export function exprValueToCellValue(
   if (typeof value === "number" && !Number.isFinite(value)) {
     return null;
   }
+  if (Array.isArray(value)) {
+    // A list projects to a multiSelect-shaped cell only when every element is
+    // text; otherwise there's no faithful scalar cell value (collapse to empty).
+    return value.every((element) => typeof element === "string")
+      ? (value as string[])
+      : null;
+  }
   return value;
 }

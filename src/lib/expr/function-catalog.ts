@@ -7,7 +7,13 @@
  */
 
 /** Section a function is listed under in the builder. */
-export type ExprFunctionCategory = "logic" | "math" | "text" | "date" | "time";
+export type ExprFunctionCategory =
+  | "logic"
+  | "math"
+  | "text"
+  | "date"
+  | "time"
+  | "list";
 
 /** One documented function: what the builder lists, previews, and inserts. */
 export interface ExprFunctionCatalogEntry {
@@ -514,6 +520,133 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
     description: "Returns the current date and time as an ISO timestamp.",
     example: 'formatDate(now(), "MMM d, HH:mm")',
     category: "time",
+  },
+  // List
+  {
+    name: "count",
+    signature: "count(list)",
+    description: "Returns the number of items in a list.",
+    example: "count(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "length",
+    signature: "length(list)",
+    description: "Returns the number of items in a list (same as count).",
+    example: "length(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "first",
+    signature: "first(list)",
+    description: "Returns the first item of a list, or empty when it has none.",
+    example: "first(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "last",
+    signature: "last(list)",
+    description: "Returns the last item of a list, or empty when it has none.",
+    example: "last(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "at",
+    signature: "at(list, index)",
+    description:
+      "Returns the item at a 0-based index (negative counts from the end), or empty.",
+    example: "at(thisPage.Tags, 0)",
+    category: "list",
+  },
+  {
+    name: "includes",
+    signature: "includes(list, value)",
+    description: "True when the list contains the given value.",
+    example: 'includes(thisPage.Tags, "urgent")',
+    category: "list",
+  },
+  {
+    name: "join",
+    signature: "join(list, separator?)",
+    description:
+      'Joins the list items into text, separated by separator (default ", ").',
+    example: 'join(thisPage.Tags, " · ")',
+    category: "list",
+  },
+  {
+    name: "unique",
+    signature: "unique(list)",
+    description: "Returns the list with duplicate items removed.",
+    example: "unique(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "reverse",
+    signature: "reverse(list)",
+    description: "Returns the list in reverse order.",
+    example: "reverse(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "slice",
+    signature: "slice(list, start, end?)",
+    description:
+      "Returns the sublist from the 0-based start index up to (not including) end.",
+    example: "slice(thisPage.Tags, 0, 3)",
+    category: "list",
+  },
+  {
+    name: "sort",
+    signature: "sort(list)",
+    description: "Returns the list sorted ascending (numerically or by text).",
+    example: "sort(thisPage.Tags)",
+    category: "list",
+  },
+  {
+    name: "map",
+    signature: "map(list, expression)",
+    description:
+      "Transforms each item with an expression; use current for the item.",
+    example: "map(thisPage.Tags, upper(current))",
+    category: "list",
+  },
+  {
+    name: "filter",
+    signature: "filter(list, condition)",
+    description:
+      "Keeps the items where the condition is true; use current for the item.",
+    example: 'filter(thisPage.Tags, current != "done")',
+    category: "list",
+  },
+  {
+    name: "find",
+    signature: "find(list, condition)",
+    description:
+      "Returns the first item where the condition is true; use current for the item.",
+    example: 'find(thisPage.Tags, startsWith(current, "a"))',
+    category: "list",
+  },
+  {
+    name: "some",
+    signature: "some(list, condition)",
+    description: "True when any item satisfies the condition (uses current).",
+    example: 'some(thisPage.Tags, current == "urgent")',
+    category: "list",
+  },
+  {
+    name: "every",
+    signature: "every(list, condition)",
+    description: "True when every item satisfies the condition (uses current).",
+    example: "every(thisPage.Scores, current >= 60)",
+    category: "list",
+  },
+  {
+    name: "countIf",
+    signature: "countIf(list, condition)",
+    description:
+      "Counts the items where the condition is true; use current for the item.",
+    example: "countIf(thisPage.Scores, current > 80)",
+    category: "list",
   },
 ];
 

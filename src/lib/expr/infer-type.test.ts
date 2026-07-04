@@ -75,6 +75,16 @@ describe("inferType", () => {
     expect(typeOf('thisPage.Due | date("MMM d")')).toBe("text");
   });
 
+  it("types list literals and list operations", () => {
+    expect(typeOf("[1, 2, 3]")).toBe("list");
+    expect(typeOf("count(thisPage.Tags)")).toBe("number");
+    expect(typeOf("countIf(thisPage.Scores, current > 80)")).toBe("number");
+    expect(typeOf("filter([1, 2], current > 1)")).toBe("list");
+    expect(typeOf("map([1, 2], current * 2)")).toBe("list");
+    expect(typeOf('join([1, 2], ",")')).toBe("text");
+    expect(typeOf("some([1, 2], current > 1)")).toBe("boolean");
+  });
+
   it("is unknown for bare variables and unknown functions", () => {
     expect(typeOf("current")).toBe("unknown");
     expect(typeOf("mystery(1)")).toBe("unknown");

@@ -125,9 +125,13 @@ describe("createRowScope value mapping", () => {
     );
   });
 
-  it("joins multiSelect option names with commas", () => {
-    expect(run("thisPage.Tags")).toBe("Alpha, Beta");
+  it("exposes multiSelect as a list of option names (in option order)", () => {
+    expect(run("thisPage.Tags")).toEqual(["Alpha", "Beta"]);
+    // Default display and text coercion still render the comma-joined names.
     expect(run('contains(thisPage.Tags, "Beta")')).toBe(true);
+    expect(run("count(thisPage.Tags)")).toBe(2);
+    expect(run('join(thisPage.Tags, " / ")')).toBe("Alpha / Beta");
+    expect(run('includes(thisPage.Tags, "Alpha")')).toBe(true);
   });
 
   it("reduces dates to their ISO date part for lexical comparison", () => {

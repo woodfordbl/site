@@ -11,12 +11,13 @@
 
 import type { ExprNode } from "@/lib/expr/parse.ts";
 
-/** The surfaced value types. `list`/`row` arrive with Phase D/E. */
+/** The surfaced value types. `row` arrives with Phase E (relations). */
 export type ExprType =
   | "number"
   | "text"
   | "boolean"
   | "date"
+  | "list"
   | "empty"
   | "unknown";
 
@@ -55,6 +56,9 @@ const FUNCTION_RESULT_TYPES = new Map<string, ExprType>([
       "month",
       "day",
       "weekday",
+      "count",
+      "length",
+      "countif",
     ] as const
   ).map((name): [string, ExprType] => [name, "number"]),
   // text
@@ -77,6 +81,7 @@ const FUNCTION_RESULT_TYPES = new Map<string, ExprType>([
       "dayname",
       "monthname",
       "now",
+      "join",
     ] as const
   ).map((name): [string, ExprType] => [name, "text"]),
   // boolean
@@ -95,11 +100,18 @@ const FUNCTION_RESULT_TYPES = new Map<string, ExprType>([
       "endswith",
       "regexmatch",
       "issameday",
+      "includes",
+      "some",
+      "every",
     ] as const
   ).map((name): [string, ExprType] => [name, "boolean"]),
   // date
   ...(["dateadd", "today", "startof", "endof"] as const).map(
     (name): [string, ExprType] => [name, "date"]
+  ),
+  // list
+  ...(["map", "filter", "unique", "reverse", "slice", "sort"] as const).map(
+    (name): [string, ExprType] => [name, "list"]
   ),
 ]);
 
@@ -229,6 +241,8 @@ export function inferType(
     case "pipe":
       // Every pipe formats to display text.
       return "text";
+    case "list":
+      return "list";
     default:
       return "unknown";
   }

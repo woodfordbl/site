@@ -37,6 +37,8 @@ function sexpr(node: ExprNode): string {
       return `(${node.name} ${node.args.map(sexpr).join(" ")})`;
     case "pipe":
       return `(| ${node.name} ${[node.input, ...node.args].map(sexpr).join(" ")})`;
+    case "list":
+      return `[${node.elements.map(sexpr).join(" ")}]`;
     default:
       return "?";
   }
@@ -270,6 +272,24 @@ describe("parse format pipes", () => {
 
   it("errors when a pipe name is missing", () => {
     expect(errorOf("1 | ").message).toContain("pipe name");
+  });
+});
+
+describe("parse list literals", () => {
+  it("parses empty, flat, and nested lists", () => {
+    expect(sexpr(astOf("[]"))).toBe("[]");
+    expect(sexpr(astOf("[1, 2, 3]"))).toBe("[1 2 3]");
+    expect(sexpr(astOf('[thisPage.Name, "x"]'))).toBe('[prop:Name "x"]');
+    expect(sexpr(astOf("[[1, 2], [3]]"))).toBe("[[1 2] [3]]");
+  });
+
+  it("supports method chaining and pipes on a list", () => {
+    expect(sexpr(astOf("[3, 1, 2].sort()"))).toBe("(sort [3 1 2])");
+    expect(sexpr(astOf("[1, 2] | plain"))).toBe("(| plain [1 2])");
+  });
+
+  it("errors on an unclosed list", () => {
+    expect(errorOf("[1, 2").message).toContain("close the list");
   });
 });
 

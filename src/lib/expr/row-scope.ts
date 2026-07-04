@@ -52,8 +52,26 @@ function cellToExprValue(
       return typeof coerced === "number" ? coerced : null;
     case "checkbox":
       return typeof coerced === "boolean" ? coerced : null;
+    case "multiSelect": {
+      // A real list value (Phase D): option NAMES in field-option order (the
+      // same order cellToPlainText joins), so count()/filter()/join() work and
+      // stale ids drop out. Default display still renders "A, B".
+      if (!Array.isArray(coerced)) {
+        return null;
+      }
+      const entries: { index: number; name: string }[] = [];
+      for (const optionId of coerced) {
+        const index = field.options.findIndex(
+          (option) => option.id === optionId
+        );
+        if (index !== -1) {
+          entries.push({ index, name: field.options[index].name });
+        }
+      }
+      entries.sort((a, b) => a.index - b.index);
+      return entries.map((entry) => entry.name);
+    }
     case "select":
-    case "multiSelect":
     case "date":
       return cellToPlainText(field, coerced);
     default:

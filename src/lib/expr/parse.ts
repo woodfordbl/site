@@ -104,6 +104,13 @@ export interface ExprPipeNode {
   position: number;
 }
 
+/** A list literal — `[a, b, c]`. Elements are arbitrary expressions. */
+export interface ExprListNode {
+  elements: ExprNode[];
+  kind: "list";
+  position: number;
+}
+
 /** Any expression AST node. */
 export type ExprNode =
   | ExprLiteralNode
@@ -112,7 +119,8 @@ export type ExprNode =
   | ExprUnaryNode
   | ExprBinaryNode
   | ExprCallNode
-  | ExprPipeNode;
+  | ExprPipeNode
+  | ExprListNode;
 
 /** Result of {@link parseExpression}: the AST or a positioned parse error. */
 export type ParseExpressionResult =
@@ -453,6 +461,10 @@ class Parser {
       this.expectPunct(")", "to close the group");
       return inner;
     }
+    if (token.type === "punct" && token.value === "[") {
+      this.advance();
+      return this.parseListLiteral(token.position);
+    }
     throw new ExprParseFailure(
       `Unexpected ${describeToken(token)}`,
       token.position
@@ -518,6 +530,22 @@ class Parser {
       `Expected "." or "[" after "${root}"`,
       found.position
     );
+  }
+
+  /** Finish a `[…]` list literal after the opening `[` has been consumed. */
+  private parseListLiteral(position: number): ExprNode {
+    const elements: ExprNode[] = [];
+    if (this.matchPunct("]") !== null) {
+      return { kind: "list", elements, position };
+    }
+    for (;;) {
+      elements.push(this.parsePipe());
+      if (this.matchPunct(",") !== null) {
+        continue;
+      }
+      this.expectPunct("]", "to close the list");
+      return { kind: "list", elements, position };
+    }
   }
 
   private parseCallArgs(name: string, position: number): ExprNode {

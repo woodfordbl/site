@@ -605,6 +605,86 @@ describe("switch / ifs (v2)", () => {
   });
 });
 
+describe("lists (v2)", () => {
+  it("evaluates list literals and propagates element errors", () => {
+    expect(run("[1, 2, 3]")).toEqual([1, 2, 3]);
+    expect(run("[]")).toEqual([]);
+    expect(run('["a", thisPage.X]', scopeOf({ X: "b" }))).toEqual(["a", "b"]);
+    expect(errorMessage(run("[1, 1 / 0]"))).toBe("Division by zero");
+  });
+
+  it("count / length / first / last / at", () => {
+    expect(run("count([10, 20, 30])")).toBe(3);
+    expect(run("length([])")).toBe(0);
+    expect(run("first([10, 20])")).toBe(10);
+    expect(run("last([10, 20])")).toBe(20);
+    expect(run("first([])")).toBe(null);
+    expect(run("at([10, 20, 30], 1)")).toBe(20);
+    expect(run("at([10, 20, 30], -1)")).toBe(30);
+    expect(run("at([10], 5)")).toBe(null);
+  });
+
+  it("includes / join / unique / reverse / slice / sort", () => {
+    expect(run('includes(["a", "b"], "b")')).toBe(true);
+    expect(run('includes(["a", "b"], "z")')).toBe(false);
+    expect(run('join(["a", "b", "c"], " · ")')).toBe("a · b · c");
+    expect(run("join([1, 2, 3])")).toBe("1, 2, 3");
+    expect(run("unique([1, 1, 2, 3, 3])")).toEqual([1, 2, 3]);
+    expect(run("reverse([1, 2, 3])")).toEqual([3, 2, 1]);
+    expect(run("slice([1, 2, 3, 4], 1, 3)")).toEqual([2, 3]);
+    expect(run("sort([3, 1, 2])")).toEqual([1, 2, 3]);
+    expect(run('sort(["c", "a", "b"])')).toEqual(["a", "b", "c"]);
+  });
+
+  it("sum / min / max / average accept a single list", () => {
+    expect(run("sum([1, 2, 3])")).toBe(6);
+    expect(run("min([3, 1, 2])")).toBe(1);
+    expect(run("max([3, 1, 2])")).toBe(3);
+    expect(run("average([2, 4, 6])")).toBe(4);
+    // Varargs still work.
+    expect(run("sum(1, 2, 3)")).toBe(6);
+  });
+
+  it("list functions reject non-lists", () => {
+    expect(errorMessage(run("count(5)"))).toContain("expects a list");
+    expect(errorMessage(run('join("x", ",")'))).toContain("expects a list");
+  });
+});
+
+describe("higher-order list functions (v2)", () => {
+  it("map / filter with the current element binding", () => {
+    expect(run("map([1, 2, 3], current * 2)")).toEqual([2, 4, 6]);
+    expect(run('map(["a", "b"], upper(current))')).toEqual(["A", "B"]);
+    expect(run("filter([1, 2, 3, 4], current > 2)")).toEqual([3, 4]);
+    expect(run("map([10, 20], index)")).toEqual([0, 1]);
+  });
+
+  it("find / some / every / countIf", () => {
+    expect(run("find([1, 2, 3], current > 1)")).toBe(2);
+    expect(run("find([1, 2], current > 9)")).toBe(null);
+    expect(run("some([1, 2, 3], current > 2)")).toBe(true);
+    expect(run("some([1, 2], current > 9)")).toBe(false);
+    expect(run("every([2, 4, 6], mod(current, 2) == 0)")).toBe(true);
+    expect(run("every([2, 3], mod(current, 2) == 0)")).toBe(false);
+    expect(run("countIf([80, 90, 60, 95], current > 80)")).toBe(2);
+  });
+
+  it("compose: countIf over a filtered/mapped list", () => {
+    expect(run("count(filter([1, 2, 3, 4, 5], mod(current, 2) == 1))")).toBe(3);
+    expect(run("sum(map([1, 2, 3], current * current))")).toBe(14);
+  });
+
+  it("validate arity, list type, and boolean predicates", () => {
+    expect(errorMessage(run("map([1], current, 2)"))).toContain(
+      "expects 2 arguments"
+    );
+    expect(errorMessage(run("filter(5, current)"))).toContain("expects a list");
+    expect(errorMessage(run("filter([1, 2], current)"))).toContain(
+      "expects a boolean"
+    );
+  });
+});
+
 describe("format pipes (v2)", () => {
   it("currency / percent / compact / number format numbers", () => {
     expect(run("1234.5 | currency")).toBe("$1,234.50");
