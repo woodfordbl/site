@@ -211,22 +211,43 @@ export function useDatabaseColumnHeaderDrag(fieldId: string): {
     [reset, rowDrag]
   );
 
+  // The column-menu drawer/popover is rendered inside this React subtree but
+  // PORTALED to <body>, so its events re-enter React propagation through this
+  // wrapper. React capture handlers here run before the drawer content's own
+  // handlers — swallowing a portaled pointerdown killed vaul's drag-to-dismiss
+  // (the drawer could never be swiped away). Only own presses that physically
+  // land inside the header cell.
+  const isPortaledEvent = (event: {
+    currentTarget: HTMLElement;
+    target: EventTarget;
+  }) =>
+    event.target instanceof Node && !event.currentTarget.contains(event.target);
+
   let headerProps: DatabaseColumnHeaderDragProps;
   if (isCoarsePrimaryPointer) {
     headerProps = {
       draggable: false,
       onPointerDownCapture: (event) => {
+        if (isPortaledEvent(event)) {
+          return;
+        }
         // Keep the press away from the menu trigger (see hook JSDoc).
         event.stopPropagation();
         touchPointerDown(event);
       },
       onMouseDownCapture: (event) => {
+        if (isPortaledEvent(event)) {
+          return;
+        }
         event.stopPropagation();
       },
       onPointerMove: touchPointerMove,
       onPointerUp: touchPointerUp,
       onPointerCancel: touchPointerCancel,
       onClickCapture: (event) => {
+        if (isPortaledEvent(event)) {
+          return;
+        }
         if (suppressClickRef.current) {
           suppressClickRef.current = false;
           event.preventDefault();
@@ -248,6 +269,9 @@ export function useDatabaseColumnHeaderDrag(fieldId: string): {
     headerProps = {
       draggable: sourceProps.draggable,
       onPointerDownCapture: (event) => {
+        if (isPortaledEvent(event)) {
+          return;
+        }
         // Keep the press away from the menu trigger (see hook JSDoc). The
         // capture-phase stop also skips our own bubble handler, so invoke the
         // drag source's pointerdown directly.
@@ -255,6 +279,9 @@ export function useDatabaseColumnHeaderDrag(fieldId: string): {
         sourceProps.onPointerDown(event);
       },
       onMouseDownCapture: (event) => {
+        if (isPortaledEvent(event)) {
+          return;
+        }
         event.stopPropagation();
       },
       onPointerMove: sourceProps.onPointerMove,
@@ -264,6 +291,9 @@ export function useDatabaseColumnHeaderDrag(fieldId: string): {
       onDragStart: sourceProps.onDragStart,
       onDragEnd: sourceProps.onDragEnd,
       onClickCapture: (event) => {
+        if (isPortaledEvent(event)) {
+          return;
+        }
         if (dragSource.shouldSuppressClick()) {
           event.preventDefault();
           event.stopPropagation();

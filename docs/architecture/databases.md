@@ -84,6 +84,11 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   [`database-column-dnd.tsx`](../../src/components/database/database-column-dnd.tsx)):
   press-threshold drag on fine pointers (click still opens the menu, on release),
   450ms long-press lift on coarse; full-grid-height `bg-selection-primary` drop lines;
+  the wrapper's capture-phase `stopPropagation` (which keeps the press away from the
+  menu trigger) ignores events that land in the portaled column-menu drawer/popover —
+  the portal stays in this React subtree, and swallowing its pointerdowns would break
+  the drawer's swipe-to-dismiss (see the drawer drag contract in
+  [canvas-editor](./canvas-editor.md));
   drop writes `columnOrder` and derives `pinnedFieldIds` from the freeze-boundary rule
   (left of the boundary pins, right unpins, exactly on it keeps state). Vertical cell
   separators are per view (`config.showVerticalLines`, absent = shown); the last column
