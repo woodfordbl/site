@@ -63,7 +63,7 @@ describe("FormulaEditorPanel", () => {
 
     const textarea = screen.getByLabelText("Formula expression");
     const search = screen.getByLabelText(
-      "Search properties, functions, and operators"
+      "Search properties, functions, operators, and pipes"
     );
 
     // Search narrows the reference list to the average function.
@@ -88,8 +88,8 @@ describe("FormulaEditorPanel", () => {
       "average(thisPage.Price)"
     );
 
-    // Live parse status + first-row preview.
-    expect(screen.getByText("✓ Valid")).toBeDefined();
+    // Live parse status (with inferred result type) + first-row preview.
+    expect(screen.getByText(/✓ Valid · number/)).toBeDefined();
     expect(screen.getByText("Preview: 10")).toBeDefined();
   });
 

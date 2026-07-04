@@ -1,4 +1,8 @@
-import { IconMathFunction, IconSearch } from "@tabler/icons-react";
+import {
+  IconArrowRight,
+  IconMathFunction,
+  IconSearch,
+} from "@tabler/icons-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -23,15 +27,38 @@ import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
 import {
   EXPR_FUNCTION_CATALOG,
   EXPR_OPERATOR_CATALOG,
+  EXPR_PIPE_CATALOG,
   formulaPropertyReference,
 } from "@/lib/expr/function-catalog.ts";
+import { type ExprType, inferType } from "@/lib/expr/infer-type.ts";
 import { parseExpression } from "@/lib/expr/parse.ts";
 import { createRowScope } from "@/lib/expr/row-scope.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
+  DatabaseFieldType,
 } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
+
+/** Map a database field type to the expression type its values evaluate to. */
+function fieldExprType(type: DatabaseFieldType): ExprType {
+  switch (type) {
+    case "number":
+      return "number";
+    case "checkbox":
+      return "boolean";
+    case "date":
+      return "date";
+    case "text":
+    case "url":
+    case "select":
+    case "multiSelect":
+      return "text";
+    default:
+      // `formula` fields cannot be referenced yet (see createRowScope).
+      return "unknown";
+  }
+}
 
 /**
  * Shared formula BUILDER panel (Notion-style): expression textarea with live
@@ -224,15 +251,45 @@ export function FormulaEditorPanel({
     [normalizedQuery]
   );
 
+  const pipeEntries = useMemo(
+    () =>
+      EXPR_PIPE_CATALOG.filter((entry) =>
+        `${entry.name} ${entry.signature} ${entry.description}`
+          .toLowerCase()
+          .includes(normalizedQuery)
+      ),
+    [normalizedQuery]
+  );
+
+  // Advisory result type of the current draft, for the ✓ Valid badge. Resolves
+  // property references to their field types; unknown when it can't be pinned.
+  const resultType = useMemo<ExprType | null>(() => {
+    if (!parsed?.ok) {
+      return null;
+    }
+    const byName = new Map<string, ExprType>();
+    for (const field of fields) {
+      byName.set(field.name.trim().toLowerCase(), fieldExprType(field.type));
+    }
+    return inferType(
+      parsed.ast,
+      (name) => byName.get(name.trim().toLowerCase()) ?? "unknown"
+    );
+  }, [parsed, fields]);
+
   const nothingMatches =
     propertyFields.length === 0 &&
     functionEntries.length === 0 &&
-    operatorEntries.length === 0;
+    operatorEntries.length === 0 &&
+    pipeEntries.length === 0;
 
   let status: ReactNode = null;
   if (parsed !== null) {
     status = parsed.ok ? (
-      <span className="px-0.5 text-muted-foreground text-xs">✓ Valid</span>
+      <span className="px-0.5 text-muted-foreground text-xs">
+        ✓ Valid
+        {resultType && resultType !== "unknown" ? ` · ${resultType}` : ""}
+      </span>
     ) : (
       <span className="px-0.5 text-destructive text-xs">
         {parsed.error.message} (at character {parsed.error.position + 1})
@@ -273,7 +330,7 @@ export function FormulaEditorPanel({
           </InputGroupText>
         </InputGroupAddon>
         <InputGroupInput
-          aria-label="Search properties, functions, and operators"
+          aria-label="Search properties, functions, operators, and pipes"
           autoComplete="off"
           onChange={(event) => {
             setQuery(event.target.value);
@@ -351,6 +408,28 @@ export function FormulaEditorPanel({
               <span className="w-8 shrink-0 text-center font-mono text-xs">
                 {entry.symbol}
               </span>
+              <span className="truncate text-muted-foreground text-xs">
+                {entry.description}
+              </span>
+            </ReferenceRow>
+          ))}
+          {pipeEntries.length > 0 ? <SectionLabel>Pipes</SectionLabel> : null}
+          {pipeEntries.map((entry) => (
+            <ReferenceRow
+              detail={{
+                title: `| ${entry.signature}`,
+                description: entry.description,
+                example: entry.example,
+              }}
+              key={entry.name}
+              onInsert={() => {
+                // Append the pipe after the current expression.
+                insertAtCaret(` | ${entry.name}`, entry.name.length + 3);
+              }}
+              onShowDetail={setDetail}
+            >
+              <IconArrowRight className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+              <span className="shrink-0 font-mono text-xs">{entry.name}</span>
               <span className="truncate text-muted-foreground text-xs">
                 {entry.description}
               </span>

@@ -91,6 +91,19 @@ export interface ExprCallNode {
   position: number;
 }
 
+/**
+ * A format pipe — `value | currency`, `value | date("MMM d")`. Applies a
+ * display formatter to `input`; the result is always text and the pipe never
+ * changes the underlying value's type. Lowest precedence, left-associative.
+ */
+export interface ExprPipeNode {
+  args: ExprNode[];
+  input: ExprNode;
+  kind: "pipe";
+  name: string;
+  position: number;
+}
+
 /** Any expression AST node. */
 export type ExprNode =
   | ExprLiteralNode
@@ -98,7 +111,8 @@ export type ExprNode =
   | ExprVariableNode
   | ExprUnaryNode
   | ExprBinaryNode
-  | ExprCallNode;
+  | ExprCallNode
+  | ExprPipeNode;
 
 /** Result of {@link parseExpression}: the AST or a positioned parse error. */
 export type ParseExpressionResult =
@@ -171,7 +185,7 @@ class Parser {
     if (first.type === "eof") {
       throw new ExprParseFailure("Empty expression", first.position);
     }
-    const ast = this.parseOr();
+    const ast = this.parsePipe();
     const trailing = this.peek();
     if (trailing.type !== "eof") {
       throw new ExprParseFailure(
@@ -226,6 +240,40 @@ class Parser {
       );
     }
     return token;
+  }
+
+  /**
+   * Format pipes: `expr | name` / `expr | name(args)`, lowest precedence and
+   * left-associative, so `a + b | currency | compact` reads as
+   * `((a + b) | currency) | compact`. A pipe's result is always display text.
+   */
+  private parsePipe(): ExprNode {
+    let node = this.parseOr();
+    for (;;) {
+      const bar = this.matchPunct("|");
+      if (bar === null) {
+        return node;
+      }
+      const name = this.peek();
+      if (name.type !== "identifier") {
+        throw new ExprParseFailure(
+          `Expected a pipe name after "|", got ${describeToken(name)}`,
+          name.position
+        );
+      }
+      this.advance();
+      let args: ExprNode[] = [];
+      if (this.matchPunct("(") !== null) {
+        args = this.parseArgList(`to close the "| ${name.value}(…)" pipe`);
+      }
+      node = {
+        kind: "pipe",
+        input: node,
+        name: name.value,
+        args,
+        position: bar.position,
+      };
+    }
   }
 
   private parseOr(): ExprNode {
@@ -401,7 +449,7 @@ class Parser {
     }
     if (token.type === "punct" && token.value === "(") {
       this.advance();
-      const inner = this.parseOr();
+      const inner = this.parsePipe();
       this.expectPunct(")", "to close the group");
       return inner;
     }
@@ -488,7 +536,7 @@ class Parser {
       return args;
     }
     for (;;) {
-      args.push(this.parseOr());
+      args.push(this.parsePipe());
       if (this.matchPunct(",") !== null) {
         continue;
       }

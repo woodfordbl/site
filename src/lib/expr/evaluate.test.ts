@@ -605,6 +605,67 @@ describe("switch / ifs (v2)", () => {
   });
 });
 
+describe("format pipes (v2)", () => {
+  it("currency / percent / compact / number format numbers", () => {
+    expect(run("1234.5 | currency")).toBe("$1,234.50");
+    expect(run('1234.5 | currency("EUR")')).toBe("€1,234.50");
+    expect(run("0.42 | percent")).toBe("42%");
+    expect(run("0.425 | percent(1)")).toBe("42.5%");
+    expect(run("12400 | compact")).toBe("12.4K");
+    expect(run("1234.5 | number(2)")).toBe("1,234.50");
+  });
+
+  it("date pipe formats a date string", () => {
+    expect(run('"2026-03-05" | date("MMM d")')).toBe("Mar 5");
+  });
+
+  it("plain applies the default display", () => {
+    expect(run("true | plain")).toBe("Yes");
+    expect(run("1234.5 | plain")).toBe("1,234.5");
+  });
+
+  it("ago is clock-relative and reads the injected now", () => {
+    const scope: ExprScope = {
+      getProperty: () => null,
+      // Exactly three calendar days after the parsed (local-midnight) date, so
+      // date-fns' distance rounding is unambiguous.
+      now: () => new Date(2026, 2, 8),
+    };
+    expect(run('"2026-03-05" | ago', scope)).toBe("3 days ago");
+  });
+
+  it("propagates input errors and reports unknown pipes / bad types", () => {
+    expect(errorMessage(run("1 / 0 | currency"))).toBe("Division by zero");
+    expect(errorMessage(run("5 | bogus"))).toContain('Unknown pipe "bogus"');
+    expect(errorMessage(run('"x" | currency'))).toContain("expects a number");
+    expect(errorMessage(run('1234 | currency("NOPE")'))).toContain(
+      "unknown currency code"
+    );
+  });
+
+  it("chains and composes with expressions", () => {
+    expect(run("(1 + 2) | compact")).toBe("3");
+    expect(run('concat("~", 1234.5 | currency)')).toBe("~$1,234.50");
+  });
+});
+
+describe("pipe volatility (v2)", () => {
+  function volatileOf(source: string): boolean {
+    const parsed = parseExpression(source);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+    return isVolatileExpression(parsed.ast);
+  }
+
+  it("ago / fromNow pipes are volatile; pure pipes are not", () => {
+    expect(volatileOf("thisPage.Due | ago")).toBe(true);
+    expect(volatileOf("thisPage.Due | fromNow")).toBe(true);
+    expect(volatileOf("thisPage.Price | currency")).toBe(false);
+    expect(volatileOf('today() | date("MMM d")')).toBe(true);
+  });
+});
+
 describe("scope properties", () => {
   it("resolves values from the scope", () => {
     const scope = scopeOf({ Score: 10, Name: "Ada", Done: true, Empty: null });

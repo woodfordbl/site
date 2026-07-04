@@ -35,6 +35,8 @@ function sexpr(node: ExprNode): string {
       return `(${node.op} ${sexpr(node.left)} ${sexpr(node.right)})`;
     case "call":
       return `(${node.name} ${node.args.map(sexpr).join(" ")})`;
+    case "pipe":
+      return `(| ${node.name} ${[node.input, ...node.args].map(sexpr).join(" ")})`;
     default:
       return "?";
   }
@@ -236,6 +238,38 @@ describe("parse method chaining", () => {
 
   it("leaves scope-root property access as property access", () => {
     expect(sexpr(astOf("thisPage.Name"))).toBe("prop:Name");
+  });
+});
+
+describe("parse format pipes", () => {
+  it("parses a bare pipe and a pipe with args", () => {
+    expect(sexpr(astOf("thisPage.Price | currency"))).toBe(
+      "(| currency prop:Price)"
+    );
+    expect(sexpr(astOf('thisPage.Due | date("MMM d")'))).toBe(
+      '(| date prop:Due "MMM d")'
+    );
+  });
+
+  it("is lowest precedence — the whole expression is piped", () => {
+    expect(sexpr(astOf("1 + 2 | compact"))).toBe("(| compact (+ 1 2))");
+  });
+
+  it("chains left to right", () => {
+    expect(sexpr(astOf("thisPage.N | number(2) | plain"))).toBe(
+      "(| plain (| number prop:N 2))"
+    );
+  });
+
+  it("works inside groups and call arguments", () => {
+    expect(sexpr(astOf("(1 | compact)"))).toBe("(| compact 1)");
+    expect(sexpr(astOf("concat(thisPage.P | currency)"))).toBe(
+      "(concat (| currency prop:P))"
+    );
+  });
+
+  it("errors when a pipe name is missing", () => {
+    expect(errorOf("1 | ").message).toContain("pipe name");
   });
 });
 

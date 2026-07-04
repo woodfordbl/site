@@ -16,6 +16,7 @@ import { endOfMonth } from "date-fns/endOfMonth";
 import { endOfWeek } from "date-fns/endOfWeek";
 import { endOfYear } from "date-fns/endOfYear";
 import { format as dateFnsFormat } from "date-fns/format";
+import { formatDistance } from "date-fns/formatDistance";
 import { startOfMonth } from "date-fns/startOfMonth";
 import { startOfWeek } from "date-fns/startOfWeek";
 import { startOfYear } from "date-fns/startOfYear";
@@ -1043,6 +1044,147 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
 ]);
 
 /**
+ * A format pipe: turns a value into display text without changing its type.
+ * Shared vocabulary with the inline-token language (databases proposal §5.3)
+ * so chips and formula columns format identically. Receives the injected
+ * `scope` for the clock-relative `ago`/`fromNow` pipes.
+ */
+type PipeFormatter = (
+  value: ExprPlainValue,
+  args: ExprPlainValue[],
+  scope: ExprScope
+) => ExprValue;
+
+/** Coerce a pipe input to a number, or name the pipe in the type error. */
+function pipeNumber(name: string, value: ExprPlainValue): number | ExprError {
+  return typeof value === "number"
+    ? value
+    : exprError(`"${name}" pipe expects a number, got ${typeName(value)}`);
+}
+
+/** Optional integer argument (e.g. decimal places) shared by numeric pipes. */
+function pipeIntArg(
+  name: string,
+  args: ExprPlainValue[],
+  fallback: number
+): number | ExprError {
+  if (args.length === 0) {
+    return fallback;
+  }
+  const value = args[0];
+  return typeof value === "number"
+    ? Math.trunc(value)
+    : exprError(`"${name}" pipe expects a number of digits`);
+}
+
+/** Every display pipe, keyed by lowercased name (see {@link PipeFormatter}). */
+const EXPR_PIPES = new Map<string, PipeFormatter>([
+  ["plain", (value) => formatExprValueDefault(value)],
+  [
+    "number",
+    (value, args) => {
+      const n = pipeNumber("number", value);
+      if (typeof n !== "number") {
+        return n;
+      }
+      const digits = pipeIntArg("number", args, -1);
+      if (typeof digits !== "number") {
+        return digits;
+      }
+      const options: Intl.NumberFormatOptions =
+        digits < 0
+          ? { maximumFractionDigits: 6 }
+          : { minimumFractionDigits: digits, maximumFractionDigits: digits };
+      return new Intl.NumberFormat("en-US", options).format(n);
+    },
+  ],
+  [
+    "currency",
+    (value, args) => {
+      const n = pipeNumber("currency", value);
+      if (typeof n !== "number") {
+        return n;
+      }
+      const code = args.length > 0 ? toText(args[0]) : "USD";
+      try {
+        return new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: code,
+        }).format(n);
+      } catch {
+        return exprError(
+          `"currency" pipe: unknown currency code ${JSON.stringify(code)}`
+        );
+      }
+    },
+  ],
+  [
+    "percent",
+    (value, args) => {
+      const n = pipeNumber("percent", value);
+      if (typeof n !== "number") {
+        return n;
+      }
+      const digits = pipeIntArg("percent", args, 0);
+      if (typeof digits !== "number") {
+        return digits;
+      }
+      return new Intl.NumberFormat("en-US", {
+        style: "percent",
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      }).format(n);
+    },
+  ],
+  [
+    "compact",
+    (value) => {
+      const n = pipeNumber("compact", value);
+      return typeof n === "number"
+        ? new Intl.NumberFormat("en-US", {
+            notation: "compact",
+            maximumFractionDigits: 1,
+          }).format(n)
+        : n;
+    },
+  ],
+  [
+    "date",
+    (value, args) => {
+      const date = parseDateArg(value, "date");
+      if (date instanceof Date === false) {
+        return date;
+      }
+      const pattern = requireString(args[0] ?? null, "date");
+      if (typeof pattern !== "string") {
+        return pattern;
+      }
+      try {
+        return dateFnsFormat(date, pattern);
+      } catch {
+        return exprError(
+          `"date" pipe: invalid format pattern ${JSON.stringify(pattern)}`
+        );
+      }
+    },
+  ],
+  ["ago", (value, _args, scope) => pipeRelative(value, scope)],
+  ["fromnow", (value, _args, scope) => pipeRelative(value, scope)],
+]);
+
+/** Shared body for `ago`/`fromNow`: distance from a date to the clock now. */
+function pipeRelative(value: ExprPlainValue, scope: ExprScope): ExprValue {
+  const date = parseDateArg(value, "ago");
+  if (date instanceof Date === false) {
+    return date;
+  }
+  return formatDistance(date, scopeNow(scope), { addSuffix: true });
+}
+
+/** Pipe names whose result depends on the clock (see {@link isVolatileExpression}). */
+const VOLATILE_PIPE_NAMES = new Set(["ago", "fromnow"]);
+
+/**
  * Every implemented function name (lowercased), lazily-evaluated `if`
  * included. The drift anchor for the UI catalog in `function-catalog.ts` —
  * its test asserts catalog coverage against this list so adding a function
@@ -1412,6 +1554,31 @@ function evalCall(
   return def.apply(values, scope);
 }
 
+/** Evaluate a `value | name(args)` pipe: format the input, never re-type it. */
+function evalPipe(
+  node: Extract<ExprNode, { kind: "pipe" }>,
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  const value = evalNode(node.input, scope, bindings);
+  if (isExprError(value)) {
+    return value;
+  }
+  const formatter = EXPR_PIPES.get(node.name.toLowerCase());
+  if (formatter === undefined) {
+    return exprError(`Unknown pipe "${node.name}"`);
+  }
+  const argValues: ExprPlainValue[] = [];
+  for (const arg of node.args) {
+    const argValue = evalNode(arg, scope, bindings);
+    if (isExprError(argValue)) {
+      return argValue;
+    }
+    argValues.push(argValue);
+  }
+  return formatter(value, argValues, scope);
+}
+
 /** Recursive core of {@link evaluateExpression}, threading the binding scope. */
 function evalNode(
   ast: ExprNode,
@@ -1425,6 +1592,8 @@ function evalNode(
       return scope.getProperty(ast.name);
     case "variable":
       return lookupBinding(bindings, ast.name);
+    case "pipe":
+      return evalPipe(ast, scope, bindings);
     case "unary":
       return evalUnary(ast.op, evalNode(ast.operand, scope, bindings));
     case "binary": {
@@ -1476,6 +1645,12 @@ export function isVolatileExpression(ast: ExprNode): boolean {
     case "call":
       return (
         VOLATILE_FUNCTION_NAMES.has(ast.name.toLowerCase()) ||
+        ast.args.some(isVolatileExpression)
+      );
+    case "pipe":
+      return (
+        VOLATILE_PIPE_NAMES.has(ast.name.toLowerCase()) ||
+        isVolatileExpression(ast.input) ||
         ast.args.some(isVolatileExpression)
       );
     default:

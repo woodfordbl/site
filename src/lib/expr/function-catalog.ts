@@ -603,6 +603,69 @@ export const EXPR_OPERATOR_CATALOG: readonly ExprOperatorCatalogEntry[] = [
   },
 ];
 
+/** One documented format pipe: what the builder lists and inserts after `|`. */
+export interface ExprPipeCatalogEntry {
+  /** One sentence, sentence case. */
+  readonly description: string;
+  /** An example result the pipe produces (display only). */
+  readonly example: string;
+  /** Canonical (insertable) pipe name. */
+  readonly name: string;
+  /** Human signature, e.g. `currency(code?)`. */
+  readonly signature: string;
+}
+
+/**
+ * Every display pipe, mirroring `EXPR_PIPES` in `evaluate.ts`. Pipes format a
+ * value for display (`value | currency`) and never change its type; the
+ * vocabulary is shared with the inline-token language (databases §5.3).
+ */
+export const EXPR_PIPE_CATALOG: readonly ExprPipeCatalogEntry[] = [
+  {
+    name: "currency",
+    signature: "currency(code?)",
+    description: "Formats a number as currency (default USD).",
+    example: "1234.5 → $1,234.50",
+  },
+  {
+    name: "percent",
+    signature: "percent(decimals?)",
+    description: "Formats a number as a percentage (0.42 → 42%).",
+    example: "0.42 → 42%",
+  },
+  {
+    name: "compact",
+    signature: "compact",
+    description: "Abbreviates large numbers.",
+    example: "12400 → 12.4K",
+  },
+  {
+    name: "number",
+    signature: "number(decimals?)",
+    description: "Formats a number with grouping and optional fixed decimals.",
+    example: "1234.5 → 1,234.50",
+  },
+  {
+    name: "date",
+    signature: "date(pattern)",
+    description: 'Formats a date with a date-fns pattern like "MMM d, yyyy".',
+    example: '2026-03-05 → "Mar 5"',
+  },
+  {
+    name: "ago",
+    signature: "ago",
+    description:
+      "Shows a date as a clock-relative distance (also spelled fromNow).",
+    example: "→ 3 days ago",
+  },
+  {
+    name: "plain",
+    signature: "plain",
+    description: "Renders the value with the default display formatting.",
+    example: "true → Yes",
+  },
+];
+
 /**
  * Bare-identifier rule, mirroring the tokenizer's `IDENTIFIER_START_RE` /
  * `IDENTIFIER_PART_RE`: names outside it need the bracket reference form.

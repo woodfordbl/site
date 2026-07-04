@@ -32,7 +32,8 @@ export type ExprPunct =
   | "]"
   | "<"
   | ">"
-  | "!";
+  | "!"
+  | "|";
 
 /** One lexed token. `position` is the 0-based index of the token's first character. */
 export type ExprToken =
@@ -70,6 +71,9 @@ const SINGLE_CHAR_PUNCTS = new Set<ExprPunct>([
   "<",
   ">",
   "!",
+  // Single `|` is the format-pipe operator (`value | currency`); `||` is still
+  // matched first as the `or` operator via TWO_CHAR_PUNCTS.
+  "|",
 ]);
 
 /** Named escape sequences inside string literals; any other `\x` yields `x`. */
@@ -83,7 +87,6 @@ const STRING_ESCAPES = new Map<string, string>([
 const LONELY_CHAR_HINTS = new Map<string, string>([
   ["=", 'Unexpected "=" — use "==" to compare'],
   ["&", 'Unexpected "&" — use "&&" or "and"'],
-  ["|", 'Unexpected "|" — use "||" or "or"'],
 ]);
 
 interface TokenStep {
