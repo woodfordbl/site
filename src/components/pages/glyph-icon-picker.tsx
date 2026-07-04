@@ -31,6 +31,7 @@ import {
   preloadPageIconEmojiPanel,
   preloadPageIconIconPanel,
 } from "@/lib/pages/preload-page-icon-picker.ts";
+import { recordRecentlyUsedPageIcon } from "@/lib/pages/recently-used-page-icons.ts";
 import { cn } from "@/lib/utils.ts";
 
 /** Placeholder chrome (search + scroll box) shown while a lazy panel chunk resolves. */
@@ -197,6 +198,7 @@ export function GlyphIconPicker({
 
   const handleSelect = useCallback(
     (nextIcon: string) => {
+      recordRecentlyUsedPageIcon(nextIcon);
       onSelect(nextIcon);
       setOpen(false);
     },

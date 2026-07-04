@@ -4,7 +4,6 @@ import {
   IconFileText,
   IconHome,
   IconLayoutSidebar,
-  IconPencil,
   IconSlash,
 } from "@tabler/icons-react";
 import { eq, useLiveQuery } from "@tanstack/react-db";
@@ -78,15 +77,15 @@ import { cn } from "@/lib/utils.ts";
  * as a page WITHOUT any per-row page storage. The body renders from the
  * database's shared `rowTemplate` (tokens evaluated per render against the
  * row's live values); the title is the primary field's value; properties
- * edit inline through the same collection ops as the grid. A REAL user page
- * materializes copy-on-write on the first "Edit page" (or body click) — see
- * {@link useMaterializeRowPage} — after which the route redirects to it.
+ * edit inline through the same collection ops as the grid. The page reads as
+ * a normal blank page (no "Edit page" affordance); a REAL user page
+ * materializes copy-on-write the first time the user clicks into the body —
+ * see {@link useMaterializeRowPage} — after which the route redirects to it.
  *
  * Works identically for synced databases: a GitHub PR table's thousands of
  * rows each "have" a templated page with zero stored blocks. Synced rows
  * (those carrying an `externalId`) never materialize, though — the sync
- * engine owns their lifecycle — so they render without the Edit-page
- * affordance.
+ * engine owns their lifecycle — so the body click is inert for them.
  */
 
 /** Title shown (and used for the materialized page) when the primary cell is empty. */
@@ -501,7 +500,7 @@ function RowPageBody({
 
   // Clicking anywhere in the read-only body starts editing (Notion's "the
   // page is one click from real"); clicks on interactive elements (links,
-  // property editors, the Edit button handles itself) are ignored.
+  // property editors) are ignored.
   const handleBodyClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
@@ -542,7 +541,6 @@ function RowPageBody({
                 <RowPageTitleSection
                   database={database}
                   displayTitle={displayTitle}
-                  onEditPage={materialize}
                   row={row}
                 />
               }
@@ -555,19 +553,19 @@ function RowPageBody({
 }
 
 /**
- * Title + properties + Edit-page section rendered as the read-only canvas's
- * `titleSlot`. Stops click propagation so inline property editing never
- * triggers the body's copy-on-write click handler.
+ * Title + properties section rendered as the read-only canvas's `titleSlot`.
+ * Stops click propagation so inline property editing never triggers the
+ * body's copy-on-write click handler. There is deliberately no "Edit page"
+ * affordance — the page reads as a normal blank page, and clicking into the
+ * body starts editing (materializes) silently.
  */
 function RowPageTitleSection({
   database,
   displayTitle,
-  onEditPage,
   row,
 }: {
   database: LocalDatabase;
   displayTitle: string;
-  onEditPage: () => void;
   row: LocalDatabaseRow;
 }): ReactNode {
   return (
@@ -595,24 +593,9 @@ function RowPageTitleSection({
           {displayTitle}
         </h1>
       </div>
-      <div className="mt-6 border-border border-b pb-3">
+      <div className="mt-6 mb-4 border-border border-b pb-3">
         <RowPropertiesPanel database={database} row={row} />
       </div>
-      {row.externalId ? null : (
-        // Synced rows never materialize pages (the sync engine owns their
-        // lifecycle), so the affordance is hidden entirely for them.
-        <div className="mt-2 mb-4">
-          <Button
-            className="text-muted-foreground"
-            onClick={onEditPage}
-            size="sm"
-            variant="ghost"
-          >
-            <IconPencil />
-            Edit page
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

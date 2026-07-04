@@ -792,6 +792,27 @@ export function renameDatabase(databaseId: string, name: string): void {
 }
 
 /**
+ * Set (or clear, with `undefined`) a database's icon — an emoji or
+ * `tabler:IconName`, matching page icons — and bump its `updatedAt`.
+ */
+export function setDatabaseIcon(
+  databaseId: string,
+  icon: string | undefined
+): void {
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.icon = icon;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
  * Rebuild the database's `fields` array in the given id order, in one
  * transaction, bumping `updatedAt`. Ids are validated against the existing
  * schema: unknown ids are ignored (as are duplicates after the first), and
