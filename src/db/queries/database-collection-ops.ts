@@ -12,6 +12,7 @@ import type {
   DatabaseFilterCondition,
   DatabaseFilterGroup,
   DatabaseFilterInnerGroup,
+  DatabaseSource,
   DatabaseView,
   LocalDatabase,
   LocalDatabaseRow,
@@ -219,15 +220,25 @@ export function updateDatabaseCell(
   commitDatabaseTransaction(tx);
 }
 
-/** Delete rows by id in one transaction. */
+/**
+ * Delete rows by id in one transaction. Rows carrying an `externalId`
+ * (written by the connector sync engine) are skipped: locally deleting a
+ * synced row is dishonest UX — the next sync pass would simply respawn it
+ * from the provider snapshot — so v1 disables synced-row deletion at the op
+ * level. Whole-database deletion (`deleteDatabase`) still removes synced
+ * rows, and the sync engine's own tombstone path never goes through here.
+ */
 export function deleteDatabaseRows(rowIds: string[]): void {
-  if (rowIds.length === 0) {
+  const deletable = rowIds.filter(
+    (rowId) => localDatabaseRowsCollection.get(rowId)?.externalId === undefined
+  );
+  if (deletable.length === 0) {
     return;
   }
 
   const tx = createDatabaseTransaction();
   tx.mutate(() => {
-    for (const rowId of rowIds) {
+    for (const rowId of deletable) {
       localDatabaseRowsCollection.delete(rowId);
     }
   });
@@ -475,7 +486,10 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
 /**
  * Duplicate a field's definition (config included) under a new id named
  * "<Name> copy", inserted right after the original, and copy every row's
- * value for the source field under the new id.
+ * value for the source field under the new id. `sourceKey` is deliberately
+ * stripped: duplicating a synced column yields a LOCAL field with the current
+ * values copied — the copy must never be adopted (and overwritten) by the
+ * sync engine.
  */
 export function duplicateDatabaseField(
   databaseId: string,
@@ -487,11 +501,14 @@ export function duplicateDatabaseField(
     return;
   }
 
-  const copy: DatabaseField = {
-    ...structuredClone(source),
+  // Rest-destructure `sourceKey` away (the linter bans `delete`) so the copy
+  // carries no provider binding at all.
+  const { sourceKey: _sourceKey, ...cloned } = structuredClone(source);
+  const copy = {
+    ...cloned,
     id: crypto.randomUUID(),
     name: `${source.name} copy`,
-  };
+  } as DatabaseField;
   const affectedRows = localDatabaseRowsCollection.toArray.filter(
     (row) => row.databaseId === databaseId && fieldId in row.values
   );
@@ -574,6 +591,51 @@ export function reorderDatabaseFields(
       }
 
       draft.fields = ordered;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/** The connector variant of `DatabaseSource` (the only editable one). */
+type ConnectorDatabaseSource = Extract<DatabaseSource, { kind: "connector" }>;
+
+/**
+ * Patch a connector database's `source` (refresh-interval override, edited
+ * config) and bump `updatedAt`. Only databases whose source is already
+ * `kind: "connector"` are patched — local databases have no source settings.
+ * Passing `refreshMs: undefined` removes the override so the connector's
+ * default cadence applies again (connectors still clamp any override to
+ * their own minimum). The sync engine subscribes to the databases
+ * collection, so a saved patch reschedules polling automatically.
+ */
+export function updateDatabaseSource(
+  databaseId: string,
+  patch: Partial<Omit<ConnectorDatabaseSource, "kind">>
+): void {
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      if (draft.source?.kind !== "connector") {
+        return;
+      }
+      // `toPlain` drops keys whose value is undefined, so the explicit
+      // "clear the refresh override" case rebuilds the source without the
+      // key via rest-destructuring (the linter bans `delete`).
+      const merged: ConnectorDatabaseSource = {
+        ...toPlain(draft.source),
+        ...toPlain(patch),
+        kind: "connector",
+      };
+      if ("refreshMs" in patch && patch.refreshMs === undefined) {
+        const { refreshMs: _cleared, ...withoutOverride } = merged;
+        draft.source = withoutOverride;
+      } else {
+        draft.source = merged;
+      }
       draft.updatedAt = timestamp;
     });
   });

@@ -1,5 +1,6 @@
 import {
   IconCheck,
+  IconCloudDown,
   IconColumnInsertLeft,
   IconColumnInsertRight,
   IconCopy,
@@ -52,7 +53,10 @@ import {
   sortPriority,
   toggledSorts,
 } from "@/components/database/database-filter-helpers.ts";
-import { aggregateFnLabel } from "@/components/database/database-grid-helpers.ts";
+import {
+  aggregateFnLabel,
+  isSyncedField,
+} from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -571,6 +575,11 @@ export function DatabaseColumnMenu({
     });
   };
 
+  // Synced (connector-written) fields keep view-level and cosmetic actions
+  // (rename, icon, sort, calculate, freeze, hide, wrap, duplicate-as-local)
+  // but never schema-destructive ones: type/config edits and deletion would
+  // fight the sync engine's reconciliation.
+  const synced = isSyncedField(field);
   const freezePrefix = freezePrefixEndingAt(displayFieldIds, field.id);
   const frozenHere = isFrozenExactlyAt(config.pinnedFieldIds, freezePrefix);
   const sortEntry = sortEntryFor(view.sorts, field.id);
@@ -637,13 +646,26 @@ export function DatabaseColumnMenu({
             }}
           />
           <DropdownMenuGroup>
-            <DropdownMenuLabel>
+            <DropdownMenuLabel className="flex items-center">
               {FIELD_TYPE_DEFS[field.type].label}
+              {synced ? (
+                <span className="ml-auto inline-flex items-center gap-1 font-normal">
+                  <IconCloudDown
+                    aria-hidden
+                    className="size-3.5 stroke-[1.5px]"
+                  />
+                  Synced
+                </span>
+              ) : null}
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <EditPropertySubmenu databaseId={databaseId} field={field} />
-          <ChangeTypeSubmenu databaseId={databaseId} field={field} />
+          {synced ? null : (
+            <>
+              <EditPropertySubmenu databaseId={databaseId} field={field} />
+              <ChangeTypeSubmenu databaseId={databaseId} field={field} />
+            </>
+          )}
           <DropdownMenuItem
             onClick={() => {
               setIconPickerOpen(true);
@@ -771,7 +793,7 @@ export function DatabaseColumnMenu({
             Duplicate property
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={isPrimary}
+            disabled={isPrimary || synced}
             onClick={() => {
               removeDatabaseField(databaseId, field.id);
             }}

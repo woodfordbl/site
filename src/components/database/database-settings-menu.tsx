@@ -1,6 +1,7 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconClock,
   IconColumns3,
   IconDatabase,
   IconDots,
@@ -8,6 +9,7 @@ import {
   IconEyeOff,
   IconLayoutList,
   IconListDetails,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { format } from "date-fns/format";
@@ -20,6 +22,7 @@ import {
   useState,
 } from "react";
 
+import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { Button } from "@/components/ui/button.tsx";
@@ -27,6 +30,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -44,10 +49,20 @@ import {
   deleteDatabase,
   renameDatabase,
   reorderDatabaseFields,
+  updateDatabaseSource,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
+import { requestImmediateSync } from "@/db/sync/database-sync-engine.ts";
+import { useSyncStatus } from "@/hooks/use-sync-status.ts";
+import { getConnector } from "@/lib/connectors/registry.ts";
+import {
+  getConnectorToken,
+  setConnectorToken,
+} from "@/lib/connectors/token-store.ts";
+import type { ConnectorAuthSpec } from "@/lib/connectors/types.ts";
 import type {
   DatabaseField,
+  DatabaseSource,
   DatabaseView,
   DatabaseViewType,
   LocalDatabase,
@@ -352,17 +367,227 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Refresh-interval presets offered in the Source submenu. */
+const REFRESH_INTERVAL_OPTIONS: { label: string; ms: number }[] = [
+  { label: "1 minute", ms: 60_000 },
+  { label: "5 minutes", ms: 300_000 },
+  { label: "15 minutes", ms: 900_000 },
+  { label: "1 hour", ms: 3_600_000 },
+  { label: "6 hours", ms: 21_600_000 },
+];
+
+/** Radio value marking "no override — use the connector's default cadence". */
+const REFRESH_INTERVAL_DEFAULT_VALUE = "default";
+
+interface RefreshIntervalSubmenuProps {
+  databaseId: string;
+  refreshMs: number | undefined;
+}
+
+/**
+ * Poll-interval override picker. "Default" clears `source.refreshMs`; any
+ * preset writes it. Connectors clamp overrides to their own minimum, so an
+ * aggressive pick may effectively poll slower than labeled.
+ */
+function RefreshIntervalSubmenu({
+  databaseId,
+  refreshMs,
+}: RefreshIntervalSubmenuProps) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconClock />
+        Refresh interval
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => {
+            updateDatabaseSource(databaseId, {
+              refreshMs:
+                value === REFRESH_INTERVAL_DEFAULT_VALUE
+                  ? undefined
+                  : Number(value),
+            });
+          }}
+          value={String(refreshMs ?? REFRESH_INTERVAL_DEFAULT_VALUE)}
+        >
+          <DropdownMenuRadioItem value={REFRESH_INTERVAL_DEFAULT_VALUE}>
+            Default
+          </DropdownMenuRadioItem>
+          {REFRESH_INTERVAL_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.ms} value={String(option.ms)}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <p className="px-2 py-1.5 text-muted-foreground text-xs">
+          Sources enforce a minimum interval.
+        </p>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+interface ConnectorTokenRowProps {
+  auth: ConnectorAuthSpec;
+  connectorId: string;
+}
+
+/**
+ * Masked token input for connectors with BYO-token auth. Commits to the
+ * client-only token store on blur/Enter; an empty value clears the token.
+ */
+function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
+  const commit = (value: string) => {
+    setConnectorToken(connectorId, value);
+  };
+
+  return (
+    <div className="px-2 py-2">
+      <span className="text-muted-foreground text-xs">{auth.label}</span>
+      <InputGroup className="mt-1 h-8">
+        <InputGroupInput
+          aria-label={auth.label}
+          autoComplete="off"
+          defaultValue={getConnectorToken(connectorId) ?? ""}
+          onBlur={(event) => {
+            commit(event.currentTarget.value);
+          }}
+          onKeyDown={(event) => {
+            stopMenuKeys(event);
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit(event.currentTarget.value);
+            }
+          }}
+          placeholder="Paste token…"
+          type="password"
+        />
+      </InputGroup>
+      <p className="mt-1 text-muted-foreground text-xs">
+        Token saved locally — it never leaves this browser.
+      </p>
+    </div>
+  );
+}
+
+interface ConnectorSourceSubmenuProps {
+  database: LocalDatabase;
+  rowCount: number;
+  source: Extract<DatabaseSource, { kind: "connector" }>;
+}
+
+/**
+ * Source submenu for a connector-synced database: connector identity, the
+ * config summary (labels from `configFields`), last sync / last error from
+ * the live engine status, Refresh now, the refresh-interval override, and the
+ * token row for connectors with auth.
+ */
+function ConnectorSourceSubmenu({
+  database,
+  rowCount,
+  source,
+}: ConnectorSourceSubmenuProps) {
+  const connector = getConnector(source.connectorId);
+  const status = useSyncStatus(database.id);
+
+  const configRows: { label: string; value: string }[] = (
+    connector?.configFields ?? []
+  ).flatMap((configField) => {
+    const raw = source.config[configField.key];
+    const value = Array.isArray(raw) ? raw.join(", ") : String(raw ?? "");
+    return value === "" ? [] : [{ label: configField.label, value }];
+  });
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconDatabase />
+        Source
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-72 min-w-72">
+        <div className="space-y-1.5 px-2 py-2">
+          <div className="flex items-center gap-1.5 pb-0.5 text-sm">
+            <ConnectorIcon
+              className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground"
+              icon={connector?.icon}
+            />
+            <span className="min-w-0 truncate">
+              {connector?.title ?? "Unknown connector"}
+            </span>
+          </div>
+          {configRows.map((row) => (
+            <InfoRow key={row.label} label={row.label} value={row.value} />
+          ))}
+          <InfoRow label="Rows" value={String(rowCount)} />
+          <InfoRow
+            label="Last synced"
+            value={
+              status.lastSyncedAt ? formatTimestamp(status.lastSyncedAt) : "—"
+            }
+          />
+        </div>
+        {status.error ? (
+          <div className="px-2 pb-2 text-xs">
+            <span className="text-muted-foreground">Last error</span>
+            <p className="mt-0.5 break-words text-destructive">
+              {status.error.message}
+            </p>
+          </div>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          closeOnClick={false}
+          disabled={status.syncing}
+          onClick={() => {
+            requestImmediateSync(database.id);
+          }}
+        >
+          <IconRefresh
+            className={status.syncing ? "animate-spin" : undefined}
+          />
+          {status.syncing ? "Syncing…" : "Refresh now"}
+        </DropdownMenuItem>
+        <RefreshIntervalSubmenu
+          databaseId={database.id}
+          refreshMs={source.refreshMs}
+        />
+        {connector?.auth ? (
+          <>
+            <DropdownMenuSeparator />
+            <ConnectorTokenRow
+              auth={connector.auth}
+              connectorId={connector.id}
+            />
+          </>
+        ) : null}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
 interface SourceSubmenuProps {
   database: LocalDatabase;
   rowCount: number;
 }
 
 /**
- * Source submenu — read-only for now: the local storage backing (shard key),
- * row count, and timestamps. Connector sources will surface here in a later
- * phase.
+ * Source submenu. Local databases show the read-only storage backing (shard
+ * key), row count, and timestamps; connector databases get the full sync
+ * section (`ConnectorSourceSubmenu`).
  */
 function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
+  if (database.source?.kind === "connector") {
+    return (
+      <ConnectorSourceSubmenu
+        database={database}
+        rowCount={rowCount}
+        source={database.source}
+      />
+    );
+  }
+
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>

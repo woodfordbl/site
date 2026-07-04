@@ -219,13 +219,27 @@ export function resolveColumnDropSpot(
 }
 
 /**
- * Whether a field type routes through `DatabaseCellInlineEditor` when its
- * cell is clicked in edit mode: text/url/number take the input overlay,
+ * Whether a field's values are written by the connector sync engine (it
+ * carries the provider-side `sourceKey`). Synced fields are read-only in the
+ * grid — the next sync pass would overwrite any local edit.
+ */
+export function isSyncedField(
+  field: Pick<DatabaseField, "sourceKey">
+): boolean {
+  return field.sourceKey !== undefined;
+}
+
+/**
+ * Whether a field routes through `DatabaseCellInlineEditor` when its cell is
+ * clicked in edit mode: text/url/number take the input overlay,
  * select/multi-select/date open popover editors. Checkbox is the exception —
- * it toggles in place with no editing state.
+ * it toggles in place with no editing state. Synced fields (`sourceKey`) are
+ * never editable — this is the single edit-mode gate, so their cells also
+ * drop out of keyboard Tab/Enter navigation; view-mode rendering is
+ * unaffected.
  */
 export function isInlineEditableField(field: DatabaseField): boolean {
-  return field.type !== "checkbox";
+  return field.type !== "checkbox" && !isSyncedField(field);
 }
 
 /** One editing cell, addressed by stable row + field ids. */

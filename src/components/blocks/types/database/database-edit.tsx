@@ -1,19 +1,24 @@
 import { IconDatabase } from "@tabler/icons-react";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
+import { DatabaseCreatePanel } from "@/components/database/database-create-panel.tsx";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
-import { createDatabaseWithDefaults } from "@/db/queries/database-collection-ops.ts";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
-import { createDefaultDatabaseSeed } from "@/lib/databases/database-defaults.ts";
 
 type DatabaseEditProps = BlockEditProps<"database">;
 
 /**
  * Editable `database` block: an unlinked block shows the shared placeholder
- * trigger whose single action creates a default database and links it; a
+ * trigger opening the creation popover (media/embed source-picker
+ * conventions) with a local "New table" path and a connector "Sync" path; a
  * linked block renders the database's table view in edit mode. All grid
  * complexity lives in `components/database/`.
  */
@@ -31,11 +36,15 @@ export function DatabaseEdit({
   onStructuralKey,
 }: DatabaseEditProps) {
   const focusRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const hasDatabase = props.databaseId !== "";
 
   const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
-  }, []);
+    if (!hasDatabase) {
+      setPickerOpen(true);
+    }
+  }, [hasDatabase]);
 
   useAutoFocus({
     enabled: autoFocus,
@@ -53,10 +62,9 @@ export function DatabaseEdit({
     onStructuralKey,
   });
 
-  const handleCreateDatabase = () => {
-    const seed = createDefaultDatabaseSeed();
-    createDatabaseWithDefaults(seed);
-    onChange({ ...props, databaseId: seed.database.id });
+  const handleCreated = (databaseId: string) => {
+    setPickerOpen(false);
+    onChange({ ...props, databaseId });
   };
 
   const handleWrapperKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
@@ -71,14 +79,26 @@ export function DatabaseEdit({
 
   if (!hasDatabase) {
     return (
-      <PlaceholderTrigger
-        icon={<IconDatabase />}
-        onClick={handleCreateDatabase}
-        onKeyDown={handleKeyDown}
-        ref={focusRef as React.RefObject<HTMLButtonElement>}
-      >
-        New table database
-      </PlaceholderTrigger>
+      <Popover onOpenChange={setPickerOpen} open={pickerOpen}>
+        <PopoverTrigger
+          render={
+            <PlaceholderTrigger
+              icon={<IconDatabase />}
+              onKeyDown={handleKeyDown}
+              ref={focusRef as React.RefObject<HTMLButtonElement>}
+            />
+          }
+        >
+          New table — empty or synced from a source
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-96"
+          finalFocus={false}
+          initialFocus={false}
+        >
+          <DatabaseCreatePanel onCreated={handleCreated} />
+        </PopoverContent>
+      </Popover>
     );
   }
 

@@ -9,6 +9,7 @@ import {
   DEFAULT_COLUMN_WIDTH_PX,
   isInlineEditableField,
   isoDateToLocalDate,
+  isSyncedField,
   MIN_COLUMN_WIDTH_PX,
   nextEditTarget,
   parseNumberCellInput,
@@ -306,6 +307,14 @@ describe("isInlineEditableField", () => {
 
   it("excludes checkbox — it toggles in place", () => {
     expect(isInlineEditableField(field("checkbox"))).toBe(false);
+  });
+
+  it("excludes synced fields — the sync engine owns their values", () => {
+    expect(isInlineEditableField({ ...field("text"), sourceKey: "name" })).toBe(
+      false
+    );
+    expect(isSyncedField({ sourceKey: "name" })).toBe(true);
+    expect(isSyncedField({})).toBe(false);
   });
 });
 

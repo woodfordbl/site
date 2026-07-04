@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 
 import { DatabaseSettingsMenu } from "@/components/database/database-settings-menu.tsx";
+import { DatabaseSyncStatusChip } from "@/components/database/database-sync-status-chip.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { renameDatabase } from "@/db/queries/database-collection-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
@@ -130,6 +131,9 @@ export function DatabaseTitle({
           <span className="shrink-0 text-muted-foreground text-xs">
             {countLabel}
           </span>
+          {database.source?.kind === "connector" ? (
+            <DatabaseSyncStatusChip databaseId={databaseId} />
+          ) : null}
         </>
       )}
       {mode === "edit" ? (

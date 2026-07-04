@@ -113,6 +113,7 @@ export function DatabaseTableView({
       <DatabaseTableGrid
         columns={columns}
         databaseId={databaseId}
+        isSyncedDatabase={database.source?.kind === "connector"}
         mode={mode}
         pinnedFields={pinnedFields}
         primaryFieldId={database.primaryFieldId}

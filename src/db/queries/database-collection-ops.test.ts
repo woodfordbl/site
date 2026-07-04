@@ -473,6 +473,114 @@ describe("database collection ops", () => {
     ]);
   });
 
+  it("duplicateDatabaseField strips sourceKey so the copy is a local field", async () => {
+    const database = makeDatabase();
+    database.fields = [
+      { id: "f-title", name: "Name", type: "text" },
+      { id: "f-synced", name: "Stars", type: "number", sourceKey: "stars" },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowState = [makeRow("row-1", { values: { "f-synced": 42 } })];
+    const databaseDrafts = captureDatabaseDrafts(database);
+    const rowDrafts = captureRowDrafts(mocks.rowState as LocalDatabaseRow[]);
+
+    ops.duplicateDatabaseField(databaseId, "f-synced");
+    await flushAsync();
+
+    const copy = databaseDrafts[0]?.fields[2];
+    expect(copy?.name).toBe("Stars copy");
+    expect(copy?.sourceKey).toBeUndefined();
+    expect(copy && "sourceKey" in copy).toBe(false);
+    // Values still copy — the duplicate keeps the current data as local cells.
+    expect(copy && rowDrafts.get("row-1")?.values[copy.id]).toBe(42);
+  });
+
+  it("deleteDatabaseRows skips rows carrying an externalId", async () => {
+    const syncedRow = { ...makeRow("row-synced"), externalId: "ext-1" };
+    const localRow = makeRow("row-local");
+    mocks.rowGet.mockImplementation((id: string) =>
+      id === "row-synced" ? syncedRow : localRow
+    );
+
+    ops.deleteDatabaseRows(["row-synced", "row-local"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).toHaveBeenCalledTimes(1);
+    expect(mocks.rowDelete).toHaveBeenCalledWith("row-local");
+  });
+
+  it("deleteDatabaseRows with only synced rows never opens a transaction", async () => {
+    mocks.rowGet.mockReturnValue({
+      ...makeRow("row-synced"),
+      externalId: "ext-1",
+    });
+
+    ops.deleteDatabaseRows(["row-synced"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("updateDatabaseSource patches refreshMs on a connector database", async () => {
+    const database: LocalDatabase = {
+      ...makeDatabase(),
+      source: {
+        kind: "connector",
+        connectorId: "frankfurter-rates",
+        config: { base: "USD" },
+      },
+    };
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseSource(databaseId, { refreshMs: 300_000 });
+    await flushAsync();
+
+    const draft = databaseDrafts[0];
+    expect(draft?.source).toEqual({
+      kind: "connector",
+      connectorId: "frankfurter-rates",
+      config: { base: "USD" },
+      refreshMs: 300_000,
+    });
+    expect(draft?.updatedAt).not.toBe(database.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("updateDatabaseSource with refreshMs undefined clears the override", async () => {
+    const database: LocalDatabase = {
+      ...makeDatabase(),
+      source: {
+        kind: "connector",
+        connectorId: "frankfurter-rates",
+        config: { base: "USD" },
+        refreshMs: 60_000,
+      },
+    };
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseSource(databaseId, { refreshMs: undefined });
+    await flushAsync();
+
+    const draft = databaseDrafts[0];
+    expect(draft?.source?.kind).toBe("connector");
+    expect(
+      draft?.source?.kind === "connector" && "refreshMs" in draft.source
+    ).toBe(false);
+  });
+
+  it("updateDatabaseSource leaves local databases untouched", async () => {
+    const database = makeDatabase();
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseSource(databaseId, { refreshMs: 60_000 });
+    await flushAsync();
+
+    const draft = databaseDrafts[0];
+    expect(draft?.source).toBeUndefined();
+    expect(draft?.updatedAt).toBe(database.updatedAt);
+  });
+
   it("deleteDatabase deletes the definition and only its rows in one commit", async () => {
     mocks.databaseGet.mockReturnValue(makeDatabase());
     mocks.rowState = [

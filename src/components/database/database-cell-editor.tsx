@@ -377,6 +377,8 @@ function DateCellPopoverEditor({
 }
 
 interface DatabaseCheckboxCellEditorProps {
+  /** Read-only render (synced fields) — the checkbox shows but never writes. */
+  disabled?: boolean;
   field: DatabaseField;
   rowId: string;
   value: DatabaseCellValue | undefined;
@@ -388,6 +390,7 @@ interface DatabaseCheckboxCellEditorProps {
  * gridcell): a bare 16px checkbox is untappable on coarse pointers.
  */
 export function DatabaseCheckboxCellEditor({
+  disabled = false,
   field,
   rowId,
   value,
@@ -398,6 +401,7 @@ export function DatabaseCheckboxCellEditor({
       aria-label={field.name}
       checked={checked}
       className="static after:absolute after:inset-0"
+      disabled={disabled}
       onCheckedChange={(next) => {
         updateDatabaseCell(rowId, field.id, next === true);
       }}

@@ -39,6 +39,7 @@ import {
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
   isInlineEditableField,
+  isSyncedField,
   MIN_COLUMN_WIDTH_PX,
   nextEditTarget,
   resolveColumnWidthPx,
@@ -89,6 +90,11 @@ interface DatabaseTableGridProps {
   /** Visible fields in display order (`resolveColumnOrder`). */
   columns: readonly DatabaseField[];
   databaseId: string;
+  /**
+   * Connector-synced database: the "New row" strip is hidden (rows come from
+   * the source). Local columns stay first-class — add-field remains enabled.
+   */
+  isSyncedDatabase?: boolean;
   mode: "view" | "edit";
   /** Left-frozen fields in pin order (`resolvePinnedFields`). */
   pinnedFields: readonly DatabaseField[];
@@ -102,6 +108,7 @@ interface DatabaseTableGridProps {
 export function DatabaseTableGrid({
   columns,
   databaseId,
+  isSyncedDatabase = false,
   mode,
   pinnedFields,
   primaryFieldId,
@@ -462,7 +469,7 @@ export function DatabaseTableGrid({
             ) : null}
           </div>
         </div>
-        {mode === "edit" ? (
+        {mode === "edit" && !isSyncedDatabase ? (
           <div className="border-border border-t">
             <DatabaseAddRow
               databaseId={databaseId}
@@ -687,7 +694,14 @@ function GridCell({
   let content: ReactNode;
   if (mode === "edit" && isCheckbox) {
     content = (
-      <DatabaseCheckboxCellEditor field={field} rowId={row.id} value={value} />
+      <DatabaseCheckboxCellEditor
+        // Synced checkbox columns render the checkbox but never write — the
+        // sync engine owns their values.
+        disabled={isSyncedField(field)}
+        field={field}
+        rowId={row.id}
+        value={value}
+      />
     );
   } else if (inlineEditable) {
     content = (
