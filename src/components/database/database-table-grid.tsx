@@ -22,8 +22,16 @@ import {
   DatabaseCellInlineEditor,
   DatabaseCheckboxCellEditor,
 } from "@/components/database/database-cell-editor.tsx";
+import {
+  DATABASE_COLUMN_DRAG_ATTRIBUTE,
+  DatabaseColumnDnd,
+  DatabaseColumnDragAutoScroll,
+  DatabaseColumnDropIndicator,
+  DatabaseColumnDropZone,
+} from "@/components/database/database-column-dnd.tsx";
 import { DatabaseColumnMenu } from "@/components/database/database-column-menu.tsx";
-import { DATABASE_FIELD_TYPE_ICONS } from "@/components/database/database-field-icons.ts";
+import { DatabaseColumnResizeZone } from "@/components/database/database-column-resize-zone.tsx";
+import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   type CellEditMove,
   type CellEditTarget,
@@ -35,6 +43,8 @@ import {
   nextEditTarget,
   resolveColumnWidthPx,
 } from "@/components/database/database-grid-helpers.ts";
+import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
+import { useDatabaseColumnResize } from "@/components/database/use-database-column-resize.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
   addDatabaseField,
@@ -99,21 +109,64 @@ export function DatabaseTableGrid({
   view,
 }: DatabaseTableGridProps): ReactNode {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState<CellEditTarget | null>(null);
 
-  // Column render metadata: width from the view config (clamped), pinned
-  // columns first with cumulative sticky offsets — the same math TanStack's
-  // `columnPinning` state machine applies, kept memoized on the raw view
-  // inputs so memoized rows only re-render when the schema/config changes.
+  // Divider resize: live pixel widths during a drag, committed to
+  // `view.config.columnWidths` on pointer up.
+  const { liveWidths, startResize } = useDatabaseColumnResize({
+    databaseId,
+    view,
+  });
+
+  // Scrollport width, live via ResizeObserver — pinning is disabled when the
+  // frozen columns would swallow (nearly) the whole scrollport, which on
+  // narrow/mobile viewports otherwise leaves every unfrozen column stuck
+  // underneath the sticky ones and unreachable by horizontal scroll.
+  const [scrollportWidth, setScrollportWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      setScrollportWidth(element.clientWidth);
+    });
+    observer.observe(element);
+    setScrollportWidth(element.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+
+  const pinnedTotalWidth = useMemo(
+    () =>
+      pinnedFields.reduce(
+        (total, field) => total + resolveColumnWidthPx(view.config, field.id),
+        0
+      ),
+    [pinnedFields, view.config]
+  );
+  // Keep at least one minimum-width column of scrollable room; SSR/first
+  // paint (width unknown) keeps the configured pinning for desktop parity.
+  const pinningDisabled =
+    scrollportWidth !== null &&
+    pinnedTotalWidth > scrollportWidth - MIN_COLUMN_WIDTH_PX;
+  const effectivePinnedFields = pinningDisabled ? [] : pinnedFields;
+
+  // Column render metadata: width from the view config (clamped, overridden
+  // by the live divider-drag width mid-resize), pinned columns first with
+  // cumulative sticky offsets — the same math TanStack's `columnPinning`
+  // state machine applies, kept memoized on the raw view inputs so memoized
+  // rows only re-render when the schema/config changes.
   const gridColumns = useMemo<GridColumn[]>(() => {
-    const pinnedIds = new Set(pinnedFields.map((field) => field.id));
+    const pinnedIds = new Set(effectivePinnedFields.map((field) => field.id));
     const ordered = [
-      ...pinnedFields,
+      ...effectivePinnedFields,
       ...columns.filter((field) => !pinnedIds.has(field.id)),
     ];
     let offset = 0;
     return ordered.map((field, index) => {
-      const width = resolveColumnWidthPx(view.config, field.id);
+      const width =
+        liveWidths?.[field.id] ?? resolveColumnWidthPx(view.config, field.id);
       const pinned = index < pinnedIds.size;
       const column: GridColumn = {
         field,
@@ -128,7 +181,7 @@ export function DatabaseTableGrid({
       }
       return column;
     });
-  }, [columns, pinnedFields, view.config]);
+  }, [columns, effectivePinnedFields, liveWidths, view.config]);
 
   const displayFieldIds = useMemo(
     () => gridColumns.map((column) => column.field.id),
@@ -146,8 +199,8 @@ export function DatabaseTableGrid({
   );
 
   const columnPinning = useMemo(
-    () => ({ left: pinnedFields.map((field) => field.id) }),
-    [pinnedFields]
+    () => ({ left: effectivePinnedFields.map((field) => field.id) }),
+    [effectivePinnedFields]
   );
 
   // Fully manual mode: no sorted/filtered row models — data computation
@@ -165,7 +218,7 @@ export function DatabaseTableGrid({
   const totalWidth = table.getTotalSize();
   const gridWidth =
     mode === "edit" ? totalWidth + ADD_FIELD_CELL_WIDTH_PX : totalWidth;
-  const hasPinnedColumns = pinnedFields.length > 0;
+  const hasPinnedColumns = effectivePinnedFields.length > 0;
 
   // Pinned-edge fade: a rAF-throttled scroll listener writes the fade
   // opacity (0 at scrollLeft 0, ramping over PINNED_FADE_RAMP_PX, and only
@@ -286,150 +339,241 @@ export function DatabaseTableGrid({
     calculations !== undefined && Object.keys(calculations).length > 0;
 
   return (
-    <div className="w-full min-w-0 overflow-hidden rounded-lg border border-border">
-      <div
-        className={cn("relative overflow-auto", GRID_MAX_HEIGHT_CLASS)}
-        ref={scrollRef}
-      >
-        {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
+    // The DnD wrapper stays outside the scroll container (the table block's
+    // hard-won wrapper-placement rule) so header sources, the drop zone, and
+    // the overlay all share one surface.
+    <DatabaseColumnDnd
+      databaseId={databaseId}
+      gridColumns={gridColumns}
+      gridRef={gridRef}
+      view={view}
+    >
+      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg border border-border">
         <div
-          aria-colcount={gridColumns.length}
-          aria-rowcount={rows.length + 1}
-          role="grid"
-          style={{ width: gridWidth, minWidth: "100%" }}
+          className={cn("relative overflow-auto", GRID_MAX_HEIGHT_CLASS)}
+          ref={scrollRef}
         >
-          {/* biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above. */}
-          {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
+          {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
           <div
-            aria-rowindex={1}
-            className="sticky top-0 z-20 flex border-border border-b bg-background"
-            role="row"
+            aria-colcount={gridColumns.length}
+            aria-rowcount={rows.length + 1}
+            className="relative"
+            ref={gridRef}
+            role="grid"
+            style={{ width: gridWidth, minWidth: "100%" }}
           >
-            {table.getHeaderGroups().map((headerGroup) =>
-              headerGroup.headers.map((header, headerIndex) => {
-                const column = gridColumns.find(
-                  (entry) => entry.field.id === header.column.id
-                );
-                if (!column) {
-                  return null;
-                }
-                const Icon = DATABASE_FIELD_TYPE_ICONS[column.field.type];
-                const sort = view.sorts?.find(
-                  (entry) => entry.fieldId === column.field.id
-                );
-                const headerContent = (
-                  <>
-                    <Icon className="size-4 shrink-0 stroke-[1.5px]" />
-                    <span className="truncate text-sm">
-                      {column.field.name}
-                    </span>
-                  </>
-                );
-                return (
-                  // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
-                  // biome-ignore lint/a11y/useFocusableInteractive: the menu trigger button inside is the focusable element.
-                  <div
-                    aria-colindex={headerIndex + 1}
-                    aria-sort={
-                      sort &&
-                      (sort.direction === "asc" ? "ascending" : "descending")
-                    }
-                    className={cn(
-                      "flex h-9 shrink-0 items-stretch overflow-hidden border-border/60 border-r bg-background text-muted-foreground",
-                      column.pinned && "sticky z-10",
-                      column.isLastPinned &&
-                        "database-grid-pinned-edge border-r-border"
-                    )}
-                    key={header.id}
-                    role="columnheader"
-                    style={{
-                      width: header.getSize(),
-                      left: column.left ?? undefined,
-                    }}
+            {/* biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above. */}
+            {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
+            <div
+              aria-rowindex={1}
+              className="sticky top-0 z-20 flex border-border border-b bg-background"
+              role="row"
+            >
+              {table.getHeaderGroups().map((headerGroup) =>
+                headerGroup.headers.map((header, headerIndex) => {
+                  const column = gridColumns.find(
+                    (entry) => entry.field.id === header.column.id
+                  );
+                  if (!column) {
+                    return null;
+                  }
+                  const sort = view.sorts?.find(
+                    (entry) => entry.fieldId === column.field.id
+                  );
+                  return (
+                    <GridHeaderCell
+                      ariaColIndex={headerIndex + 1}
+                      column={column}
+                      databaseId={databaseId}
+                      displayFieldIds={displayFieldIds}
+                      key={header.id}
+                      mode={mode}
+                      onResizeStart={startResize}
+                      primaryFieldId={primaryFieldId}
+                      sortDirection={sort?.direction}
+                      view={view}
+                      width={header.getSize()}
+                    />
+                  );
+                })
+              )}
+              {mode === "edit" ? (
+                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+                  <Button
+                    aria-label="Add property"
+                    // Hit area covers the whole 36px header cell (anchored to
+                    // the relative wrapper) — the visual 24px button alone is
+                    // too small a touch target.
+                    className="static after:absolute after:inset-0"
+                    onClick={handleAddField}
+                    size="icon-xs"
+                    variant="ghost"
                   >
-                    {mode === "edit" ? (
-                      <DatabaseColumnMenu
-                        databaseId={databaseId}
-                        displayFieldIds={displayFieldIds}
-                        field={column.field}
-                        isPrimary={column.field.id === primaryFieldId}
-                        triggerClassName="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50"
-                        view={view}
-                      >
-                        {headerContent}
-                      </DatabaseColumnMenu>
-                    ) : (
-                      <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2">
-                        {headerContent}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-            {mode === "edit" ? (
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center">
-                <Button
-                  aria-label="Add property"
-                  onClick={handleAddField}
-                  size="icon-xs"
-                  variant="ghost"
-                >
-                  <IconPlus />
-                </Button>
+                    <IconPlus />
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+            {rows.length === 0 ? (
+              <div className="flex h-9 items-center px-2 text-muted-foreground text-sm">
+                <span className="sticky left-2">No rows</span>
               </div>
+            ) : (
+              // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
+              <div
+                className="relative"
+                role="rowgroup"
+                style={{ height: virtualizer.getTotalSize() }}
+              >
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = rows[virtualRow.index];
+                  return (
+                    <GridRow
+                      columns={gridColumns}
+                      editingFieldId={
+                        editing?.rowId === row.id ? editing.fieldId : null
+                      }
+                      key={row.id}
+                      measureRow={virtualizer.measureElement}
+                      mode={mode}
+                      onNavigate={handleNavigate}
+                      onStartEdit={handleStartEdit}
+                      onStopEdit={handleStopEdit}
+                      row={row}
+                      rowIndex={virtualRow.index}
+                      top={virtualRow.start}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            {hasCalculations ? (
+              <DatabaseCalculateRow
+                calculations={calculations}
+                columns={gridColumns}
+                rows={rows}
+                totalWidth={totalWidth}
+              />
+            ) : null}
+            {mode === "edit" ? (
+              <DatabaseColumnDropIndicator gridRef={gridRef} />
             ) : null}
           </div>
-          {rows.length === 0 ? (
-            <div className="flex h-9 items-center px-2 text-muted-foreground text-sm">
-              <span className="sticky left-2">No rows</span>
-            </div>
-          ) : (
-            // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
-            <div
-              className="relative"
-              role="rowgroup"
-              style={{ height: virtualizer.getTotalSize() }}
-            >
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index];
-                return (
-                  <GridRow
-                    columns={gridColumns}
-                    editingFieldId={
-                      editing?.rowId === row.id ? editing.fieldId : null
-                    }
-                    key={row.id}
-                    measureRow={virtualizer.measureElement}
-                    mode={mode}
-                    onNavigate={handleNavigate}
-                    onStartEdit={handleStartEdit}
-                    onStopEdit={handleStopEdit}
-                    row={row}
-                    rowIndex={virtualRow.index}
-                    top={virtualRow.start}
-                  />
-                );
-              })}
-            </div>
-          )}
-          {hasCalculations ? (
-            <DatabaseCalculateRow
-              calculations={calculations}
-              columns={gridColumns}
-              rows={rows}
-              totalWidth={totalWidth}
+        </div>
+        {mode === "edit" ? (
+          <div className="border-border border-t">
+            <DatabaseAddRow
+              databaseId={databaseId}
+              onRowInserted={handleRowInserted}
             />
-          ) : null}
-        </div>
-      </div>
+          </div>
+        ) : null}
+        {mode === "edit" ? (
+          <DatabaseColumnDragAutoScroll scrollRef={scrollRef} />
+        ) : null}
+      </DatabaseColumnDropZone>
+    </DatabaseColumnDnd>
+  );
+}
+
+interface GridHeaderCellProps {
+  ariaColIndex: number;
+  column: GridColumn;
+  databaseId: string;
+  displayFieldIds: readonly string[];
+  mode: "view" | "edit";
+  onResizeStart: (
+    fieldId: string,
+    event: React.PointerEvent<HTMLElement>
+  ) => void;
+  primaryFieldId: string;
+  sortDirection: "asc" | "desc" | undefined;
+  view: DatabaseView;
+  /** TanStack's `header.getSize()` — the table stays the size source at render. */
+  width: number;
+}
+
+/**
+ * One header cell: the column menu trigger wrapped in the press-threshold
+ * drag source (click still opens the menu; press-and-move / long-press lifts
+ * the header into a reorder drag — see `useDatabaseColumnHeaderDrag`), plus
+ * the between-column resize zone on the cell's right edge. The source cell
+ * dims to 50% while it is being dragged.
+ */
+function GridHeaderCell({
+  ariaColIndex,
+  column,
+  databaseId,
+  displayFieldIds,
+  mode,
+  onResizeStart,
+  primaryFieldId,
+  sortDirection,
+  view,
+  width,
+}: GridHeaderCellProps) {
+  const { field } = column;
+  const { headerProps, isDragging, showGrabbing } = useDatabaseColumnHeaderDrag(
+    field.id
+  );
+  const Icon = resolveFieldIcon(field);
+  const headerContent = (
+    <>
+      <Icon className="size-4 shrink-0 stroke-[1.5px]" />
+      <span className="truncate text-sm">{field.name}</span>
+    </>
+  );
+
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note.
+    // biome-ignore lint/a11y/useFocusableInteractive: the menu trigger button inside is the focusable element.
+    <div
+      aria-colindex={ariaColIndex}
+      aria-sort={
+        sortDirection && (sortDirection === "asc" ? "ascending" : "descending")
+      }
+      className={cn(
+        "relative flex h-9 shrink-0 items-stretch overflow-hidden border-border/60 border-r bg-background text-muted-foreground",
+        column.pinned && "sticky z-10",
+        column.isLastPinned && "database-grid-pinned-edge border-r-border",
+        isDragging && "opacity-50"
+      )}
+      role="columnheader"
+      style={{ width, left: column.left ?? undefined }}
+      {...{
+        [DATABASE_COLUMN_DRAG_ATTRIBUTE]:
+          mode === "edit" ? field.id : undefined,
+      }}
+    >
       {mode === "edit" ? (
-        <div className="border-border border-t">
-          <DatabaseAddRow
+        <div
+          {...headerProps}
+          className={cn(
+            "flex w-full min-w-0 select-none",
+            showGrabbing && "cursor-grabbing [&_button]:cursor-grabbing"
+          )}
+        >
+          <DatabaseColumnMenu
             databaseId={databaseId}
-            onRowInserted={handleRowInserted}
-          />
+            displayFieldIds={displayFieldIds}
+            field={field}
+            isPrimary={field.id === primaryFieldId}
+            triggerClassName="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50"
+            view={view}
+          >
+            {headerContent}
+          </DatabaseColumnMenu>
         </div>
+      ) : (
+        <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2">
+          {headerContent}
+        </div>
+      )}
+      {mode === "edit" ? (
+        <DatabaseColumnResizeZone
+          fieldId={field.id}
+          onResizeStart={onResizeStart}
+        />
       ) : null}
     </div>
   );

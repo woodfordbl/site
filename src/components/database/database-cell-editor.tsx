@@ -382,7 +382,11 @@ interface DatabaseCheckboxCellEditorProps {
   value: DatabaseCellValue | undefined;
 }
 
-/** Edit-mode checkbox cell — toggles the stored boolean directly. */
+/**
+ * Edit-mode checkbox cell — toggles the stored boolean directly. The hit area
+ * expands to the whole cell (the `after` overlay anchors to the relative
+ * gridcell): a bare 16px checkbox is untappable on coarse pointers.
+ */
 export function DatabaseCheckboxCellEditor({
   field,
   rowId,
@@ -393,6 +397,7 @@ export function DatabaseCheckboxCellEditor({
     <Checkbox
       aria-label={field.name}
       checked={checked}
+      className="static after:absolute after:inset-0"
       onCheckedChange={(next) => {
         updateDatabaseCell(rowId, field.id, next === true);
       }}

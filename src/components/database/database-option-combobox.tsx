@@ -120,7 +120,7 @@ export function DatabaseOptionCombobox({
           const selected = selectedIds.includes(option.id);
           return (
             <button
-              className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+              className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
               key={option.id}
               onClick={() => onToggleOption(option.id)}
               type="button"
@@ -143,7 +143,7 @@ export function DatabaseOptionCombobox({
         })}
         {canCreate ? (
           <button
-            className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+            className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
             onClick={create}
             type="button"
           >

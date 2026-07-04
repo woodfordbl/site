@@ -92,11 +92,13 @@ import { cn } from "@/lib/utils.ts";
  *   with a remove action; creating/editing groups via UI arrives later.
  */
 
+// `pointer-coarse:` bumps: 24px-tall chip segments are too small a touch
+// target, so chips grow to 32px with wider segment padding on touch devices.
 const CHIP_CLASS =
-  "flex h-6 shrink-0 items-stretch divide-x divide-border overflow-hidden rounded-md border border-border bg-background text-xs";
+  "flex h-6 shrink-0 items-stretch divide-x divide-border overflow-hidden rounded-md border border-border bg-background text-xs pointer-coarse:h-8";
 
 const CHIP_SEGMENT_CLASS =
-  "flex items-center gap-1 px-1.5 text-muted-foreground outline-none transition-colors";
+  "flex items-center gap-1 px-1.5 text-muted-foreground outline-none transition-colors pointer-coarse:px-2";
 
 const CHIP_BUTTON_CLASS = cn(
   CHIP_SEGMENT_CLASS,
@@ -491,7 +493,7 @@ function CheckboxValueList({
     <div className="flex flex-col">
       {CHECKBOX_VALUE_ROWS.map((row) => (
         <button
-          className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+          className="flex h-8 pointer-coarse:h-10 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
           key={row.label}
           onClick={() => onPick(row.value)}
           type="button"
@@ -578,7 +580,7 @@ function AddFilterChip({
       <PopoverTrigger
         render={
           <button
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border border-dashed px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
+            className="flex h-6 pointer-coarse:h-8 shrink-0 items-center gap-1 rounded-md border border-border border-dashed pointer-coarse:px-2 px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
             type="button"
           >
             <IconPlus className="size-3.5 stroke-[1.5px]" />
@@ -615,7 +617,7 @@ function AddFilterChip({
               const Icon = resolveFieldIcon(field);
               return (
                 <button
-                  className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
+                  className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
                   key={field.id}
                   onClick={() => pick(field)}
                   type="button"
@@ -650,7 +652,7 @@ function MatchOpControl({
       <DropdownMenuTrigger
         render={
           <button
-            className="ml-auto flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
+            className="ml-auto flex h-6 pointer-coarse:h-8 shrink-0 items-center gap-1 rounded-md pointer-coarse:px-2 px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
             type="button"
           >
             {op === "and" ? "Match all filters" : "Match any filter"}

@@ -2,12 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateFnLabel,
+  type ColumnDropZoneRect,
+  clampColumnWidthPx,
+  configWithColumnWidth,
+  configWithoutColumnWidth,
   DEFAULT_COLUMN_WIDTH_PX,
   isInlineEditableField,
   isoDateToLocalDate,
   MIN_COLUMN_WIDTH_PX,
   nextEditTarget,
   parseNumberCellInput,
+  planColumnReorder,
+  resolveColumnDropSpot,
   resolveColumnWidthPx,
   urlCellHref,
 } from "@/components/database/database-grid-helpers.ts";
@@ -26,6 +32,260 @@ describe("resolveColumnWidthPx", () => {
     expect(resolveColumnWidthPx({ columnWidths: { f1: 20 } }, "f1")).toBe(
       MIN_COLUMN_WIDTH_PX
     );
+  });
+});
+
+describe("clampColumnWidthPx", () => {
+  it("rounds to whole pixels", () => {
+    expect(clampColumnWidthPx(240.6)).toBe(241);
+  });
+
+  it("clamps below the minimum", () => {
+    expect(clampColumnWidthPx(10)).toBe(MIN_COLUMN_WIDTH_PX);
+    expect(clampColumnWidthPx(-50)).toBe(MIN_COLUMN_WIDTH_PX);
+  });
+});
+
+describe("configWithColumnWidth", () => {
+  it("sets a clamped width and keeps other keys", () => {
+    expect(
+      configWithColumnWidth(
+        { columnWidths: { f1: 240 }, pinnedFieldIds: ["f1"] },
+        "f2",
+        10
+      )
+    ).toEqual({
+      columnWidths: { f1: 240, f2: MIN_COLUMN_WIDTH_PX },
+      pinnedFieldIds: ["f1"],
+    });
+  });
+
+  it("overwrites an existing width", () => {
+    expect(
+      configWithColumnWidth({ columnWidths: { f1: 240 } }, "f1", 300)
+    ).toEqual({ columnWidths: { f1: 300 } });
+  });
+});
+
+describe("configWithoutColumnWidth", () => {
+  it("removes the stored width", () => {
+    expect(
+      configWithoutColumnWidth({ columnWidths: { f1: 240, f2: 300 } }, "f1")
+    ).toEqual({ columnWidths: { f2: 300 } });
+  });
+
+  it("drops the record entirely when it empties", () => {
+    expect(
+      configWithoutColumnWidth({ columnWidths: { f1: 240 } }, "f1")
+    ).toEqual({ columnWidths: undefined });
+  });
+
+  it("returns null when nothing is stored", () => {
+    expect(configWithoutColumnWidth({}, "f1")).toBeNull();
+    expect(configWithoutColumnWidth({ columnWidths: { f2: 1 } }, "f1")).toBe(
+      null
+    );
+  });
+});
+
+describe("planColumnReorder", () => {
+  const ids = ["a", "b", "c", "d"];
+
+  it("moves a column before another", () => {
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "d",
+        targetFieldId: "b",
+        edge: "before",
+      })
+    ).toEqual({ columnOrder: ["a", "d", "b", "c"], pinnedFieldIds: [] });
+  });
+
+  it("moves a column after another", () => {
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "a",
+        targetFieldId: "c",
+        edge: "after",
+      })
+    ).toEqual({ columnOrder: ["b", "c", "a", "d"], pinnedFieldIds: [] });
+  });
+
+  it("returns null for no-op drops", () => {
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "a",
+        targetFieldId: "b",
+        edge: "before",
+      })
+    ).toBeNull();
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "b",
+        targetFieldId: "a",
+        edge: "after",
+      })
+    ).toBeNull();
+  });
+
+  it("returns null for self-drops and unknown ids", () => {
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "a",
+        targetFieldId: "a",
+        edge: "before",
+      })
+    ).toBeNull();
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "ghost",
+        targetFieldId: "a",
+        edge: "before",
+      })
+    ).toBeNull();
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 0,
+        sourceFieldId: "a",
+        targetFieldId: "ghost",
+        edge: "before",
+      })
+    ).toBeNull();
+  });
+
+  it("pins a column dropped left of the freeze boundary", () => {
+    // Pinned prefix [a, b]; dropping c before b lands inside the prefix.
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 2,
+        sourceFieldId: "c",
+        targetFieldId: "b",
+        edge: "before",
+      })
+    ).toEqual({
+      columnOrder: ["a", "c", "b", "d"],
+      pinnedFieldIds: ["a", "c", "b"],
+    });
+  });
+
+  it("unpins a column dropped right of the freeze boundary", () => {
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 2,
+        sourceFieldId: "b",
+        targetFieldId: "c",
+        edge: "after",
+      })
+    ).toEqual({ columnOrder: ["a", "c", "b", "d"], pinnedFieldIds: ["a"] });
+    // Dragging the first pinned column to the end unpins it too.
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 2,
+        sourceFieldId: "a",
+        targetFieldId: "d",
+        edge: "after",
+      })
+    ).toEqual({
+      columnOrder: ["b", "c", "d", "a"],
+      pinnedFieldIds: ["b"],
+    });
+  });
+
+  it("keeps the pin state on a drop exactly at the boundary", () => {
+    // Unpinned d dropped right after the last pinned column moves but stays
+    // unpinned.
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 2,
+        sourceFieldId: "d",
+        targetFieldId: "b",
+        edge: "after",
+      })
+    ).toEqual({
+      columnOrder: ["a", "b", "d", "c"],
+      pinnedFieldIds: ["a", "b"],
+    });
+    // Pinned b picked up and dropped back at the boundary is a no-op — it
+    // never silently unpins.
+    expect(
+      planColumnReorder({
+        displayFieldIds: ids,
+        pinnedCount: 2,
+        sourceFieldId: "b",
+        targetFieldId: "c",
+        edge: "before",
+      })
+    ).toBeNull();
+  });
+});
+
+describe("resolveColumnDropSpot", () => {
+  const rect = (
+    fieldId: string,
+    left: number,
+    right: number,
+    pinned = false
+  ): ColumnDropZoneRect => ({ fieldId, left, right, pinned });
+
+  it("resolves the containing column with a midpoint edge", () => {
+    const rects = [rect("a", 0, 100), rect("b", 100, 300)];
+    expect(resolveColumnDropSpot(rects, 30)).toEqual({
+      fieldId: "a",
+      edge: "before",
+    });
+    expect(resolveColumnDropSpot(rects, 80)).toEqual({
+      fieldId: "a",
+      edge: "after",
+    });
+    expect(resolveColumnDropSpot(rects, 250)).toEqual({
+      fieldId: "b",
+      edge: "after",
+    });
+  });
+
+  it("prefers pinned rects when overlapping scrolled-under columns", () => {
+    const rects = [
+      rect("pinned", 0, 100, true),
+      // Scrolled partially underneath the sticky pinned column.
+      rect("under", -40, 160),
+    ];
+    expect(resolveColumnDropSpot(rects, 50)).toEqual({
+      fieldId: "pinned",
+      edge: "after",
+    });
+  });
+
+  it("snaps to the nearest end outside every rect", () => {
+    const rects = [rect("a", 100, 200), rect("b", 200, 300)];
+    expect(resolveColumnDropSpot(rects, 50)).toEqual({
+      fieldId: "a",
+      edge: "before",
+    });
+    expect(resolveColumnDropSpot(rects, 400)).toEqual({
+      fieldId: "b",
+      edge: "after",
+    });
+  });
+
+  it("returns null with no rects", () => {
+    expect(resolveColumnDropSpot([], 10)).toBeNull();
   });
 });
 
