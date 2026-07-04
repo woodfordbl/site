@@ -156,7 +156,11 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   ([`database-sync-status-chip.tsx`](../../src/components/database/database-sync-status-chip.tsx));
   no row-count label (counts live in the settings menu's stats footer / Source section),
   and the ⋯ [`database-settings-menu.tsx`](../../src/components/database/database-settings-menu.tsx):
-  rename, Properties (reorder via `reorderDatabaseFields`, hide/show, Title badge), Views
+  rename, Properties (each row: a left grip that drag-reorders the schema via
+  `reorderDatabaseFields` — pointer-based, works in the popover and the touch drawer, see
+  [`use-list-reorder.ts`](../../src/components/database/use-list-reorder.ts) — the field
+  name with a Title badge beside the primary field, and hide/show + delete
+  (`removeDatabaseField`) controls on non-primary rows), Views
   (inline rename with type icon, per-view Duplicate — `duplicateDatabaseView`, "<name>
   copy" activated on create — and Delete, disabled on the last view and refused at the op
   level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's

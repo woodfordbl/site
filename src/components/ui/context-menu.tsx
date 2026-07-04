@@ -120,7 +120,7 @@ function ContextMenuContent({
           hasTitle={false}
           variant="menu"
         >
-          <MenuPresentationProvider close={() => root.setOpen(false)}>
+          <MenuPresentationProvider close={() => root.setOpen(false)} grouped>
             {children}
           </MenuPresentationProvider>
         </DrawerContent>
