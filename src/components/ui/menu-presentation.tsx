@@ -203,108 +203,17 @@ export function useMenuPresentation(): MenuPresentationValue {
 }
 
 /**
- * Static role tag a menu/popover part carries so the grouped drawer body can
- * split a flat child list into cards: `"break"` on separators (ends a card) and
- * `"label"` on section labels (ends a card and renders standalone above the
- * next one). Read structurally off the element's component identity, so no
- * circular import back to dropdown/context menus is needed.
+ * Marks the drawer body as the grouped-list presentation of a menu (the
+ * iOS/Linear look). The card treatment is pure CSS driven off this class in
+ * `styles.css`: runs of adjacent `data-menu-card-item` rows get the muted card
+ * background with rounded outer corners and hairline dividers, while any
+ * non-item sibling (search input, section label, stats footer, or a
+ * `data-menu-card-break` separator) breaks the run and renders plain. Doing it
+ * in CSS — rather than wrapping rows in the React tree — means the grouping
+ * sees through caller wrapper components (e.g. the action-menu search section),
+ * whose fragments add no DOM node, so every row is a flat sibling in the body.
  */
-export type MenuDrawerRole = "break" | "label";
-
-/** React's Fragment element type, matched without importing `Fragment`. */
-const REACT_FRAGMENT = Symbol.for("react.fragment");
-
-/**
- * Flattens a `children` node into an ordered list, dropping nullish/boolean
- * holes and unwrapping arrays and fragments so a run of authored siblings is
- * seen as siblings regardless of how the caller nested them.
- */
-function flattenChildren(children: ReactNode): ReactNode[] {
-  const result: ReactNode[] = [];
-  const walk = (node: ReactNode) => {
-    if (node == null || typeof node === "boolean") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        walk(child);
-      }
-      return;
-    }
-    if (isValidElement(node) && (node.type as unknown) === REACT_FRAGMENT) {
-      walk((node.props as { children?: ReactNode }).children);
-      return;
-    }
-    result.push(node);
-  };
-  walk(children);
-  return result;
-}
-
-/** Reads the {@link MenuDrawerRole} of a child element, if it declares one. */
-function menuDrawerRoleOf(node: ReactNode): MenuDrawerRole | undefined {
-  if (!isValidElement(node)) {
-    return;
-  }
-  const { type } = node;
-  if (typeof type !== "function") {
-    return;
-  }
-  return (type as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole;
-}
-
-/** Clones `node` with a stable key so it can live in a rendered array. */
-function keyed(node: ReactNode, key: string): ReactNode {
-  return isValidElement(node) ? cloneElement(node, { key }) : node;
-}
-
-/**
- * Groups a flat drawer child list into rounded `bg-muted` cards — the touch
- * presentation of a menu, mirroring the iOS/Linear "grouped list" look. Runs of
- * rows between separators become one card; section labels sit outside the cards
- * above their group. Non-row children (inputs, stats footers) still land in a
- * card, which reads as an inset panel.
- */
-function GroupedDrawerBody({ children }: { children: ReactNode }) {
-  const out: ReactNode[] = [];
-  let group: ReactNode[] = [];
-  let key = 0;
-
-  const flush = () => {
-    if (group.length === 0) {
-      return;
-    }
-    out.push(
-      <div
-        // Row press states use a background-independent overlay
-        // (`active:bg-foreground/10`) so they stay visible on the muted card,
-        // where `bg-accent` would match the card and vanish.
-        className="divide-y divide-border/60 overflow-hidden rounded-xl bg-muted/60 [&_button]:active:bg-foreground/10"
-        key={`card-${key++}`}
-      >
-        {group}
-      </div>
-    );
-    group = [];
-  };
-
-  for (const child of flattenChildren(children)) {
-    const role = menuDrawerRoleOf(child);
-    if (role === "break") {
-      flush();
-      continue;
-    }
-    if (role === "label") {
-      flush();
-      out.push(keyed(child, `label-${key++}`));
-      continue;
-    }
-    group.push(keyed(child, `row-${key++}`));
-  }
-  flush();
-
-  return <>{out}</>;
-}
+export const DRAWER_MENU_GROUP_CLASS = "cn-drawer-menu-group";
 
 /**
  * Wraps drawer-mode menu/popover content in the scrollable body and supplies
@@ -327,11 +236,11 @@ export function MenuPresentationProvider({
       <div
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-2",
-          grouped && "gap-2",
+          grouped && DRAWER_MENU_GROUP_CLASS,
           className
         )}
       >
-        {grouped ? <GroupedDrawerBody>{children}</GroupedDrawerBody> : children}
+        {children}
       </div>
     </MenuPresentationContext.Provider>
   );
@@ -458,6 +367,7 @@ export function DrawerMenuRow({
           renderProps.className
         ),
         "data-disabled": disabled ? "" : undefined,
+        "data-menu-card-item": "",
         onClick: handleRenderClick,
       },
       body
@@ -477,6 +387,7 @@ export function DrawerMenuRow({
     <button
       className={cn(rowClassName(destructive), className)}
       data-disabled={disabled ? "" : undefined}
+      data-menu-card-item=""
       disabled={disabled}
       onClick={handleClick}
       type="button"
@@ -512,12 +423,11 @@ export function DrawerMenuSectionLabel({
 }
 
 export function DrawerMenuSeparator() {
-  return <div className="my-1 h-px bg-border" />;
+  // `data-menu-card-break` marks this as a hard gap between grouped cards: in
+  // the grouped body its own hairline is hidden (styles.css) so only the gap
+  // remains, while inside a card the hairline dividers come from adjacent rows.
+  return <div className="my-1 h-px bg-border" data-menu-card-break="" />;
 }
-(DrawerMenuSeparator as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole =
-  "break";
-(DrawerMenuSectionLabel as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole =
-  "label";
 
 export function DrawerCheckTrailing({ checked }: { checked: boolean }) {
   if (!checked) {

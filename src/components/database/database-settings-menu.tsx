@@ -215,6 +215,7 @@ function PropertyRow({
         "relative flex min-h-8 pointer-coarse:min-h-11 items-center gap-1 rounded-md pr-1 pl-0.5 text-sm",
         isDragging && "opacity-40"
       )}
+      data-menu-card-item=""
       data-reorder-item=""
     >
       {dropBefore ? <PropertyDropLine position="top" /> : null}

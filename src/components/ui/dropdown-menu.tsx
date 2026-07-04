@@ -12,7 +12,6 @@ import {
   DrawerMenuSectionLabel,
   DrawerMenuSeparator,
   DrawerMenuTrigger,
-  type MenuDrawerRole,
   MenuDrawerRoot,
   MenuDrawerSubDrawer,
   MenuDrawerSubProvider,
@@ -610,12 +609,6 @@ function DropdownMenuShortcut({
     />
   );
 }
-
-// Grouped drawer body splits its flat child list into cards at these parts.
-(DropdownMenuSeparator as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole =
-  "break";
-(DropdownMenuLabel as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole =
-  "label";
 
 export type { DropdownMenuHandle };
 export {

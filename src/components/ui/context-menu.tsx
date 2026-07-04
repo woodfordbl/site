@@ -11,7 +11,6 @@ import {
   DrawerMenuRow,
   DrawerMenuSectionLabel,
   DrawerMenuSeparator,
-  type MenuDrawerRole,
   MenuDrawerSubDrawer,
   MenuDrawerSubProvider,
   MenuPresentationProvider,
@@ -495,12 +494,6 @@ function ContextMenuShortcut({
     />
   );
 }
-
-// Grouped drawer body splits its flat child list into cards at these parts.
-(ContextMenuSeparator as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole =
-  "break";
-(ContextMenuLabel as { menuDrawerRole?: MenuDrawerRole }).menuDrawerRole =
-  "label";
 
 export {
   ContextMenu,
