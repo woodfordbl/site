@@ -234,6 +234,20 @@ see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirror
 media/embed pickers. Deleting a database block does **not**
 delete the database entity (blocks are references; entity lifecycle UI is future work).
 
+## Review-hardening invariants
+
+Post-review guarantees worth knowing when editing this area: the expression
+parser enforces length/depth caps so `parseExpression` never throws (hostile
+synced cell text cannot crash render); formula columns filter on their
+displayed text; multiSelect plain text joins in field-option order so
+Calculate/sort/grouping agree; the editing grid row is pinned into the virtual
+range (scrolling never unmounts an open editor); sync meta persists a new ETag
+only after the row-apply commit resolves; hidden leader tabs resign the sync
+lock within ~5s so a visible tab polls; config/auth connector errors halt
+polling until the source or token changes; GitHub connectors follow Link
+pagination (3 pages, page-1 conditional GET); duplicated select fields
+regenerate option ids and remap copied row values.
+
 ## Row pages (virtual + copy-on-write)
 
 Every row "has" a page with **zero per-row storage**: the `/db/$databaseId/$rowId`

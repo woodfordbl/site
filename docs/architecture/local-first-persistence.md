@@ -129,6 +129,13 @@ draft objects back into stored documents — zod v4 `z.record` keys reject proxi
 on the next write. Database view ops JSON-flatten drafts before rebuilding
 (see [databases — Draft-proxy invariant](./databases.md#draft-proxy-invariant-mutations)).
 
+## Sync meta ordering
+
+Connector sync meta (`site-db-sync-meta`) persists a new ETag/missing-count
+snapshot only after the row-apply transaction commit resolves — a failed apply
+keeps the old ETag so the next poll refetches instead of freezing rows behind
+a 304 (see [databases — Review-hardening invariants](./databases.md#review-hardening-invariants)).
+
 ## Persistence error surfacing
 
 All block-collection transactions are created with `autoCommit: false` — the TanStack DB default auto-commits on the first `mutate()`, which would close the transaction mid-batch and make the explicit commit reject. Collection commits do not swallow errors. `commitAndMarkDirty` in [`block-collection-ops.ts`](../../src/db/queries/block-collection-ops.ts) commits the transaction, runs `markPageDirty` only after a **successful** commit, and reports failures to the central sink in [`persistence-errors.ts`](../../src/db/persistence-errors.ts) (`reportPersistenceError`, with quota detection for `QuotaExceededError`). [`AppProviders`](../../src/db/provider.tsx) mounts Sonner's [`Toaster`](../../src/components/ui/sonner.tsx); `reportPersistenceError` shows a persistent dismissible error toast when local saves fail — without it, a failed save leaves the optimistic in-memory state rendering as if everything persisted.
