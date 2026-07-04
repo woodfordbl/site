@@ -49,6 +49,14 @@ const databaseFieldBaseSchema = z.object({
    * Falls back to the field-type icon when unset.
    */
   icon: z.string().optional(),
+  /**
+   * Connector column key this field is synced from. Present = the field's
+   * values are written by the sync engine and read-only in the UI; absent =
+   * a normal local field. Local fields are ALWAYS allowed on synced
+   * databases — the sync diff only touches synced keys in `row.values`, so
+   * user-added columns survive every refresh.
+   */
+  sourceKey: z.string().optional(),
 });
 
 /**
@@ -222,6 +230,25 @@ export const databaseViewSchema = z.object({
 
 export type DatabaseView = z.infer<typeof databaseViewSchema>;
 
+/**
+ * Where a database's rows come from. Absent/`local` = user-authored rows.
+ * `connector` = rows pulled from an external service by the client-side sync
+ * engine; `config` is validated by the connector's own zod schema at use
+ * sites. Synced databases are plain tables — rows never require pages.
+ */
+export const databaseSourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("local") }),
+  z.object({
+    kind: z.literal("connector"),
+    connectorId: z.string(),
+    config: z.record(z.string(), z.unknown()),
+    /** Poll interval override in ms; connectors clamp to their own minimum. */
+    refreshMs: z.number().positive().optional(),
+  }),
+]);
+
+export type DatabaseSource = z.infer<typeof databaseSourceSchema>;
+
 /** One database definition row in `localDatabasesCollection`. */
 export const localDatabaseSchema = z.object({
   id: z.string(),
@@ -230,6 +257,8 @@ export const localDatabaseSchema = z.object({
   icon: z.string().optional(),
   /** The title-like field; every database has exactly one. Names row pages. */
   primaryFieldId: z.string(),
+  /** Row origin; absent means a local (user-authored) database. */
+  source: databaseSourceSchema.optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   createdAt: z.string(),
