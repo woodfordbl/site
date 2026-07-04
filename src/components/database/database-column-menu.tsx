@@ -59,6 +59,7 @@ import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -384,7 +385,9 @@ function EditPropertySubmenu({ databaseId, field }: EditPropertySubmenuProps) {
           Edit property
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
-          <DropdownMenuLabel>Number format</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Number format</DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuRadioGroup
             onValueChange={(value) => {
               updateDatabaseField(
@@ -633,9 +636,11 @@ export function DatabaseColumnMenu({
               setOpen(false);
             }}
           />
-          <DropdownMenuLabel>
-            {FIELD_TYPE_DEFS[field.type].label}
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>
+              {FIELD_TYPE_DEFS[field.type].label}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <EditPropertySubmenu databaseId={databaseId} field={field} />
           <ChangeTypeSubmenu databaseId={databaseId} field={field} />

@@ -1,3 +1,4 @@
+import { types } from "node:util";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -300,6 +301,56 @@ describe("database collection ops", () => {
     expect(captured.get("row-a")?.order).toBe(0);
     expect(captured.get("row-b")?.order).toBe(2000);
     expect(captured.get("row-c")?.order).toBe(1000);
+  });
+
+  it("updateDatabaseView flattens draft proxies so record configs stay writable", async () => {
+    // Mimic TanStack DB change-tracking drafts: the views array, each view,
+    // its config, and the record values inside it arrive as proxies. Spreading
+    // them into the stored document made zod v4's z.record validation reject
+    // the NEXT write once calculations/columnWidths existed.
+    const base = makeDatabase();
+    const proxiedViews = base.views.map(
+      (view) =>
+        new Proxy(
+          {
+            ...view,
+            config: new Proxy(
+              {
+                ...view.config,
+                calculations: new Proxy({ "f-extra": "sum" as const }, {}),
+              },
+              {}
+            ),
+          },
+          {}
+        )
+    );
+    const draft: LocalDatabase = { ...base, views: proxiedViews };
+    const captured: LocalDatabase[] = [];
+    mocks.databaseUpdate.mockImplementation(
+      (_id: string, update: (value: LocalDatabase) => void) => {
+        update(draft);
+        captured.push(draft);
+        return draft;
+      }
+    );
+
+    ops.updateDatabaseView(databaseId, "view-1", {
+      sorts: [{ fieldId: "f-title", direction: "desc" }],
+    });
+    await flushAsync();
+
+    const view = captured[0]?.views[0];
+    expect(view).toBeDefined();
+    if (!view) {
+      return;
+    }
+    expect(types.isProxy(view)).toBe(false);
+    expect(types.isProxy(view.config)).toBe(false);
+    expect(types.isProxy(view.config.calculations)).toBe(false);
+    expect(view.config.calculations).toEqual({ "f-extra": "sum" });
+    expect(view.sorts).toEqual([{ fieldId: "f-title", direction: "desc" }]);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
 
   it("removeDatabaseField strips the field from rows and every view reference", async () => {

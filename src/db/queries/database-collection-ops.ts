@@ -280,8 +280,21 @@ export function reorderDatabaseRow(
 }
 
 /**
+ * Deep-copy a draft value into plain objects. TanStack DB update drafts are
+ * change-tracking proxies; spreading them into the stored document makes zod
+ * v4's `z.record` validation reject the NEXT write ("expected record,
+ * received object") once a record key (calculations, columnWidths) exists.
+ * A JSON round-trip flattens every nested proxy — database documents are
+ * JSON-safe by schema.
+ */
+function toPlain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
  * Shallow-merge a patch into the matching view (immutably rebuilding the
- * `views` array; the view id is never patched) and bump `updatedAt`.
+ * `views` array from plain data; the view id is never patched) and bump
+ * `updatedAt`.
  */
 export function updateDatabaseView(
   databaseId: string,
@@ -293,8 +306,8 @@ export function updateDatabaseView(
 
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
-      draft.views = draft.views.map((view) =>
-        view.id === viewId ? { ...view, ...patch, id: view.id } : view
+      draft.views = toPlain(draft.views).map((view) =>
+        view.id === viewId ? { ...view, ...toPlain(patch), id: view.id } : view
       );
       draft.updatedAt = timestamp;
     });
@@ -438,7 +451,7 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.fields = draft.fields.filter((field) => field.id !== fieldId);
-      draft.views = draft.views.map((view) =>
+      draft.views = toPlain(draft.views).map((view) =>
         // The draft's view type keeps `config` optional (schema input side of
         // the `.default({})`); normalize before stripping references.
         stripFieldFromView({ ...view, config: view.config ?? {} }, fieldId)
