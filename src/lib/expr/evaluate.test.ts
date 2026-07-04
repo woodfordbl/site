@@ -540,6 +540,71 @@ describe("date-part functions (v2)", () => {
   });
 });
 
+describe("let / lets bindings (v2)", () => {
+  it("binds a value and reuses it in the body", () => {
+    expect(run("let(x, 5, x * x)")).toBe(25);
+    const scope = scopeOf({ Price: 100 });
+    expect(run("let(rate, 2, thisPage.Price * rate)", scope)).toBe(200);
+  });
+
+  it("lets chains bindings, each seeing the ones before it", () => {
+    expect(run("lets(a, 2, b, a * 3, a + b)")).toBe(8);
+  });
+
+  it("binding names resolve case-insensitively", () => {
+    expect(run("let(Days, 3, days + 1)")).toBe(4);
+  });
+
+  it("an unbound variable errors helpfully at eval time", () => {
+    expect(errorMessage(run("score + 1"))).toContain(
+      'Unknown identifier "score"'
+    );
+    expect(errorMessage(run("score + 1"))).toContain("thisPage");
+  });
+
+  it("rejects a non-identifier binding name and bad arity", () => {
+    expect(errorMessage(run("let(1, 2, 3)"))).toContain("binding name");
+    expect(errorMessage(run("let(x, 1)"))).toContain(
+      "let() expects 3 arguments"
+    );
+    expect(errorMessage(run("lets(a, 1)"))).toContain("odd number");
+  });
+});
+
+describe("method chaining (v2)", () => {
+  it("evaluates chained method calls as functions", () => {
+    expect(run('"  hi  ".trim().upper()')).toBe("HI");
+    expect(run("(3.456).round(1)")).toBe(3.5);
+    const scope = scopeOf({ Name: "ada" });
+    expect(run("thisPage.Name.upper()", scope)).toBe("ADA");
+  });
+});
+
+describe("switch / ifs (v2)", () => {
+  it("switch returns the matching result", () => {
+    expect(run('switch("P1", "P0", "🔴", "P1", "🟠", "⚪️")')).toBe("🟠");
+    expect(run('switch("P9", "P0", "🔴", "⚪️")')).toBe("⚪️");
+    expect(run('switch("P9", "P0", "🔴")')).toBe(null);
+  });
+
+  it("switch is lazy — non-matching results never evaluate", () => {
+    expect(run('switch("a", "a", 1, "b", 1 / 0)')).toBe(1);
+  });
+
+  it("ifs returns the first true branch", () => {
+    expect(run("ifs(false, 1, true, 2, 3)")).toBe(2);
+    expect(run("ifs(false, 1, false, 2, 99)")).toBe(99);
+    expect(errorMessage(run("ifs(false, 1, false, 2)"))).toContain(
+      "no condition matched"
+    );
+  });
+
+  it("ifs is lazy and validates boolean conditions", () => {
+    expect(run("ifs(true, 1, 1 / 0, 2)")).toBe(1);
+    expect(errorMessage(run("ifs(1, 2)"))).toContain("expects a boolean");
+  });
+});
+
 describe("scope properties", () => {
   it("resolves values from the scope", () => {
     const scope = scopeOf({ Score: 10, Name: "Ada", Done: true, Empty: null });

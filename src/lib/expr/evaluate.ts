@@ -1049,7 +1049,8 @@ const EXPR_FUNCTIONS = new Map<string, ExprFunctionDef>([
  * here without documenting it (or vice versa) fails loudly.
  */
 export function implementedExprFunctionNames(): string[] {
-  return ["if", ...EXPR_FUNCTIONS.keys()];
+  // Lazy special forms (if/ifs/switch/let/lets) live outside EXPR_FUNCTIONS.
+  return ["if", "ifs", "switch", "let", "lets", ...EXPR_FUNCTIONS.keys()];
 }
 
 /** Function names whose results depend on the clock (see {@link isVolatileExpression}). */
@@ -1167,13 +1168,41 @@ function requireBoolean(value: ExprValue, op: string): boolean | ExprError {
   return value;
 }
 
+/**
+ * A `let`/`lets`/`current` binding frame — an immutable linked list walked
+ * inner-to-outer by {@link lookupBinding}. Names are stored lowercased so
+ * lookup is case-insensitive, matching property and function resolution.
+ */
+interface BindingFrame {
+  readonly name: string;
+  readonly parent: BindingFrame | null;
+  readonly value: ExprValue;
+}
+
+/** Empty binding scope (the top-level, non-lambda, non-`let` case). */
+type Bindings = BindingFrame | null;
+
+/** Resolve a variable against the binding chain, or report it unbound. */
+function lookupBinding(bindings: Bindings, name: string): ExprValue {
+  const key = name.toLowerCase();
+  for (let frame = bindings; frame !== null; frame = frame.parent) {
+    if (frame.name === key) {
+      return frame.value;
+    }
+  }
+  return exprError(
+    `Unknown identifier "${name}" — expected thisPage.<property>, a function call, or a literal`
+  );
+}
+
 function evalLogical(
   op: "and" | "or",
   leftNode: ExprNode,
   rightNode: ExprNode,
-  scope: ExprScope
+  scope: ExprScope,
+  bindings: Bindings
 ): ExprValue {
-  const left = requireBoolean(evaluateExpression(leftNode, scope), op);
+  const left = requireBoolean(evalNode(leftNode, scope, bindings), op);
   if (typeof left !== "boolean") {
     return left;
   }
@@ -1185,7 +1214,7 @@ function evalLogical(
   if (op === "or" && left) {
     return true;
   }
-  return requireBoolean(evaluateExpression(rightNode, scope), op);
+  return requireBoolean(evalNode(rightNode, scope, bindings), op);
 }
 
 function evalUnary(op: "-" | "not", operand: ExprValue): ExprValue {
@@ -1204,22 +1233,166 @@ function evalUnary(op: "-" | "not", operand: ExprValue): ExprValue {
   return !operand;
 }
 
-function evalIf(args: ExprNode[], scope: ExprScope): ExprValue {
+function evalIf(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
   if (args.length !== 3) {
     return exprError(`if() expects 3 arguments, got ${args.length}`);
   }
-  const condition = requireBoolean(evaluateExpression(args[0], scope), "if");
+  const condition = requireBoolean(evalNode(args[0], scope, bindings), "if");
   if (typeof condition !== "boolean") {
     return condition;
   }
   // Lazy: only the taken branch evaluates, so `if(x != 0, 1 / x, 0)` is safe.
-  return evaluateExpression(condition ? args[1] : args[2], scope);
+  return evalNode(condition ? args[1] : args[2], scope, bindings);
 }
 
-function evalCall(name: string, args: ExprNode[], scope: ExprScope): ExprValue {
+/**
+ * `switch(subject, case1, result1, …, default?)` — compares `subject` to each
+ * case with type-aware equality and returns the matching result. A trailing
+ * odd argument is the default; with none and no match the result is empty.
+ * Lazy: only the subject, the compared cases, and the taken result evaluate.
+ */
+function evalSwitch(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  if (args.length < 3) {
+    return exprError(
+      `switch() expects at least 3 arguments, got ${args.length}`
+    );
+  }
+  const subject = evalNode(args[0], scope, bindings);
+  if (isExprError(subject)) {
+    return subject;
+  }
+  let index = 1;
+  while (index + 1 < args.length) {
+    const caseValue = evalNode(args[index], scope, bindings);
+    if (isExprError(caseValue)) {
+      return caseValue;
+    }
+    if (valuesEqual(subject, caseValue)) {
+      return evalNode(args[index + 1], scope, bindings);
+    }
+    index += 2;
+  }
+  return index < args.length ? evalNode(args[index], scope, bindings) : null;
+}
+
+/**
+ * `ifs(cond1, result1, …, default?)` — returns the first result whose
+ * condition is true. A trailing odd argument is the default; with none and no
+ * match, an error. Lazy: evaluation stops at the first true condition.
+ */
+function evalIfs(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  if (args.length < 2) {
+    return exprError(`ifs() expects at least 2 arguments, got ${args.length}`);
+  }
+  let index = 0;
+  while (index + 1 < args.length) {
+    const condition = requireBoolean(
+      evalNode(args[index], scope, bindings),
+      "ifs"
+    );
+    if (typeof condition !== "boolean") {
+      return condition;
+    }
+    if (condition) {
+      return evalNode(args[index + 1], scope, bindings);
+    }
+    index += 2;
+  }
+  return index < args.length
+    ? evalNode(args[index], scope, bindings)
+    : exprError("ifs(): no condition matched");
+}
+
+/** `let(name, value, body)` — bind `name` to `value`, then evaluate `body`. */
+function evalLet(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  if (args.length !== 3) {
+    return exprError(`let() expects 3 arguments, got ${args.length}`);
+  }
+  const nameNode = args[0];
+  if (nameNode.kind !== "variable") {
+    return exprError("let(): the first argument must be a binding name");
+  }
+  const value = evalNode(args[1], scope, bindings);
+  const extended: BindingFrame = {
+    name: nameNode.name.toLowerCase(),
+    value,
+    parent: bindings,
+  };
+  return evalNode(args[2], scope, extended);
+}
+
+/**
+ * `lets(name1, value1, …, body)` — multiple bindings then a body. Each value
+ * sees the bindings before it (Excel `LET` semantics), so later bindings can
+ * build on earlier ones.
+ */
+function evalLets(
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
+  if (args.length < 3 || args.length % 2 === 0) {
+    return exprError(
+      `lets() expects an odd number of arguments (name/value pairs then a body), got ${args.length}`
+    );
+  }
+  let frame = bindings;
+  for (let index = 0; index + 1 < args.length - 1; index += 2) {
+    const nameNode = args[index];
+    if (nameNode.kind !== "variable") {
+      return exprError("lets(): binding names must be identifiers");
+    }
+    frame = {
+      name: nameNode.name.toLowerCase(),
+      value: evalNode(args[index + 1], scope, frame),
+      parent: frame,
+    };
+  }
+  const body = args.at(-1);
+  // The arity guard above ensures a body arg exists; this keeps types honest.
+  return body === undefined
+    ? exprError("lets(): missing body")
+    : evalNode(body, scope, frame);
+}
+
+/** Lazy special forms whose arguments must not be eagerly evaluated. */
+const LAZY_CALLS = new Map<
+  string,
+  (args: ExprNode[], scope: ExprScope, bindings: Bindings) => ExprValue
+>([
+  ["if", evalIf],
+  ["ifs", evalIfs],
+  ["switch", evalSwitch],
+  ["let", evalLet],
+  ["lets", evalLets],
+]);
+
+function evalCall(
+  name: string,
+  args: ExprNode[],
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
   const lower = name.toLowerCase();
-  if (lower === "if") {
-    return evalIf(args, scope);
+  const lazy = LAZY_CALLS.get(lower);
+  if (lazy !== undefined) {
+    return lazy(args, scope, bindings);
   }
   const def = EXPR_FUNCTIONS.get(lower);
   if (def === undefined) {
@@ -1230,7 +1403,7 @@ function evalCall(name: string, args: ExprNode[], scope: ExprScope): ExprValue {
   }
   const values: ExprPlainValue[] = [];
   for (const arg of args) {
-    const value = evaluateExpression(arg, scope);
+    const value = evalNode(arg, scope, bindings);
     if (isExprError(value)) {
       return value;
     }
@@ -1239,39 +1412,50 @@ function evalCall(name: string, args: ExprNode[], scope: ExprScope): ExprValue {
   return def.apply(values, scope);
 }
 
-/**
- * Evaluate a parsed expression against a scope. Never throws — all failure
- * modes surface as {@link ExprError} values, and any error operand propagates
- * outward (except through the untaken branches of `and`/`or`/`if`, which
- * short-circuit).
- */
-export function evaluateExpression(ast: ExprNode, scope: ExprScope): ExprValue {
+/** Recursive core of {@link evaluateExpression}, threading the binding scope. */
+function evalNode(
+  ast: ExprNode,
+  scope: ExprScope,
+  bindings: Bindings
+): ExprValue {
   switch (ast.kind) {
     case "literal":
       return ast.value;
     case "property":
       return scope.getProperty(ast.name);
+    case "variable":
+      return lookupBinding(bindings, ast.name);
     case "unary":
-      return evalUnary(ast.op, evaluateExpression(ast.operand, scope));
+      return evalUnary(ast.op, evalNode(ast.operand, scope, bindings));
     case "binary": {
       if (ast.op === "and" || ast.op === "or") {
-        return evalLogical(ast.op, ast.left, ast.right, scope);
+        return evalLogical(ast.op, ast.left, ast.right, scope, bindings);
       }
-      const left = evaluateExpression(ast.left, scope);
+      const left = evalNode(ast.left, scope, bindings);
       if (isExprError(left)) {
         return left;
       }
-      const right = evaluateExpression(ast.right, scope);
+      const right = evalNode(ast.right, scope, bindings);
       if (isExprError(right)) {
         return right;
       }
       return applyBinary(ast.op, left, right);
     }
     case "call":
-      return evalCall(ast.name, ast.args, scope);
+      return evalCall(ast.name, ast.args, scope, bindings);
     default:
       return exprError("Unsupported expression");
   }
+}
+
+/**
+ * Evaluate a parsed expression against a scope. Never throws — all failure
+ * modes surface as {@link ExprError} values, and any error operand propagates
+ * outward (except through the untaken branches of `and`/`or`/`if`/`switch`/
+ * `ifs`, which short-circuit).
+ */
+export function evaluateExpression(ast: ExprNode, scope: ExprScope): ExprValue {
+  return evalNode(ast, scope, null);
 }
 
 /**
@@ -1283,6 +1467,7 @@ export function isVolatileExpression(ast: ExprNode): boolean {
   switch (ast.kind) {
     case "literal":
     case "property":
+    case "variable":
       return false;
     case "unary":
       return isVolatileExpression(ast.operand);

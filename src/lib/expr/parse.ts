@@ -51,6 +51,18 @@ export interface ExprPropertyNode {
   position: number;
 }
 
+/**
+ * A bare identifier resolved at evaluation time against the binding scope —
+ * `let`/`lets` bindings and the `current` element of a `map`/`filter` lambda.
+ * Unbound names surface the same "expected thisPage.<property>…" error the
+ * parser used to raise, only now at eval time (so `let` bindings can exist).
+ */
+export interface ExprVariableNode {
+  kind: "variable";
+  name: string;
+  position: number;
+}
+
 /** Unary operation (numeric negation or boolean `not`). */
 export interface ExprUnaryNode {
   kind: "unary";
@@ -83,6 +95,7 @@ export interface ExprCallNode {
 export type ExprNode =
   | ExprLiteralNode
   | ExprPropertyNode
+  | ExprVariableNode
   | ExprUnaryNode
   | ExprBinaryNode
   | ExprCallNode;
@@ -171,6 +184,12 @@ class Parser {
 
   private peek(): ExprToken {
     return this.tokens[this.index];
+  }
+
+  /** Look ahead `offset` tokens, clamping past the end to the `eof` token. */
+  private peekAt(offset: number): ExprToken {
+    const at = Math.min(this.index + offset, this.tokens.length - 1);
+    return this.tokens[at];
   }
 
   private advance(): ExprToken {
@@ -332,8 +351,43 @@ class Parser {
           position: not.position,
         };
       }
-      return this.parsePrimary();
+      return this.parsePostfix();
     });
+  }
+
+  /**
+   * Method-chaining sugar: a primary followed by `.name(args)` desugars to the
+   * call `name(receiver, …args)` — `x.upper()` becomes `upper(x)`. Only the
+   * `.name(` shape (dot, identifier, open paren) triggers it; a bare `.name`
+   * stays reserved for scope-root property access (parsed inside primary), so
+   * this never collides with `thisPage.Field`.
+   */
+  private parsePostfix(): ExprNode {
+    let node = this.parsePrimary();
+    for (;;) {
+      const dot = this.peek();
+      const method = this.peekAt(1);
+      const open = this.peekAt(2);
+      if (
+        dot.type !== "punct" ||
+        dot.value !== "." ||
+        method.type !== "identifier" ||
+        open.type !== "punct" ||
+        open.value !== "("
+      ) {
+        return node;
+      }
+      this.advance(); // "."
+      this.advance(); // method identifier
+      this.advance(); // "("
+      const rest = this.parseArgList(`to close the ".${method.value}(…)" call`);
+      node = {
+        kind: "call",
+        name: method.value,
+        args: [node, ...rest],
+        position: node.position,
+      };
+    }
   }
 
   private parsePrimary(): ExprNode {
@@ -382,10 +436,9 @@ class Parser {
     if (this.matchPunct("(") !== null) {
       return this.parseCallArgs(token.value, token.position);
     }
-    throw new ExprParseFailure(
-      `Unknown identifier "${token.value}" — expected thisPage.<property>, a function call, or a literal`,
-      token.position
-    );
+    // A bare identifier is a variable reference (a `let` binding or the
+    // `current` lambda element) — resolved, or reported unbound, at eval time.
+    return { kind: "variable", name: token.value, position: token.position };
   }
 
   private parsePropertyAccess(root: string, position: number): ExprNode {
@@ -420,17 +473,27 @@ class Parser {
   }
 
   private parseCallArgs(name: string, position: number): ExprNode {
+    const args = this.parseArgList(`to close the "${name}(…)" call`);
+    return { kind: "call", name, args, position };
+  }
+
+  /**
+   * Parse a comma-separated argument list after an already-consumed `(`, up to
+   * and including the closing `)`. Shared by function calls and method-chaining
+   * desugar (see {@link parsePostfix}).
+   */
+  private parseArgList(closeContext: string): ExprNode[] {
     const args: ExprNode[] = [];
     if (this.matchPunct(")") !== null) {
-      return { kind: "call", name, args, position };
+      return args;
     }
     for (;;) {
       args.push(this.parseOr());
       if (this.matchPunct(",") !== null) {
         continue;
       }
-      this.expectPunct(")", `to close the "${name}(…)" call`);
-      return { kind: "call", name, args, position };
+      this.expectPunct(")", closeContext);
+      return args;
     }
   }
 }

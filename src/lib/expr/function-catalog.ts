@@ -36,6 +36,38 @@ export const EXPR_FUNCTION_CATALOG: readonly ExprFunctionCatalogEntry[] = [
     category: "logic",
   },
   {
+    name: "ifs",
+    signature: "ifs(condition, result, …, default?)",
+    description:
+      "Returns the first result whose condition is true; a trailing odd argument is the default.",
+    example: 'ifs(thisPage.Score >= 90, "A", thisPage.Score >= 80, "B", "C")',
+    category: "logic",
+  },
+  {
+    name: "switch",
+    signature: "switch(value, case, result, …, default?)",
+    description:
+      "Compares value to each case and returns the matching result; a trailing odd argument is the default.",
+    example: 'switch(thisPage.Priority, "P0", "🔴", "P1", "🟠", "⚪️")',
+    category: "logic",
+  },
+  {
+    name: "let",
+    signature: "let(name, value, body)",
+    description:
+      "Binds name to value inside body, so a value computed once can be reused.",
+    example: "let(rate, 1.1, thisPage.Price * rate)",
+    category: "logic",
+  },
+  {
+    name: "lets",
+    signature: "lets(name, value, …, body)",
+    description:
+      "Binds several name/value pairs (each seeing the ones before it) inside a final body.",
+    example: "lets(sub, thisPage.Price, tax, sub * 0.1, sub + tax)",
+    category: "logic",
+  },
+  {
     name: "empty",
     aliases: ["isEmpty"],
     signature: "empty(value)",

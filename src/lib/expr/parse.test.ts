@@ -27,6 +27,8 @@ function sexpr(node: ExprNode): string {
       return JSON.stringify(node.value);
     case "property":
       return `prop:${node.name}`;
+    case "variable":
+      return `var:${node.name}`;
     case "unary":
       return `(${node.op} ${sexpr(node.operand)})`;
     case "binary":
@@ -192,11 +194,15 @@ describe("parse errors", () => {
     expect(errorOf("(1 + 2").message).toContain("close the group");
   });
 
-  it("rejects bare identifiers with a helpful message", () => {
-    const error = errorOf("score + 1");
-    expect(error.message).toContain('Unknown identifier "score"');
-    expect(error.message).toContain("thisPage");
-    expect(error.position).toBe(0);
+  it("parses bare identifiers as variable references (let/current)", () => {
+    // v2: bare identifiers are variables resolved at eval time; the
+    // unbound-identifier error moved to evaluation (see evaluate.test.ts).
+    expect(sexpr(astOf("score + 1"))).toBe("(+ var:score 1)");
+    expect(astOf("current")).toEqual({
+      kind: "variable",
+      name: "current",
+      position: 0,
+    });
   });
 
   it("surfaces tokenizer errors through parseExpression", () => {
@@ -206,8 +212,45 @@ describe("parse errors", () => {
     });
   });
 
-  it("rejects member access on non-scope identifiers", () => {
-    expect(errorOf("Tasks.Score").message).toContain("Unknown identifier");
+  it("rejects bare property access on non-scope identifiers", () => {
+    // `Tasks.Score` — the dangling `.Score` (no call parens) is a trailing
+    // token; only `thisPage.`/`thisRow.` and method calls consume a dot.
+    expect(errorOf("Tasks.Score").message).toContain("Unexpected");
+  });
+});
+
+describe("parse method chaining", () => {
+  it("desugars receiver.method(args) into method(receiver, args)", () => {
+    expect(sexpr(astOf("thisPage.Name.upper()"))).toBe("(upper prop:Name)");
+    expect(sexpr(astOf('"hi".repeat(3)'))).toBe('(repeat "hi" 3)');
+    expect(sexpr(astOf("thisPage.Price.round(2)"))).toBe(
+      "(round prop:Price 2)"
+    );
+  });
+
+  it("chains left to right", () => {
+    expect(sexpr(astOf("thisPage.Name.trim().upper()"))).toBe(
+      "(upper (trim prop:Name))"
+    );
+  });
+
+  it("leaves scope-root property access as property access", () => {
+    expect(sexpr(astOf("thisPage.Name"))).toBe("prop:Name");
+  });
+});
+
+describe("parse let / switch", () => {
+  it("parses let bindings with variable references in the body", () => {
+    expect(sexpr(astOf("let(x, 1, x + 2)"))).toBe("(let var:x 1 (+ var:x 2))");
+  });
+
+  it("parses lets and switch as ordinary calls", () => {
+    expect(sexpr(astOf("lets(a, 1, b, 2, a + b)"))).toBe(
+      "(lets var:a 1 var:b 2 (+ var:a var:b))"
+    );
+    expect(sexpr(astOf('switch(thisPage.S, "a", 1, 0)'))).toBe(
+      '(switch prop:S "a" 1 0)'
+    );
   });
 });
 
