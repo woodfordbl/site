@@ -133,11 +133,20 @@ function sourceToHtml(
     .join("");
 }
 
-/** Imperative handle so the panel's reference list can insert at the caret. */
+/** Imperative handle so the panel's reference list can edit the source. */
 export interface FormulaCodeFieldHandle {
   focus: () => void;
-  /** Splice `text` at the caret, leaving the caret `caretOffset` chars in. */
-  insertAtCaret: (text: string, caretOffset: number) => void;
+  /**
+   * Replace source `[start, end)` with `text`, leaving the caret `caretOffset`
+   * characters into the inserted text. Uses absolute source offsets (the panel
+   * tracks the caret) so it is robust even if the field lost focus to a click.
+   */
+  replaceRange: (
+    start: number,
+    end: number,
+    text: string,
+    caretOffset: number
+  ) => void;
 }
 
 export interface FormulaCodeFieldProps {
@@ -145,6 +154,8 @@ export interface FormulaCodeFieldProps {
   className?: string;
   fields: readonly DatabaseField[];
   handleRef?: Ref<FormulaCodeFieldHandle>;
+  /** Reports the caret (source offset) on user edits/navigation, for autocomplete. */
+  onCaretChange?: (caret: number) => void;
   onChange: (source: string) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   placeholder?: string;
@@ -157,6 +168,7 @@ export function FormulaCodeField({
   className,
   fields,
   handleRef,
+  onCaretChange,
   onChange,
   onKeyDown,
   placeholder,
@@ -247,35 +259,46 @@ export function FormulaCodeField({
     }
   }, [onChange]);
 
+  const reportCaret = useCallback(() => {
+    const root = rootRef.current;
+    if (root && onCaretChange) {
+      onCaretChange(getFormulaCaret(root)?.start ?? 0);
+    }
+  }, [onCaretChange]);
+
   const handleInput = useCallback(() => {
     if (composingRef.current) {
       return;
     }
     emit();
+    reportCaret();
     // Recolor shortly after typing pauses (never mid-keystroke).
     if (recolorTimerRef.current) {
       clearTimeout(recolorTimerRef.current);
     }
     recolorTimerRef.current = setTimeout(() => recolor(true), 350);
-  }, [emit, recolor]);
+  }, [emit, recolor, reportCaret]);
 
   useImperativeHandle(
     handleRef,
     () => ({
       focus: () => rootRef.current?.focus(),
-      insertAtCaret: (text: string, caretOffset: number) => {
+      replaceRange: (
+        start: number,
+        end: number,
+        text: string,
+        caretOffset: number
+      ) => {
         const root = rootRef.current;
         if (!root) {
           return;
         }
-        root.focus();
         const source = serializeFormulaDom(root);
-        const caret = getFormulaCaret(root);
-        const start = caret?.start ?? source.length;
-        const end = caret?.end ?? source.length;
-        onChange(source.slice(0, start) + text + source.slice(end));
-        const next = start + caretOffset;
-        // Value change rebuilds the DOM (external path); place the caret after.
+        const from = Math.max(0, Math.min(start, source.length));
+        const to = Math.max(from, Math.min(end, source.length));
+        onChange(source.slice(0, from) + text + source.slice(to));
+        const next = from + caretOffset;
+        // The value change rebuilds the DOM (external path); place caret after.
         requestAnimationFrame(() => {
           const current = rootRef.current;
           if (current) {
@@ -383,8 +406,11 @@ export function FormulaCodeField({
       onCompositionStart={() => {
         composingRef.current = true;
       }}
+      onFocus={reportCaret}
       onInput={handleInput}
       onKeyDown={handleKeyDown}
+      onKeyUp={reportCaret}
+      onMouseUp={reportCaret}
       onPaste={handlePaste}
       ref={rootRef}
       role="textbox"

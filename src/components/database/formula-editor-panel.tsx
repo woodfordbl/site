@@ -25,11 +25,18 @@ import {
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import {
+  type CaretContext,
+  formulaCaretContext,
+  isMethodOf,
+} from "@/lib/expr/autocomplete.ts";
 import { evaluateExpression } from "@/lib/expr/evaluate.ts";
 import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
 import {
   EXPR_FUNCTION_CATALOG,
   EXPR_OPERATOR_CATALOG,
+  type ExprFunctionCatalogEntry,
+  type ExprOperatorCatalogEntry,
   formulaPropertyReference,
 } from "@/lib/expr/function-catalog.ts";
 import { type ExprType, inferType } from "@/lib/expr/infer-type.ts";
@@ -143,6 +150,287 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+/** Which reference sections to show for the caret context. */
+interface Suggestions {
+  functions: readonly ExprFunctionCatalogEntry[];
+  methodEntries: readonly ExprFunctionCatalogEntry[];
+  operators: readonly ExprOperatorCatalogEntry[];
+  properties: readonly DatabaseField[];
+}
+
+/**
+ * Pick the reference sections for the caret context: methods of the receiver
+ * type after a value's dot, fields after a `Page.` dot, or the full catalog
+ * otherwise. `partial` (the text typed after the dot) filters the suggestions.
+ */
+function computeSuggestions(
+  context: CaretContext,
+  receiverType: ExprType,
+  propertyFields: readonly DatabaseField[],
+  functionEntries: readonly ExprFunctionCatalogEntry[],
+  operatorEntries: readonly ExprOperatorCatalogEntry[]
+): Suggestions {
+  const empty = {
+    functions: [],
+    methodEntries: [],
+    operators: [],
+    properties: [],
+  };
+  if (context.kind === "method") {
+    const partial = context.partial.toLowerCase();
+    return {
+      ...empty,
+      methodEntries: EXPR_FUNCTION_CATALOG.filter(
+        (entry) =>
+          isMethodOf(entry.name, receiverType) &&
+          entry.name.toLowerCase().startsWith(partial)
+      ),
+    };
+  }
+  if (context.kind === "property") {
+    const partial = context.partial.toLowerCase();
+    return {
+      ...empty,
+      properties: propertyFields.filter((field) =>
+        field.name.toLowerCase().startsWith(partial)
+      ),
+    };
+  }
+  return {
+    methodEntries: [],
+    properties: propertyFields,
+    functions: functionEntries,
+    operators: operatorEntries,
+  };
+}
+
+/** All derived autocomplete state for the panel (keeps the component lean). */
+function useReferenceSuggestions(
+  draft: string,
+  caret: number,
+  query: string,
+  fields: readonly DatabaseField[]
+) {
+  const parsed = draft.trim() === "" ? null : parseExpression(draft);
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const propertyFields = useMemo(
+    () =>
+      fields.filter(
+        (field) =>
+          field.type !== "formula" &&
+          field.name.toLowerCase().includes(normalizedQuery)
+      ),
+    [fields, normalizedQuery]
+  );
+  const functionEntries = useMemo(
+    () =>
+      EXPR_FUNCTION_CATALOG.filter((entry) =>
+        [
+          entry.name,
+          ...(entry.aliases ?? []),
+          entry.signature,
+          entry.description,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery)
+      ),
+    [normalizedQuery]
+  );
+  const operatorEntries = useMemo(
+    () =>
+      EXPR_OPERATOR_CATALOG.filter((entry) =>
+        `${entry.symbol} ${entry.category} ${entry.description}`
+          .toLowerCase()
+          .includes(normalizedQuery)
+      ),
+    [normalizedQuery]
+  );
+
+  const resolveType = useMemo(() => {
+    const byName = new Map<string, ExprType>();
+    for (const field of fields) {
+      byName.set(field.name.trim().toLowerCase(), fieldExprType(field.type));
+    }
+    return (name: string): ExprType =>
+      byName.get(name.trim().toLowerCase()) ?? "unknown";
+  }, [fields]);
+
+  const resultType: ExprType | null = parsed?.ok
+    ? inferType(parsed.ast, resolveType)
+    : null;
+
+  // Ignored while searching so the search box always reaches the full catalog.
+  const context: CaretContext =
+    normalizedQuery === ""
+      ? formulaCaretContext(draft, caret)
+      : { kind: "none" };
+
+  let receiverType: ExprType = "unknown";
+  if (context.kind === "method") {
+    const parsedReceiver = parseExpression(context.receiver);
+    receiverType = parsedReceiver.ok
+      ? inferType(parsedReceiver.ast, resolveType)
+      : "unknown";
+  }
+
+  const suggestions = computeSuggestions(
+    context,
+    receiverType,
+    propertyFields,
+    functionEntries,
+    operatorEntries
+  );
+  const nothingMatches =
+    suggestions.methodEntries.length === 0 &&
+    suggestions.properties.length === 0 &&
+    suggestions.functions.length === 0 &&
+    suggestions.operators.length === 0;
+
+  return {
+    context,
+    nothingMatches,
+    parsed,
+    receiverType,
+    resultType,
+    suggestions,
+  };
+}
+
+/**
+ * Live parse status: `✓ Valid · type` when the draft parses, otherwise a quiet
+ * warning triangle that reveals the message on hover (title) or tap (inline).
+ */
+function FormulaStatus({
+  parsed,
+  resultType,
+}: {
+  parsed: ReturnType<typeof parseExpression> | null;
+  resultType: ExprType | null;
+}) {
+  const [open, setOpen] = useState(false);
+  if (parsed === null) {
+    return null;
+  }
+  if (parsed.ok) {
+    return (
+      <span className="px-0.5 text-muted-foreground text-xs">
+        ✓ Valid
+        {resultType && resultType !== "unknown" ? ` · ${resultType}` : ""}
+      </span>
+    );
+  }
+  const message = `${parsed.error.message} (at character ${parsed.error.position + 1})`;
+  return (
+    <button
+      aria-label={message}
+      className="flex items-center gap-1 self-start rounded px-0.5 text-destructive text-xs outline-none focus-visible:bg-accent"
+      onClick={() => {
+        setOpen((value) => !value);
+      }}
+      title={message}
+      type="button"
+    >
+      <IconAlertTriangle className="size-3.5 shrink-0 stroke-[1.5px]" />
+      {open ? <span className="text-left">{message}</span> : null}
+    </button>
+  );
+}
+
+interface ReferenceListProps {
+  methods: readonly ExprFunctionCatalogEntry[];
+  nothingMatches: boolean;
+  onFunction: (entry: ExprFunctionCatalogEntry) => void;
+  onMethod: (entry: ExprFunctionCatalogEntry) => void;
+  onOperator: (entry: ExprOperatorCatalogEntry) => void;
+  onProperty: (field: DatabaseField) => void;
+  operators: readonly ExprOperatorCatalogEntry[];
+  properties: readonly DatabaseField[];
+  receiverType: ExprType;
+  standaloneFunctions: readonly ExprFunctionCatalogEntry[];
+}
+
+/** Scrollable, sectioned autocomplete list — methods, properties, functions, operators. */
+function ReferenceList({
+  methods,
+  nothingMatches,
+  onFunction,
+  onMethod,
+  onOperator,
+  onProperty,
+  operators,
+  properties,
+  receiverType,
+  standaloneFunctions,
+}: ReferenceListProps) {
+  return (
+    <div className="flex flex-col p-1">
+      {methods.length > 0 ? (
+        <SectionLabel>
+          {receiverType === "unknown" ? "Methods" : `${receiverType} methods`}
+        </SectionLabel>
+      ) : null}
+      {methods.map((entry) => (
+        <ReferenceRow
+          description={entry.description}
+          hint={entry.signature.slice(entry.name.length)}
+          icon={<IconMathFunction />}
+          key={`method-${entry.name}`}
+          label={entry.name}
+          onInsert={() => onMethod(entry)}
+        />
+      ))}
+      {properties.length > 0 ? <SectionLabel>Properties</SectionLabel> : null}
+      {properties.map((field) => {
+        const FieldIcon = resolveFieldIcon(field);
+        return (
+          <ReferenceRow
+            description={`Inserts ${formulaPropertyReference(field.name)}`}
+            hint={`· ${field.type}`}
+            icon={<FieldIcon />}
+            key={field.id}
+            label={field.name}
+            onInsert={() => onProperty(field)}
+          />
+        );
+      })}
+      {standaloneFunctions.length > 0 ? (
+        <SectionLabel>Functions</SectionLabel>
+      ) : null}
+      {standaloneFunctions.map((entry) => (
+        <ReferenceRow
+          description={entry.description}
+          hint={entry.signature.slice(entry.name.length)}
+          icon={<IconMathFunction />}
+          key={entry.name}
+          label={entry.name}
+          onInsert={() => onFunction(entry)}
+        />
+      ))}
+      {operators.length > 0 ? <SectionLabel>Operators</SectionLabel> : null}
+      {operators.map((entry) => (
+        <ReferenceRow
+          description={entry.description}
+          icon={
+            <span className="text-center font-mono text-xs">
+              {entry.symbol}
+            </span>
+          }
+          key={entry.symbol}
+          label={entry.symbol}
+          onInsert={() => onOperator(entry)}
+        />
+      ))}
+      {nothingMatches ? (
+        <div className="px-2 py-3 text-center text-muted-foreground text-xs">
+          No matches
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export interface FormulaEditorPanelProps {
   /** Stored expression the draft starts from (and is compared against on Save). */
   expression: string;
@@ -166,7 +454,7 @@ export function FormulaEditorPanel({
 }: FormulaEditorPanelProps): ReactNode {
   const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
-  const [errorOpen, setErrorOpen] = useState(false);
+  const [caret, setCaret] = useState(expression.length);
   const fieldRef = useRef<FormulaCodeFieldHandle>(null);
   const coarse = useIsCoarsePrimaryPointer();
 
@@ -181,13 +469,28 @@ export function FormulaEditorPanel({
     };
   }, []);
 
-  /** Insert reference text at the field's caret (the field owns caret math). */
-  const insertAtCaret = (text: string, caretOffset: number) => {
-    fieldRef.current?.insertAtCaret(text, caretOffset);
+  /**
+   * Replace source `[start, end)` with `text` and keep our tracked caret in
+   * sync (programmatic edits don't fire the field's caret events).
+   */
+  const applyEdit = (
+    start: number,
+    end: number,
+    text: string,
+    caretOffset: number
+  ) => {
+    fieldRef.current?.replaceRange(start, end, text, caretOffset);
+    setCaret(start + caretOffset);
   };
 
-  const trimmed = draft.trim();
-  const parsed = trimmed === "" ? null : parseExpression(draft);
+  const {
+    context,
+    nothingMatches,
+    parsed,
+    receiverType,
+    resultType,
+    suggestions,
+  } = useReferenceSuggestions(draft, caret, query, fields);
 
   // Live preview against the FIRST row: evaluate the parsed draft through the
   // same scope the real overlay uses; errors render honestly ("⚠ …").
@@ -201,92 +504,12 @@ export function FormulaEditorPanel({
     return exprValueToDisplay(evaluateExpression(parsed.ast, scope));
   }, [parsed, fields, firstRowValues]);
 
-  const normalizedQuery = query.trim().toLowerCase();
-
-  const propertyFields = useMemo(
-    () =>
-      fields.filter(
-        (field) =>
-          field.type !== "formula" &&
-          field.name.toLowerCase().includes(normalizedQuery)
-      ),
-    [fields, normalizedQuery]
-  );
-
-  const functionEntries = useMemo(
-    () =>
-      EXPR_FUNCTION_CATALOG.filter((entry) =>
-        [
-          entry.name,
-          ...(entry.aliases ?? []),
-          entry.signature,
-          entry.description,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [normalizedQuery]
-  );
-
-  const operatorEntries = useMemo(
-    () =>
-      EXPR_OPERATOR_CATALOG.filter((entry) =>
-        `${entry.symbol} ${entry.category} ${entry.description}`
-          .toLowerCase()
-          .includes(normalizedQuery)
-      ),
-    [normalizedQuery]
-  );
-
-  // Advisory result type of the current draft, for the ✓ Valid badge. Resolves
-  // property references to their field types; unknown when it can't be pinned.
-  const resultType = useMemo<ExprType | null>(() => {
-    if (!parsed?.ok) {
-      return null;
-    }
-    const byName = new Map<string, ExprType>();
-    for (const field of fields) {
-      byName.set(field.name.trim().toLowerCase(), fieldExprType(field.type));
-    }
-    return inferType(
-      parsed.ast,
-      (name) => byName.get(name.trim().toLowerCase()) ?? "unknown"
-    );
-  }, [parsed, fields]);
-
-  const nothingMatches =
-    propertyFields.length === 0 &&
-    functionEntries.length === 0 &&
-    operatorEntries.length === 0;
-
-  let status: ReactNode = null;
-  if (parsed?.ok) {
-    status = (
-      <span className="px-0.5 text-muted-foreground text-xs">
-        ✓ Valid
-        {resultType && resultType !== "unknown" ? ` · ${resultType}` : ""}
-      </span>
-    );
-  } else if (parsed !== null) {
-    // Errors (often just mid-edit) stay quiet: a small triangle that reveals
-    // the message on hover (title) or tap (toggles it inline).
-    const message = `${parsed.error.message} (at character ${parsed.error.position + 1})`;
-    status = (
-      <button
-        aria-label={message}
-        className="flex items-center gap-1 self-start rounded px-0.5 text-destructive text-xs outline-none focus-visible:bg-accent"
-        onClick={() => {
-          setErrorOpen((open) => !open);
-        }}
-        title={message}
-        type="button"
-      >
-        <IconAlertTriangle className="size-3.5 shrink-0 stroke-[1.5px]" />
-        {errorOpen ? <span className="text-left">{message}</span> : null}
-      </button>
-    );
-  }
+  /** Insert a property reference, replacing a `Page.<partial>` when in context. */
+  const insertProperty = (name: string) => {
+    const reference = formulaPropertyReference(name);
+    const start = context.kind === "property" ? context.replaceFrom : caret;
+    applyEdit(start, caret, reference, reference.length);
+  };
 
   return (
     <div
@@ -304,12 +527,13 @@ export function FormulaEditorPanel({
         className="max-h-40 overflow-y-auto"
         fields={fields}
         handleRef={fieldRef}
+        onCaretChange={setCaret}
         onChange={setDraft}
         onKeyDown={stopMenuKeys}
-        placeholder="thisPage.Price * 1.1"
+        placeholder="Page.Price * 1.1"
         value={draft}
       />
-      {status}
+      <FormulaStatus parsed={parsed} resultType={resultType} />
       {preview === null ? null : (
         <span className="truncate px-0.5 text-muted-foreground text-xs">
           Preview: {preview === "" ? "(empty)" : preview}
@@ -338,66 +562,40 @@ export function FormulaEditorPanel({
           coarse ? "min-h-0 flex-1" : "max-h-72"
         )}
       >
-        <div className="flex flex-col p-1">
-          {propertyFields.length > 0 ? (
-            <SectionLabel>Properties</SectionLabel>
-          ) : null}
-          {propertyFields.map((propertyField) => {
-            const FieldIcon = resolveFieldIcon(propertyField);
-            const reference = formulaPropertyReference(propertyField.name);
-            return (
-              <ReferenceRow
-                description={`Inserts ${reference}`}
-                hint={`· ${propertyField.type}`}
-                icon={<FieldIcon />}
-                key={propertyField.id}
-                label={propertyField.name}
-                onInsert={() => {
-                  insertAtCaret(reference, reference.length);
-                }}
-              />
+        <ReferenceList
+          methods={suggestions.methodEntries}
+          nothingMatches={nothingMatches}
+          onFunction={(entry) => {
+            // Caret lands inside the parens, ready for arguments.
+            applyEdit(caret, caret, `${entry.name}()`, entry.name.length + 1);
+          }}
+          onMethod={(entry) => {
+            if (context.kind === "method") {
+              // Replace the typed partial after the dot with `name()`.
+              applyEdit(
+                context.replaceFrom,
+                caret,
+                `${entry.name}()`,
+                entry.name.length + 1
+              );
+            }
+          }}
+          onOperator={(entry) => {
+            applyEdit(
+              caret,
+              caret,
+              ` ${entry.symbol} `,
+              entry.symbol.length + 2
             );
-          })}
-          {functionEntries.length > 0 ? (
-            <SectionLabel>Functions</SectionLabel>
-          ) : null}
-          {functionEntries.map((entry) => (
-            <ReferenceRow
-              description={entry.description}
-              hint={entry.signature.slice(entry.name.length)}
-              icon={<IconMathFunction />}
-              key={entry.name}
-              label={entry.name}
-              onInsert={() => {
-                // Caret lands inside the parens, ready for arguments.
-                insertAtCaret(`${entry.name}()`, entry.name.length + 1);
-              }}
-            />
-          ))}
-          {operatorEntries.length > 0 ? (
-            <SectionLabel>Operators</SectionLabel>
-          ) : null}
-          {operatorEntries.map((entry) => (
-            <ReferenceRow
-              description={entry.description}
-              icon={
-                <span className="text-center font-mono text-xs">
-                  {entry.symbol}
-                </span>
-              }
-              key={entry.symbol}
-              label={entry.symbol}
-              onInsert={() => {
-                insertAtCaret(` ${entry.symbol} `, entry.symbol.length + 2);
-              }}
-            />
-          ))}
-          {nothingMatches ? (
-            <div className="px-2 py-3 text-center text-muted-foreground text-xs">
-              No matches
-            </div>
-          ) : null}
-        </div>
+          }}
+          onProperty={(field) => {
+            insertProperty(field.name);
+          }}
+          operators={suggestions.operators}
+          properties={suggestions.properties}
+          receiverType={receiverType}
+          standaloneFunctions={suggestions.functions}
+        />
       </ScrollArea>
       <Button
         className="self-end"

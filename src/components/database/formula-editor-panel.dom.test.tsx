@@ -17,6 +17,7 @@ vi.mock("@/hooks/device-layout.ts", () => ({
 
 const FIELDS: DatabaseField[] = [
   { id: "f-price", name: "Price", type: "number" },
+  { id: "f-name", name: "Name", type: "text" },
   { id: "f-qty", name: "Unit Count", type: "number" },
   { id: "f-total", name: "Total", type: "formula", expression: "" },
 ];
@@ -104,6 +105,24 @@ describe("FormulaEditorPanel", () => {
     // The function insert leaves the caret inside its parens, so the property
     // lands there; it serializes back to its full source via the chip.
     expect(serializeFormulaDom(field())).toBe("average(Page.Price)");
+  });
+
+  it("suggests type-appropriate methods after a value's dot, and chains them", async () => {
+    // Caret sits right after `Page.Name.` (Name is text).
+    renderPanel("Page.Name.");
+    await flushFrames();
+    const el = field();
+    setFormulaCaret(el, { start: 10, end: 10 });
+    fireEvent.keyUp(el); // reports the caret → panel recomputes context
+
+    // Text methods are recommended; number-only methods are not.
+    expect(screen.getByText("upper")).toBeDefined();
+    expect(screen.getByText("len")).toBeDefined();
+    expect(screen.queryByText("round")).toBeNull();
+
+    fireEvent.click(screen.getByText("upper"));
+    await flushFrames();
+    expect(serializeFormulaDom(field())).toBe("Page.Name.upper()");
   });
 
   it("deletes a whole property chip on Backspace", async () => {
