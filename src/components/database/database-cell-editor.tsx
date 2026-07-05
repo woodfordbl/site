@@ -3,7 +3,7 @@ import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
-  useLayoutEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -240,12 +240,17 @@ function TextCellPopoverEditor({
   // Set once an exit path has run so the trailing blur/close is a no-op.
   const finishedRef = useRef(false);
 
-  useLayoutEffect(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.focus();
-      el.select();
-      autosizeTextarea(el);
+  // Focus/select/size the textarea the moment it attaches — the popover only
+  // mounts it once `anchor` is set (a render after this component mounts), so a
+  // mount effect would fire too early to see it. A `useCallback([])` identity is
+  // invoked only on attach/detach, never on the re-renders each keystroke
+  // triggers (which would re-select and eat characters).
+  const initTextarea = useCallback((node: HTMLTextAreaElement | null) => {
+    textareaRef.current = node;
+    if (node) {
+      node.focus();
+      node.select();
+      autosizeTextarea(node);
     }
   }, []);
 
@@ -327,7 +332,7 @@ function TextCellPopoverEditor({
             sideOffset={0}
           >
             <PopoverPrimitive.Popup
-              className="overlay-popover-surface flex w-[var(--anchor-width)] min-w-48 max-w-[min(var(--available-width),32rem)] flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10"
+              className="overlay-popover-surface flex w-[max(var(--anchor-width),16rem)] max-w-[min(var(--available-width),32rem)] flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10"
               finalFocus={false}
               initialFocus={textareaRef}
             >
@@ -340,7 +345,7 @@ function TextCellPopoverEditor({
                   autosizeTextarea(event.currentTarget);
                 }}
                 onKeyDown={handleKeyDown}
-                ref={textareaRef}
+                ref={initTextarea}
                 rows={1}
                 value={draft}
               />

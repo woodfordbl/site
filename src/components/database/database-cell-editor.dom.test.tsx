@@ -1,11 +1,5 @@
 /** @vitest-environment jsdom */
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DatabaseCellInlineEditor } from "@/components/database/database-cell-editor.tsx";
@@ -71,12 +65,21 @@ afterEach(() => {
 });
 
 describe("TextCellPopoverEditor", () => {
-  it("mounts the overflow popover focused on the current value", async () => {
+  it("autofocuses the overflow popover on the current value when opened", () => {
     renderEditor({ value: "hello" });
     const textarea = screen.getByLabelText("Note") as HTMLTextAreaElement;
     expect(textarea.value).toBe("hello");
-    // Base UI settles initial focus in a post-mount effect.
-    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    // The callback ref focuses synchronously the moment the textarea attaches,
+    // so focus lands without waiting on Base UI's async initial-focus pass.
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it("gives the popover a minimum width so narrow cells stay usable", () => {
+    renderEditor({ value: "hello" });
+    const popup = screen
+      .getByLabelText("Note")
+      .closest("[data-slot='popover-content'], .overlay-popover-surface");
+    expect(popup?.className).toContain("w-[max(var(--anchor-width),16rem)]");
   });
 
   it("commits the edited value and moves down on Enter", () => {
