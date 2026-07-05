@@ -38,7 +38,7 @@ const DIGIT_RE = /[0-9]/;
 const IDENTIFIER_START_RE = /[A-Za-z_]/;
 const IDENTIFIER_PART_RE = /[A-Za-z0-9_]/;
 
-const SCOPE_ROOTS = new Set(["thispage", "thisrow"]);
+const SCOPE_ROOTS = new Set(["page", "row", "thispage", "thisrow"]);
 const KEYWORD_LITERALS = new Set(["true", "false", "null"]);
 const WORD_OPERATORS = new Set(["and", "or", "not"]);
 const TWO_CHAR_OPERATORS = ["==", "!=", "<=", ">=", "&&", "||"];

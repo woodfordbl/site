@@ -48,6 +48,13 @@ describe("scanExpressionSegments", () => {
     expect(segment.propertyName).toBe("Weight");
   });
 
+  it("treats Page/Row as property scope roots too", () => {
+    expect(classes("Page.Weight")).toEqual(["property:Page.Weight"]);
+    expect(classes("Row.Weight")).toEqual(["property:Row.Weight"]);
+    const [segment] = scanExpressionSegments("Page.Weight");
+    expect(segment.propertyName).toBe("Weight");
+  });
+
   it("handles the bracket property form and captures the name", () => {
     const segments = scanExpressionSegments('thisRow["Unit Price"] + 1');
     expect(segments[0]).toMatchObject({

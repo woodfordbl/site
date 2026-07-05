@@ -113,8 +113,12 @@ export type ParseExpressionResult =
   | { ok: true; ast: ExprNode }
   | { ok: false; error: ExprSourceError };
 
-/** Scope roots accepted before `.property` / `["property"]` (lowercased). */
-const SCOPE_ROOTS = new Set(["thispage", "thisrow"]);
+/**
+ * Scope roots accepted before `.property` / `["property"]` (lowercased).
+ * `page`/`row` are the preferred spellings (and the future anchor for graph
+ * navigation like `Page.parent`); `thispage`/`thisrow` stay for back-compat.
+ */
+const SCOPE_ROOTS = new Set(["page", "row", "thispage", "thisrow"]);
 
 /**
  * Longest accepted expression source, in characters. Longer input becomes a

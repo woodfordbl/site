@@ -105,6 +105,15 @@ describe("parse property references", () => {
     expect(astOf("thisRow.Score")).toEqual(astOf("thisPage.Score"));
   });
 
+  it("accepts Page/Row as scope roots (preferred spelling)", () => {
+    expect(sexpr(astOf("Page.Score"))).toBe("prop:Score");
+    expect(sexpr(astOf("Row.Score"))).toBe("prop:Score");
+    expect(astOf("Page.Score")).toEqual(astOf("thisPage.Score"));
+    expect(sexpr(astOf('Page["Unit Price"].upper()'))).toBe(
+      "(upper prop:Unit Price)"
+    );
+  });
+
   it("matches scope roots case-insensitively", () => {
     expect(sexpr(astOf("THISPAGE.Score"))).toBe("prop:Score");
     expect(sexpr(astOf("thisrow.Score"))).toBe("prop:Score");

@@ -103,7 +103,7 @@ describe("FormulaEditorPanel", () => {
     await flushFrames();
     // The function insert leaves the caret inside its parens, so the property
     // lands there; it serializes back to its full source via the chip.
-    expect(serializeFormulaDom(field())).toBe("average(thisPage.Price)");
+    expect(serializeFormulaDom(field())).toBe("average(Page.Price)");
   });
 
   it("deletes a whole property chip on Backspace", async () => {

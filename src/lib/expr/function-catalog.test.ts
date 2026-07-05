@@ -80,19 +80,15 @@ describe("EXPR_OPERATOR_CATALOG", () => {
 
 describe("formulaPropertyReference", () => {
   it("uses dot form for bare identifiers", () => {
-    expect(formulaPropertyReference("Price")).toBe("thisPage.Price");
-    expect(formulaPropertyReference("_x2")).toBe("thisPage._x2");
+    expect(formulaPropertyReference("Price")).toBe("Page.Price");
+    expect(formulaPropertyReference("_x2")).toBe("Page._x2");
   });
 
   it("uses the escaped bracket form otherwise", () => {
-    expect(formulaPropertyReference("Unit Price")).toBe(
-      'thisPage["Unit Price"]'
-    );
-    expect(formulaPropertyReference('Say "hi"')).toBe(
-      'thisPage["Say \\"hi\\""]'
-    );
-    expect(formulaPropertyReference("a\\b")).toBe('thisPage["a\\\\b"]');
-    expect(formulaPropertyReference("1st")).toBe('thisPage["1st"]');
+    expect(formulaPropertyReference("Unit Price")).toBe('Page["Unit Price"]');
+    expect(formulaPropertyReference('Say "hi"')).toBe('Page["Say \\"hi\\""]');
+    expect(formulaPropertyReference("a\\b")).toBe('Page["a\\\\b"]');
+    expect(formulaPropertyReference("1st")).toBe('Page["1st"]');
   });
 
   it("always produces a parseable property reference", () => {

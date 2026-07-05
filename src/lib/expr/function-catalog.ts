@@ -804,14 +804,15 @@ export const EXPR_OPERATOR_CATALOG: readonly ExprOperatorCatalogEntry[] = [
 const BARE_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
- * The `thisPage` reference expression for a property name: dot form for
- * bare identifiers (`thisPage.Price`), bracket form with string escaping
- * otherwise (`thisPage["Unit Price"]`). Always parses.
+ * The `Page` reference expression for a property name: dot form for bare
+ * identifiers (`Page.Price`), bracket form with string escaping otherwise
+ * (`Page["Unit Price"]`). Always parses. (`thisPage`/`thisRow` remain valid
+ * roots for existing formulas; `Page` is the spelling we insert.)
  */
 export function formulaPropertyReference(name: string): string {
   if (BARE_IDENTIFIER_RE.test(name)) {
-    return `thisPage.${name}`;
+    return `Page.${name}`;
   }
   const escaped = name.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
-  return `thisPage["${escaped}"]`;
+  return `Page["${escaped}"]`;
 }
