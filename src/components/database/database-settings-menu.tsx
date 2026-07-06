@@ -1,6 +1,4 @@
 import {
-  IconArrowDown,
-  IconArrowUp,
   IconChartBar,
   IconCheck,
   IconClock,
@@ -11,6 +9,7 @@ import {
   IconEye,
   IconEyeOff,
   IconFileText,
+  IconGripVertical,
   IconLayoutGrid,
   IconLayoutKanban,
   IconLayoutList,
@@ -35,6 +34,10 @@ import {
   AddDatabaseViewMenuItems,
   DATABASE_VIEW_TYPE_ICONS,
 } from "@/components/database/database-view-switcher.tsx";
+import {
+  type ListReorderHandleProps,
+  useListReorder,
+} from "@/components/database/use-list-reorder.ts";
 import { BoardOptionsItems } from "@/components/database/views/database-board-config.tsx";
 import { ChartOptionsItems } from "@/components/database/views/database-chart-config.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -60,6 +63,7 @@ import {
 import {
   deleteDatabase,
   duplicateDatabaseView,
+  removeDatabaseField,
   removeDatabaseView,
   renameDatabase,
   reorderDatabaseFields,
@@ -82,6 +86,7 @@ import type {
   DatabaseView,
   LocalDatabase,
 } from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
 
 /**
  * Database ⋯ settings menu in the title row (edit mode only), following the
@@ -169,74 +174,104 @@ function DatabaseRenameInput({
 }
 
 interface PropertyRowProps {
-  canMoveDown: boolean;
-  canMoveUp: boolean;
+  /** Drop-line below the last row while a row is dragged past the end. */
+  dropAfter: boolean;
+  /** Drop-line above this row while another row is dragged over its top slot. */
+  dropBefore: boolean;
   field: DatabaseField;
+  /** Dim the row while it is the one being dragged. */
+  isDragging: boolean;
   isPrimary: boolean;
   isVisible: boolean;
-  onMove: (delta: -1 | 1) => void;
+  onDelete: () => void;
   onToggleVisible: () => void;
+  /** Pointer handlers for the left grip; drives {@link useListReorder}. */
+  reorderHandleProps: ListReorderHandleProps;
 }
 
 /**
- * One field row in the Properties submenu: field icon (custom glyph or type
- * icon) + name, move up/down, and a hide/show toggle. The primary field shows
- * a "Title" badge and can never be hidden. Tapping the name opens nothing
- * this wave — field editing lives in the column menu.
+ * One field row in the Properties list: a left grip that drag-reorders the
+ * schema, the field icon + name, a "Title" badge beside the primary field's
+ * name, and — for non-primary fields — hide/show and delete controls on the
+ * right. The primary field can never be hidden or deleted. Tapping the name
+ * opens nothing this wave — field editing lives in the column menu.
  */
 function PropertyRow({
-  canMoveDown,
-  canMoveUp,
+  dropBefore,
+  dropAfter,
   field,
+  isDragging,
   isPrimary,
   isVisible,
-  onMove,
+  reorderHandleProps,
+  onDelete,
   onToggleVisible,
 }: PropertyRowProps) {
   const FieldIcon = resolveFieldIcon(field);
 
   return (
-    <div className="flex min-h-8 pointer-coarse:min-h-11 items-center gap-1.5 rounded-md px-1.5 py-1 text-sm">
+    <div
+      className={cn(
+        "relative flex min-h-8 pointer-coarse:min-h-11 items-center gap-1 rounded-md pr-1 pl-0.5 text-sm",
+        isDragging && "opacity-40"
+      )}
+      data-menu-card-item=""
+      data-reorder-item=""
+    >
+      {dropBefore ? <PropertyDropLine position="top" /> : null}
+      {dropAfter ? <PropertyDropLine position="bottom" /> : null}
+      <button
+        aria-label={`Reorder ${field.name}`}
+        className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground active:cursor-grabbing"
+        data-vaul-no-drag=""
+        type="button"
+        {...reorderHandleProps}
+      >
+        <IconGripVertical className="size-4 stroke-[1.5px]" />
+      </button>
       <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">{field.name}</span>
-      {isPrimary ? (
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-          Title
-        </span>
-      ) : null}
-      <Button
-        aria-label={`Move ${field.name} up`}
-        disabled={!canMoveUp}
-        onClick={() => {
-          onMove(-1);
-        }}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <IconArrowUp />
-      </Button>
-      <Button
-        aria-label={`Move ${field.name} down`}
-        disabled={!canMoveDown}
-        onClick={() => {
-          onMove(1);
-        }}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <IconArrowDown />
-      </Button>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="min-w-0 truncate">{field.name}</span>
+        {isPrimary ? (
+          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            Title
+          </span>
+        ) : null}
+      </div>
       {isPrimary ? null : (
-        <Button
-          aria-label={isVisible ? `Hide ${field.name}` : `Show ${field.name}`}
-          onClick={onToggleVisible}
-          size="icon-xs"
-          variant="ghost"
-        >
-          {isVisible ? <IconEye /> : <IconEyeOff />}
-        </Button>
+        <>
+          <Button
+            aria-label={isVisible ? `Hide ${field.name}` : `Show ${field.name}`}
+            onClick={onToggleVisible}
+            size="icon-xs"
+            variant="ghost"
+          >
+            {isVisible ? <IconEye /> : <IconEyeOff />}
+          </Button>
+          <Button
+            aria-label={`Delete ${field.name}`}
+            className="text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <IconTrash />
+          </Button>
+        </>
       )}
     </div>
+  );
+}
+
+/** Full-width reorder drop indicator, pinned to a row's top or bottom edge. */
+function PropertyDropLine({ position }: { position: "top" | "bottom" }) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-0 z-10 h-0.5 -translate-y-1/2 rounded-full bg-selection-primary",
+        position === "top" ? "top-0" : "bottom-0 translate-y-1/2"
+      )}
+    />
   );
 }
 
@@ -247,23 +282,22 @@ interface PropertiesSubmenuProps {
 }
 
 /**
- * Properties submenu: one row per field in schema order with reorder and
- * hide/show controls. Visibility writes `visibleFieldIds` on the ACTIVE view;
- * reorder rewrites the schema (all views).
+ * Properties submenu: one row per field in schema order with a drag grip,
+ * hide/show, and delete. Visibility writes `visibleFieldIds` on the ACTIVE
+ * view; reorder rewrites the schema (all views).
  */
 function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
   const isVisible = (fieldId: string): boolean =>
     !view.visibleFieldIds || view.visibleFieldIds.includes(fieldId);
 
-  const moveField = (index: number, delta: -1 | 1) => {
+  const reorderFields = (from: number, to: number) => {
     const ids = database.fields.map((field) => field.id);
-    const target = index + delta;
-    if (target < 0 || target >= ids.length) {
-      return;
-    }
-    [ids[index], ids[target]] = [ids[target], ids[index]];
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
     reorderDatabaseFields(database.id, ids);
   };
+
+  const { containerRef, getHandleProps, state } = useListReorder(reorderFields);
 
   const toggleVisible = (fieldId: string) => {
     const allFieldIds = database.fields.map((field) => field.id);
@@ -273,6 +307,9 @@ function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
     updateDatabaseView(database.id, view.id, { visibleFieldIds: next });
   };
 
+  const lastIndex = database.fields.length - 1;
+  const isReordering = state.fromIndex !== null;
+
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
@@ -280,22 +317,30 @@ function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
         Properties
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-64 min-w-64">
-        {database.fields.map((field, index) => (
-          <PropertyRow
-            canMoveDown={index < database.fields.length - 1}
-            canMoveUp={index > 0}
-            field={field}
-            isPrimary={field.id === database.primaryFieldId}
-            isVisible={isVisible(field.id)}
-            key={field.id}
-            onMove={(delta) => {
-              moveField(index, delta);
-            }}
-            onToggleVisible={() => {
-              toggleVisible(field.id);
-            }}
-          />
-        ))}
+        <div ref={containerRef}>
+          {database.fields.map((field, index) => (
+            <PropertyRow
+              dropAfter={
+                isReordering &&
+                index === lastIndex &&
+                state.overIndex === index + 1
+              }
+              dropBefore={isReordering && state.overIndex === index}
+              field={field}
+              isDragging={state.fromIndex === index}
+              isPrimary={field.id === database.primaryFieldId}
+              isVisible={isVisible(field.id)}
+              key={field.id}
+              onDelete={() => {
+                removeDatabaseField(database.id, field.id);
+              }}
+              onToggleVisible={() => {
+                toggleVisible(field.id);
+              }}
+              reorderHandleProps={getHandleProps(index)}
+            />
+          ))}
+        </div>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -1026,6 +1071,19 @@ export function DatabaseSettingsMenu({
           >
             <IconColumns3 />
             Vertical separators
+          </DropdownMenuSwitchItem>
+        ) : null}
+        {view && view.type === "table" ? (
+          <DropdownMenuSwitchItem
+            checked={view.config.showPageIcons !== false}
+            onCheckedChange={(next) => {
+              updateDatabaseView(database.id, view.id, {
+                config: { ...view.config, showPageIcons: next },
+              });
+            }}
+          >
+            <IconFileText />
+            Page icons
           </DropdownMenuSwitchItem>
         ) : null}
         <DropdownMenuSeparator />

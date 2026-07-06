@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_ROW_TEMPLATE_TEXT,
   defaultRowTemplateBlocks,
   instantiateTemplateBlocks,
 } from "@/lib/databases/row-template.ts";
@@ -22,13 +21,12 @@ const fields: DatabaseField[] = [
 const values = { "f-name": "Widget", "f-count": 3, "f-status": "opt-1" };
 
 describe("instantiateTemplateBlocks", () => {
-  it("falls back to the default muted text block when the template is absent or empty", () => {
+  it("falls back to a single empty text block when the template is absent or empty", () => {
     for (const template of [undefined, []]) {
       const blocks = instantiateTemplateBlocks(template, fields, values);
       expect(blocks).toHaveLength(1);
       expect(blocks[0].type).toBe("text");
-      expect(blocks[0].color).toBe("gray");
-      expect(blocks[0].props).toEqual({ text: DEFAULT_ROW_TEMPLATE_TEXT });
+      expect(blocks[0].props).toEqual({ text: "" });
     }
   });
 

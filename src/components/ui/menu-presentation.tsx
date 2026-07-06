@@ -207,23 +207,40 @@ export function useMenuPresentation(): MenuPresentationValue {
 }
 
 /**
+ * Marks the drawer body as the grouped-list presentation of a menu (the
+ * iOS/Linear look). The card treatment is pure CSS driven off this class in
+ * `styles.css`: runs of adjacent `data-menu-card-item` rows get the muted card
+ * background with rounded outer corners and hairline dividers, while any
+ * non-item sibling (search input, section label, stats footer, or a
+ * `data-menu-card-break` separator) breaks the run and renders plain. Doing it
+ * in CSS — rather than wrapping rows in the React tree — means the grouping
+ * sees through caller wrapper components (e.g. the action-menu search section),
+ * whose fragments add no DOM node, so every row is a flat sibling in the body.
+ */
+export const DRAWER_MENU_GROUP_CLASS = "cn-drawer-menu-group";
+
+/**
  * Wraps drawer-mode menu/popover content in the scrollable body and supplies
- * the presentation context its rows read.
+ * the presentation context its rows read. Menus opt into `grouped` for the
+ * card-backed list treatment; popovers (arbitrary content) leave it off.
  */
 export function MenuPresentationProvider({
   children,
   close,
   className,
+  grouped = false,
 }: {
   children: ReactNode;
   className?: string;
   close: () => void;
+  grouped?: boolean;
 }) {
   return (
     <MenuPresentationContext.Provider value={{ close, presentation: "drawer" }}>
       <div
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-1 pb-2",
+          grouped && DRAWER_MENU_GROUP_CLASS,
           className
         )}
       >
@@ -268,6 +285,7 @@ export function MenuDrawerSubDrawer({
             onOpenChange(false);
             closeParent();
           }}
+          grouped
         >
           {children}
         </MenuPresentationProvider>
@@ -344,6 +362,7 @@ export function DrawerMenuRow({
           renderProps.className
         ),
         "data-disabled": disabled ? "" : undefined,
+        "data-menu-card-item": "",
         onClick: handleRenderClick,
       },
       body
@@ -363,6 +382,7 @@ export function DrawerMenuRow({
     <button
       className={cn(rowClassName(destructive), className)}
       data-disabled={disabled ? "" : undefined}
+      data-menu-card-item=""
       disabled={disabled}
       onClick={handleClick}
       type="button"
@@ -398,7 +418,10 @@ export function DrawerMenuSectionLabel({
 }
 
 export function DrawerMenuSeparator() {
-  return <div className="my-1 h-px bg-border" />;
+  // `data-menu-card-break` marks this as a hard gap between grouped cards: in
+  // the grouped body its own hairline is hidden (styles.css) so only the gap
+  // remains, while inside a card the hairline dividers come from adjacent rows.
+  return <div className="my-1 h-px bg-border" data-menu-card-break="" />;
 }
 
 export function DrawerCheckTrailing({ checked }: { checked: boolean }) {

@@ -937,3 +937,39 @@
 .dark .code-shiki span {
   color: var(--shiki-dark, inherit);
 }
+
+/*
+ * Grouped drawer menu (touch presentation of dropdown/context menus). Runs of
+ * adjacent item rows read as one iOS/Linear "grouped list" card: shared muted
+ * background, rounded only at the run's outer corners, hairline dividers
+ * between rows. Any non-item sibling — search input, section label, stats
+ * footer, or a `data-menu-card-break` separator — breaks the run and stays
+ * plain. Done in CSS (not by wrapping rows) so it sees through caller wrapper
+ * components, whose fragments add no DOM node and leave every row a flat
+ * sibling in the scroll body.
+ */
+.cn-drawer-menu-group [data-menu-card-item] {
+  background-color: var(--muted);
+  border-radius: 0;
+}
+.cn-drawer-menu-group [data-menu-card-item]:first-child,
+.cn-drawer-menu-group :not([data-menu-card-item]) + [data-menu-card-item] {
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+}
+.cn-drawer-menu-group [data-menu-card-item]:last-child,
+.cn-drawer-menu-group [data-menu-card-item]:has(+ :not([data-menu-card-item])) {
+  border-bottom-right-radius: var(--radius-xl);
+  border-bottom-left-radius: var(--radius-xl);
+}
+.cn-drawer-menu-group [data-menu-card-item] + [data-menu-card-item] {
+  border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+}
+/* Press feedback layered over the muted card (plain `bg-accent` == muted). */
+.cn-drawer-menu-group [data-menu-card-item]:active {
+  background-color: color-mix(in oklch, var(--foreground) 10%, var(--muted));
+}
+/* Separator between cards collapses to a pure gap — no hairline. */
+.cn-drawer-menu-group [data-menu-card-break] {
+  background-color: transparent;
+}

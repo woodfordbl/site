@@ -25,9 +25,6 @@ import type {
  *   when row values change.
  */
 
-/** Body copy of the default template shown when a database has none. */
-export const DEFAULT_ROW_TEMPLATE_TEXT = "Add notes by editing this page…";
-
 /**
  * Fixed id for the default template's single block — the default template is
  * rebuilt per call, and a stable id keeps virtual re-renders from remounting
@@ -36,14 +33,18 @@ export const DEFAULT_ROW_TEMPLATE_TEXT = "Add notes by editing this page…";
  */
 const DEFAULT_ROW_TEMPLATE_BLOCK_ID = "row-template-default-text";
 
-/** The fallback template: one muted text block inviting the first edit. */
+/**
+ * The fallback template: a single EMPTY text block, so a row with no custom
+ * template opens as a blank page (no "edit this page" placeholder copy) that
+ * reads and behaves like any freshly-created page. The empty trailing row is
+ * also the click target that starts editing (copy-on-write materialization).
+ */
 export function defaultRowTemplateBlocks(): Block[] {
   return [
     {
       id: DEFAULT_ROW_TEMPLATE_BLOCK_ID,
       type: "text",
-      color: "gray",
-      props: { text: DEFAULT_ROW_TEMPLATE_TEXT },
+      props: { text: "" },
     },
   ];
 }
