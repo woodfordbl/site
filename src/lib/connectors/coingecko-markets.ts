@@ -154,7 +154,7 @@ export const coingeckoMarketsConnector: ConnectorDefinition<CoingeckoMarketsConf
     id: "coingecko-markets",
     title: "Crypto prices",
     description:
-      "USD price, 24h change, and market cap for a CoinGecko coin watchlist.",
+      "USD price, 24h change, and market cap for your coin watchlist.",
     icon: "tabler:IconCoinBitcoin",
     configSchema: coingeckoMarketsConfigSchema,
     configFields: [

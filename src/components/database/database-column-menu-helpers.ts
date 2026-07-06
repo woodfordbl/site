@@ -342,3 +342,44 @@ export function withoutSelectOption(
 ): DatabaseSelectOption[] {
   return options.filter((option) => option.id !== optionId);
 }
+
+/**
+ * Whether the column menu's Edit property submenu has a body for this field
+ * (formula expression, number/date display config, or select options).
+ */
+export function hasPropertyEditorMenu(field: DatabaseField): boolean {
+  return (
+    field.type === "formula" ||
+    field.type === "number" ||
+    field.type === "date" ||
+    field.type === "select" ||
+    field.type === "multiSelect"
+  );
+}
+
+/**
+ * Date and number fields expose display-only config (`format`, decimals,
+ * grouping) that does not fight connector sync — cell values stay
+ * provider-owned while presentation is per-field local state.
+ */
+export function hasDisplayOnlyPropertyEditor(
+  field: DatabaseField
+): field is
+  | (DatabaseField & { type: "date" })
+  | (DatabaseField & { type: "number" }) {
+  return field.type === "date" || field.type === "number";
+}
+
+/**
+ * Whether Edit property should render: local fields get the full submenu;
+ * synced fields get display-only editors for date/number only.
+ */
+export function showsEditPropertySubmenu(
+  field: DatabaseField,
+  synced: boolean
+): boolean {
+  if (synced) {
+    return hasDisplayOnlyPropertyEditor(field);
+  }
+  return hasPropertyEditorMenu(field);
+}

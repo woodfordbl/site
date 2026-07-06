@@ -18,6 +18,7 @@ import {
   useDragState,
   useDropTarget,
 } from "@/components/dnd/use-dnd.ts";
+import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
@@ -185,6 +186,7 @@ function PageListRowLink({
 
   const menuButtonClassName = cn(
     pageListRowPaddingLeft(depth),
+    "transition-none",
     isNestTarget && "bg-selection-primary",
     isDragging &&
       "text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
@@ -253,7 +255,7 @@ function PageListRowLink({
         showGrabbing && "cursor-grabbing",
         isDragging && "text-muted-foreground",
         !isDragging &&
-          "hover:[&_[data-page-list-row-content]]:bg-sidebar-accent hover:[&_[data-page-list-row-content]]:text-sidebar-accent-foreground has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:bg-sidebar-accent has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:text-sidebar-accent-foreground"
+          "focus-within:[&_[data-page-list-row-content]]:pr-8 hover:[&_[data-page-list-row-content]]:bg-sidebar-accent hover-none:[&_[data-page-list-row-content]]:pr-8 hover:[&_[data-page-list-row-content]]:pr-8 hover:[&_[data-page-list-row-content]]:text-sidebar-accent-foreground has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:bg-sidebar-accent has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:pr-8 has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-page-list-row-content]]:text-sidebar-accent-foreground"
       )}
       data-page-list-row-id={pageId}
       data-reveal-group=""
@@ -732,34 +734,12 @@ export function PageListItem({
             </DialogContent>
           </Dialog>
 
-          <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
-            <DialogContent showCloseButton={false}>
-              <DialogHeader>
-                <DialogTitle>Delete page?</DialogTitle>
-                <DialogDescription>
-                  {localPage && localPage.serverBaselineHash === null
-                    ? "This page and its blocks will be removed. This cannot be undone."
-                    : "This page will be hidden locally. The published version will remain."}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  onClick={() => setDeleteOpen(false)}
-                  type="button"
-                  variant="outline"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleDelete}
-                  type="button"
-                  variant="destructive"
-                >
-                  Delete
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <DeletePageConfirmDialog
+            onConfirm={handleDelete}
+            onOpenChange={setDeleteOpen}
+            open={deleteOpen}
+            pageId={page.id}
+          />
         </>
       ) : null}
     </>

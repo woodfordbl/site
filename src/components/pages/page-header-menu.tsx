@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
+import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { PageHeaderMenuExportSubmenu } from "@/components/pages/page-header-menu-export-submenu.tsx";
@@ -29,14 +30,6 @@ import { PageHeaderMenuTextSizeSubmenu } from "@/components/pages/page-header-me
 import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
 import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -501,30 +494,12 @@ export function PageHeaderMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Delete page?</DialogTitle>
-            <DialogDescription>
-              This page and its subpages will be removed. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                setDeleteOpen(false);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleDelete} type="button" variant="destructive">
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeletePageConfirmDialog
+        onConfirm={handleDelete}
+        onOpenChange={setDeleteOpen}
+        open={deleteOpen}
+        pageId={pageId}
+      />
 
       <PageCanvasConfirmDialog
         confirmAction={footerActions.confirmAction}

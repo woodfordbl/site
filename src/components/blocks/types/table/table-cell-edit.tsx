@@ -7,6 +7,7 @@ import {
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
 import { canvasEditTextClassName } from "@/lib/blocks/block-spacing.ts";
+import { findRowContext } from "@/lib/blocks/block-tree.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
 import type { CanvasField } from "@/lib/editor/caret-navigation.ts";
 import { cn } from "@/lib/utils.ts";
@@ -25,7 +26,7 @@ export function TableCellEdit({
   onAutoFocusHandled,
   onCellFocus,
 }: TableCellEditProps) {
-  const { dispatch, clearSelection, moveAfter, moveBefore } =
+  const { dispatch, clearSelection, duplicateRow, moveAfter, moveBefore } =
     useCanvasEditorContext();
   const { rows } = useCanvasEditorState();
   const focus = useCanvasFocus();
@@ -45,6 +46,20 @@ export function TableCellEdit({
       ) {
         event.preventDefault();
         return true;
+      }
+
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "d"
+      ) {
+        const tableRowId = findRowContext(rows, rowId)?.parent?.rowId;
+        if (tableRowId) {
+          event.preventDefault();
+          duplicateRow(tableRowId);
+          return true;
+        }
       }
 
       if (event.key === "Tab") {
@@ -69,7 +84,7 @@ export function TableCellEdit({
 
       return false;
     },
-    [dispatch, moveAfter, moveBefore, rowId, rows]
+    [dispatch, duplicateRow, moveAfter, moveBefore, rowId, rows]
   );
 
   return (

@@ -4,6 +4,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 
 export function BlockGutterMenuRowActions() {
   const {
@@ -21,6 +22,7 @@ export function BlockGutterMenuRowActions() {
       <DropdownMenuItem onClick={handleDuplicate}>
         <IconCopy />
         Duplicate
+        <Shortcut className="ml-auto" command="duplicate-block" />
       </DropdownMenuItem>
       <DropdownMenuItem onClick={handleDelete}>
         <IconTrash />

@@ -1,13 +1,4 @@
-import { Button } from "@/components/ui/button.tsx";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.tsx";
-import { useLocalPageById } from "@/hooks/use-local-pages.ts";
+import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 
 interface PageLinkDeleteDialogProps {
   onCancel: () => void;
@@ -27,35 +18,16 @@ export function PageLinkDeleteDialog({
   onCancel,
   onConfirm,
 }: PageLinkDeleteDialogProps) {
-  const localPage = useLocalPageById(pageId ?? "");
-
   return (
-    <Dialog
+    <DeletePageConfirmDialog
+      onConfirm={onConfirm}
       onOpenChange={(open) => {
         if (!open) {
           onCancel();
         }
       }}
       open={pageId !== null}
-    >
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Delete page?</DialogTitle>
-          <DialogDescription>
-            {localPage && localPage.serverBaselineHash === null
-              ? "This page and its blocks will be removed. This cannot be undone."
-              : "This page will be hidden locally. The published version will remain."}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button onClick={onCancel} type="button" variant="outline">
-            Cancel
-          </Button>
-          <Button onClick={onConfirm} type="button" variant="destructive">
-            Delete
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      pageId={pageId ?? undefined}
+    />
   );
 }

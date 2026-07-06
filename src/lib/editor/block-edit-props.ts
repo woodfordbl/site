@@ -5,8 +5,11 @@ export interface BlockEditKeyboardProps {
   autoFocus?: boolean;
   autoFocusOffset?: number;
   autoFocusPlacement?: "start" | "end";
+  hasBlockSelection?: boolean;
   indent?: number;
   onAutoFocusHandled?: () => void;
+  onDeleteSelection?: () => void;
+  onDuplicate?: () => void;
   onEnter?: (selection: FieldSelection) => void;
   onExtendSelectionDown?: () => void;
   onExtendSelectionUp?: () => void;
@@ -14,6 +17,8 @@ export interface BlockEditKeyboardProps {
   onMarkdownShortcut?: () => boolean;
   onMoveRowDown?: () => void;
   onMoveRowUp?: () => void;
+  onMoveSelectedRowDown?: () => void;
+  onMoveSelectedRowUp?: () => void;
   onNavigateDown?: () => void;
   onNavigateUp?: () => void;
   onSlash?: (query: string, caret: FieldSelection) => void;

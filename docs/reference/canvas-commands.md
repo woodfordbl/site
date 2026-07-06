@@ -14,7 +14,7 @@ On coarse pointers, [`MobileEditorToolbar`](../../src/components/canvas/mobile-e
 | `row.delete` | Structural resolver; gutter menu **Delete** |
 | `row.convert` | Slash selection; gutter menu **Turn into**. Container children stay inside only when container policy allows the target; list items stay in the list only for `text → text`; other targets lift the item out and split the list when needed. `pageLink` conversions pass `options.pageId` and optional `options.pageLinkVariant` (`linked` \| `child`). |
 | `row.move` | Drag block to new position (grab handle), or Option+↑/↓ on a focused row (`row.moveAdjacent`). `PageCanvasEditor` resolves drag targets from pointer Y via `resolveDropTargetFromPointer`; off-page pointer snaps to first/last top-level row. Touch grips commit the same command via the pointer-drag path (the resolver's pointer X is nudged into the content column since the finger grabs the left gutter) — see [drag-and-drop — Touch drags](../architecture/drag-and-drop.md#touch-pointer-drags). |
-| `selection.delete` | Delete selected blocks (Delete / Backspace) |
+| `selection.delete` | Delete selected blocks (Delete / Backspace when blocks are highlighted — including while the row field stays focused after grab select, unless a text range is active) |
 | `rows.paste` | Paste copied blocks after selection or focus; gutter menu **Duplicate**. Always clones with fresh ids — `cloneBlocksForPaste` ([`clipboard.ts`](../../src/lib/canvas/clipboard.ts)) remaps `parentId` within the pasted set so container subtrees stay intact; subtree roots are coerced to types the destination accepts (`coercePastedRootBlock` in [`reducer.ts`](../../src/lib/canvas/reducer.ts)) |
 
 ## Row actions hook
@@ -42,7 +42,7 @@ Structural row commands must persist the full next document order, not only the 
 | `block.liftAsText` | Exit container child as text block (indent preserved; sole child deletes the container; empty list first item with no previous sibling) |
 | `container.wrap` | Wrap row in list (`variant`: `bullet` or `ordered`) or checklist using `buildWrappedContainerBlock` / `buildContainerChildBlock`. Container children lift out first, then wrap at that canvas position (no nested containers). |
 | `container.unwrap` | Collapse empty container (empty list first or sole item uses `block.liftAsText`; empty list item with previous sibling uses `row.delete`) |
-| `columns.create` | Replace the active row with a `columns` shell and `count` (2–4) `column` children, each seeded with one `text` row (first column keeps slash text). `seedChildType: "database"` seeds an unlinked `database` block per column instead (the `/Dashboard` slash scaffold; `text` is ignored). Planner: [`planColumnsCreate`](../../src/lib/canvas/columns-layout.ts). |
+| `columns.create` | Replace the active row with a `columns` shell and `count` (2–4) `column` children, each seeded with one `text` row (first column keeps slash text). `seedChildType: "database"` seeds an unlinked `database` block per column instead (`text` is ignored). Planner: [`planColumnsCreate`](../../src/lib/canvas/columns-layout.ts). |
 | `columns.addColumn` | Append a `column` + empty `text` (max 4); equalize `column.props.width`. |
 | `columns.removeColumn` | Delete a column subtree; when fewer than 2 columns remain, [`planColumnsUnwrap`](../../src/lib/canvas/columns-layout.ts) hoists content to the canvas parent. |
 | `tabs.create` | Replace the active row with a `tabs` shell and `count` `tab` children (labelled `Tab 1…N`), each seeded with one `text` row (first tab keeps slash text). Planner: [`planTabsCreate`](../../src/lib/canvas/tabs-layout.ts). |
@@ -77,7 +77,7 @@ Structural row commands must persist the full next document order, not only the 
 |---------|---------|
 | `focus.set` | Focus row (`placement`: `start`/`end`, or explicit `offset` character index). Optional `embedAction`: `replace` opens the embed URL picker; `caption` focuses the caption field. |
 | `row.focusAdjacent` | Up/down navigation at caret boundary (skips container shells; [`focusable-rows.ts`](../../src/lib/canvas/focusable-rows.ts)) |
-| `row.moveAdjacent` | Option+↑/↓ — reducer finds adjacent focusable row, then dispatches `row.move` before/after it |
+| `row.moveAdjacent` | Option+↑/↓ on a focused row, or Cmd/Ctrl+↑/↓ when blocks are selected — reducer finds adjacent focusable row, then dispatches `row.move` before/after it |
 
 Reducer `focus` effects mirror `focus.set` (`placement` and/or `offset`). `apply-pending-focus` uses `offset` when present so merge/lift paths restore the caret after structural edits.
 

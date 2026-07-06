@@ -96,8 +96,7 @@ export const frankfurterRatesConnector: ConnectorDefinition<FrankfurterRatesConf
   {
     id: "frankfurter-rates",
     title: "Exchange rates",
-    description:
-      "Daily ECB reference exchange rates for a base currency, via Frankfurter.",
+    description: "Daily reference exchange rates for a base currency.",
     icon: "tabler:IconExchange",
     configSchema: frankfurterRatesConfigSchema,
     configFields: [

@@ -1,8 +1,10 @@
 "use client";
 
 import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 
 import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
+import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { usePageActions } from "@/hooks/use-page-actions.ts";
@@ -29,6 +31,7 @@ function PageCommandHotkeysLive({
   const { pages } = useMergedPageListItems();
   const dispatch = usePageDispatch(pages);
   const actions = usePageActions(pageId);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const cover = usePageCover();
   const { fullWidth, setFullWidth } = usePageSettings({
     pageId,
@@ -56,12 +59,15 @@ function PageCommandHotkeysLive({
     },
     "delete-page": () => {
       if (actions.canDelete) {
-        actions.deletePage();
+        setDeleteOpen(true);
       }
     },
     // Wrapped: handlers receive the keydown event, which must not leak into
     // duplicate()'s optional withContent parameter.
-    "duplicate-page": () => actions.duplicate(),
+    "duplicate-page": (event) => {
+      event.preventDefault();
+      actions.duplicate();
+    },
     "new-subpage": () =>
       dispatch({
         parentId: pageId,
@@ -73,7 +79,17 @@ function PageCommandHotkeysLive({
     "toggle-full-width": () => setFullWidth(!fullWidth),
   });
 
-  return null;
+  return (
+    <DeletePageConfirmDialog
+      onConfirm={() => {
+        actions.deletePage();
+        setDeleteOpen(false);
+      }}
+      onOpenChange={setDeleteOpen}
+      open={deleteOpen}
+      pageId={pageId}
+    />
+  );
 }
 
 /**

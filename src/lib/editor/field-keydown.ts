@@ -63,17 +63,79 @@ export function handleSlashMenuKeyDown(
 }
 
 interface BlockModifierArrowHandlers {
+  hasBlockSelection?: boolean;
   onExtendSelectionDown?: () => void;
   onExtendSelectionUp?: () => void;
   onMoveRowDown?: () => void;
   onMoveRowUp?: () => void;
+  onMoveSelectedRowDown?: () => void;
+  onMoveSelectedRowUp?: () => void;
 }
 
 interface ModifierArrowKeyEvent {
   altKey: boolean;
+  ctrlKey?: boolean;
+  currentTarget?: CanvasField | EventTarget | null;
   key: string;
+  metaKey?: boolean;
   preventDefault: () => void;
   shiftKey: boolean;
+}
+
+function invokeArrowHandler(
+  event: ModifierArrowKeyEvent,
+  handler: (() => void) | undefined
+): boolean {
+  if (!handler) {
+    return false;
+  }
+  event.preventDefault();
+  handler();
+  return true;
+}
+
+function handleShiftArrowKeyDown(
+  direction: "up" | "down",
+  event: ModifierArrowKeyEvent,
+  handlers: BlockModifierArrowHandlers
+): boolean {
+  const handler =
+    direction === "up"
+      ? handlers.onExtendSelectionUp
+      : handlers.onExtendSelectionDown;
+  return invokeArrowHandler(event, handler);
+}
+
+function handleModArrowKeyDown(
+  direction: "up" | "down",
+  event: ModifierArrowKeyEvent,
+  handlers: BlockModifierArrowHandlers
+): boolean {
+  if (!handlers.hasBlockSelection) {
+    return false;
+  }
+  const field = event.currentTarget;
+  if (field instanceof HTMLElement) {
+    const selection = getFieldSelection(field);
+    if (selection.start !== selection.end) {
+      return false;
+    }
+  }
+  const handler =
+    direction === "up"
+      ? handlers.onMoveSelectedRowUp
+      : handlers.onMoveSelectedRowDown;
+  return invokeArrowHandler(event, handler);
+}
+
+function handleAltArrowKeyDown(
+  direction: "up" | "down",
+  event: ModifierArrowKeyEvent,
+  handlers: BlockModifierArrowHandlers
+): boolean {
+  const handler =
+    direction === "up" ? handlers.onMoveRowUp : handlers.onMoveRowDown;
+  return invokeArrowHandler(event, handler);
 }
 
 export function handleBlockModifierArrowKeyDown(
@@ -87,27 +149,15 @@ export function handleBlockModifierArrowKeyDown(
   const direction = event.key === "ArrowUp" ? "up" : "down";
 
   if (event.shiftKey) {
-    const handler =
-      direction === "up"
-        ? handlers.onExtendSelectionUp
-        : handlers.onExtendSelectionDown;
-    if (!handler) {
-      return false;
-    }
-    event.preventDefault();
-    handler();
-    return true;
+    return handleShiftArrowKeyDown(direction, event, handlers);
+  }
+
+  if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+    return handleModArrowKeyDown(direction, event, handlers);
   }
 
   if (event.altKey) {
-    const handler =
-      direction === "up" ? handlers.onMoveRowUp : handlers.onMoveRowDown;
-    if (!handler) {
-      return false;
-    }
-    event.preventDefault();
-    handler();
-    return true;
+    return handleAltArrowKeyDown(direction, event, handlers);
   }
 
   return false;
@@ -186,6 +236,30 @@ export type StructuralDeleteKeyResult =
   | { handled: true; caretAtStart: boolean; key: "Backspace" | "Delete" }
   | { handled: false };
 
+/** Delete selected blocks when a row is highlighted and the field has no text range. */
+export function shouldDeleteSelectedBlocks(
+  event: KeyboardEvent<CanvasField>,
+  options: {
+    hasBlockSelection: boolean;
+    slashMenuOpen: boolean;
+  }
+): boolean {
+  if (!options.hasBlockSelection) {
+    return false;
+  }
+  if (event.key !== "Backspace" && event.key !== "Delete") {
+    return false;
+  }
+  if (options.slashMenuOpen) {
+    return false;
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey) {
+    return false;
+  }
+  const selection = getFieldSelection(event.currentTarget);
+  return selection.start === selection.end;
+}
+
 /** Backspace/Delete becomes a structural command when the caret is at start or the block is empty. */
 export function resolveStructuralDeleteKey(
   event: KeyboardEvent<CanvasField>,
@@ -203,6 +277,32 @@ export function resolveStructuralDeleteKey(
   }
 
   return { handled: true, caretAtStart, key: event.key };
+}
+
+/** Duplicate the focused or selected block when Mod+D is pressed in a canvas field. */
+export function handleBlockDuplicateKeyDown(
+  event: {
+    altKey: boolean;
+    ctrlKey?: boolean;
+    key: string;
+    metaKey?: boolean;
+    preventDefault: () => void;
+    shiftKey: boolean;
+  },
+  onDuplicate?: () => void
+): boolean {
+  if (!onDuplicate) {
+    return false;
+  }
+  if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) {
+    return false;
+  }
+  if (event.key.toLowerCase() !== "d") {
+    return false;
+  }
+  event.preventDefault();
+  onDuplicate();
+  return true;
 }
 
 /**

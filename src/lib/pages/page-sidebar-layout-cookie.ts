@@ -18,6 +18,12 @@ export const PAGE_SIDEBAR_MIN_WIDTH_REM = 12;
 /** Maximum draggable width. */
 export const PAGE_SIDEBAR_MAX_WIDTH_REM = 24;
 
+/**
+ * Past minimum width, drag this fraction of the min width further to collapse
+ * (e.g. min 192px → 96px overshoot triggers full collapse).
+ */
+export const PAGE_SIDEBAR_COLLAPSE_OVERSHOOT_RATIO = 0.5;
+
 /** Collapsed rail width — matches shadcn `SIDEBAR_WIDTH_ICON` (`3rem`). */
 export const PAGE_SIDEBAR_COLLAPSED_SIZE = "3rem";
 
@@ -32,15 +38,64 @@ export function sidebarWidthRemToCss(rem: number): string {
   return `${clampSidebarWidthRem(rem)}rem`;
 }
 
+export function readRootFontSizePx(): number {
+  if (typeof document === "undefined") {
+    return 16;
+  }
+
+  return (
+    Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  );
+}
+
 export function pixelsToRem(pixels: number): number {
   if (typeof document === "undefined") {
     return PAGE_SIDEBAR_DEFAULT_WIDTH_REM;
   }
 
-  const rootFontSize = Number.parseFloat(
-    getComputedStyle(document.documentElement).fontSize
+  return pixels / readRootFontSizePx();
+}
+
+export function sidebarMinWidthPx(
+  rootFontSizePx = readRootFontSizePx()
+): number {
+  return PAGE_SIDEBAR_MIN_WIDTH_REM * rootFontSizePx;
+}
+
+export function sidebarCollapseOvershootThresholdPx(
+  rootFontSizePx = readRootFontSizePx()
+): number {
+  return (
+    sidebarMinWidthPx(rootFontSizePx) * PAGE_SIDEBAR_COLLAPSE_OVERSHOOT_RATIO
   );
-  return pixels / (rootFontSize || 16);
+}
+
+export interface SidebarPointerResizeResult {
+  overshootPx: number;
+  widthRem: number;
+}
+
+/**
+ * Maps a viewport `clientX` to sidebar width while tracking overshoot past min.
+ * Visual width clamps at min; `overshootPx` is how far left of min the pointer is.
+ */
+export function resolveSidebarPointerResize(
+  clientX: number,
+  rootFontSizePx: number
+): SidebarPointerResizeResult {
+  const minPx = sidebarMinWidthPx(rootFontSizePx);
+
+  if (clientX >= minPx) {
+    return {
+      widthRem: clampSidebarWidthRem(clientX / rootFontSizePx),
+      overshootPx: 0,
+    };
+  }
+
+  return {
+    widthRem: PAGE_SIDEBAR_MIN_WIDTH_REM,
+    overshootPx: minPx - clientX,
+  };
 }
 
 /** Parses raw width cookie value in `rem` (defaults to shadcn `12rem`). */

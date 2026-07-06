@@ -17,7 +17,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu.tsx";
-import { Kbd } from "@/components/ui/kbd.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { findRowById } from "@/lib/blocks/block-tree.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
@@ -128,6 +128,7 @@ export function TableStructureHandleMenu({
           label: "Duplicate",
           keywords: ["copy", "clone", "row"],
           icon: <IconCopy />,
+          command: "duplicate-block",
           onSelect: () => {
             duplicateRow(tableRowId);
             onClose();
@@ -289,7 +290,7 @@ export function TableStructureHandleMenu({
           >
             <IconCopy />
             Duplicate
-            <Kbd className="ml-auto">⌘D</Kbd>
+            <Shortcut className="ml-auto" command="duplicate-block" />
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
@@ -361,7 +362,6 @@ export function TableStructureHandleMenu({
           >
             <IconCopy />
             Duplicate
-            <Kbd className="ml-auto">⌘D</Kbd>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {

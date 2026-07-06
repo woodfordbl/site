@@ -10,7 +10,6 @@ import {
   IconH4,
   IconInfoCircle,
   IconLayoutColumns,
-  IconLayoutDashboard,
   IconLayoutNavbar,
   IconLink,
   IconList,
@@ -380,19 +379,6 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
         aliases: ["4", "four", "cols4"],
         icon: IconLayoutColumns,
         keywords: ["4 columns", "four columns", "columns", "cols"],
-      },
-      {
-        // Dashboard scaffold: 2 columns, each seeded with an unlinked
-        // `database` block placeholder — the documented composition pattern
-        // for dashboards (databases.md § Dashboards).
-        key: "columns-dashboard",
-        id: "columns",
-        columnCount: 2,
-        columnSeed: "database",
-        label: "Dashboard",
-        aliases: ["dashboard", "dash"],
-        icon: IconLayoutDashboard,
-        keywords: ["dashboard", "database views", "columns", "charts"],
       },
     ],
     Container: () => resolveRegisteredContainer("columns"),

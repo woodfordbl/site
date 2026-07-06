@@ -84,13 +84,15 @@ import { cn } from "@/lib/utils.ts";
 
 /**
  * Linear-style filter chip bar rendered between the database title and the
- * grid (edit mode, non-narrow viewports; narrow viewports render the same
- * chip strips inside the title row's toolbar popovers — see
- * `database-mobile-toolbar.tsx`). One chip per root-level condition — field,
- * operator, and value are separate click targets editing in place via
- * popovers — plus a "+ Filter" type-ahead field picker, a Match all/any
- * control once two or more root entries exist, and one sort chip per view
- * sort in priority order (flip direction, reorder priority, remove).
+ * grid (edit mode, non-narrow viewports with active filters/sorts/grouping;
+ * narrow viewports render the same chip bar below the title when the title-row
+ * funnel/sort toggles expand it — see `database-mobile-toolbar.tsx`). One chip
+ * per root-level condition — field, operator, and value are separate click
+ * targets editing in place via popovers — plus a Match all/any control once
+ * two or more root entries exist, and one sort chip per view sort in priority
+ * order (flip direction, reorder priority, remove). Each title-row icon toggles
+ * the whole bar when its category exists; otherwise it opens a field dropdown
+ * to add the first filter or sort (adding expands the bar).
  *
  * Deferred (per §5.2 of the databases proposal):
  * - All writes mutate the saved view directly through `updateDatabaseView`;
@@ -145,8 +147,13 @@ export function DatabaseFilterChips({
   className,
   databaseId,
   fields,
+  showAddTrigger = true,
   view,
-}: ChipStripProps & { addFullWidth?: boolean }): ReactNode {
+}: ChipStripProps & {
+  addFullWidth?: boolean;
+  /** When false, omit the dashed "+ Filter" chip (title funnel adds on mobile). */
+  showAddTrigger?: boolean;
+}): ReactNode {
   // Condition whose value popover should open as soon as its chip mounts —
   // set when "+ Filter" appends a fresh condition.
   const [autoOpenId, setAutoOpenId] = useState<string | null>(null);
@@ -211,11 +218,13 @@ export function DatabaseFilterChips({
           />
         )
       )}
-      <AddFilterChip
-        fields={fields}
-        fullWidth={addFullWidth}
-        onPick={handleAddField}
-      />
+      {showAddTrigger ? (
+        <AddFilterChip
+          fields={fields}
+          fullWidth={addFullWidth}
+          onPick={handleAddField}
+        />
+      ) : null}
     </div>
   );
 }
@@ -343,6 +352,12 @@ export function DatabaseFilterMatchOp({
 interface DatabaseFilterBarProps {
   databaseId: string;
   fields: readonly DatabaseField[];
+  /** Show the dashed "+ Filter" chip at the end of the filter strip. */
+  showFilterAddTrigger?: boolean;
+  /** Render filter condition chips (false when the title funnel hides them). */
+  showFilterChips?: boolean;
+  /** Show the dashed "+ Sort" chip (narrow viewport collapsible bar). */
+  showSortAddTrigger?: boolean;
   view: DatabaseView;
 }
 
@@ -350,16 +365,22 @@ interface DatabaseFilterBarProps {
 export function DatabaseFilterBar({
   databaseId,
   fields,
+  showFilterAddTrigger = false,
+  showFilterChips = true,
+  showSortAddTrigger = false,
   view,
 }: DatabaseFilterBarProps): ReactNode {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <DatabaseFilterChips
-        className="contents"
-        databaseId={databaseId}
-        fields={fields}
-        view={view}
-      />
+      {showFilterChips ? (
+        <DatabaseFilterChips
+          className="contents"
+          databaseId={databaseId}
+          fields={fields}
+          showAddTrigger={showFilterAddTrigger}
+          view={view}
+        />
+      ) : null}
       <DatabaseSortChips
         className="contents"
         databaseId={databaseId}
@@ -371,7 +392,12 @@ export function DatabaseFilterBar({
         fields={fields}
         view={view}
       />
-      <DatabaseFilterMatchOp databaseId={databaseId} view={view} />
+      {showFilterChips ? (
+        <DatabaseFilterMatchOp databaseId={databaseId} view={view} />
+      ) : null}
+      {showSortAddTrigger ? (
+        <AddSortButton databaseId={databaseId} fields={fields} view={view} />
+      ) : null}
     </div>
   );
 }
@@ -867,6 +893,41 @@ function FieldPickerPopover({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Plain field list dropdown for title-row filter/sort icon triggers. */
+export function FieldPickerDropdown({
+  emptyLabel = "No properties",
+  fields,
+  onPick,
+  trigger,
+}: {
+  emptyLabel?: string;
+  fields: readonly DatabaseField[];
+  onPick: (field: DatabaseField) => void;
+  trigger: ReactElement;
+}): ReactNode {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={trigger} />
+      <DropdownMenuContent align="end" className="w-56">
+        {fields.map((field) => {
+          const Icon = resolveFieldIcon(field);
+          return (
+            <DropdownMenuItem key={field.id} onClick={() => onPick(field)}>
+              <Icon className="size-4 stroke-[1.5px] text-muted-foreground" />
+              {field.name}
+            </DropdownMenuItem>
+          );
+        })}
+        {fields.length === 0 ? (
+          <div className="px-2 py-1.5 text-muted-foreground text-sm">
+            {emptyLabel}
+          </div>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

@@ -41,6 +41,7 @@ export interface CanvasEditorActions {
   insertBefore: (rowId: string, options?: RowInsertOptions) => void;
   moveAfter: (sourceRowId: string, targetRowId: string) => void;
   moveBefore: (sourceRowId: string, targetRowId: string) => void;
+  moveSelectedRowAdjacent: (direction: "up" | "down") => void;
   pasteAfter: (targetRowId: string, blocks: Block[]) => void;
   pasteBefore: (targetRowId: string, blocks: Block[]) => void;
   pasteClipboard: () => void;

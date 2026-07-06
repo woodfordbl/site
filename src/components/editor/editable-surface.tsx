@@ -19,11 +19,13 @@ import {
 } from "@/lib/editor/caret-navigation.ts";
 import {
   handleBlockArrowKeyDown,
+  handleBlockDuplicateKeyDown,
   handleBlockIndentKeyDown,
   handleBlockModifierArrowKeyDown,
   handleSlashMenuKeyDown,
   resolveFormattingShortcut,
   resolveStructuralDeleteKey,
+  shouldDeleteSelectedBlocks,
 } from "@/lib/editor/field-keydown.ts";
 import type { RichTextDomSnapshot } from "@/lib/editor/rich-text-dom.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
@@ -50,6 +52,7 @@ interface EditableSurfaceProps {
   autoFocusOffset?: number;
   autoFocusPlacement?: "start" | "end";
   className?: string;
+  hasBlockSelection?: boolean;
   indent?: number;
   /**
    * Inline marks over `value`. Passing marks (even `[]`) switches the surface
@@ -60,6 +63,8 @@ interface EditableSurfaceProps {
   multiline?: boolean;
   onAutoFocusHandled?: () => void;
   onChange: (value: string, marks?: InlineMark[]) => void;
+  onDeleteSelection?: () => void;
+  onDuplicate?: () => void;
   onEnter?: (selection: FieldSelection) => void;
   onExtendSelectionDown?: () => void;
   onExtendSelectionUp?: () => void;
@@ -69,6 +74,8 @@ interface EditableSurfaceProps {
   onMarkdownShortcut?: () => boolean;
   onMoveRowDown?: () => void;
   onMoveRowUp?: () => void;
+  onMoveSelectedRowDown?: () => void;
+  onMoveSelectedRowUp?: () => void;
   onNavigateDown?: () => void;
   onNavigateUp?: () => void;
   onSlash?: (query: string, caret: FieldSelection) => void;
@@ -119,8 +126,13 @@ export function EditableSurface({
   autoFocusPlacement = "start",
   onExtendSelectionDown,
   onExtendSelectionUp,
+  hasBlockSelection = false,
+  onDeleteSelection,
+  onDuplicate,
   onMoveRowDown,
   onMoveRowUp,
+  onMoveSelectedRowDown,
+  onMoveSelectedRowUp,
   onNavigateUp,
   onNavigateDown,
   onAutoFocusHandled,
@@ -229,10 +241,13 @@ export function EditableSurface({
 
       if (
         handleBlockModifierArrowKeyDown(event, {
+          hasBlockSelection,
           onExtendSelectionDown,
           onExtendSelectionUp,
           onMoveRowDown,
           onMoveRowUp,
+          onMoveSelectedRowDown,
+          onMoveSelectedRowUp,
         })
       ) {
         absorbKeyEvent();
@@ -275,9 +290,27 @@ export function EditableSurface({
         }
       }
 
+      if (handleBlockDuplicateKeyDown(event, onDuplicate)) {
+        absorbKeyEvent();
+        return;
+      }
+
       if (event.key === "Enter" && !event.shiftKey && onEnter) {
         event.preventDefault();
         onEnter(getFieldSelection(event.currentTarget));
+        absorbKeyEvent();
+        return;
+      }
+
+      if (
+        onDeleteSelection &&
+        shouldDeleteSelectedBlocks(event, {
+          hasBlockSelection,
+          slashMenuOpen,
+        })
+      ) {
+        event.preventDefault();
+        onDeleteSelection();
         absorbKeyEvent();
         return;
       }
@@ -306,7 +339,10 @@ export function EditableSurface({
       isRich,
       marks,
       onChange,
+      onDeleteSelection,
+      onDuplicate,
       onEnter,
+      hasBlockSelection,
       onIndentChange,
       indent,
       onKeyDownProp,
@@ -315,6 +351,8 @@ export function EditableSurface({
       onExtendSelectionUp,
       onMoveRowDown,
       onMoveRowUp,
+      onMoveSelectedRowDown,
+      onMoveSelectedRowUp,
       onNavigateDown,
       onNavigateUp,
       onSlashClose,

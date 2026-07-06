@@ -302,6 +302,10 @@ function ContextMenuSubTrigger({
 }
 
 function ContextMenuSubContent({
+  align = "start",
+  alignOffset = -4,
+  side = "right",
+  sideOffset = 0,
   children,
   ...props
 }: React.ComponentProps<typeof ContextMenuContent>) {
@@ -322,9 +326,12 @@ function ContextMenuSubContent({
 
   return (
     <ContextMenuContent
+      align={align}
+      alignOffset={alignOffset}
       className="shadow-lg"
       data-slot="context-menu-sub-content"
-      side="right"
+      side={side}
+      sideOffset={sideOffset}
       {...props}
     >
       {children}

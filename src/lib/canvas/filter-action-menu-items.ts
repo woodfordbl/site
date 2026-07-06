@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
+import type { CommandId } from "@/lib/settings/keyboard-commands.ts";
+
 export interface ActionMenuEntry {
+  command?: CommandId;
   destructive?: boolean;
   icon?: ReactNode;
   id: string;

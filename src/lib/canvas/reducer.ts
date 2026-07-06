@@ -138,7 +138,8 @@ function structuredPasteEffects(
   rows: CanvasRow[],
   targetRowId: string,
   blocks: Block[],
-  edge: "before" | "after" = "after"
+  edge: "before" | "after" = "after",
+  options: { focusPlacement?: "start" | "end" } = {}
 ): CanvasEffect[] {
   if (blocks.length === 0) {
     return [];
@@ -199,6 +200,7 @@ function structuredPasteEffects(
   const lastEffect = effects.at(-1);
   if (lastEffect?.type === "insert") {
     lastEffect.focus = true;
+    lastEffect.focusPlacement = options.focusPlacement ?? "start";
   }
 
   return effects;
@@ -270,7 +272,8 @@ export function canvasReducer(
           state.rows,
           command.targetRowId,
           cloneBlocksForPaste(command.blocks),
-          command.edge ?? "after"
+          command.edge ?? "after",
+          { focusPlacement: command.focusPlacement }
         ),
       };
     }

@@ -223,7 +223,7 @@ async function fetchRows(
 export const githubReposConnector: ConnectorDefinition<GithubReposConfig> = {
   id: "github-repos",
   title: "GitHub repositories",
-  description: "Public repositories for a GitHub user, newest-pushed first.",
+  description: "Public repositories for a username, newest-pushed first.",
   icon: "tabler:IconBrandGithub",
   configSchema: githubReposConfigSchema,
   configFields: [

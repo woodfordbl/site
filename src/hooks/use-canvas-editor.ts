@@ -382,6 +382,7 @@ export function useCanvasEditor(
         type: "rows.paste",
         targetRowId: rowId,
         blocks: flattenRows([row]).map((flatRow) => flatRow.effectiveBlock),
+        focusPlacement: "end",
       });
     },
     [dispatch, getRows]

@@ -21,6 +21,7 @@ export type CanvasEffect =
       position: RowPlacement;
       block: Block;
       focus?: boolean;
+      focusPlacement?: "start" | "end";
     }
   | { type: "delete"; rowId: string }
   | {

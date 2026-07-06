@@ -1,4 +1,9 @@
-import { IconChevronLeft, IconRefresh, IconTable } from "@tabler/icons-react";
+import {
+  IconChevronLeft,
+  IconLink,
+  IconRefresh,
+  IconTable,
+} from "@tabler/icons-react";
 import { useForm } from "@tanstack/react-form";
 import { type ReactNode, useMemo, useState } from "react";
 
@@ -35,12 +40,12 @@ import { createDefaultDatabaseSeed } from "@/lib/databases/database-defaults.ts"
 
 /**
  * Popover panel behind an unlinked database block's placeholder trigger
- * (media/embed source-picker conventions): a "New table" tab creating the
- * default local seed, and a "Sync" tab listing connector cards whose pick
- * opens a config form generated from the connector's `configFields`. Submit
- * validates via the connector's zod `configSchema` (inline errors per the
- * url-input conventions), stores any auth token client-side only, then
- * builds + inserts the synced seed.
+ * (media/embed source-picker conventions): **New** (default local seed),
+ * **Linked** (existing workspace database — picker stub), and **Synced**
+ * (connector cards whose pick opens a config form generated from the
+ * connector's `configFields`). Submit validates via the connector's zod
+ * `configSchema` (inline errors per the url-input conventions), stores any
+ * auth token client-side only, then builds + inserts the synced seed.
  */
 
 const LIST_INPUT_SEPARATOR_RE = /[\n,]/;
@@ -81,7 +86,7 @@ export interface DatabaseCreatePanelProps {
   onCreated: (databaseId: string) => void;
 }
 
-/** Two-tab creation panel: local "New table" and connector "Sync". */
+/** Three-tab creation panel: New, Linked (stub), and Synced. */
 export function DatabaseCreatePanel({
   onCreated,
 }: DatabaseCreatePanelProps): ReactNode {
@@ -103,11 +108,15 @@ export function DatabaseCreatePanel({
         <TabsList className="relative z-[1]" variant="line">
           <TabsTrigger value="new">
             <IconTable />
-            New table
+            New
+          </TabsTrigger>
+          <TabsTrigger value="linked">
+            <IconLink />
+            Linked
           </TabsTrigger>
           <TabsTrigger value="sync">
             <IconRefresh />
-            Sync from source
+            Synced
           </TabsTrigger>
         </TabsList>
       </div>
@@ -118,6 +127,12 @@ export function DatabaseCreatePanel({
         <Button className="w-full" onClick={handleCreateLocal}>
           Create table
         </Button>
+      </TabsContent>
+      <TabsContent className="mt-3 space-y-2" value="linked">
+        <p className="text-muted-foreground text-sm">
+          Link an existing database from your workspace. Database picker coming
+          soon.
+        </p>
       </TabsContent>
       <TabsContent className="mt-3" value="sync">
         {connector ? (

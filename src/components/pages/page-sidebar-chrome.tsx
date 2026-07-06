@@ -25,6 +25,9 @@ import {
   PAGE_SIDEBAR_MIN_WIDTH_REM,
   PAGE_SIDEBAR_PANEL_ID,
   pixelsToRem,
+  readRootFontSizePx,
+  resolveSidebarPointerResize,
+  type SidebarPointerResizeResult,
   sidebarWidthRemToCss,
   writePageSidebarWidthToDocument,
 } from "@/lib/pages/page-sidebar-layout-cookie.ts";
@@ -41,7 +44,7 @@ interface PageSidebarChromeContextValue {
   isCollapsed: boolean;
   pin: PageSidebarPin;
   pinSidebar: () => void;
-  resizeSidebarToPointerX: (clientX: number) => void;
+  resizeSidebarToPointerX: (clientX: number) => SidebarPointerResizeResult;
   toggleSidebar: () => void;
 }
 
@@ -97,15 +100,16 @@ export function PageSidebarChromeProvider({
   }, [collapseSidebar, pin, pinSidebar]);
 
   const resizeSidebarToPointerX = useCallback(
-    (clientX: number) => {
+    (clientX: number): SidebarPointerResizeResult => {
       const panel = sidebarPanelRef.current;
-      if (!panel) {
-        return;
+      const result = resolveSidebarPointerResize(clientX, readRootFontSizePx());
+
+      if (panel) {
+        panel.resize(sidebarWidthRemToCss(result.widthRem));
       }
 
-      const rem = clampSidebarWidthRem(pixelsToRem(clientX));
-      panel.resize(sidebarWidthRemToCss(rem));
-      setSidebarWidthRem(rem);
+      setSidebarWidthRem(result.widthRem);
+      return result;
     },
     [sidebarPanelRef]
   );
