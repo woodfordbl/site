@@ -98,8 +98,11 @@ const ROW_OVERSCAN = 12;
 /** Vertical cap so row virtualization has a bounded scrollport. */
 const GRID_MAX_HEIGHT_CLASS = "max-h-[600px]";
 
-/** Width of the trailing edit-mode "+" add-field header cell. */
-const ADD_FIELD_CELL_WIDTH_PX = 36;
+/**
+ * The trailing edit-mode add-field control renders as a real (empty) column
+ * at a normal column width, its header carrying the "+" add-property button.
+ */
+const ADD_FIELD_CELL_WIDTH_PX = DEFAULT_COLUMN_WIDTH_PX;
 
 /** Scroll distance over which the pinned-edge fade ramps from 0 to 1. */
 const PINNED_FADE_RAMP_PX = 24;
@@ -558,7 +561,7 @@ export function DatabaseTableGrid({
       gridRef={gridRef}
       view={view}
     >
-      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg border-border border-b-[0.5px]">
+      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg">
         {/* Positioning parent for the pinned-edge shadow: exactly the
             scrollport (header through calculate row), not the add-row strip
             below it. */}
@@ -612,19 +615,20 @@ export function DatabaseTableGrid({
                   })
                 )}
                 {mode === "edit" ? (
-                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-                    <Button
+                  // A real, empty trailing column; its header is a normal
+                  // header-style button (mirrors `GridHeaderCell`'s trigger).
+                  <div
+                    className="relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground"
+                    style={{ width: ADD_FIELD_CELL_WIDTH_PX }}
+                  >
+                    <button
                       aria-label="Add property"
-                      // Hit area covers the whole 36px header cell (anchored to
-                      // the relative wrapper) — the visual 24px button alone is
-                      // too small a touch target.
-                      className="static after:absolute after:inset-0"
+                      className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
                       onClick={handleAddField}
-                      size="icon-xs"
-                      variant="ghost"
+                      type="button"
                     >
-                      <IconPlus />
-                    </Button>
+                      <IconPlus className="size-4 shrink-0 stroke-[1.5px]" />
+                    </button>
                   </div>
                 ) : null}
               </div>

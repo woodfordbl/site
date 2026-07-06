@@ -24,7 +24,7 @@ const ROW_ID = "row-1";
 // Below the inline/popover threshold, so text cells open the overflow popover.
 const NARROW_WIDTH_PX = 96;
 // At/above the threshold, so text cells edit inline in place.
-const WIDE_WIDTH_PX = 240;
+const WIDE_WIDTH_PX = 320;
 
 function renderEditor(overrides?: {
   onNavigate?: () => void;

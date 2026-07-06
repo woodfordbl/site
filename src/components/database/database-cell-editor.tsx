@@ -74,7 +74,7 @@ interface DatabaseCellInlineEditorProps {
  * cramped to type/read in, so text/url open the aligned overflow popover
  * instead (which grows past the cell's clip).
  */
-const POPOVER_OVERFLOW_THRESHOLD_PX = 160;
+const POPOVER_OVERFLOW_THRESHOLD_PX = 240;
 
 /**
  * The editing-state cell editor the grid mounts for every editable field
