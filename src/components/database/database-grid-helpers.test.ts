@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateFnLabel,
+  CHECKBOX_COLUMN_WIDTH_PX,
   type ColumnDropZoneRect,
   clampColumnWidthPx,
   configWithColumnWidth,
   configWithoutColumnWidth,
   DEFAULT_COLUMN_WIDTH_PX,
+  defaultColumnWidthPx,
   isInlineEditableField,
   isoDateToLocalDate,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
+  minColumnWidthPx,
   nextEditTarget,
   parseNumberCellInput,
   planColumnReorder,
@@ -45,6 +48,50 @@ describe("clampColumnWidthPx", () => {
   it("clamps below the minimum", () => {
     expect(clampColumnWidthPx(10)).toBe(MIN_COLUMN_WIDTH_PX);
     expect(clampColumnWidthPx(-50)).toBe(MIN_COLUMN_WIDTH_PX);
+  });
+
+  it("clamps below a supplied minimum", () => {
+    expect(clampColumnWidthPx(10, CHECKBOX_COLUMN_WIDTH_PX)).toBe(
+      CHECKBOX_COLUMN_WIDTH_PX
+    );
+  });
+});
+
+describe("minColumnWidthPx", () => {
+  it("lets checkbox columns collapse below the text-column floor", () => {
+    expect(minColumnWidthPx({ type: "checkbox" })).toBe(
+      CHECKBOX_COLUMN_WIDTH_PX
+    );
+    expect(CHECKBOX_COLUMN_WIDTH_PX).toBeLessThan(MIN_COLUMN_WIDTH_PX);
+  });
+
+  it("keeps the general floor for text columns", () => {
+    expect(minColumnWidthPx({ type: "text" })).toBe(MIN_COLUMN_WIDTH_PX);
+  });
+});
+
+describe("defaultColumnWidthPx", () => {
+  it("defaults checkbox columns to the narrow checkbox width", () => {
+    expect(defaultColumnWidthPx({ type: "checkbox" })).toBe(
+      CHECKBOX_COLUMN_WIDTH_PX
+    );
+  });
+
+  it("defaults other columns to the general width", () => {
+    expect(defaultColumnWidthPx({ type: "text" })).toBe(
+      DEFAULT_COLUMN_WIDTH_PX
+    );
+  });
+
+  it("is used as the fallback when the view stores no width", () => {
+    expect(
+      resolveColumnWidthPx(
+        {},
+        "chk",
+        minColumnWidthPx({ type: "checkbox" }),
+        defaultColumnWidthPx({ type: "checkbox" })
+      )
+    ).toBe(CHECKBOX_COLUMN_WIDTH_PX);
   });
 });
 

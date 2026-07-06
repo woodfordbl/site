@@ -47,6 +47,7 @@ import {
   type CellEditMove,
   type CellEditTarget,
   DEFAULT_COLUMN_WIDTH_PX,
+  defaultColumnWidthPx,
   flattenGridItems,
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
@@ -54,6 +55,7 @@ import {
   isInlineEditableField,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
+  minColumnWidthPx,
   nextEditTarget,
   resolveColumnWidthPx,
   withPinnedRowIndex,
@@ -97,8 +99,11 @@ const ROW_OVERSCAN = 12;
 /** Vertical cap so row virtualization has a bounded scrollport. */
 const GRID_MAX_HEIGHT_CLASS = "max-h-[600px]";
 
-/** Width of the trailing edit-mode "+" add-field header cell. */
-const ADD_FIELD_CELL_WIDTH_PX = 36;
+/**
+ * The trailing edit-mode add-field control renders as a real (empty) column
+ * at a normal column width, its header carrying the "+" add-property button.
+ */
+const ADD_FIELD_CELL_WIDTH_PX = DEFAULT_COLUMN_WIDTH_PX;
 
 /** Scroll distance over which the pinned-edge fade ramps from 0 to 1. */
 const PINNED_FADE_RAMP_PX = 24;
@@ -194,7 +199,14 @@ export function DatabaseTableGrid({
   const pinnedTotalWidth = useMemo(
     () =>
       pinnedFields.reduce(
-        (total, field) => total + resolveColumnWidthPx(view.config, field.id),
+        (total, field) =>
+          total +
+          resolveColumnWidthPx(
+            view.config,
+            field.id,
+            minColumnWidthPx(field),
+            defaultColumnWidthPx(field)
+          ),
         0
       ),
     [pinnedFields, view.config]
@@ -223,7 +235,13 @@ export function DatabaseTableGrid({
     let offset = 0;
     return ordered.map((field, index) => {
       const width =
-        liveWidths?.[field.id] ?? resolveColumnWidthPx(view.config, field.id);
+        liveWidths?.[field.id] ??
+        resolveColumnWidthPx(
+          view.config,
+          field.id,
+          minColumnWidthPx(field),
+          defaultColumnWidthPx(field)
+        );
       const pinned = index < pinnedIds.size;
       const column: GridColumn = {
         field,
@@ -251,7 +269,7 @@ export function DatabaseTableGrid({
       gridColumns.map((column) => ({
         id: column.field.id,
         size: column.width,
-        minSize: MIN_COLUMN_WIDTH_PX,
+        minSize: minColumnWidthPx(column.field),
       })),
     [gridColumns]
   );
@@ -554,7 +572,7 @@ export function DatabaseTableGrid({
       gridRef={gridRef}
       view={view}
     >
-      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg border border-border">
+      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg">
         {/* Positioning parent for the pinned-edge shadow: exactly the
             scrollport (header through calculate row), not the add-row strip
             below it. */}
@@ -576,7 +594,7 @@ export function DatabaseTableGrid({
               {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
               <div
                 aria-rowindex={1}
-                className="sticky top-0 z-20 flex border-border border-b bg-background"
+                className="sticky top-0 z-20 flex border-border border-b-[0.5px] bg-background"
                 role="row"
               >
                 {table.getHeaderGroups().map((headerGroup) =>
@@ -608,19 +626,20 @@ export function DatabaseTableGrid({
                   })
                 )}
                 {mode === "edit" ? (
-                  <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-                    <Button
+                  // A real, empty trailing column; its header is a normal
+                  // header-style button (mirrors `GridHeaderCell`'s trigger).
+                  <div
+                    className="relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground"
+                    style={{ width: ADD_FIELD_CELL_WIDTH_PX }}
+                  >
+                    <button
                       aria-label="Add property"
-                      // Hit area covers the whole 36px header cell (anchored to
-                      // the relative wrapper) — the visual 24px button alone is
-                      // too small a touch target.
-                      className="static after:absolute after:inset-0"
+                      className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
                       onClick={handleAddField}
-                      size="icon-xs"
-                      variant="ghost"
+                      type="button"
                     >
-                      <IconPlus />
-                    </Button>
+                      <IconPlus className="size-4 shrink-0 stroke-[1.5px]" />
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -700,12 +719,10 @@ export function DatabaseTableGrid({
           )}
         </div>
         {mode === "edit" && !isSyncedDatabase ? (
-          <div className="border-border border-t">
-            <DatabaseAddRow
-              databaseId={databaseId}
-              onRowInserted={handleRowInserted}
-            />
-          </div>
+          <DatabaseAddRow
+            databaseId={databaseId}
+            onRowInserted={handleRowInserted}
+          />
         ) : null}
         {mode === "edit" ? (
           <DatabaseColumnDragAutoScroll scrollRef={scrollRef} />
@@ -723,6 +740,8 @@ interface GridHeaderCellProps {
   mode: "view" | "edit";
   onResizeStart: (
     fieldId: string,
+    minWidth: number,
+    defaultWidth: number,
     event: React.PointerEvent<HTMLElement>
   ) => void;
   primaryFieldId: string;
@@ -756,10 +775,16 @@ function GridHeaderCell({
     field.id
   );
   const Icon = resolveFieldIcon(field);
+  // Checkbox columns are only as wide as the checkbox, so their header shows
+  // just the field icon (centered over the checkbox); the name stays reachable
+  // through the column menu.
+  const isCheckbox = field.type === "checkbox";
   const headerContent = (
     <>
       <Icon className="size-4 shrink-0 stroke-[1.5px]" />
-      <span className="truncate text-sm">{field.name}</span>
+      {isCheckbox ? null : (
+        <span className="truncate text-sm">{field.name}</span>
+      )}
     </>
   );
 
@@ -775,8 +800,9 @@ function GridHeaderCell({
         // `isolate`: the cell's internal z-20 resize zone must not escape into
         // the header row's stacking context, where it would paint above the
         // sticky pinned header (z-10) while scrolling underneath it.
+        // Header cells carry no inter-column separators (only body cells do);
+        // the freeze-boundary border on the last pinned column still applies.
         "relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
-        column.showVerticalLine && "border-border/60 border-r",
         column.pinned && "sticky z-10",
         column.isLastPinned && "border-r border-r-border",
         isDragging && "opacity-50"
@@ -801,20 +827,30 @@ function GridHeaderCell({
             displayFieldIds={displayFieldIds}
             field={field}
             isPrimary={field.id === primaryFieldId}
-            triggerClassName="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50"
+            triggerClassName={cn(
+              "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50",
+              isCheckbox && "justify-center"
+            )}
             view={view}
           >
             {headerContent}
           </DatabaseColumnMenu>
         </div>
       ) : (
-        <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2">
+        <div
+          className={cn(
+            "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2",
+            isCheckbox && "justify-center"
+          )}
+        >
           {headerContent}
         </div>
       )}
       {mode === "edit" ? (
         <DatabaseColumnResizeZone
+          defaultWidth={defaultColumnWidthPx(field)}
           fieldId={field.id}
+          minWidth={minColumnWidthPx(field)}
           onResizeStart={onResizeStart}
         />
       ) : null}
@@ -861,7 +897,7 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
     // biome-ignore lint/a11y/useFocusableInteractive: the full-row toggle button inside is the focusable element.
     <div
       aria-rowindex={rowIndex + 2}
-      className="absolute top-0 left-0 flex w-full border-border border-b bg-muted/30"
+      className="absolute top-0 left-0 flex w-full border-border border-b-[0.5px] bg-muted/30"
       data-index={rowIndex}
       data-reveal-group=""
       ref={measureRow}
@@ -979,7 +1015,7 @@ const GridRow = memo(function GridRowInner({
     // biome-ignore lint/a11y/useFocusableInteractive: focus lives on the cell editors, not the row.
     <div
       aria-rowindex={rowIndex + 2}
-      className="absolute top-0 left-0 flex w-full border-border border-b"
+      className="absolute top-0 left-0 flex w-full border-border border-b-[0.5px]"
       data-index={rowIndex}
       data-reveal-group=""
       ref={measureRow}
@@ -1195,7 +1231,7 @@ function GridCell({
         // `isolate` mirrors the header cell: positioned children keep their
         // z-index inside the cell instead of leaking above pinned siblings.
         "relative isolate flex shrink-0 items-center overflow-hidden text-foreground text-sm",
-        column.showVerticalLine && "border-border/60 border-r",
+        column.showVerticalLine && "border-border/60 border-r-[0.5px]",
         inlineEditable ? "p-0" : "px-2",
         field.type === "number" && "justify-end",
         isCheckbox && "justify-center",
@@ -1220,6 +1256,7 @@ function GridCell({
           onStopEdit={onStopEdit}
           rowId={row.id}
           value={value}
+          width={column.width}
         />
       ) : null}
     </div>
