@@ -24,7 +24,6 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   type CaretContext,
   formulaCaretContext,
@@ -47,17 +46,16 @@ import type {
   DatabaseField,
   DatabaseFieldType,
 } from "@/lib/schemas/database.ts";
-import { cn } from "@/lib/utils.ts";
 
 /**
  * Shared formula BUILDER panel (Notion-style): an expression textarea with live
  * parse status + result type and a first-row preview on top, then a single
  * searchable, scrollable autocomplete of Properties / Functions / Operators.
  * Each row carries its own title, signature, and description inline (no
- * separate detail strip), and inserts at the caret when tapped. Width-fluid and
- * height-fluid: in the desktop column-menu submenu (~360px) the list caps at a
- * max height; in the mobile menu drawer it grows to fill the sheet so there is
- * no dead space. Save hands the draft to the caller's `onSave` unconditionally.
+ * separate detail strip), and inserts at the caret when tapped. The panel fills
+ * its container's height so the reference list grows into the available space
+ * (the desktop submenu gives it an XL 3:2 footprint; the mobile drawer the whole
+ * sheet) with no dead space. Save hands the draft to `onSave` unconditionally.
  */
 
 /** Map a database field type to the expression type its values evaluate to. */
@@ -456,7 +454,6 @@ export function FormulaEditorPanel({
   const [query, setQuery] = useState("");
   const [caret, setCaret] = useState(expression.length);
   const fieldRef = useRef<FormulaCodeFieldHandle>(null);
-  const coarse = useIsCoarsePrimaryPointer();
 
   // Mounted only while the (sub)menu is open — steal focus from the popup
   // after Base UI's initial focus pass (same rAF pattern as the rename input).
@@ -512,14 +509,7 @@ export function FormulaEditorPanel({
   };
 
   return (
-    <div
-      className={cn(
-        "flex w-full flex-col gap-1.5 p-1",
-        // Fill the drawer sheet on touch so the autocomplete grows into the
-        // space instead of leaving it dead; the popover sizes to content.
-        coarse && "h-full min-h-0"
-      )}
-    >
+    <div className="flex h-full min-h-0 w-full flex-col gap-1.5 p-1">
       <FormulaCodeField
         ariaLabel="Formula expression"
         // Normal app input sizing: 16px on mobile (matches the base input and
@@ -556,12 +546,7 @@ export function FormulaEditorPanel({
           value={query}
         />
       </InputGroup>
-      <ScrollArea
-        className={cn(
-          "overflow-hidden rounded-md border border-border",
-          coarse ? "min-h-0 flex-1" : "max-h-72"
-        )}
-      >
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden rounded-md border border-border">
         <ReferenceList
           methods={suggestions.methodEntries}
           nothingMatches={nothingMatches}

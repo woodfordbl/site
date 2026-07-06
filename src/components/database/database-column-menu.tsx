@@ -628,9 +628,10 @@ function EditPropertySubmenu({
           <IconSettings />
           Edit property
         </DropdownMenuSubTrigger>
-        {/* Wider than the standard submenu so the builder's reference list
-            breathes; ignored in drawer presentation (panel is width-fluid). */}
-        <DropdownMenuSubContent className="w-[360px] min-w-[360px]">
+        {/* XL width with a 3:2 (w:h) footprint so the builder's editor and
+            reference list have room to breathe; ignored in drawer presentation
+            (panel is width-fluid and fills the sheet). */}
+        <DropdownMenuSubContent className="h-[24rem] w-[36rem] min-w-[36rem]">
           <FormulaExpressionEditor
             databaseId={databaseId}
             field={field}
