@@ -54,6 +54,7 @@ import {
   isInlineEditableField,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
+  minColumnWidthPx,
   nextEditTarget,
   resolveColumnWidthPx,
   withPinnedRowIndex,
@@ -194,7 +195,9 @@ export function DatabaseTableGrid({
   const pinnedTotalWidth = useMemo(
     () =>
       pinnedFields.reduce(
-        (total, field) => total + resolveColumnWidthPx(view.config, field.id),
+        (total, field) =>
+          total +
+          resolveColumnWidthPx(view.config, field.id, minColumnWidthPx(field)),
         0
       ),
     [pinnedFields, view.config]
@@ -223,7 +226,8 @@ export function DatabaseTableGrid({
     let offset = 0;
     return ordered.map((field, index) => {
       const width =
-        liveWidths?.[field.id] ?? resolveColumnWidthPx(view.config, field.id);
+        liveWidths?.[field.id] ??
+        resolveColumnWidthPx(view.config, field.id, minColumnWidthPx(field));
       const pinned = index < pinnedIds.size;
       const column: GridColumn = {
         field,
@@ -251,7 +255,7 @@ export function DatabaseTableGrid({
       gridColumns.map((column) => ({
         id: column.field.id,
         size: column.width,
-        minSize: MIN_COLUMN_WIDTH_PX,
+        minSize: minColumnWidthPx(column.field),
       })),
     [gridColumns]
   );
@@ -554,7 +558,7 @@ export function DatabaseTableGrid({
       gridRef={gridRef}
       view={view}
     >
-      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg border border-border">
+      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg border-border border-b-[0.5px]">
         {/* Positioning parent for the pinned-edge shadow: exactly the
             scrollport (header through calculate row), not the add-row strip
             below it. */}
@@ -576,7 +580,7 @@ export function DatabaseTableGrid({
               {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
               <div
                 aria-rowindex={1}
-                className="sticky top-0 z-20 flex border-border border-b bg-background"
+                className="sticky top-0 z-20 flex border-border border-b-[0.5px] bg-background"
                 role="row"
               >
                 {table.getHeaderGroups().map((headerGroup) =>
@@ -700,12 +704,10 @@ export function DatabaseTableGrid({
           )}
         </div>
         {mode === "edit" && !isSyncedDatabase ? (
-          <div className="border-border border-t">
-            <DatabaseAddRow
-              databaseId={databaseId}
-              onRowInserted={handleRowInserted}
-            />
-          </div>
+          <DatabaseAddRow
+            databaseId={databaseId}
+            onRowInserted={handleRowInserted}
+          />
         ) : null}
         {mode === "edit" ? (
           <DatabaseColumnDragAutoScroll scrollRef={scrollRef} />
@@ -723,6 +725,7 @@ interface GridHeaderCellProps {
   mode: "view" | "edit";
   onResizeStart: (
     fieldId: string,
+    minWidth: number,
     event: React.PointerEvent<HTMLElement>
   ) => void;
   primaryFieldId: string;
@@ -775,8 +778,9 @@ function GridHeaderCell({
         // `isolate`: the cell's internal z-20 resize zone must not escape into
         // the header row's stacking context, where it would paint above the
         // sticky pinned header (z-10) while scrolling underneath it.
+        // Header cells carry no inter-column separators (only body cells do);
+        // the freeze-boundary border on the last pinned column still applies.
         "relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
-        column.showVerticalLine && "border-border/60 border-r",
         column.pinned && "sticky z-10",
         column.isLastPinned && "border-r border-r-border",
         isDragging && "opacity-50"
@@ -815,6 +819,7 @@ function GridHeaderCell({
       {mode === "edit" ? (
         <DatabaseColumnResizeZone
           fieldId={field.id}
+          minWidth={minColumnWidthPx(field)}
           onResizeStart={onResizeStart}
         />
       ) : null}
@@ -861,7 +866,7 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
     // biome-ignore lint/a11y/useFocusableInteractive: the full-row toggle button inside is the focusable element.
     <div
       aria-rowindex={rowIndex + 2}
-      className="absolute top-0 left-0 flex w-full border-border border-b bg-muted/30"
+      className="absolute top-0 left-0 flex w-full border-border border-b-[0.5px] bg-muted/30"
       data-index={rowIndex}
       data-reveal-group=""
       ref={measureRow}
@@ -979,7 +984,7 @@ const GridRow = memo(function GridRowInner({
     // biome-ignore lint/a11y/useFocusableInteractive: focus lives on the cell editors, not the row.
     <div
       aria-rowindex={rowIndex + 2}
-      className="absolute top-0 left-0 flex w-full border-border border-b"
+      className="absolute top-0 left-0 flex w-full border-border border-b-[0.5px]"
       data-index={rowIndex}
       data-reveal-group=""
       ref={measureRow}
@@ -1195,7 +1200,7 @@ function GridCell({
         // `isolate` mirrors the header cell: positioned children keep their
         // z-index inside the cell instead of leaking above pinned siblings.
         "relative isolate flex shrink-0 items-center overflow-hidden text-foreground text-sm",
-        column.showVerticalLine && "border-border/60 border-r",
+        column.showVerticalLine && "border-border/60 border-r-[0.5px]",
         inlineEditable ? "p-0" : "px-2",
         field.type === "number" && "justify-end",
         isCheckbox && "justify-center",
@@ -1220,6 +1225,7 @@ function GridCell({
           onStopEdit={onStopEdit}
           rowId={row.id}
           value={value}
+          width={column.width}
         />
       ) : null}
     </div>

@@ -61,14 +61,27 @@ interface DatabaseCellInlineEditorProps {
   onStopEdit: () => void;
   rowId: string;
   value: DatabaseCellValue | undefined;
+  /**
+   * Rendered cell width in px — decides inline vs overflow-popover editing for
+   * text/url. Omitted on wide, non-clipping surfaces (the row page's property
+   * panel), which always edit inline.
+   */
+  width?: number;
 }
+
+/**
+ * Cells at or above this width edit inline in place; narrower ones are too
+ * cramped to type/read in, so text/url open the aligned overflow popover
+ * instead (which grows past the cell's clip).
+ */
+const POPOVER_OVERFLOW_THRESHOLD_PX = 160;
 
 /**
  * The editing-state cell editor the grid mounts for every editable field
  * type: select/multi-select and date get popover editors anchored to the
- * cell; text/url open the auto-growing popover editor (so long values escape
- * the cell's `overflow-hidden` clip instead of being truncated); number keeps
- * the borderless numeric input overlay.
+ * cell; number keeps the borderless numeric input overlay. Text/url edit
+ * inline in place, escaping to the auto-growing overflow popover only when
+ * the cell is too narrow (`POPOVER_OVERFLOW_THRESHOLD_PX`) to type in.
  */
 export function DatabaseCellInlineEditor({
   field,
@@ -76,6 +89,8 @@ export function DatabaseCellInlineEditor({
   onStopEdit,
   rowId,
   value,
+  // Default to inline: surfaces that don't clip (row property panel) omit it.
+  width = POPOVER_OVERFLOW_THRESHOLD_PX,
 }: DatabaseCellInlineEditorProps): ReactNode {
   switch (field.type) {
     case "select":
@@ -97,17 +112,21 @@ export function DatabaseCellInlineEditor({
           value={value}
         />
       );
-    case "number":
-      return (
-        <TextCellInlineEditor
-          field={field}
-          onNavigate={onNavigate}
-          onStopEdit={onStopEdit}
-          rowId={rowId}
-          value={value}
-        />
-      );
     default:
+      // Number always edits inline; text/url edit inline unless the cell is
+      // too narrow, in which case the aligned overflow popover gives room.
+      if (field.type === "number" || width >= POPOVER_OVERFLOW_THRESHOLD_PX) {
+        return (
+          <TextCellInlineEditor
+            field={field}
+            onNavigate={onNavigate}
+            onStopEdit={onStopEdit}
+            rowId={rowId}
+            value={value}
+            width={width}
+          />
+        );
+      }
       return (
         <TextCellPopoverEditor
           field={field}
@@ -115,17 +134,19 @@ export function DatabaseCellInlineEditor({
           onStopEdit={onStopEdit}
           rowId={rowId}
           value={value}
+          width={width}
         />
       );
   }
 }
 
 /**
- * Borderless input overlay filling a number cell (right-aligned, tabular).
- * Commits through `updateDatabaseCell` on blur/Enter/Tab; Escape reverts
- * without writing. EditableSurface philosophy: native input, transparent
- * chrome, only a subtle inset ring marks the editing cell. Text/url cells
- * route through `TextCellPopoverEditor` instead so overflow escapes the clip.
+ * Borderless input overlay filling the cell — number cells (right-aligned,
+ * tabular) and text/url cells wide enough to type in place. Commits through
+ * `updateDatabaseCell` on blur/Enter/Tab; Escape reverts without writing.
+ * EditableSurface philosophy: native input, transparent chrome, no selection
+ * ring on the cell. Narrow text/url cells route through
+ * `TextCellPopoverEditor` instead so the editor escapes the cell's clip.
  */
 function TextCellInlineEditor({
   field,
@@ -184,7 +205,7 @@ function TextCellInlineEditor({
     <input
       aria-label={field.name}
       className={cn(
-        "absolute inset-0 z-10 size-full rounded-none border-none bg-background px-2 font-normal text-foreground text-sm outline-none ring-1 ring-border ring-inset placeholder:text-muted-foreground",
+        "absolute inset-0 z-10 size-full rounded-none border-none bg-background px-2 font-normal text-foreground text-sm outline-none placeholder:text-muted-foreground",
         isNumber && "text-right tabular-nums"
       )}
       inputMode={isNumber ? "decimal" : undefined}
@@ -301,11 +322,6 @@ function TextCellPopoverEditor({
 
   return (
     <>
-      {/* Full-cell inset ring marks the editing cell beneath the popover. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-10 ring-1 ring-border ring-inset"
-      />
       {/* Zero-height anchor at the cell's top edge → popover opens flush with it. */}
       <div
         aria-hidden
@@ -364,9 +380,10 @@ interface CellEditorPopoverProps {
 }
 
 /**
- * Popover shell for cell editors: an invisible full-cell anchor marks the
- * editing cell with an inset ring, the popover opens immediately beneath it,
- * and any dismissal (Escape, outside click) exits editing via `onStopEdit`.
+ * Popover shell for cell editors: an invisible full-cell anchor the popover
+ * opens immediately beneath, with any dismissal (Escape, outside click)
+ * exiting editing via `onStopEdit`. The anchor carries no selection ring —
+ * the open popover alone marks the editing cell.
  */
 function CellEditorPopover({
   children,
@@ -378,7 +395,7 @@ function CellEditorPopover({
     <>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-10 ring-1 ring-border ring-inset"
+        className="pointer-events-none absolute inset-0 z-10"
         ref={setAnchor}
       />
       <Popover

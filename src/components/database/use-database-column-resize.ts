@@ -41,6 +41,7 @@ export function useDatabaseColumnResize({
   liveWidths: Record<string, number> | null;
   startResize: (
     fieldId: string,
+    minWidth: number,
     event: React.PointerEvent<HTMLElement>
   ) => void;
 } {
@@ -63,13 +64,21 @@ export function useDatabaseColumnResize({
   );
 
   const startResize = useCallback(
-    (fieldId: string, event: React.PointerEvent<HTMLElement>) => {
+    (
+      fieldId: string,
+      minWidth: number,
+      event: React.PointerEvent<HTMLElement>
+    ) => {
       event.preventDefault();
       event.stopPropagation();
 
       const startX = event.clientX;
       const startY = event.clientY;
-      const startWidth = resolveColumnWidthPx(viewRef.current.config, fieldId);
+      const startWidth = resolveColumnWidthPx(
+        viewRef.current.config,
+        fieldId,
+        minWidth
+      );
       const handleEl = event.currentTarget as HTMLElement;
       // The gesture belongs to the initiating pointer only: the listeners
       // live on document, so without this filter a second touch finger's
@@ -86,7 +95,7 @@ export function useDatabaseColumnResize({
       const flushMove = () => {
         rafRef.current = null;
         setLiveWidths({
-          [fieldId]: clampColumnWidthPx(startWidth + pendingDelta),
+          [fieldId]: clampColumnWidthPx(startWidth + pendingDelta, minWidth),
         });
       };
 
@@ -147,13 +156,19 @@ export function useDatabaseColumnResize({
 
         lastTapRef.current = null;
         const width = clampColumnWidthPx(
-          startWidth + (upEvent.clientX - startX)
+          startWidth + (upEvent.clientX - startX),
+          minWidth
         );
         if (width === startWidth) {
           return;
         }
         updateDatabaseView(databaseId, viewRef.current.id, {
-          config: configWithColumnWidth(viewRef.current.config, fieldId, width),
+          config: configWithColumnWidth(
+            viewRef.current.config,
+            fieldId,
+            width,
+            minWidth
+          ),
         });
       };
 

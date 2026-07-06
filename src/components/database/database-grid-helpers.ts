@@ -18,6 +18,20 @@ export const DEFAULT_COLUMN_WIDTH_PX = 192;
 /** Narrowest a column can render, regardless of stored width. */
 export const MIN_COLUMN_WIDTH_PX = 96;
 
+/**
+ * Checkbox columns hold no text — only the header's field icon and the
+ * centered checkbox — so they collapse far narrower than the general
+ * `MIN_COLUMN_WIDTH_PX` floor meant for readable text columns.
+ */
+export const CHECKBOX_MIN_COLUMN_WIDTH_PX = 64;
+
+/** Narrowest width a specific field's column may render/resize to. */
+export function minColumnWidthPx(field: Pick<DatabaseField, "type">): number {
+  return field.type === "checkbox"
+    ? CHECKBOX_MIN_COLUMN_WIDTH_PX
+    : MIN_COLUMN_WIDTH_PX;
+}
+
 /** Fixed grid row height (header, body, and footer rows). */
 export const GRID_ROW_HEIGHT_PX = 36;
 
@@ -41,31 +55,39 @@ export interface GridColumn {
   wrap: boolean;
 }
 
-/** Column width from the view config, clamped to the grid minimum. */
+/**
+ * Column width from the view config, clamped to the column's minimum
+ * (`minWidth`, defaulting to the general text-column floor).
+ */
 export function resolveColumnWidthPx(
   config: DatabaseTableViewConfig,
-  fieldId: string
+  fieldId: string,
+  minWidth: number = MIN_COLUMN_WIDTH_PX
 ): number {
   const width = config.columnWidths?.[fieldId] ?? DEFAULT_COLUMN_WIDTH_PX;
-  return Math.max(MIN_COLUMN_WIDTH_PX, width);
+  return Math.max(minWidth, width);
 }
 
-/** Clamp a dragged column width: whole pixels, never below the grid minimum. */
-export function clampColumnWidthPx(widthPx: number): number {
-  return Math.max(MIN_COLUMN_WIDTH_PX, Math.round(widthPx));
+/** Clamp a dragged column width: whole pixels, never below the column minimum. */
+export function clampColumnWidthPx(
+  widthPx: number,
+  minWidth: number = MIN_COLUMN_WIDTH_PX
+): number {
+  return Math.max(minWidth, Math.round(widthPx));
 }
 
 /** View config with one column width set (clamped); other keys untouched. */
 export function configWithColumnWidth(
   config: DatabaseTableViewConfig,
   fieldId: string,
-  widthPx: number
+  widthPx: number,
+  minWidth: number = MIN_COLUMN_WIDTH_PX
 ): DatabaseTableViewConfig {
   return {
     ...config,
     columnWidths: {
       ...config.columnWidths,
-      [fieldId]: clampColumnWidthPx(widthPx),
+      [fieldId]: clampColumnWidthPx(widthPx, minWidth),
     },
   };
 }

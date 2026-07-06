@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateFnLabel,
+  CHECKBOX_MIN_COLUMN_WIDTH_PX,
   type ColumnDropZoneRect,
   clampColumnWidthPx,
   configWithColumnWidth,
@@ -11,6 +12,7 @@ import {
   isoDateToLocalDate,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
+  minColumnWidthPx,
   nextEditTarget,
   parseNumberCellInput,
   planColumnReorder,
@@ -45,6 +47,25 @@ describe("clampColumnWidthPx", () => {
   it("clamps below the minimum", () => {
     expect(clampColumnWidthPx(10)).toBe(MIN_COLUMN_WIDTH_PX);
     expect(clampColumnWidthPx(-50)).toBe(MIN_COLUMN_WIDTH_PX);
+  });
+
+  it("clamps below a supplied minimum", () => {
+    expect(clampColumnWidthPx(10, CHECKBOX_MIN_COLUMN_WIDTH_PX)).toBe(
+      CHECKBOX_MIN_COLUMN_WIDTH_PX
+    );
+  });
+});
+
+describe("minColumnWidthPx", () => {
+  it("lets checkbox columns collapse below the text-column floor", () => {
+    expect(minColumnWidthPx({ type: "checkbox" })).toBe(
+      CHECKBOX_MIN_COLUMN_WIDTH_PX
+    );
+    expect(CHECKBOX_MIN_COLUMN_WIDTH_PX).toBeLessThan(MIN_COLUMN_WIDTH_PX);
+  });
+
+  it("keeps the general floor for text columns", () => {
+    expect(minColumnWidthPx({ type: "text" })).toBe(MIN_COLUMN_WIDTH_PX);
   });
 });
 

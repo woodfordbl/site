@@ -5,8 +5,11 @@ import { cn } from "@/lib/utils.ts";
 
 interface DatabaseColumnResizeZoneProps {
   fieldId: string;
+  /** The column's minimum width, so a drag never resizes below its floor. */
+  minWidth: number;
   onResizeStart: (
     fieldId: string,
+    minWidth: number,
     event: React.PointerEvent<HTMLElement>
   ) => void;
 }
@@ -25,6 +28,7 @@ interface DatabaseColumnResizeZoneProps {
  */
 export function DatabaseColumnResizeZone({
   fieldId,
+  minWidth,
   onResizeStart,
 }: DatabaseColumnResizeZoneProps) {
   const isCoarsePointer = useIsCoarsePrimaryPointer();
@@ -45,7 +49,7 @@ export function DatabaseColumnResizeZone({
           isCoarsePointer ? "w-4" : "w-2"
         )}
         onPointerDown={(event) => {
-          onResizeStart(fieldId, event);
+          onResizeStart(fieldId, minWidth, event);
         }}
         type="button"
       >
