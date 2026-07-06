@@ -20,16 +20,25 @@ export const MIN_COLUMN_WIDTH_PX = 96;
 
 /**
  * Checkbox columns hold no text — only the header's field icon and the
- * centered checkbox — so they collapse far narrower than the general
- * `MIN_COLUMN_WIDTH_PX` floor meant for readable text columns.
+ * centered checkbox — so they size to just the checkbox plus padding, used as
+ * both their default width and their minimum (they don't need to grow).
  */
-export const CHECKBOX_MIN_COLUMN_WIDTH_PX = 64;
+export const CHECKBOX_COLUMN_WIDTH_PX = 48;
 
 /** Narrowest width a specific field's column may render/resize to. */
 export function minColumnWidthPx(field: Pick<DatabaseField, "type">): number {
   return field.type === "checkbox"
-    ? CHECKBOX_MIN_COLUMN_WIDTH_PX
+    ? CHECKBOX_COLUMN_WIDTH_PX
     : MIN_COLUMN_WIDTH_PX;
+}
+
+/** A field's fallback column width when the view stores none. */
+export function defaultColumnWidthPx(
+  field: Pick<DatabaseField, "type">
+): number {
+  return field.type === "checkbox"
+    ? CHECKBOX_COLUMN_WIDTH_PX
+    : DEFAULT_COLUMN_WIDTH_PX;
 }
 
 /** Fixed grid row height (header, body, and footer rows). */
@@ -56,15 +65,17 @@ export interface GridColumn {
 }
 
 /**
- * Column width from the view config, clamped to the column's minimum
- * (`minWidth`, defaulting to the general text-column floor).
+ * Column width from the view config, falling back to `defaultWidth` when the
+ * view stores none and clamped to the column's minimum (`minWidth`); both
+ * default to the general text-column values.
  */
 export function resolveColumnWidthPx(
   config: DatabaseTableViewConfig,
   fieldId: string,
-  minWidth: number = MIN_COLUMN_WIDTH_PX
+  minWidth: number = MIN_COLUMN_WIDTH_PX,
+  defaultWidth: number = DEFAULT_COLUMN_WIDTH_PX
 ): number {
-  const width = config.columnWidths?.[fieldId] ?? DEFAULT_COLUMN_WIDTH_PX;
+  const width = config.columnWidths?.[fieldId] ?? defaultWidth;
   return Math.max(minWidth, width);
 }
 

@@ -47,6 +47,7 @@ import {
   type CellEditMove,
   type CellEditTarget,
   DEFAULT_COLUMN_WIDTH_PX,
+  defaultColumnWidthPx,
   flattenGridItems,
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
@@ -200,7 +201,12 @@ export function DatabaseTableGrid({
       pinnedFields.reduce(
         (total, field) =>
           total +
-          resolveColumnWidthPx(view.config, field.id, minColumnWidthPx(field)),
+          resolveColumnWidthPx(
+            view.config,
+            field.id,
+            minColumnWidthPx(field),
+            defaultColumnWidthPx(field)
+          ),
         0
       ),
     [pinnedFields, view.config]
@@ -230,7 +236,12 @@ export function DatabaseTableGrid({
     return ordered.map((field, index) => {
       const width =
         liveWidths?.[field.id] ??
-        resolveColumnWidthPx(view.config, field.id, minColumnWidthPx(field));
+        resolveColumnWidthPx(
+          view.config,
+          field.id,
+          minColumnWidthPx(field),
+          defaultColumnWidthPx(field)
+        );
       const pinned = index < pinnedIds.size;
       const column: GridColumn = {
         field,
@@ -730,6 +741,7 @@ interface GridHeaderCellProps {
   onResizeStart: (
     fieldId: string,
     minWidth: number,
+    defaultWidth: number,
     event: React.PointerEvent<HTMLElement>
   ) => void;
   primaryFieldId: string;
@@ -763,10 +775,16 @@ function GridHeaderCell({
     field.id
   );
   const Icon = resolveFieldIcon(field);
+  // Checkbox columns are only as wide as the checkbox, so their header shows
+  // just the field icon (centered over the checkbox); the name stays reachable
+  // through the column menu.
+  const isCheckbox = field.type === "checkbox";
   const headerContent = (
     <>
       <Icon className="size-4 shrink-0 stroke-[1.5px]" />
-      <span className="truncate text-sm">{field.name}</span>
+      {isCheckbox ? null : (
+        <span className="truncate text-sm">{field.name}</span>
+      )}
     </>
   );
 
@@ -809,19 +827,28 @@ function GridHeaderCell({
             displayFieldIds={displayFieldIds}
             field={field}
             isPrimary={field.id === primaryFieldId}
-            triggerClassName="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50"
+            triggerClassName={cn(
+              "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50",
+              isCheckbox && "justify-center"
+            )}
             view={view}
           >
             {headerContent}
           </DatabaseColumnMenu>
         </div>
       ) : (
-        <div className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2">
+        <div
+          className={cn(
+            "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2",
+            isCheckbox && "justify-center"
+          )}
+        >
           {headerContent}
         </div>
       )}
       {mode === "edit" ? (
         <DatabaseColumnResizeZone
+          defaultWidth={defaultColumnWidthPx(field)}
           fieldId={field.id}
           minWidth={minColumnWidthPx(field)}
           onResizeStart={onResizeStart}

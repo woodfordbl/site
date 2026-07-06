@@ -42,6 +42,7 @@ export function useDatabaseColumnResize({
   startResize: (
     fieldId: string,
     minWidth: number,
+    defaultWidth: number,
     event: React.PointerEvent<HTMLElement>
   ) => void;
 } {
@@ -67,6 +68,7 @@ export function useDatabaseColumnResize({
     (
       fieldId: string,
       minWidth: number,
+      defaultWidth: number,
       event: React.PointerEvent<HTMLElement>
     ) => {
       event.preventDefault();
@@ -77,7 +79,8 @@ export function useDatabaseColumnResize({
       const startWidth = resolveColumnWidthPx(
         viewRef.current.config,
         fieldId,
-        minWidth
+        minWidth,
+        defaultWidth
       );
       const handleEl = event.currentTarget as HTMLElement;
       // The gesture belongs to the initiating pointer only: the listeners
