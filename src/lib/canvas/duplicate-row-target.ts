@@ -5,10 +5,10 @@ import {
   rowIdsInDocumentOrder,
 } from "@/lib/canvas/block-selection.ts";
 
-type ResolveDuplicateRowIdOptions = {
+interface ResolveDuplicateRowIdOptions {
   rowId?: string | null;
   selectedRowIds: readonly string[];
-};
+}
 
 /** Resolves which canvas row `duplicateRow` should clone for the current target. */
 export function resolveDuplicateRowId(
