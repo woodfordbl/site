@@ -238,6 +238,7 @@ export function useBlockGutterMenuItems(
       label: "Duplicate",
       keywords: ["copy", "clone"],
       icon: <IconCopy />,
+      command: "duplicate-block",
       onSelect: handleDuplicate,
     });
     items.push({

@@ -8,6 +8,7 @@ import {
   expressionPatch,
   fieldTypeChangePatch,
   freezePrefixEndingAt,
+  hasDisplayOnlyPropertyEditor,
   isFrozenExactlyAt,
   logicalColumnOrder,
   MAX_NUMBER_DECIMALS,
@@ -16,6 +17,7 @@ import {
   recoloredSelectOptions,
   renamedSelectOptions,
   selectFieldForOptionEdit,
+  showsEditPropertySubmenu,
   steppedDecimals,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
@@ -321,6 +323,53 @@ describe("dateFormatPatch", () => {
 
   it("clears the key for Default (absent = default)", () => {
     expect(dateFormatPatch("default")).toEqual({ format: undefined });
+  });
+});
+
+describe("synced column Edit property gating", () => {
+  const syncedDate = {
+    id: "f-asof",
+    name: "As of",
+    type: "date" as const,
+    sourceKey: "asOf",
+  };
+  const syncedText = {
+    id: "f-currency",
+    name: "Currency",
+    type: "text" as const,
+    sourceKey: "currency",
+  };
+  const localSelect = {
+    id: "f-state",
+    name: "State",
+    type: "select" as const,
+    options: [{ id: "o1", name: "Open" }],
+  };
+
+  it("allows display-only editors on synced date and number fields", () => {
+    expect(hasDisplayOnlyPropertyEditor(syncedDate)).toBe(true);
+    expect(
+      hasDisplayOnlyPropertyEditor({
+        id: "f-rate",
+        name: "Rate",
+        type: "number",
+        sourceKey: "rate",
+      })
+    ).toBe(true);
+    expect(showsEditPropertySubmenu(syncedDate, true)).toBe(true);
+  });
+
+  it("blocks schema editors on synced non-display fields", () => {
+    expect(hasDisplayOnlyPropertyEditor(syncedText)).toBe(false);
+    expect(showsEditPropertySubmenu(syncedText, true)).toBe(false);
+    expect(
+      showsEditPropertySubmenu({ ...localSelect, sourceKey: "state" }, true)
+    ).toBe(false);
+  });
+
+  it("shows the full Edit property menu for local fields", () => {
+    expect(showsEditPropertySubmenu(localSelect, false)).toBe(true);
+    expect(showsEditPropertySubmenu(syncedDate, false)).toBe(true);
   });
 });
 

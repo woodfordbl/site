@@ -26,12 +26,15 @@ const TITLE_TYPOGRAPHY_CLASS = cn(
   "text-foreground"
 );
 
+/** Inline name field caps growth so the view switcher keeps room on the row. */
+const TITLE_NAME_MAX_CLASS = "max-w-[min(100%,40ch)]";
+
 interface DatabaseTitleProps {
   /** The resolved active view — settings menu scope (Properties/Group/…). */
   activeView: DatabaseView;
   /** Chart dataset for a chart active view — the settings menu color rows. */
   chartData?: ChartData;
-  /** Extra right-aligned controls before the ⋯ menu (mobile filter/sort). */
+  /** Extra right-aligned controls before the ⋯ menu (filter/sort icon triggers). */
   controls?: ReactNode;
   database: LocalDatabase;
   /** Hide the name; the row keeps only right-aligned controls. */
@@ -124,7 +127,7 @@ function DatabaseTitleIcon({
  * Database name above the grid (h3-equivalent typography). In edit mode the
  * name is inline-editable (click to edit, commit via `renameDatabase` on
  * blur/Enter, Escape reverts) and the right-aligned control cluster holds
- * optional mobile toolbar buttons plus the ⋯ settings menu — revealed on row
+ * optional filter/sort icon triggers plus the ⋯ settings menu — revealed on row
  * hover/focus on fine pointers, always visible on coarse pointers
  * (`.hover-reveal` + `data-reveal-group`). Row counts live in the settings
  * menu (stats footer / Source section), not in the title row. The saved-view
@@ -173,55 +176,72 @@ export function DatabaseTitle({
 
   let nameDisplay: ReactNode;
   if (mode === "edit") {
+    const mirrorText = (draft ?? name) || "Untitled";
     nameDisplay = (
-      <button
+      <span
         className={cn(
-          "min-w-0 truncate rounded-sm text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50",
+          "inline-grid min-w-0",
+          TITLE_NAME_MAX_CLASS,
           TITLE_TYPOGRAPHY_CLASS
         )}
-        onClick={() => {
-          finishedRef.current = false;
-          setDraft(name);
-        }}
-        type="button"
       >
-        {name}
-      </button>
+        <span
+          aria-hidden
+          className="invisible col-start-1 row-start-1 whitespace-pre px-1.5"
+        >
+          {mirrorText}
+        </span>
+        {draft === null ? (
+          <button
+            className="col-start-1 row-start-1 min-w-0 truncate rounded-sm px-1.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+            onClick={() => {
+              finishedRef.current = false;
+              setDraft(name);
+            }}
+            type="button"
+          >
+            {name}
+          </button>
+        ) : (
+          <input
+            aria-label="Database name"
+            className="col-start-1 row-start-1 w-full min-w-0 rounded-sm border-none bg-transparent px-1.5 py-0 outline-none placeholder:text-muted-foreground"
+            onBlur={(event) => {
+              if (finishedRef.current) {
+                return;
+              }
+              commit(event.currentTarget.value);
+            }}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Untitled"
+            ref={focusOnMount}
+            type="text"
+            value={draft}
+          />
+        )}
+      </span>
     );
   } else {
     nameDisplay = (
-      <h3 className={cn("min-w-0 truncate", TITLE_TYPOGRAPHY_CLASS)}>{name}</h3>
+      <h3
+        className={cn(
+          "min-w-0 truncate",
+          TITLE_NAME_MAX_CLASS,
+          TITLE_TYPOGRAPHY_CLASS
+        )}
+      >
+        {name}
+      </h3>
     );
   }
 
   return (
-    <div className="flex min-w-0 items-baseline gap-2" data-reveal-group>
+    <div className="flex min-w-0 items-center gap-1" data-reveal-group>
       {hideTitle ? null : (
         <>
           <DatabaseTitleIcon database={database} mode={mode} />
-          {draft === null ? (
-            nameDisplay
-          ) : (
-            <input
-              aria-label="Database name"
-              className={cn(
-                "min-w-0 flex-1 rounded-none border-none bg-transparent p-0 outline-none placeholder:text-muted-foreground",
-                TITLE_TYPOGRAPHY_CLASS
-              )}
-              onBlur={(event) => {
-                if (finishedRef.current) {
-                  return;
-                }
-                commit(event.currentTarget.value);
-              }}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Untitled"
-              ref={focusOnMount}
-              type="text"
-              value={draft}
-            />
-          )}
+          {nameDisplay}
           {database.source?.kind === "connector" ? (
             <DatabaseSyncStatusChip databaseId={databaseId} />
           ) : null}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildSyncedDatabaseSeed } from "@/lib/connectors/build-synced-database.ts";
 import { frankfurterRatesConnector } from "@/lib/connectors/frankfurter-rates.ts";
+import { githubIssuesConnector } from "@/lib/connectors/github-issues.ts";
 import { githubPrsConnector } from "@/lib/connectors/github-prs.ts";
 import { githubReposConnector } from "@/lib/connectors/github-repos.ts";
 import { localDatabaseSchema } from "@/lib/schemas/database.ts";
@@ -59,6 +60,27 @@ describe("buildSyncedDatabaseSeed", () => {
       { id: "merged", name: "Merged", color: "purple" },
       { id: "closed", name: "Closed", color: "red" },
     ]);
+  });
+
+  it("seeds GitHub issues with open/closed state options", () => {
+    const { database } = buildSyncedDatabaseSeed(githubIssuesConnector, {
+      owner: "octocat",
+      repo: "hello-world",
+      state: "all",
+    });
+    expect(localDatabaseSchema.parse(database)).toBeTruthy();
+    expect(database.source).toEqual({
+      kind: "connector",
+      connectorId: "github-issues",
+      config: { owner: "octocat", repo: "hello-world", state: "all" },
+    });
+    const state = database.fields.find((field) => field.sourceKey === "state");
+    expect(state?.type).toBe("select");
+    expect(state?.type === "select" ? state.options : undefined).toEqual([
+      { id: "open", name: "Open", color: "green" },
+      { id: "closed", name: "Closed", color: "red" },
+    ]);
+    expect(database.fields.map((field) => field.sourceKey)).toContain("labels");
   });
 
   it("resolves primaryFieldId from primarySourceKey", () => {

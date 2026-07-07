@@ -30,11 +30,14 @@ export type CommandId =
   | "select-all-blocks"
   | "copy-blocks"
   | "paste-blocks"
+  | "duplicate-block"
   // Canvas blocks (dispatched)
   | "undo-edit"
   | "redo-edit"
   | "move-row-up"
   | "move-row-down"
+  | "move-selected-row-up"
+  | "move-selected-row-down"
   | "extend-selection-up"
   | "extend-selection-down"
   | "clear-selection"
@@ -179,10 +182,9 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "duplicate-page",
     label: "Duplicate page",
     group: "Pages",
-    defaultHotkey: "Mod+D",
+    defaultHotkey: "Mod+Shift+D",
     customizable: true,
     scope: "global",
-    // No field meaning, and avoids the browser bookmark dialog; never fire mid-typing.
     ignoreInputs: true,
   },
   {
@@ -385,6 +387,22 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     scope: "canvas",
   },
   {
+    id: "move-selected-row-up",
+    label: "Move selected row up",
+    group: "Canvas blocks",
+    defaultHotkey: "Mod+ArrowUp",
+    customizable: false,
+    scope: "canvas",
+  },
+  {
+    id: "move-selected-row-down",
+    label: "Move selected row down",
+    group: "Canvas blocks",
+    defaultHotkey: "Mod+ArrowDown",
+    customizable: false,
+    scope: "canvas",
+  },
+  {
     id: "extend-selection-up",
     label: "Extend selection up",
     group: "Canvas blocks",
@@ -442,6 +460,17 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     defaultHotkey: "Mod+V",
     customizable: false,
     scope: "canvas",
+  },
+  {
+    id: "duplicate-block",
+    label: "Duplicate block",
+    group: "Canvas clipboard",
+    defaultHotkey: "Mod+D",
+    customizable: false,
+    scope: "canvas",
+    // Field-level duplicate is handled in editable-surface.tsx; this covers
+    // block selection when no canvas field is focused.
+    ignoreInputs: true,
   },
 
   // ── Slash menu ───────────────────────────────────────────────────────────

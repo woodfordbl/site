@@ -28,6 +28,7 @@ export type CanvasCommand =
       targetRowId: string;
       blocks: Block[];
       edge?: "before" | "after";
+      focusPlacement?: "start" | "end";
     }
   | { type: "row.split"; rowId: string; start: number; end: number }
   | {
@@ -68,8 +69,8 @@ export type CanvasCommand =
       text?: string;
       /**
        * Per-column seed block: absent = one empty `text` row per column;
-       * `"database"` = one unlinked `database` block per column (the
-       * Dashboard slash scaffold). Database seeds ignore `text`.
+       * `"database"` = one unlinked `database` block per column. Database
+       * seeds ignore `text`.
        */
       seedChildType?: "database";
     }

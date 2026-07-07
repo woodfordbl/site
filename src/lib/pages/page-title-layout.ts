@@ -24,7 +24,7 @@ export const pageTitleIconPickerClassName = "mt-0 sm:mt-0.5";
  * `md:pb-12` override restores the tight desktop inset (no keyboard there).
  */
 export const pageCanvasMobileScrollClassName =
-  "pr-4 pb-[50vh] pl-7 md:overflow-auto md:px-12 md:pt-16 md:pb-12";
+  "no-scrollbar pr-4 pb-[50vh] pl-7 md:overflow-auto md:px-12 md:pt-16 md:pb-12";
 
 /**
  * Touch (coarse pointer) canvas scroll inset. The drag gutter is not rendered on
@@ -35,7 +35,7 @@ export const pageCanvasMobileScrollClassName =
  * {@link pageCanvasMobileScrollClassName}.
  */
 export const pageCanvasTouchScrollClassName =
-  "pr-4 pb-[50vh] pl-3 md:overflow-auto md:px-12 md:pt-16 md:pb-12";
+  "no-scrollbar pr-4 pb-[50vh] pl-3 md:overflow-auto md:px-12 md:pt-16 md:pb-12";
 
 /**
  * Mobile header slot (cover-less pages). Negative margins cancel the scroll

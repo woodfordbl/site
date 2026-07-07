@@ -16,6 +16,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   type ActionMenuEntry,
@@ -126,6 +127,9 @@ export function FilteredActionMenuItems({
     >
       {item.icon}
       {item.label}
+      {item.command ? (
+        <Shortcut className="ml-auto" command={item.command} />
+      ) : null}
     </DropdownMenuItem>
   ));
 }

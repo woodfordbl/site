@@ -6,6 +6,7 @@ import {
   IconColumnInsertRight,
   IconCopy,
   IconEyeOff,
+  IconFileText,
   IconLayoutGrid,
   IconMinus,
   IconPhoto,
@@ -50,6 +51,7 @@ import {
   recoloredSelectOptions,
   renamedSelectOptions,
   selectOptionsPatch,
+  showsEditPropertySubmenu,
   steppedDecimals,
   toggledWrapFieldIds,
   visibleFieldIdsAfterHide,
@@ -605,6 +607,11 @@ function DatePropertyEditor({ databaseId, field }: DatePropertyEditorProps) {
 
 interface EditPropertySubmenuProps {
   databaseId: string;
+  /**
+   * Synced columns: only date/number display config (format, decimals,
+   * grouping). Formula expression and select options stay hidden.
+   */
+  displayOnly?: boolean;
   field: DatabaseField;
   /** Closes the whole column menu (used after the formula editor saves). */
   onRequestClose: () => void;
@@ -614,13 +621,19 @@ interface EditPropertySubmenuProps {
  * Per-type "Edit property" config submenu: number → format/decimals/grouping
  * display config, date → display format picker, select/multi-select → option
  * list editor, formula → expression editor. Types without config render
- * nothing (the submenu is omitted entirely).
+ * nothing (the submenu is omitted entirely). `displayOnly` limits synced
+ * columns to date/number presentation settings.
  */
 function EditPropertySubmenu({
   databaseId,
+  displayOnly = false,
   field,
   onRequestClose,
 }: EditPropertySubmenuProps) {
+  if (displayOnly && field.type !== "date" && field.type !== "number") {
+    return null;
+  }
+
   if (field.type === "formula") {
     return (
       <DropdownMenuSub>
@@ -834,8 +847,9 @@ export function DatabaseColumnMenu({
 
   // Synced (connector-written) fields keep view-level and cosmetic actions
   // (rename, icon, sort, calculate, freeze, hide, wrap, duplicate-as-local)
-  // but never schema-destructive ones: type/config edits and deletion would
-  // fight the sync engine's reconciliation.
+  // plus date/number display config (format, decimals, grouping). Schema-
+  // destructive edits (type, select options, formula expression, delete)
+  // stay blocked — cell values remain provider-owned.
   const synced = isSyncedField(field);
   // Broken formula badge on the header (parse errors only — per-row
   // evaluation errors render in their cells instead).
@@ -945,17 +959,18 @@ export function DatabaseColumnMenu({
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          {showsEditPropertySubmenu(field, synced) ? (
+            <EditPropertySubmenu
+              databaseId={databaseId}
+              displayOnly={synced}
+              field={field}
+              onRequestClose={() => {
+                handleOpenChange(false);
+              }}
+            />
+          ) : null}
           {synced ? null : (
-            <>
-              <EditPropertySubmenu
-                databaseId={databaseId}
-                field={field}
-                onRequestClose={() => {
-                  handleOpenChange(false);
-                }}
-              />
-              <ChangeTypeSubmenu databaseId={databaseId} field={field} />
-            </>
+            <ChangeTypeSubmenu databaseId={databaseId} field={field} />
           )}
           <DropdownMenuItem
             onClick={() => {
@@ -1064,6 +1079,17 @@ export function DatabaseColumnMenu({
             <IconTextWrap />
             Wrap content
           </DropdownMenuSwitchItem>
+          {isPrimary ? (
+            <DropdownMenuSwitchItem
+              checked={config.showPageIcons !== false}
+              onCheckedChange={(next) => {
+                patchConfig({ showPageIcons: next });
+              }}
+            >
+              <IconFileText />
+              Show page icon
+            </DropdownMenuSwitchItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {

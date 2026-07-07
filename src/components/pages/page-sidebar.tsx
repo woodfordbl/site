@@ -1,5 +1,5 @@
 import { IconChevronRight } from "@tabler/icons-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   FavoritesList,
@@ -38,24 +38,21 @@ function SidebarCollapsibleSection({
   defaultOpen?: boolean;
   label: string;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
     <SidebarGroup className="gap-y-px">
-      <Collapsible onOpenChange={setOpen} open={open}>
+      <Collapsible defaultOpen={defaultOpen}>
         <div className="flex h-8 shrink-0 items-center">
           <CollapsibleTrigger className="group/label flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md px-2 text-left font-medium text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2">
             <span className="min-w-0 flex-1 truncate">{label}</span>
             <IconChevronRight
               className={cn(
-                "size-3.5 shrink-0 text-sidebar-foreground/50 opacity-0 transition-[transform,opacity] duration-100 ease-out hover-none:opacity-100 group-hover/label:opacity-100 group-focus-visible/label:opacity-100",
-                open && "rotate-90"
+                "size-3.5 shrink-0 text-sidebar-foreground/50 opacity-0 transition-[transform,opacity] duration-200 ease-[var(--ease-out-strong)] hover-none:opacity-100 group-hover/label:opacity-100 group-focus-visible/label:opacity-100 group-data-[panel-open]/label:rotate-90 motion-reduce:transition-none"
               )}
             />
           </CollapsibleTrigger>
           {action}
         </div>
-        <CollapsibleContent>
+        <CollapsibleContent className="pt-px">
           <SidebarGroupContent>{children}</SidebarGroupContent>
         </CollapsibleContent>
       </Collapsible>
@@ -65,6 +62,7 @@ function SidebarCollapsibleSection({
 
 function PageSidebarPanel({ className }: { className?: string }) {
   const hasFavorites = useHasFavorites();
+  const pinAction = <SidebarPinAction />;
 
   return (
     <div
@@ -79,11 +77,14 @@ function PageSidebarPanel({ className }: { className?: string }) {
     >
       <SidebarContent>
         {hasFavorites ? (
-          <SidebarCollapsibleSection label="Favorites">
+          <SidebarCollapsibleSection action={pinAction} label="Favorites">
             <FavoritesList />
           </SidebarCollapsibleSection>
         ) : null}
-        <SidebarCollapsibleSection action={<SidebarPinAction />} label="Pages">
+        <SidebarCollapsibleSection
+          action={hasFavorites ? undefined : pinAction}
+          label="Pages"
+        >
           <PageList />
         </SidebarCollapsibleSection>
       </SidebarContent>

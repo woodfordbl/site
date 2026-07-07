@@ -1,6 +1,6 @@
 # Table blocks
 
-Notion-style editable grids: a **table** container holds **tableRow** rows, each holding **tableCell** leaves with plain text. Persistence stays in the flat block collection (same pattern as lists and columns); ShadCN [`Table`](../../src/components/ui/table.tsx) provides semantic markup only — no TanStack Table.
+Editable grids: a **table** container holds **tableRow** rows, each holding **tableCell** leaves with plain text. Persistence stays in the flat block collection (same pattern as lists and columns); ShadCN [`Table`](../../src/components/ui/table.tsx) provides semantic markup only — no TanStack Table.
 
 ## Block hierarchy
 
@@ -83,7 +83,7 @@ Handled in [`table-cell-edit.tsx`](../../src/components/blocks/types/table/table
 | Shift+Enter | Newline in cell (`EditableSurface` multiline) |
 | Backspace/Delete (empty) | Clear text only — grid structure preserved |
 
-Empty cell Backspace does **not** delete the row or column (Notion-style).
+Empty cell Backspace does **not** delete the row or column.
 
 ## Structural commands
 

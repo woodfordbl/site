@@ -90,8 +90,8 @@ export interface DatabaseViewSwitcherProps {
 /**
  * Compact saved-view tabs in the database title row: TabsList `indicator`
  * variant, one tab per view (type icon + name), horizontally scrollable when
- * the row overflows. Edit mode appends a "+" opening the Add-view menu; view
- * mode is switch-only (and hides entirely for single-view databases, where
+ * the row overflows. Edit mode appends a hover-revealed "+" opening the
+ * Add-view menu; view mode is switch-only (and hides entirely for single-view
  * there is nothing to switch).
  */
 export function DatabaseViewSwitcher({
@@ -138,7 +138,7 @@ export function DatabaseViewSwitcher({
             render={
               <Button
                 aria-label="Add view"
-                className="shrink-0 text-muted-foreground"
+                className="hover-reveal shrink-0 text-muted-foreground data-popup-open:opacity-100"
                 size="icon-xs"
                 type="button"
                 variant="ghost"

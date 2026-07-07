@@ -62,6 +62,7 @@ function createNoopCanvasEditorActions(
     insertBefore: noop,
     moveAfter: noop,
     moveBefore: noop,
+    moveSelectedRowAdjacent: noop,
     pasteAfter: noop,
     pasteBefore: noop,
     pasteClipboard: noop,

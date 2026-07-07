@@ -98,8 +98,8 @@ export function buildColumnsBlock(
 
 /**
  * What each new column is seeded with: one empty `text` row (default) or one
- * unlinked `database` block (the Dashboard slash scaffold — its placeholder
- * trigger opens the create/link picker on focus).
+ * unlinked `database` block (its placeholder trigger opens the create/link
+ * picker on focus).
  */
 export type ColumnsSeedChildType = "text" | "database";
 

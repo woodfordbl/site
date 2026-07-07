@@ -4,9 +4,9 @@ import { formatRelativeTime } from "@/lib/pages/format-relative-time.ts";
 
 function TimestampRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right text-foreground tabular-nums">{value}</span>
+    <div className="flex items-baseline justify-between gap-3 text-muted-foreground text-sm">
+      <span>{label}</span>
+      <span className="text-right tabular-nums">{value}</span>
     </div>
   );
 }

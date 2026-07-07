@@ -133,8 +133,8 @@ export interface SlashMenuItem {
   /**
    * What `columns.create` seeds each new column with. Default (`undefined`)
    * is one empty `text` row; `"database"` seeds one unlinked `database`
-   * block per column — the Dashboard scaffold (side-by-side database views;
-   * see docs/architecture/databases.md § Dashboards).
+   * block per column (side-by-side database views; see
+   * docs/architecture/databases.md § Dashboards).
    */
   columnSeed?: "database";
   headingLevel?: 1 | 2 | 3 | 4;

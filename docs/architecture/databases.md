@@ -1,9 +1,7 @@
 # Databases
 
-Notion-style databases: workspace-level entities with typed fields, saved views, and
-sharded row storage, rendered on the canvas through the `database` block. Design
-rationale and the full multi-phase plan live in the
-[proposal](../proposals/notion-style-databases.md); this page documents what is built.
+Databases: workspace-level entities with typed fields, saved views, and sharded row
+storage, rendered on the canvas through the `database` block.
 
 ## Model
 
@@ -63,7 +61,7 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
 
 - [`database-table-view.tsx`](../../src/components/database/database-table-view.tsx) —
   entry: resolves database + the **active view** (`views.find(v => v.id === block.viewId)
-  ?? views[0]` — the pick is per BLOCK, like Notion linked views: edit mode persists a
+  ?? views[0]` — the pick is per BLOCK (linked-view placement): edit mode persists a
   switch onto `props.viewId` through the block `onChange` flow; view mode can't write
   block props, so switching falls back to ephemeral local state), applies `applyFilter` →
   `sortRowsForView` → `resolveColumnOrder`, mounts title row and filter bar (edit mode,
@@ -72,17 +70,10 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   [`views/`](../../src/components/database/views/) with the shared contract
   `{ database, view, fields, rows, mode }` (rows arrive filtered + sorted +
   formula-merged). Filter/sort/group UI always writes to the active view's id.
-  On narrow viewports the chip bar collapses into funnel/sort icon buttons inline with
-  the title ([`database-mobile-toolbar.tsx`](../../src/components/database/database-mobile-toolbar.tsx)),
-  each opening a popover (drawer on touch) that reuses the extracted chip strips. Empty
-  states use the shared centered-icon [`Empty`](../../src/components/ui/empty.tsx)
-  component (funnel / sort-arrows icon + title + description), and both add triggers
-  render **full width** inside the drawer's own padding (`AddFilterChip` /
-  `AddSortButton` with `fullWidth`, dashed `w-full` buttons). `AddSortButton` is a
-  standalone type-ahead picker that appends an ascending sort (already-sorted fields
-  drop out) — sorts no longer require the column header menu to add. Both add triggers
-  share a `FieldPickerPopover` (search + field list; drops its max-height in drawer
-  presentation so the single outer scroller owns scrolling).
+  Title-row filter/sort icons ([`database-mobile-toolbar.tsx`](../../src/components/database/database-mobile-toolbar.tsx)):
+  each icon toggles the shared collapsible chip bar when its category already
+  exists (filters, sorts, or grouping) and opens a field dropdown to add when
+  that category is still empty — adding expands the inline bar automatically.
 - [`database-view-switcher.tsx`](../../src/components/database/database-view-switcher.tsx) —
   saved-view tabs in the title row: `TabsList` **`indicator`** variant, one compact tab
   per view (type icon + name, truncated), horizontally scrollable on overflow. Edit mode
@@ -93,7 +84,9 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   hides the tabs entirely for single-view databases.
 - [`database-table-grid.tsx`](../../src/components/database/database-table-grid.tsx) —
   TanStack Table in **fully manual mode** (core row model only; data computation stays in
-  the lib layer) + TanStack Virtual rows (36px, overscan 12, `max-h-[600px]` scrollport);
+  the lib layer) + TanStack Virtual rows (36px, overscan 12, `max-h-[600px]` scrollport via
+  Base UI [`ScrollArea`](../../src/components/ui/scroll-area.tsx) with `fadeEdges` and
+  overlay scrollbars so the gutter does not shift when bars appear);
   sticky header with field icons ([`resolveFieldIcon`](../../src/components/database/database-field-icons.ts):
   custom emoji/`tabler:` glyph → type-icon fallback) and column-menu triggers; pinned
   columns as cumulative-offset `position: sticky` with a scroll-gated edge shadow — one
@@ -133,12 +126,13 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   (`nextEditTarget` in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts)).
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —
-  Notion-style property menu: rename, Edit property (per-type config incl. select-option
+  Column property menu: rename, Edit property (per-type config incl. select-option
   rename/add/delete and color via the shared block-color palette,
   [`database-option-color-menu.tsx`](../../src/components/database/database-option-color-menu.tsx)),
   Change type, Change/Remove icon (shared `GlyphIconPicker`, intent-preloaded), Sort
   (multi-key append/toggle/flip with 1-based priority numbers), Calculate picker, Freeze
-  up to column, Hide, Wrap, Insert left/right, Duplicate/Delete (primary-field guarded).
+  up to column, Hide, Wrap, Show page icon (primary column only — same `showPageIcons`
+  view config as the ⋯ menu), Insert left/right, Duplicate/Delete (primary-field guarded).
   `DropdownMenuLabel` must sit inside `DropdownMenuGroup` (Base UI context — naked labels
   crash at render).
 - [`database-filter-bar.tsx`](../../src/components/database/database-filter-bar.tsx) —
@@ -211,7 +205,8 @@ Synced databases pull rows from an external service via the client-side engine i
 election, per-database scheduling clamped to connector minimums, push-based
 `subscribeSyncStatus`, and **watch mode** — see below) over the connector SDK in
 [`src/lib/connectors/`](../../src/lib/connectors/) (registry `listConnectors`/
-`getConnector`; GitHub repos, CoinGecko markets, Frankfurter FX). Snapshot diffing lives
+`getConnector`; GitHub repos/pull requests/issues, CoinGecko markets, Frankfurter FX).
+Snapshot diffing lives
 in [`database-sync-ops.ts`](../../src/db/queries/database-sync-ops.ts): keyed by
 `externalId`, touching only `sourceKey` field values so local columns survive refreshes.
 
@@ -219,7 +214,8 @@ UI surfaces:
 
 - **Creation** — the unlinked database block's placeholder opens a popover panel
   ([`database-create-panel.tsx`](../../src/components/database/database-create-panel.tsx)):
-  **New table** (default local seed) and **Sync from source** tabs. The sync tab lists
+  **New** (default local seed), **Linked** (existing workspace database — picker stub),
+  and **Synced** tabs. The synced tab lists
   connector cards (icon/title/description from the registry); picking one renders a form
   generated from `configFields` ("list" inputs parse comma/newline-separated values;
   empty text inputs are omitted so schema defaults apply), validated by the connector's
@@ -255,12 +251,15 @@ UI surfaces:
   `isInlineEditableField` (the single edit-mode gate in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts));
   synced checkbox cells render disabled; view-mode rendering is unchanged. The column
-  menu shows a cloud "Synced" badge and hides Change type / Edit property and disables
-  Delete property (rename/icon/sort/calculate/freeze/hide/wrap stay; Duplicate yields a
-  **local** copy — `duplicateDatabaseField` strips `sourceKey`). Add-field stays enabled
-  on synced tables (local columns are first-class); the "New row" strip is hidden, and
-  `deleteDatabaseRows` skips rows with `externalId` (they would respawn on the next
-  sync).
+  menu shows a cloud "Synced" badge, hides **Change type**, and disables **Delete
+  property** (rename/icon/sort/calculate/freeze/hide/wrap stay; Duplicate yields a
+  **local** copy — `duplicateDatabaseField` strips `sourceKey`). **Edit property** stays
+  available on synced **date** and **number** columns for display-only config (`format`,
+  `decimals`, `useGrouping` — presentation is local; stored cell values stay
+  provider-owned and are never overwritten by sync). Formula expression and select
+  option editors stay hidden on synced columns. Add-field stays enabled on synced tables
+  (local columns are first-class); the "New row" strip is hidden, and `deleteDatabaseRows`
+  skips rows with `externalId` (they would respawn on the next sync).
 
 ## Formula fields
 
@@ -316,7 +315,7 @@ before rebuilding `views`; regression-tested with proxied drafts in
 `database` is a **leaf** block (`inline-custom` strategy, media/embed capabilities). The
 edit wrapper only forwards structural keys when the event target is the wrapper itself —
 keystrokes inside grid cells must never delete the block. An unlinked block shows the
-shared placeholder trigger opening the creation popover (New table / Sync from source —
+shared placeholder trigger opening the creation popover (New / Linked / Synced —
 see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirroring the
 media/embed pickers. Deleting a database block does **not**
 delete the database entity (blocks are references; entity lifecycle UI is future work).
@@ -328,12 +327,9 @@ component persists switcher changes through `onChange`, the view component passe
 
 Dashboards are a **composition pattern**, not a block type: place `database` blocks —
 each with its own `viewId` (chart here, board there) and/or different databases —
-inside a `columns` layout. The slash menu's **Dashboard** entry scaffolds this: a
-2-column `columns` block with one unlinked `database` placeholder per column
-(`columns.create` with `seedChildType: "database"`, see
-[canvas-commands](../reference/canvas-commands.md)); the first placeholder is focused,
-auto-opening its create/link picker. From there, link a database per column and pick
-each block's view with the title-row switcher.
+inside a `columns` layout. Add columns via the slash menu, then insert a `database`
+block in each column; link a database per block and pick each block's view with the
+title-row switcher.
 
 ## Review-hardening invariants
 
@@ -364,7 +360,7 @@ instantiated per render from the shared `database.rowTemplate` via
 rendered read-only with `CanvasBlocksReadOnly`. Absent template = one **empty** text
 block, so a row with no custom template opens as a normal blank page — there is
 deliberately no "Edit page" button or placeholder copy. The grid's primary cells show a
-Notion-style page icon (the default document glyph, toggled per view by the ⋯ menu's
+Page icon (the default document glyph, toggled per view by the ⋯ menu's
 **Page icons** switch) plus a hover-revealed "Open" pill (both modes) navigating there;
 the ⋯ settings menu shows the template status (authoring UI is deferred).
 
@@ -404,7 +400,7 @@ the host page, then the current row title. Collapses to database / row on narrow
 viewports; falls back to a non-navigating database crumb only when no host page is
 resolvable.
 
-## Deferred (see proposal phases)
+## Deferred
 
 Row drag-reorder UI (table grid — board card drag shipped),
 row-page template authoring UI and live tokens

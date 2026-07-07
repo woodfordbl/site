@@ -19,7 +19,6 @@ import { DatabaseListView } from "@/components/database/views/database-list-view
 import { Button } from "@/components/ui/button.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { buildChartData } from "@/lib/databases/chart-data.ts";
 import {
   computeFormulaOverlay,
@@ -40,6 +39,7 @@ import {
 import type {
   DatabaseField,
   DatabaseFilterGroup,
+  DatabaseView,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
@@ -171,6 +171,103 @@ function useDisplayClock(
   return now;
 }
 
+/** Inline filter/sort chip bar visibility (title icons toggle the whole bar). */
+function resolveInlineFilterBarState(
+  view: DatabaseView,
+  mode: "view" | "edit",
+  filterBarVisible: boolean
+): {
+  hasFilters: boolean;
+  hasSortsOrGrouping: boolean;
+  showInlineFilterBar: boolean;
+} {
+  const hasFilters = (view.filter?.conditions.length ?? 0) > 0;
+  const hasSorts = (view.sorts?.length ?? 0) > 0;
+  const hasGrouping = view.groupBy !== undefined;
+  const hasSortsOrGrouping = hasSorts || hasGrouping;
+  const hasBarContent = hasFilters || hasSortsOrGrouping;
+  return {
+    hasFilters,
+    hasSortsOrGrouping,
+    showInlineFilterBar: mode === "edit" && filterBarVisible && hasBarContent,
+  };
+}
+
+interface DatabaseViewBodyProps {
+  clockNow: Date;
+  columns: DatabaseField[];
+  database: NonNullable<ReturnType<typeof useDatabase>>;
+  databaseId: string;
+  groups: DatabaseRowGroup[] | null;
+  isSyncedDatabase: boolean;
+  mode: "view" | "edit";
+  pinnedFields: DatabaseField[];
+  rows: LocalDatabaseRow[];
+  view: DatabaseView;
+}
+
+/** Per-type view body below the title row and optional filter chip bar. */
+function DatabaseViewBody({
+  clockNow,
+  columns,
+  database,
+  databaseId,
+  groups,
+  isSyncedDatabase,
+  mode,
+  pinnedFields,
+  rows,
+  view,
+}: DatabaseViewBodyProps): ReactNode {
+  if (view.type === "list") {
+    return (
+      <DatabaseListView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  }
+  if (view.type === "board") {
+    return (
+      <DatabaseBoardView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  }
+  if (view.type === "chart") {
+    return (
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  }
+  return (
+    <DatabaseTableGrid
+      columns={columns}
+      databaseId={databaseId}
+      groups={groups}
+      isSyncedDatabase={isSyncedDatabase}
+      mode={mode}
+      now={clockNow}
+      pinnedFields={pinnedFields}
+      primaryFieldId={database.primaryFieldId}
+      rows={rows}
+      view={view}
+    />
+  );
+}
+
 /**
  * Entry for one workspace database surface: resolves the definition and rows
  * via live queries, resolves the ACTIVE view (`block.viewId`, falling back to
@@ -190,12 +287,11 @@ export function DatabaseTableView({
 }: DatabaseTableViewProps): ReactNode {
   const database = useDatabase(databaseId);
   const allRows = useDatabaseRows(databaseId);
-  const isNarrowViewport = useIsNarrowViewport();
-
   // Ephemeral fallback for surfaces that can't persist the pick (view mode
   // has no block-prop write path); when `onViewIdChange` exists the block
   // prop is the single source of truth and local state stays unused.
   const [ephemeralViewId, setEphemeralViewId] = useState<string | undefined>();
+  const [filterBarVisible, setFilterBarVisible] = useState(true);
   const requestedViewId = onViewIdChange ? viewId : (ephemeralViewId ?? viewId);
   const view =
     database?.views.find((candidate) => candidate.id === requestedViewId) ??
@@ -203,6 +299,7 @@ export function DatabaseTableView({
 
   const handleViewIdChange = useCallback(
     (nextViewId: string) => {
+      setFilterBarVisible(true);
       if (onViewIdChange) {
         onViewIdChange(nextViewId);
       } else {
@@ -309,56 +406,8 @@ export function DatabaseTableView({
   // disappears; edit mode keeps the collapsed row as the toolbar's home.
   const showTitleRow = mode === "edit" || !hideTitle;
 
-  // Per-type view body. `table` keeps the existing grid; the other types
-  // mount the dedicated renderers with the shared contract (the same
-  // filtered + sorted + formula-merged rows the grid consumes).
-  let viewBody: ReactNode;
-  if (view.type === "list") {
-    viewBody = (
-      <DatabaseListView
-        database={database}
-        fields={database.fields}
-        mode={mode}
-        rows={rows}
-        view={view}
-      />
-    );
-  } else if (view.type === "board") {
-    viewBody = (
-      <DatabaseBoardView
-        database={database}
-        fields={database.fields}
-        mode={mode}
-        rows={rows}
-        view={view}
-      />
-    );
-  } else if (view.type === "chart") {
-    viewBody = (
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode={mode}
-        rows={rows}
-        view={view}
-      />
-    );
-  } else {
-    viewBody = (
-      <DatabaseTableGrid
-        columns={columns}
-        databaseId={databaseId}
-        groups={groups}
-        isSyncedDatabase={isSyncedDatabase}
-        mode={mode}
-        now={clockNow}
-        pinnedFields={pinnedFields}
-        primaryFieldId={database.primaryFieldId}
-        rows={rows}
-        view={view}
-      />
-    );
-  }
+  const { hasFilters, hasSortsOrGrouping, showInlineFilterBar } =
+    resolveInlineFilterBarState(view, mode, filterBarVisible);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
@@ -367,10 +416,12 @@ export function DatabaseTableView({
           activeView={view}
           chartData={chartData}
           controls={
-            mode === "edit" && isNarrowViewport ? (
+            mode === "edit" ? (
               <DatabaseMobileToolbar
                 databaseId={databaseId}
                 fields={database.fields}
+                filterBarVisible={filterBarVisible}
+                onFilterBarVisibleChange={setFilterBarVisible}
                 view={view}
               />
             ) : null
@@ -393,14 +444,28 @@ export function DatabaseTableView({
           }
         />
       ) : null}
-      {mode === "edit" && !isNarrowViewport ? (
+      {showInlineFilterBar ? (
         <DatabaseFilterBar
           databaseId={databaseId}
           fields={database.fields}
+          showFilterAddTrigger={hasFilters}
+          showFilterChips={hasFilters}
+          showSortAddTrigger={hasSortsOrGrouping}
           view={view}
         />
       ) : null}
-      {viewBody}
+      <DatabaseViewBody
+        clockNow={clockNow}
+        columns={columns}
+        database={database}
+        databaseId={databaseId}
+        groups={groups}
+        isSyncedDatabase={isSyncedDatabase}
+        mode={mode}
+        pinnedFields={pinnedFields}
+        rows={rows}
+        view={view}
+      />
     </div>
   );
 }

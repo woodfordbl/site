@@ -285,6 +285,37 @@ describe("selection commands", () => {
     }
     expect(inserted.block.id).not.toBe(sourceBlock.id);
     expect(inserted.block.props).toEqual(sourceBlock.props);
+    expect(inserted.focus).toBe(true);
+    expect(inserted.focusPlacement).toBe("start");
+  });
+
+  it("rows.paste can focus the duplicate at end", () => {
+    const serverBlocks: Block[] = [
+      { id: "p1", type: "text", props: { text: "One" } },
+    ];
+    const rows = buildBlockTree(serverBlocks);
+    const target = rows[0];
+    expect(target).toBeDefined();
+    if (!target) {
+      return;
+    }
+
+    const result = canvasReducer(
+      { rows },
+      {
+        type: "rows.paste",
+        targetRowId: target.rowId,
+        blocks: [{ id: "copy1", type: "text", props: { text: "Copied" } }],
+        focusPlacement: "end",
+      }
+    );
+
+    const inserted = result.effects.find((effect) => effect.type === "insert");
+    expect(inserted).toMatchObject({
+      type: "insert",
+      focus: true,
+      focusPlacement: "end",
+    });
   });
 });
 

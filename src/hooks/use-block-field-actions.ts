@@ -1,5 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
+import {
+  useCanvasEditorContext,
+  useCanvasSelection,
+} from "@/components/canvas/canvas-editor-context.tsx";
 import { useRowSlash } from "@/components/canvas/canvas-slash-context.tsx";
 import type { LeafBlockType } from "@/lib/blocks/block-defs.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
@@ -16,6 +19,7 @@ import type {
   BlockEditComponent,
   LeafBlockSpec,
 } from "@/lib/canvas/block-spec.types.ts";
+import { resolveDuplicateRowId } from "@/lib/canvas/duplicate-row-target.ts";
 import { findFocusableAdjacentRowId } from "@/lib/canvas/focusable-rows.ts";
 import {
   markdownShortcutResultType,
@@ -58,6 +62,8 @@ export function useBlockFieldActions({
   row,
 }: UseBlockFieldActionsOptions): UseBlockFieldActionsResult {
   const canvas = useCanvasEditorContext();
+  const { selectedRowIds } = useCanvasSelection();
+  const hasBlockSelection = selectedRowIds.length > 0;
   const capabilities = leafSpec.behavior.capabilities;
   const editStrategy = leafSpec.behavior.editStrategy;
   const rowId = row.rowId;
@@ -217,6 +223,36 @@ export function useBlockFieldActions({
   const onMoveRowUp = useCallback(() => onMoveRow("up"), [onMoveRow]);
   const onMoveRowDown = useCallback(() => onMoveRow("down"), [onMoveRow]);
 
+  const onMoveSelectedRow = useCallback(
+    (direction: "up" | "down") => {
+      canvas.moveSelectedRowAdjacent(direction);
+    },
+    [canvas]
+  );
+
+  const onMoveSelectedRowUp = useCallback(
+    () => onMoveSelectedRow("up"),
+    [onMoveSelectedRow]
+  );
+  const onMoveSelectedRowDown = useCallback(
+    () => onMoveSelectedRow("down"),
+    [onMoveSelectedRow]
+  );
+
+  const onDeleteSelection = useCallback(() => {
+    canvas.deleteSelection();
+  }, [canvas]);
+
+  const onDuplicate = useCallback(() => {
+    const targetRowId = resolveDuplicateRowId(canvas.getRows(), {
+      rowId,
+      selectedRowIds: hasBlockSelection ? selectedRowIds : [],
+    });
+    if (targetRowId) {
+      canvas.duplicateRow(targetRowId);
+    }
+  }, [canvas, hasBlockSelection, rowId, selectedRowIds]);
+
   const extendSelection = useCallback(
     (direction: "up" | "down") => {
       const adjacentRowId = findFocusableAdjacentRowId(
@@ -252,8 +288,11 @@ export function useBlockFieldActions({
       autoFocus,
       autoFocusOffset,
       autoFocusPlacement,
+      hasBlockSelection,
       indent,
       onAutoFocusHandled,
+      onDeleteSelection: hasBlockSelection ? onDeleteSelection : undefined,
+      onDuplicate,
       onEnter: handleEnter,
       onIndentChange: capabilities.blockIndent ? setIndent : undefined,
       onMarkdownShortcut: handleMarkdownShortcut,
@@ -261,6 +300,10 @@ export function useBlockFieldActions({
       onExtendSelectionUp,
       onMoveRowDown,
       onMoveRowUp,
+      onMoveSelectedRowDown: hasBlockSelection
+        ? onMoveSelectedRowDown
+        : undefined,
+      onMoveSelectedRowUp: hasBlockSelection ? onMoveSelectedRowUp : undefined,
       onNavigateDown: capabilities.focusAdjacent
         ? onNavigateDownAction
         : undefined,
@@ -282,6 +325,7 @@ export function useBlockFieldActions({
       autoFocusOffset,
       autoFocusPlacement,
       canvas.clearSelection,
+      hasBlockSelection,
       capabilities.blockIndent,
       capabilities.focusAdjacent,
       handleEnter,
@@ -289,10 +333,14 @@ export function useBlockFieldActions({
       handleStructuralKey,
       indent,
       onAutoFocusHandled,
+      onDeleteSelection,
+      onDuplicate,
       onExtendSelectionDown,
       onExtendSelectionUp,
       onMoveRowDown,
       onMoveRowUp,
+      onMoveSelectedRowDown,
+      onMoveSelectedRowUp,
       onNavigateDownAction,
       onNavigateUpAction,
       setIndent,

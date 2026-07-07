@@ -58,6 +58,8 @@ describe("keyboard command registry", () => {
       "slash-dismiss": "Escape",
       "move-row-up": "Alt+ArrowUp",
       "move-row-down": "Alt+ArrowDown",
+      "move-selected-row-up": "Mod+ArrowUp",
+      "move-selected-row-down": "Mod+ArrowDown",
       "extend-selection-up": "Shift+ArrowUp",
       "extend-selection-down": "Shift+ArrowDown",
       "clear-selection": "Escape",

@@ -63,6 +63,7 @@ import {
 import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
 import { useDatabaseColumnResize } from "@/components/database/use-database-column-resize.ts";
 import { Button } from "@/components/ui/button.tsx";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area.tsx";
 import {
   addDatabaseField,
   insertDatabaseRow,
@@ -101,9 +102,9 @@ const GRID_MAX_HEIGHT_CLASS = "max-h-[600px]";
 
 /**
  * The trailing edit-mode add-field control renders as a real (empty) column
- * at a normal column width, its header carrying the "+" add-property button.
+ * just wide enough for the "+" header button (icon + minimal padding).
  */
-const ADD_FIELD_CELL_WIDTH_PX = DEFAULT_COLUMN_WIDTH_PX;
+const ADD_FIELD_CELL_WIDTH_PX = 28;
 
 /** Scroll distance over which the pinned-edge fade ramps from 0 to 1. */
 const PINNED_FADE_RAMP_PX = 24;
@@ -577,9 +578,10 @@ export function DatabaseTableGrid({
             scrollport (header through calculate row), not the add-row strip
             below it. */}
         <div className="relative">
-          <div
-            className={cn("relative overflow-auto", GRID_MAX_HEIGHT_CLASS)}
-            ref={scrollRef}
+          <ScrollArea
+            className={cn("w-full", GRID_MAX_HEIGHT_CLASS)}
+            fadeEdges
+            viewportRef={scrollRef}
           >
             {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
             <div
@@ -634,7 +636,7 @@ export function DatabaseTableGrid({
                   >
                     <button
                       aria-label="Add property"
-                      className="flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+                      className="flex size-full items-center justify-center outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
                       onClick={handleAddField}
                       type="button"
                     >
@@ -708,7 +710,8 @@ export function DatabaseTableGrid({
                 <DatabaseColumnDropIndicator gridRef={gridRef} />
               ) : null}
             </div>
-          </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
           {pinnedEdgeLeft === null ? null : (
             <div
               aria-hidden
@@ -802,7 +805,7 @@ function GridHeaderCell({
         // sticky pinned header (z-10) while scrolling underneath it.
         // Header cells carry no inter-column separators (only body cells do);
         // the freeze-boundary border on the last pinned column still applies.
-        "relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
+        "relative isolate flex h-9 shrink-0 items-stretch overflow-visible bg-background text-muted-foreground",
         column.pinned && "sticky z-10",
         column.isLastPinned && "border-r border-r-border",
         isDragging && "opacity-50"

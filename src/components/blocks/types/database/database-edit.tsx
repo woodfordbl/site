@@ -19,7 +19,7 @@ type DatabaseEditProps = BlockEditProps<"database">;
 /**
  * Editable `database` block: an unlinked block shows the shared placeholder
  * trigger opening the creation popover (media/embed source-picker
- * conventions) with a local "New table" path and a connector "Sync" path; a
+ * conventions) with New, Linked, and Synced tabs; a
  * linked block renders the database's table view in edit mode. All grid
  * complexity lives in `components/database/`.
  */
@@ -104,7 +104,7 @@ export function DatabaseEdit({
             />
           }
         >
-          New table — empty or synced from a source
+          New, linked, or synced table
         </PopoverTrigger>
         <PopoverContent
           className="w-96"

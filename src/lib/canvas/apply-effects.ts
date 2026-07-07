@@ -23,7 +23,12 @@ export function applyCanvasEffects(
       case "insert": {
         const newRowId = api.insertRow(effect.position, effect.block);
         if (effect.focus) {
-          setFocus({ rowId: newRowId, placement: "start", offset: 0 });
+          const placement = effect.focusPlacement ?? "start";
+          setFocus({
+            rowId: newRowId,
+            placement,
+            ...(placement === "start" ? { offset: 0 } : {}),
+          });
         }
         break;
       }

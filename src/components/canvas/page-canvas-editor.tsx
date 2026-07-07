@@ -57,6 +57,7 @@ import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { publishCanvasDevtoolsState } from "@/lib/canvas/canvas-devtools-store.ts";
 import { isNonCanvasEditableFocused } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
+import { resolveDuplicateRowTargetFromFocus } from "@/lib/canvas/duplicate-row-target.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
   collectCanvasRowRects,
@@ -241,10 +242,22 @@ function PageCanvasEditorBody({
 
   const hasSelection = editor.selectedRowIds.length > 0;
 
-  // Registry-driven keyboard shortcuts. Each command's combo lives in the
-  // registry; ignoreInputs (set per-command) keeps these from firing while a
-  // block field is focused, replicating the old isBlockFieldFocused guard. The
-  // hasSelection guards below match the previous handler's behavior.
+  const duplicateFocusedOrSelectedBlock = useCallback(
+    (event: KeyboardEvent) => {
+      const targetRowId = resolveDuplicateRowTargetFromFocus(
+        editor.getRows(),
+        editor.selectedRowIds
+      );
+      if (!targetRowId) {
+        return;
+      }
+      event.preventDefault();
+      editor.duplicateRow(targetRowId);
+    },
+    [editor]
+  );
+
+  // Registry-driven keyboard shortcuts.
   useCommandHotkeys({
     // Session-long undo/redo of block edits. Skipped (leaving the browser
     // default intact) when focus is in a non-canvas field — page title,
@@ -269,6 +282,7 @@ function PageCanvasEditorBody({
         editor.copySelection().catch(() => undefined);
       }
     },
+    "duplicate-block": duplicateFocusedOrSelectedBlock,
     "delete-block": () => {
       if (hasSelection) {
         deleteSelection();
@@ -281,6 +295,16 @@ function PageCanvasEditorBody({
       }
     },
     "move-row-down": () => {
+      if (hasSelection) {
+        editor.moveSelectedRowAdjacent("down");
+      }
+    },
+    "move-selected-row-up": () => {
+      if (hasSelection) {
+        editor.moveSelectedRowAdjacent("up");
+      }
+    },
+    "move-selected-row-down": () => {
       if (hasSelection) {
         editor.moveSelectedRowAdjacent("down");
       }
@@ -416,6 +440,7 @@ function PageCanvasEditorBody({
       insertBefore: editor.insertBefore,
       moveAfter: editor.moveAfter,
       moveBefore: editor.moveBefore,
+      moveSelectedRowAdjacent: editor.moveSelectedRowAdjacent,
       pasteAfter: editor.pasteAfter,
       pasteBefore: editor.pasteBefore,
       pasteClipboard: editor.pasteClipboard,
@@ -441,6 +466,7 @@ function PageCanvasEditorBody({
       editor.insertBefore,
       editor.moveAfter,
       editor.moveBefore,
+      editor.moveSelectedRowAdjacent,
       editor.pasteAfter,
       editor.pasteBefore,
       editor.pasteClipboard,

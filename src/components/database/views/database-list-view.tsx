@@ -4,6 +4,7 @@ import { type ReactNode, useMemo, useRef } from "react";
 
 import { DatabaseAddRow } from "@/components/database/database-add-row.tsx";
 import { DatabaseCellValueView } from "@/components/database/database-cell.tsx";
+import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
   coerceCellValue,
   formatCellValue,
@@ -155,9 +156,10 @@ function VirtualizedListRows({
   });
 
   return (
-    <div
-      className={cn("overflow-y-auto", LIST_MAX_HEIGHT_CLASS)}
-      ref={scrollRef}
+    <ScrollArea
+      className={cn("w-full", LIST_MAX_HEIGHT_CLASS)}
+      fadeEdges
+      viewportRef={scrollRef}
     >
       <div
         className="relative w-full"
@@ -184,7 +186,7 @@ function VirtualizedListRows({
           );
         })}
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 

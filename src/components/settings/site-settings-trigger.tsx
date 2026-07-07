@@ -18,6 +18,7 @@ export function SiteSettingsTrigger({ pageId }: SiteSettingsTriggerProps) {
   return (
     <Button
       className="pointer-events-auto"
+      nativeButton={false}
       render={
         <Link
           params={{ section: DEFAULT_SETTINGS_SECTION }}

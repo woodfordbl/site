@@ -9,6 +9,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
+import {
+  readRootFontSizePx,
+  sidebarCollapseOvershootThresholdPx,
+} from "@/lib/pages/page-sidebar-layout-cookie.ts";
 import { cn } from "@/lib/utils.ts";
 
 /** Wait before showing rail hints so quick passes do not flash tooltips. */
@@ -32,10 +36,12 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
   } = usePageSidebarChrome();
   const pointerOriginRef = useRef<{ x: number; y: number } | null>(null);
   const didDragRef = useRef(false);
+  const maxOvershootPxRef = useRef(0);
 
   const resetPointerState = useCallback(() => {
     pointerOriginRef.current = null;
     didDragRef.current = false;
+    maxOvershootPxRef.current = 0;
   }, []);
 
   const handlePointerDown = useCallback(
@@ -72,7 +78,11 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
       }
 
       didDragRef.current = true;
-      resizeSidebarToPointerX(event.clientX);
+      const { overshootPx } = resizeSidebarToPointerX(event.clientX);
+      maxOvershootPxRef.current = Math.max(
+        maxOvershootPxRef.current,
+        overshootPx
+      );
     },
     [isCollapsed, resizeSidebarToPointerX]
   );
@@ -88,7 +98,14 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
       }
 
       if (didDragRef.current) {
-        commitSidebarWidth();
+        const collapseThresholdPx = sidebarCollapseOvershootThresholdPx(
+          readRootFontSizePx()
+        );
+        if (maxOvershootPxRef.current >= collapseThresholdPx) {
+          collapseSidebar();
+        } else {
+          commitSidebarWidth();
+        }
         resetPointerState();
         return;
       }
@@ -125,12 +142,19 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
       }
 
       if (didDragRef.current) {
-        commitSidebarWidth();
+        const collapseThresholdPx = sidebarCollapseOvershootThresholdPx(
+          readRootFontSizePx()
+        );
+        if (maxOvershootPxRef.current >= collapseThresholdPx) {
+          collapseSidebar();
+        } else {
+          commitSidebarWidth();
+        }
       }
 
       resetPointerState();
     },
-    [commitSidebarWidth, resetPointerState]
+    [collapseSidebar, commitSidebarWidth, resetPointerState]
   );
 
   return (
