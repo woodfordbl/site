@@ -1,5 +1,6 @@
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
 import {
+  applyStreamTick,
   applySyncSnapshot,
   reconcileSyncedFields,
 } from "@/db/queries/database-sync-ops.ts";
@@ -19,6 +20,7 @@ import {
 } from "@/db/sync/sync-schedule.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
+import type { ConnectorRow } from "@/lib/connectors/types.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
@@ -207,6 +209,8 @@ export function watchDatabaseSync(databaseId: string): () => void {
   watcherCounts.set(databaseId, next);
   if (next === 1) {
     applyWatchedCadence(databaseId);
+    // A newly-watched streaming database opens its socket here.
+    reconcileStreams();
   }
 
   let released = false;
@@ -219,6 +223,8 @@ export function watchDatabaseSync(databaseId: string): () => void {
     if (count <= 1) {
       watcherCounts.delete(databaseId);
       restoreConfiguredCadence(databaseId);
+      // Last watcher gone — close the socket.
+      reconcileStreams();
     } else {
       watcherCounts.set(databaseId, count - 1);
     }
@@ -261,6 +267,214 @@ function restoreConfiguredCadence(databaseId: string): void {
   const now = Date.now();
   const dueAt = (entry.lastAttemptAt ?? now) + entry.intervalMs;
   scheduleRun(databaseId, Math.max(0, dueAt - now));
+}
+
+// ---------------------------------------------------------------------------
+// Live streaming (S1). A connector with a `stream` capability gets a WebSocket
+// subscription — held ONLY by the visible leader tab, and only while a view is
+// watching the database. Ticks are coalesced to bound collection writes, then
+// applied via `applyStreamTick`; the localStorage-sharded row collection
+// propagates them to follower tabs through storage events (same path snapshots
+// use), so no separate cross-tab channel is needed. A dropped socket surfaces
+// via `onError` and reconnects with backoff. Polling continues underneath as
+// the seed + unwatched-refresh path; streaming just layers live updates on top.
+// ---------------------------------------------------------------------------
+
+/** Coalesce window: ticks within this window collapse to one collection write
+ * per row (last-value-wins), capping writes at ~4/sec even on a fast feed. */
+const STREAM_FLUSH_MS = 250;
+/** Base unit for stream reconnect backoff (grows via `computeRetryDelay`). */
+const STREAM_RECONNECT_BASE_MS = 1000;
+
+interface StreamHandle {
+  /** Latest value per `externalId` awaiting the next flush. */
+  pending: Map<string, ConnectorRow>;
+  flushTimer?: ReturnType<typeof setTimeout>;
+  /** Tears down the provider subscription (set once `subscribe` returns). */
+  unsubscribe: () => void;
+}
+
+const streams = new Map<string, StreamHandle>();
+const streamReconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const streamFailures = new Map<string, number>();
+
+/** A database should stream iff this tab is the visible leader and a view is
+ * watching it — the same predicate that gates watch-mode acceleration. */
+function shouldStream(databaseId: string): boolean {
+  return (
+    isLeader &&
+    isDocumentVisible() &&
+    (watcherCounts.get(databaseId) ?? 0) > 0
+  );
+}
+
+/** Buffer a tick batch; schedule a flush if none is pending. */
+function enqueueTick(databaseId: string, rows: ConnectorRow[]): void {
+  const handle = streams.get(databaseId);
+  if (!handle) {
+    return;
+  }
+  // A tick means the socket is healthy — clear any reconnect backoff.
+  streamFailures.delete(databaseId);
+  for (const row of rows) {
+    handle.pending.set(row.externalId, row);
+  }
+  if (handle.flushTimer === undefined) {
+    handle.flushTimer = setTimeout(() => flushStream(databaseId), STREAM_FLUSH_MS);
+  }
+}
+
+/** Apply the buffered ticks in one transaction and refresh liveness status. */
+function flushStream(databaseId: string): void {
+  const handle = streams.get(databaseId);
+  if (!handle) {
+    return;
+  }
+  handle.flushTimer = undefined;
+  if (handle.pending.size === 0) {
+    return;
+  }
+  const rows = [...handle.pending.values()];
+  handle.pending.clear();
+
+  const database = localDatabasesCollection.get(databaseId);
+  if (!(database && isConnectorDatabase(database))) {
+    return;
+  }
+  applyStreamTick(database, rows);
+  const previous = getSyncStatus(databaseId);
+  setStatus(databaseId, {
+    ...previous,
+    error: undefined,
+    lastSyncedAt: new Date().toISOString(),
+    syncing: false,
+  });
+}
+
+/** Open a stream for a database (idempotent). The handle is registered
+ * synchronously so a concurrent reconcile can't double-subscribe; the actual
+ * `subscribe` runs once the connector token (if any) resolves. */
+function ensureStream(databaseId: string): void {
+  if (streams.has(databaseId)) {
+    return;
+  }
+  const database = localDatabasesCollection.get(databaseId);
+  if (!(database && isConnectorDatabase(database))) {
+    return;
+  }
+  const connector = resolveConnector(database.source.connectorId);
+  const stream = connector?.stream;
+  if (!stream) {
+    return;
+  }
+
+  const handle: StreamHandle = {
+    pending: new Map(),
+    unsubscribe: () => undefined,
+  };
+  streams.set(databaseId, handle);
+
+  Promise.resolve(getConnectorToken(database.source.connectorId))
+    .catch(() => undefined)
+    .then((token) => {
+      // Watch/leadership/visibility may have changed while resolving the token.
+      if (streams.get(databaseId) !== handle) {
+        return;
+      }
+      try {
+        handle.unsubscribe = stream.subscribe(
+          {
+            config: database.source.config,
+            fetchFn: (input, init) => fetch(input, init),
+            token: token ?? undefined,
+          },
+          {
+            onError: (error) => handleStreamError(databaseId, error),
+            onRows: (rows) => enqueueTick(databaseId, rows),
+          }
+        );
+      } catch (error) {
+        handleStreamError(databaseId, error);
+      }
+    });
+}
+
+/** Tear down a stream's subscription and flush timer (does not touch reconnect
+ * scheduling — that's `reconcileStreams`' job). */
+function teardownStream(databaseId: string): void {
+  const handle = streams.get(databaseId);
+  if (!handle) {
+    return;
+  }
+  streams.delete(databaseId);
+  if (handle.flushTimer !== undefined) {
+    clearTimeout(handle.flushTimer);
+  }
+  try {
+    handle.unsubscribe();
+  } catch {
+    // A connector's unsubscribe should never throw; ignore if it does.
+  }
+}
+
+/** A dropped/failed socket: surface the error, then reconnect with backoff if
+ * we still should be streaming. */
+function handleStreamError(databaseId: string, error: unknown): void {
+  const { kind, message } = readConnectorError(error);
+  setStatus(databaseId, {
+    error: { at: new Date().toISOString(), kind, message },
+    lastSyncedAt: getSyncStatus(databaseId).lastSyncedAt,
+    syncing: false,
+  });
+  teardownStream(databaseId);
+  if (!shouldStream(databaseId)) {
+    return;
+  }
+  const failures = (streamFailures.get(databaseId) ?? 0) + 1;
+  streamFailures.set(databaseId, failures);
+  const delay = computeRetryDelay({
+    consecutiveFailures: failures,
+    intervalMs: STREAM_RECONNECT_BASE_MS,
+  });
+  const timer = setTimeout(() => {
+    streamReconnectTimers.delete(databaseId);
+    if (shouldStream(databaseId)) {
+      ensureStream(databaseId);
+    }
+  }, delay);
+  streamReconnectTimers.set(databaseId, timer);
+}
+
+/** Reconcile live streams against current leadership/visibility/watch state:
+ * open streams that should run, tear down those that shouldn't, and cancel
+ * reconnect timers that are no longer wanted. Called whenever any of those
+ * inputs change. Idempotent. */
+function reconcileStreams(): void {
+  const canStream = isLeader && isDocumentVisible();
+  for (const databaseId of [...streams.keys()]) {
+    if (!canStream || (watcherCounts.get(databaseId) ?? 0) === 0) {
+      teardownStream(databaseId);
+    }
+  }
+  for (const [databaseId, timer] of [...streamReconnectTimers]) {
+    if (!(canStream && (watcherCounts.get(databaseId) ?? 0) > 0)) {
+      clearTimeout(timer);
+      streamReconnectTimers.delete(databaseId);
+      streamFailures.delete(databaseId);
+    }
+  }
+  if (!canStream) {
+    return;
+  }
+  for (const [databaseId, count] of watcherCounts) {
+    if (
+      count > 0 &&
+      !streams.has(databaseId) &&
+      !streamReconnectTimers.has(databaseId)
+    ) {
+      ensureStream(databaseId);
+    }
+  }
 }
 
 /** Registry lookup hardened against unknown ids, whether the registry
@@ -538,6 +752,9 @@ function dropSchedule(databaseId: string): void {
 }
 
 function handleVisibilityChange(): void {
+  // Streams follow visibility both ways: torn down when hidden, reopened when
+  // shown (the overdue-poll logic below only applies while visible).
+  reconcileStreams();
   if (document.visibilityState !== "visible") {
     return;
   }
@@ -594,6 +811,9 @@ function becomeLeader(): void {
     { includeInitialState: true }
   );
   unsubscribeDatabases = () => subscription.unsubscribe();
+
+  // Newly the leader — open streams for any already-watched databases.
+  reconcileStreams();
 }
 
 /**
@@ -619,6 +839,8 @@ function resignLeadership(): void {
     }
   }
   entries.clear();
+  // No longer leader — close every stream (canStream is now false).
+  reconcileStreams();
 
   const release = releaseLeaderLock;
   releaseLeaderLock = undefined;

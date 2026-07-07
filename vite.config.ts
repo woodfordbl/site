@@ -27,6 +27,14 @@ const unsplashDownloadHandler = fileURLToPath(
   new URL("./routes/api/unsplash/download.post.ts", import.meta.url)
 );
 
+const finnhubQuoteHandler = fileURLToPath(
+  new URL("./routes/api/connectors/finnhub/quote.get.ts", import.meta.url)
+);
+
+const finnhubStreamHandler = fileURLToPath(
+  new URL("./routes/api/connectors/finnhub/stream.ts", import.meta.url)
+);
+
 /**
  * Nitro module that re-adds `continue: true` to header-only routes in the
  * generated Vercel Build Output config once the preset has written it. Without
@@ -99,6 +107,12 @@ const config = defineConfig({
     // bundled into the Vercel function output (filesystem scanning of root
     // `routes/` isn't wired in this TanStack Start dev integration).
     nitro({
+      // Enable Nitro's native WebSocket support (crossws) for the Finnhub
+      // stream proxy route below. Same-origin `wss://…/api/connectors/finnhub/
+      // stream` relays Finnhub's real-time feed with the server-side key.
+      // Skipped under Vitest: Nitro's dev-server WS hook dereferences the (null)
+      // http server in the test runner, and tests don't exercise the socket.
+      features: { websocket: !process.env.VITEST },
       handlers: [
         { route: "/api/og", method: "GET", handler: ogHandler },
         {
@@ -110,6 +124,17 @@ const config = defineConfig({
           route: "/api/unsplash/download",
           method: "POST",
           handler: unsplashDownloadHandler,
+        },
+        {
+          route: "/api/connectors/finnhub/quote",
+          method: "GET",
+          handler: finnhubQuoteHandler,
+        },
+        // WebSocket upgrade route (no HTTP method); the handler default-exports
+        // `defineWebSocketHandler`, which Nitro wires to the crossws upgrade.
+        {
+          route: "/api/connectors/finnhub/stream",
+          handler: finnhubStreamHandler,
         },
       ],
       // Workaround for a Nitro bug on the Vercel preset. Nitro's Vite plugin

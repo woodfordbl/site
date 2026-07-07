@@ -42,6 +42,11 @@ import {
   DEFAULT_CHART_Y_AGGREGATE,
   resolveChartPaletteId,
 } from "@/lib/databases/chart-data.ts";
+import {
+  DEFAULT_TIME_WINDOW_MS,
+  presetForWindow,
+  TIME_WINDOW_PRESETS,
+} from "@/lib/databases/time-series-chart-data.ts";
 import type {
   DatabaseField,
   DatabaseView,
@@ -323,6 +328,88 @@ function ChartColorRows({
   );
 }
 
+/**
+ * Time-axis chart controls (X-mode = Time): the captured number property, the
+ * visible window, and the Y scale (absolute vs % change). Extracted so the main
+ * options function stays under the complexity budget.
+ */
+function TimeAxisOptions({
+  chart,
+  fields,
+  write,
+}: {
+  chart: ChartViewConfig;
+  fields: readonly DatabaseField[];
+  write: WriteChartPatch;
+}): ReactNode {
+  const timeFieldCandidates = fields.filter((field) => field.type === "number");
+  const firstTimeFieldId = timeFieldCandidates[0]?.id;
+  const currentWindowMs = chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS;
+  const currentWindowId = presetForWindow(currentWindowMs).id;
+  const currentScale = chart.timeSeries?.scale ?? "absolute";
+  const fieldName = (fieldId: string | undefined): string =>
+    fields.find((field) => field.id === fieldId)?.name ?? "None";
+
+  return (
+    <>
+      <RadioSubmenu
+        currentLabel={fieldName(chart.timeSeries?.fieldId)}
+        label="Time property"
+        onValueChange={(value) => {
+          write({ timeSeries: { ...chart.timeSeries, fieldId: value } });
+        }}
+        options={timeFieldCandidates.map(fieldOption)}
+        value={chart.timeSeries?.fieldId ?? ""}
+      />
+      <RadioSubmenu
+        currentLabel={currentWindowId}
+        label="Window"
+        onValueChange={(value) => {
+          const preset = TIME_WINDOW_PRESETS.find(
+            (entry) => entry.id === value
+          );
+          const fieldId = chart.timeSeries?.fieldId ?? firstTimeFieldId;
+          if (preset && fieldId) {
+            write({
+              timeSeries: {
+                ...chart.timeSeries,
+                fieldId,
+                windowMs: preset.windowMs,
+              },
+            });
+          }
+        }}
+        options={TIME_WINDOW_PRESETS.map((preset) => ({
+          value: preset.id,
+          label: preset.label,
+        }))}
+        value={currentWindowId}
+      />
+      <RadioSubmenu
+        currentLabel={currentScale === "percent" ? "% change" : "Absolute"}
+        label="Scale"
+        onValueChange={(value) => {
+          const fieldId = chart.timeSeries?.fieldId ?? firstTimeFieldId;
+          if (fieldId) {
+            write({
+              timeSeries: {
+                ...chart.timeSeries,
+                fieldId,
+                scale: value === "percent" ? "percent" : "absolute",
+              },
+            });
+          }
+        }}
+        options={[
+          { value: "absolute", label: "Absolute" },
+          { value: "percent", label: "% change" },
+        ]}
+        value={currentScale}
+      />
+    </>
+  );
+}
+
 export interface ChartOptionsItemsProps {
   /** Current chart dataset — series/category color rows derive from it. */
   data: ChartData;
@@ -373,6 +460,14 @@ export function ChartOptionsItems({
   const fieldName = (fieldId: string | undefined): string =>
     fields.find((field) => field.id === fieldId)?.name ?? "None";
 
+  // Time-axis controls: plot a captured number field over a continuous time
+  // axis, one series per synced row.
+  const isTime = chart.xMode === "time";
+  const xModeOptions: RadioSubmenuOption[] = [
+    { value: "category", label: "Category" },
+    { value: "time", label: "Time" },
+  ];
+
   // Color override rows: pie recolors slices (keyed by category bucket key),
   // cartesian marks recolor series (keyed by series key).
   const colorTargets = isPie
@@ -393,46 +488,61 @@ export function ChartOptionsItems({
       </div>
       <DropdownMenuSeparator />
       <RadioSubmenu
-        currentLabel={fieldName(chart.xFieldId)}
-        label="X axis"
+        currentLabel={isTime ? "Time" : "Category"}
+        label="X axis mode"
         onValueChange={(value) => {
-          write({ xFieldId: value });
+          write({ xMode: value === "time" ? "time" : "category" });
         }}
-        options={xOptions}
-        value={chart.xFieldId ?? ""}
+        options={xModeOptions}
+        value={isTime ? "time" : "category"}
       />
-      <RadioSubmenu
-        currentLabel={CHART_Y_AGGREGATE_LABELS[aggregate]}
-        label="Y value"
-        onValueChange={(value) => {
-          write({ yAggregate: value as ChartViewConfig["yAggregate"] });
-        }}
-        options={aggregateOptions}
-        value={aggregate}
-      />
-      {aggregate === "count" ? null : (
-        <RadioSubmenu
-          currentLabel={fieldName(chart.yFieldId)}
-          label="Y property"
-          onValueChange={(value) => {
-            write({ yFieldId: value });
-          }}
-          options={yOptions}
-          value={chart.yFieldId ?? ""}
-        />
-      )}
-      {isPie ? null : (
-        <RadioSubmenu
-          currentLabel={fieldName(chart.seriesFieldId)}
-          label="Series"
-          onValueChange={(value) => {
-            write({
-              seriesFieldId: value === NONE_VALUE ? undefined : value,
-            });
-          }}
-          options={seriesOptions}
-          value={chart.seriesFieldId ?? NONE_VALUE}
-        />
+      {isTime ? (
+        <TimeAxisOptions chart={chart} fields={fields} write={write} />
+      ) : (
+        <>
+          <RadioSubmenu
+            currentLabel={fieldName(chart.xFieldId)}
+            label="X axis"
+            onValueChange={(value) => {
+              write({ xFieldId: value });
+            }}
+            options={xOptions}
+            value={chart.xFieldId ?? ""}
+          />
+          <RadioSubmenu
+            currentLabel={CHART_Y_AGGREGATE_LABELS[aggregate]}
+            label="Y value"
+            onValueChange={(value) => {
+              write({ yAggregate: value as ChartViewConfig["yAggregate"] });
+            }}
+            options={aggregateOptions}
+            value={aggregate}
+          />
+          {aggregate === "count" ? null : (
+            <RadioSubmenu
+              currentLabel={fieldName(chart.yFieldId)}
+              label="Y property"
+              onValueChange={(value) => {
+                write({ yFieldId: value });
+              }}
+              options={yOptions}
+              value={chart.yFieldId ?? ""}
+            />
+          )}
+          {isPie ? null : (
+            <RadioSubmenu
+              currentLabel={fieldName(chart.seriesFieldId)}
+              label="Series"
+              onValueChange={(value) => {
+                write({
+                  seriesFieldId: value === NONE_VALUE ? undefined : value,
+                });
+              }}
+              options={seriesOptions}
+              value={chart.seriesFieldId ?? NONE_VALUE}
+            />
+          )}
+        </>
       )}
       <DropdownMenuSeparator />
       <ChartToggleItems

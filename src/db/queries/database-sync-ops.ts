@@ -4,6 +4,10 @@ import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
+import {
+  appendFieldHistory,
+  type FieldHistoryAppend,
+} from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
 import { connectorFieldToDatabaseField } from "@/lib/connectors/build-synced-database.ts";
@@ -146,6 +150,10 @@ export function applySyncSnapshot(
   connectorRows: ConnectorRow[],
   priorMissingCounts: Record<string, number> = {}
 ): SyncSnapshotResult {
+  // Record captured values for polled `captureHistory` fields too (the store
+  // dedupes, so a static snapshot won't grow a flat series).
+  recordCapturedHistory(database, connectorRows);
+
   const fieldIdBySourceKey = new Map<string, string>();
   for (const field of database.fields) {
     if (field.sourceKey !== undefined) {
@@ -252,6 +260,153 @@ export function applySyncSnapshot(
     missingCounts,
     persisted,
   };
+}
+
+/**
+ * Record captured numeric values into the field-history store for every field
+ * flagged `captureHistory`. Called after a tick or snapshot applies; the value
+ * timestamp is the apply time (intraday resolution the provider's day-granular
+ * date column can't give). Fire-and-forget — history is best-effort and must
+ * never block or fail a row write.
+ */
+function recordCapturedHistory(
+  database: LocalDatabase,
+  connectorRows: ConnectorRow[]
+): void {
+  const capturedFields = database.fields.filter(
+    (field) =>
+      field.captureHistory === true &&
+      field.type === "number" &&
+      field.sourceKey !== undefined
+  );
+  if (capturedFields.length === 0) {
+    return;
+  }
+  const t = Date.now();
+  const entries: FieldHistoryAppend[] = [];
+  for (const row of connectorRows) {
+    for (const field of capturedFields) {
+      const value = row.values[field.sourceKey as string];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        entries.push({
+          databaseId: database.id,
+          externalId: row.externalId,
+          fieldId: field.id,
+          t,
+          v: value,
+        });
+      }
+    }
+  }
+  if (entries.length > 0) {
+    appendFieldHistory(entries).catch(() => undefined);
+  }
+}
+
+/**
+ * Apply one streaming tick batch to a synced database's rows — a lighter
+ * partial-upsert counterpart to {@link applySyncSnapshot} for live feeds.
+ *
+ * Unlike a snapshot, a tick is NOT authoritative over the whole table: it
+ * carries only the rows that just changed, so there is NO tombstone pass —
+ * omitted rows are untouched, never deleted. Existing rows update only their
+ * synced field keys (local columns preserved, like the snapshot path); an
+ * unseen `externalId` inserts a new synced row so a symbol that ticks before
+ * its seed still appears. Writes are skipped when nothing actually changed
+ * (a common case — a `@ticker` frame can repeat the last price).
+ *
+ * Fire-and-forget: persistence failures surface via toast (there is no ETag
+ * bookkeeping to gate on, so no awaitable handle is returned).
+ */
+export function applyStreamTick(
+  database: LocalDatabase,
+  connectorRows: ConnectorRow[]
+): void {
+  if (connectorRows.length === 0) {
+    return;
+  }
+
+  // Capture history from the raw streamed values (deduped in the store), even
+  // when the row write below is skipped as an unchanged repeat.
+  recordCapturedHistory(database, connectorRows);
+
+  const fieldIdBySourceKey = new Map<string, string>();
+  for (const field of database.fields) {
+    if (field.sourceKey !== undefined) {
+      fieldIdBySourceKey.set(field.sourceKey, field.id);
+    }
+  }
+
+  const databaseRows = localDatabaseRowsCollection.toArray.filter(
+    (row) => row.databaseId === database.id
+  );
+  const rowsByExternalId = new Map<string, LocalDatabaseRow>();
+  for (const row of databaseRows) {
+    if (row.externalId !== undefined) {
+      rowsByExternalId.set(row.externalId, row);
+    }
+  }
+
+  const timestamp = nowIso();
+  let appendOrder = Math.max(
+    -ORDER_STEP,
+    ...databaseRows.map((row, index) => row.order ?? index * ORDER_STEP)
+  );
+
+  const inserts: LocalDatabaseRow[] = [];
+  const updates: {
+    rowId: string;
+    values: Record<string, DatabaseCellValue>;
+  }[] = [];
+
+  // Last-write-wins if a batch repeats an externalId.
+  const batchByExternalId = new Map(
+    connectorRows.map((row) => [row.externalId, row])
+  );
+  for (const [externalId, connectorRow] of batchByExternalId) {
+    const syncedValues = toSyncedValues(
+      connectorRow.values,
+      fieldIdBySourceKey
+    );
+    const existing = rowsByExternalId.get(externalId);
+    if (!existing) {
+      appendOrder += ORDER_STEP;
+      inserts.push({
+        id: crypto.randomUUID(),
+        databaseId: database.id,
+        externalId,
+        values: syncedValues,
+        order: appendOrder,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      continue;
+    }
+    const changed = Object.entries(syncedValues).some(
+      ([fieldId, value]) => !cellValuesEqual(existing.values[fieldId], value)
+    );
+    if (changed) {
+      updates.push({ rowId: existing.id, values: syncedValues });
+    }
+  }
+
+  if (inserts.length === 0 && updates.length === 0) {
+    return;
+  }
+
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const row of inserts) {
+      localDatabaseRowsCollection.insert(row);
+    }
+    for (const { rowId, values } of updates) {
+      localDatabaseRowsCollection.update(rowId, (draft) => {
+        draft.values = { ...toPlain(draft.values), ...values };
+        draft.updatedAt = timestamp;
+      });
+    }
+  });
+  commitDatabaseTransaction(tx);
 }
 
 /**
