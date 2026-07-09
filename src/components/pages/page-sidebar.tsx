@@ -2,6 +2,10 @@ import { IconChevronRight } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import {
+  DatabasesList,
+  useHasDatabases,
+} from "@/components/pages/databases-list.tsx";
+import {
   FavoritesList,
   useHasFavorites,
 } from "@/components/pages/favorites-list.tsx";
@@ -62,6 +66,7 @@ function SidebarCollapsibleSection({
 
 function PageSidebarPanel({ className }: { className?: string }) {
   const hasFavorites = useHasFavorites();
+  const hasDatabases = useHasDatabases();
   const pinAction = <SidebarPinAction />;
 
   return (
@@ -87,6 +92,11 @@ function PageSidebarPanel({ className }: { className?: string }) {
         >
           <PageList />
         </SidebarCollapsibleSection>
+        {hasDatabases ? (
+          <SidebarCollapsibleSection label="Databases">
+            <DatabasesList />
+          </SidebarCollapsibleSection>
+        ) : null}
       </SidebarContent>
       {/* The canvas-footer settings button is hidden on mobile, so surface
         settings from the sidebar bottom on narrow viewports only. */}

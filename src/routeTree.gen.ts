@@ -18,6 +18,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsSectionRouteImport } from './routes/settings.$section'
 import { Route as PSplatRouteImport } from './routes/p.$'
 import { Route as DevCanvasRouteImport } from './routes/dev_.canvas'
+import { Route as DbDatabaseIdRouteImport } from './routes/db.$databaseId'
 import { Route as DbDatabaseIdRowIdRouteImport } from './routes/db.$databaseId.$rowId'
 
 const TemplateRoute = TemplateRouteImport.update({
@@ -65,10 +66,15 @@ const DevCanvasRoute = DevCanvasRouteImport.update({
   path: '/dev/canvas',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DbDatabaseIdRowIdRoute = DbDatabaseIdRowIdRouteImport.update({
-  id: '/db/$databaseId/$rowId',
-  path: '/db/$databaseId/$rowId',
+const DbDatabaseIdRoute = DbDatabaseIdRouteImport.update({
+  id: '/db/$databaseId',
+  path: '/db/$databaseId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DbDatabaseIdRowIdRoute = DbDatabaseIdRowIdRouteImport.update({
+  id: '/$rowId',
+  path: '/$rowId',
+  getParentRoute: () => DbDatabaseIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
   '/template': typeof TemplateRoute
+  '/db/$databaseId': typeof DbDatabaseIdRouteWithChildren
   '/dev/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/dev': typeof DevRoute
   '/template': typeof TemplateRoute
+  '/db/$databaseId': typeof DbDatabaseIdRouteWithChildren
   '/dev/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
   '/template': typeof TemplateRoute
+  '/db/$databaseId': typeof DbDatabaseIdRouteWithChildren
   '/dev_/canvas': typeof DevCanvasRoute
   '/p/$': typeof PSplatRoute
   '/settings/$section': typeof SettingsSectionRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/settings'
     | '/template'
+    | '/db/$databaseId'
     | '/dev/canvas'
     | '/p/$'
     | '/settings/$section'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/dev'
     | '/template'
+    | '/db/$databaseId'
     | '/dev/canvas'
     | '/p/$'
     | '/settings/$section'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/dev'
     | '/settings'
     | '/template'
+    | '/db/$databaseId'
     | '/dev_/canvas'
     | '/p/$'
     | '/settings/$section'
@@ -151,9 +163,9 @@ export interface RootRouteChildren {
   DevRoute: typeof DevRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   TemplateRoute: typeof TemplateRoute
+  DbDatabaseIdRoute: typeof DbDatabaseIdRouteWithChildren
   DevCanvasRoute: typeof DevCanvasRoute
   PSplatRoute: typeof PSplatRoute
-  DbDatabaseIdRowIdRoute: typeof DbDatabaseIdRowIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -221,12 +233,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevCanvasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/db/$databaseId': {
+      id: '/db/$databaseId'
+      path: '/db/$databaseId'
+      fullPath: '/db/$databaseId'
+      preLoaderRoute: typeof DbDatabaseIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/db/$databaseId/$rowId': {
       id: '/db/$databaseId/$rowId'
-      path: '/db/$databaseId/$rowId'
+      path: '/$rowId'
       fullPath: '/db/$databaseId/$rowId'
       preLoaderRoute: typeof DbDatabaseIdRowIdRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof DbDatabaseIdRoute
     }
   }
 }
@@ -245,15 +264,27 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
+interface DbDatabaseIdRouteChildren {
+  DbDatabaseIdRowIdRoute: typeof DbDatabaseIdRowIdRoute
+}
+
+const DbDatabaseIdRouteChildren: DbDatabaseIdRouteChildren = {
+  DbDatabaseIdRowIdRoute: DbDatabaseIdRowIdRoute,
+}
+
+const DbDatabaseIdRouteWithChildren = DbDatabaseIdRoute._addFileChildren(
+  DbDatabaseIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   DevRoute: DevRoute,
   SettingsRoute: SettingsRouteWithChildren,
   TemplateRoute: TemplateRoute,
+  DbDatabaseIdRoute: DbDatabaseIdRouteWithChildren,
   DevCanvasRoute: DevCanvasRoute,
   PSplatRoute: PSplatRoute,
-  DbDatabaseIdRowIdRoute: DbDatabaseIdRowIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
