@@ -19,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { DatabaseTimeSeriesChart } from "@/components/database/views/database-time-series-chart.tsx";
 import {
   type ChartConfig,
   ChartContainer,
@@ -446,6 +447,7 @@ function ChartEmptyState({
 }
 
 export function DatabaseChartView({
+  database,
   fields,
   mode,
   rows,
@@ -461,6 +463,22 @@ export function DatabaseChartView({
     () => buildChartData(fields, rows, chart),
     [fields, rows, chart]
   );
+
+  // Time-axis charts take a separate async-loaded path (history + backfill).
+  if (chart.xMode === "time") {
+    return (
+      <div className="relative">
+        <DatabaseTimeSeriesChart
+          chart={chart}
+          database={database}
+          fields={fields}
+          mode={mode}
+          rows={rows}
+          view={view}
+        />
+      </div>
+    );
+  }
 
   let body: ReactNode;
   if (!xField) {

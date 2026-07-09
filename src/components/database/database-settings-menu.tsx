@@ -16,6 +16,7 @@ import {
   IconListDetails,
   IconRefresh,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import { format } from "date-fns/format";
 import {
@@ -77,7 +78,10 @@ import {
   getConnectorToken,
   setConnectorToken,
 } from "@/lib/connectors/token-store.ts";
-import type { ConnectorAuthSpec } from "@/lib/connectors/types.ts";
+import type {
+  ConnectorAuthSpec,
+  ConnectorConfigField,
+} from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import type {
@@ -662,6 +666,239 @@ function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
   );
 }
 
+/** Max instruments per synced source — matches the Finnhub proxy's peer cap. */
+const MAX_CONNECTOR_SYMBOLS = 30;
+/** Provider symbol shape once uppercased: A–Z 0–9 . : _ - up to 20 chars. */
+const CONNECTOR_SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
+/** Splits pasted/typed input into candidate symbols on commas or newlines. */
+const SYMBOL_INPUT_SEPARATOR = /[\n,]/;
+
+interface SymbolListEditorProps {
+  config: Record<string, unknown>;
+  configKey: string;
+  databaseId: string;
+  label: string;
+  placeholder?: string;
+  values: string[];
+}
+
+/**
+ * Editor for a `list` config field (symbol/ticker set): removable chips plus an
+ * add input. Every mutation writes the full config back through
+ * `updateDatabaseSource`; the sync engine's collection watcher then refetches
+ * and reopens the live socket against the new set (database-sync-engine.ts).
+ * Enforces the provider caps (≤ {@link MAX_CONNECTOR_SYMBOLS}, symbol shape) so
+ * the next poll can't fail config validation, and blocks removing the last one
+ * (connectors require ≥ 1).
+ */
+function SymbolListEditor({
+  config,
+  configKey,
+  databaseId,
+  label,
+  placeholder,
+  values,
+}: SymbolListEditorProps) {
+  const [error, setError] = useState("");
+
+  const write = (next: string[]) => {
+    updateDatabaseSource(databaseId, {
+      config: { ...config, [configKey]: next },
+    });
+  };
+
+  // Returns true when the input produced at least one new symbol (so the caller
+  // can clear the field); sets an inline note for anything skipped.
+  const addFromInput = (text: string): boolean => {
+    const parsed = text
+      .split(SYMBOL_INPUT_SEPARATOR)
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean);
+    const next = [...values];
+    const skipped: string[] = [];
+    for (const symbol of parsed) {
+      if (next.includes(symbol)) {
+        continue;
+      }
+      if (
+        next.length >= MAX_CONNECTOR_SYMBOLS ||
+        !CONNECTOR_SYMBOL_PATTERN.test(symbol)
+      ) {
+        skipped.push(symbol);
+        continue;
+      }
+      next.push(symbol);
+    }
+    setError(skipped.length > 0 ? `Skipped ${skipped.join(", ")}` : "");
+    if (next.length !== values.length) {
+      write(next);
+      return true;
+    }
+    return false;
+  };
+
+  const remove = (symbol: string) => {
+    if (values.length <= 1) {
+      setError("Keep at least one");
+      return;
+    }
+    setError("");
+    write(values.filter((value) => value !== symbol));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      {values.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {values.map((symbol) => (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-muted py-0.5 pr-1 pl-1.5 text-foreground text-xs tabular-nums"
+              key={symbol}
+            >
+              {symbol}
+              <button
+                aria-label={`Remove ${symbol}`}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                disabled={values.length <= 1}
+                onClick={() => remove(symbol)}
+                type="button"
+              >
+                <IconX className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <InputGroup className="h-8 pointer-coarse:h-10">
+        <InputGroupInput
+          aria-label={`Add to ${label}`}
+          autoComplete="off"
+          onBlur={(event) => {
+            if (addFromInput(event.currentTarget.value)) {
+              event.currentTarget.value = "";
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.currentTarget.value = "";
+              return;
+            }
+            stopMenuKeys(event);
+            if (event.key === "Enter" || event.key === ",") {
+              event.preventDefault();
+              if (addFromInput(event.currentTarget.value)) {
+                event.currentTarget.value = "";
+              }
+            }
+          }}
+          placeholder={placeholder ?? "Add…"}
+        />
+      </InputGroup>
+      {error ? <p className="text-destructive text-xs">{error}</p> : null}
+    </div>
+  );
+}
+
+interface ConnectorTextConfigRowProps {
+  config: Record<string, unknown>;
+  configKey: string;
+  databaseId: string;
+  label: string;
+  placeholder?: string;
+  value: string;
+}
+
+/**
+ * Editor for a `text` config field (e.g. a repo owner). Commits the trimmed
+ * value on Enter or on blur when it changed; Escape reverts the draft. Same
+ * dirty-check / `stopMenuKeys` conventions as {@link ConnectorTokenRow}.
+ */
+function ConnectorTextConfigRow({
+  config,
+  configKey,
+  databaseId,
+  label,
+  placeholder,
+  value,
+}: ConnectorTextConfigRowProps) {
+  const commit = (next: string) => {
+    const trimmed = next.trim();
+    if (trimmed !== value) {
+      updateDatabaseSource(databaseId, {
+        config: { ...config, [configKey]: trimmed },
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <InputGroup className="h-8 pointer-coarse:h-10">
+        <InputGroupInput
+          aria-label={label}
+          autoComplete="off"
+          defaultValue={value}
+          onBlur={(event) => commit(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.currentTarget.value = value;
+              return;
+            }
+            stopMenuKeys(event);
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit(event.currentTarget.value);
+            }
+          }}
+          placeholder={placeholder}
+        />
+      </InputGroup>
+    </div>
+  );
+}
+
+interface ConnectorConfigEditorProps {
+  config: Record<string, unknown>;
+  databaseId: string;
+  field: ConnectorConfigField;
+}
+
+/**
+ * Live editor for one connector config field, replacing the old read-only
+ * summary so a synced source's instruments can change after creation. `list`
+ * fields get chips; `text` fields a single input.
+ */
+function ConnectorConfigEditor({
+  config,
+  databaseId,
+  field,
+}: ConnectorConfigEditorProps) {
+  if (field.kind === "list") {
+    const raw = config[field.key];
+    return (
+      <SymbolListEditor
+        config={config}
+        configKey={field.key}
+        databaseId={databaseId}
+        label={field.label}
+        placeholder={field.placeholder}
+        values={Array.isArray(raw) ? raw.map(String) : []}
+      />
+    );
+  }
+  return (
+    <ConnectorTextConfigRow
+      config={config}
+      configKey={field.key}
+      databaseId={databaseId}
+      label={field.label}
+      placeholder={field.placeholder}
+      value={String(config[field.key] ?? "")}
+    />
+  );
+}
+
 interface ConnectorSourceSubmenuProps {
   database: LocalDatabase;
   rowCount: number;
@@ -682,14 +919,6 @@ function ConnectorSourceSubmenu({
   const connector = getConnector(source.connectorId);
   const status = useSyncStatus(database.id);
 
-  const configRows: { label: string; value: string }[] = (
-    connector?.configFields ?? []
-  ).flatMap((configField) => {
-    const raw = source.config[configField.key];
-    const value = Array.isArray(raw) ? raw.join(", ") : String(raw ?? "");
-    return value === "" ? [] : [{ label: configField.label, value }];
-  });
-
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
@@ -707,8 +936,13 @@ function ConnectorSourceSubmenu({
               {connector?.title ?? "Unknown connector"}
             </span>
           </div>
-          {configRows.map((row) => (
-            <InfoRow key={row.label} label={row.label} value={row.value} />
+          {(connector?.configFields ?? []).map((configField) => (
+            <ConnectorConfigEditor
+              config={source.config}
+              databaseId={database.id}
+              field={configField}
+              key={configField.key}
+            />
           ))}
           <InfoRow label="Rows" value={String(rowCount)} />
           <InfoRow

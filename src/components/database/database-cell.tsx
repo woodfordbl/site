@@ -1,3 +1,4 @@
+import NumberFlow, { type Format } from "@number-flow/react";
 import type { ReactNode } from "react";
 
 import { urlCellHref } from "@/components/database/database-grid-helpers.ts";
@@ -7,6 +8,7 @@ import {
   coerceCellValue,
   formatCellValue,
   isCellEmpty,
+  numberFormatOptions,
 } from "@/lib/databases/cell-values.ts";
 import { formulaCellErrorDisplay } from "@/lib/databases/formula-values.ts";
 import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
@@ -139,6 +141,58 @@ function DatabaseDateCellValue({
 }
 
 /**
+ * Animated number cell for live-updating (synced) number fields. NumberFlow
+ * transitions the digits when the value changes on a stream tick; it formats
+ * from the raw number using the field's own `Intl.NumberFormat` options, so a
+ * currency/percent cell animates while still reading like the static cell.
+ */
+function DatabaseNumberFlowCell({
+  field,
+  value,
+}: {
+  field: Extract<DatabaseField, { type: "number" }>;
+  value: number;
+}): ReactNode {
+  return (
+    <NumberFlow
+      className="truncate tabular-nums"
+      format={
+        numberFormatOptions(
+          field.format ?? "plain",
+          field.decimals,
+          field.useGrouping !== false
+        ) as Format
+      }
+      locales="en-US"
+      value={value}
+      willChange
+    />
+  );
+}
+
+/**
+ * Number cell display. Synced number fields (a `sourceKey`, e.g. a streamed
+ * Price) tick live, so their digits animate via NumberFlow; static local
+ * number fields keep the plain formatted string (nothing to animate).
+ */
+function DatabaseNumberCellValue({
+  field,
+  value,
+}: {
+  field: Extract<DatabaseField, { type: "number" }>;
+  value: DatabaseCellValue;
+}): ReactNode {
+  if (typeof value === "number" && field.sourceKey) {
+    return <DatabaseNumberFlowCell field={field} value={value} />;
+  }
+  return (
+    <span className="truncate tabular-nums">
+      {formatCellValue(field, value)}
+    </span>
+  );
+}
+
+/**
  * Render one cell's stored value for display. Empty cells render nothing;
  * wrong-shaped values are coerced defensively and never throw.
  */
@@ -184,11 +238,7 @@ export function DatabaseCellValueView({
       return <span className="truncate text-primary">{text}</span>;
     }
     case "number":
-      return (
-        <span className="truncate tabular-nums">
-          {formatCellValue(field, coerced)}
-        </span>
-      );
+      return <DatabaseNumberCellValue field={field} value={coerced} />;
     case "checkbox":
       return (
         <Checkbox aria-label={field.name} checked={coerced === true} disabled />

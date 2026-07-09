@@ -27,6 +27,9 @@ export function connectorFieldToDatabaseField(
   field.sourceKey = def.sourceKey;
   if (field.type === "number") {
     field.format = def.numberFormat;
+    if (def.captureHistory) {
+      field.captureHistory = true;
+    }
   }
   if (field.type === "select" || field.type === "multiSelect") {
     field.options = def.options ?? [];

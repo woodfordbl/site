@@ -209,7 +209,7 @@ function formulaPlainText(coerced: DatabaseCellValue): string {
  * currency stays USD. `useGrouping: false` drops thousands separators
  * (absent = on) in every format.
  */
-function numberFormatOptions(
+export function numberFormatOptions(
   format: DatabaseNumberFormat,
   decimals: number | undefined,
   useGrouping: boolean

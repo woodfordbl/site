@@ -260,6 +260,24 @@ describe("database sync ops", () => {
       expect(mocks.rowDelete).toHaveBeenCalledWith("row-a");
     });
 
+    it("deletes a missing row immediately when pruneMissing is set", async () => {
+      // A symbol dropped from the source config: the omission is intentional,
+      // so the refetch prunes it on this very snapshot with no tombstone grace.
+      mocks.rowState = [makeSyncedRow("row-a", "ext-a")];
+
+      const result = ops.applySyncSnapshot(
+        makeDatabase(),
+        [],
+        {},
+        { pruneMissing: true }
+      );
+      await flushAsync();
+
+      expect(result.removed).toBe(1);
+      expect(result.missingCounts).toEqual({});
+      expect(mocks.rowDelete).toHaveBeenCalledWith("row-a");
+    });
+
     it("resets the tombstone count when a row reappears", async () => {
       mocks.rowState = [
         makeSyncedRow("row-a", "ext-a", {
