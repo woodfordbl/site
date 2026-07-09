@@ -75,6 +75,12 @@ interface ScheduleEntry {
   nextRunAt?: number;
   /** Timer fired while the document was hidden; run on next `visible`. */
   pendingWhileHidden: boolean;
+  /**
+   * Set when the source changed (e.g. symbols edited): the next snapshot
+   * deletes rows for dropped symbols immediately, skipping the tombstone grace.
+   * Cleared once that pass consumes it.
+   */
+  pruneOnNextSnapshot: boolean;
   running: boolean;
   /** JSON fingerprint of `database.source`; a change resumes a halted entry. */
   sourceFingerprint: string;
@@ -287,11 +293,30 @@ const STREAM_FLUSH_MS = 250;
 const STREAM_RECONNECT_BASE_MS = 1000;
 
 interface StreamHandle {
+  flushTimer?: ReturnType<typeof setTimeout>;
   /** Latest value per `externalId` awaiting the next flush. */
   pending: Map<string, ConnectorRow>;
-  flushTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * Fingerprint of the source config this socket was opened against (the
+   * symbol list). When it drifts from the live database's config the symbol
+   * set was edited, so `reconcileStreams` tears the socket down and reopens it
+   * against the new set — the provider bound the old symbols at connect time.
+   */
+  signature: string;
   /** Tears down the provider subscription (set once `subscribe` returns). */
   unsubscribe: () => void;
+}
+
+/**
+ * Fingerprint of the config that binds a connector's live socket — just the
+ * connector config record (the symbol list). `refreshMs` lives as a sibling of
+ * `config`, so poll-interval edits deliberately don't churn this and never
+ * reopen the socket.
+ */
+function streamConfigSignature(database: LocalDatabase): string {
+  return database.source?.kind === "connector"
+    ? JSON.stringify(database.source.config ?? {})
+    : "";
 }
 
 const streams = new Map<string, StreamHandle>();
@@ -370,6 +395,7 @@ function ensureStream(databaseId: string): void {
 
   const handle: StreamHandle = {
     pending: new Map(),
+    signature: streamConfigSignature(database),
     unsubscribe: () => undefined,
   };
   streams.set(databaseId, handle);
@@ -453,6 +479,18 @@ function reconcileStreams(): void {
   const canStream = isLeader && isDocumentVisible();
   for (const databaseId of [...streams.keys()]) {
     if (!canStream || (watcherCounts.get(databaseId) ?? 0) === 0) {
+      teardownStream(databaseId);
+      continue;
+    }
+    // Symbols edited: the socket is bound to the old set. Drop it here; the
+    // open-loop below reopens against the current config.
+    const handle = streams.get(databaseId);
+    const database = localDatabasesCollection.get(databaseId);
+    if (
+      handle &&
+      database &&
+      handle.signature !== streamConfigSignature(database)
+    ) {
       teardownStream(databaseId);
     }
   }
@@ -567,6 +605,10 @@ async function runSync(databaseId: string): Promise<void> {
   // re-arms scheduling, a repeat config/auth failure re-halts.
   entry.halted = false;
   entry.lastAttemptAt = Date.now();
+  // Consume the one-shot prune request from the last source edit; this pass
+  // deletes rows for symbols dropped from the config with no tombstone grace.
+  const pruneMissing = entry.pruneOnNextSnapshot;
+  entry.pruneOnNextSnapshot = false;
   const previous = getSyncStatus(databaseId);
   setStatus(databaseId, { ...previous, syncing: true });
 
@@ -609,7 +651,8 @@ async function runSync(databaseId: string): Promise<void> {
       const applied = applySyncSnapshot(
         latest,
         result.rows,
-        meta?.missingCounts ?? {}
+        meta?.missingCounts ?? {},
+        { pruneMissing }
       );
       // Only record the new validator once the row transaction has actually
       // committed. If the commit fails (e.g. storage quota) the rows were
@@ -715,12 +758,18 @@ function ensureSchedule(database: LocalDatabase): void {
     existing.minIntervalMs = connector.pollPolicy.minMs;
     const sourceChanged = existing.sourceFingerprint !== sourceFingerprint;
     existing.sourceFingerprint = sourceFingerprint;
-    // A halted entry (non-transient config/auth failure) resumes only when
-    // the source actually changed — other database edits (rename, view
-    // tweaks) must not restart a poll loop that would fail identically.
-    if (existing.halted && sourceChanged && !existing.running) {
-      existing.halted = false;
-      existing.consecutiveFailures = 0;
+    // A source edit (e.g. symbols added/removed) refetches now and prunes rows
+    // for dropped symbols on that snapshot, instead of waiting for the next
+    // scheduled pass and the tombstone grace. Other database edits (rename,
+    // view tweaks) don't change the fingerprint, so they don't restart polling
+    // — and a halted loop (non-transient config/auth failure) resumes only on a
+    // genuine source change, never on an identical retry.
+    if (sourceChanged && !existing.running) {
+      existing.pruneOnNextSnapshot = true;
+      if (existing.halted) {
+        existing.halted = false;
+        existing.consecutiveFailures = 0;
+      }
       scheduleRun(database.id, 0);
     }
     return;
@@ -732,6 +781,7 @@ function ensureSchedule(database: LocalDatabase): void {
     intervalMs,
     minIntervalMs: connector.pollPolicy.minMs,
     pendingWhileHidden: false,
+    pruneOnNextSnapshot: false,
     running: false,
     sourceFingerprint,
   });
@@ -807,6 +857,9 @@ function becomeLeader(): void {
         }
         ensureSchedule(change.value);
       }
+      // A source edit (e.g. the symbol list changed) may need the live socket
+      // reopened against the new config; reconcile detects the drift.
+      reconcileStreams();
     },
     { includeInitialState: true }
   );

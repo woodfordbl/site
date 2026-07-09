@@ -143,12 +143,42 @@ export interface SyncSnapshotResult {
  *   bumps the row's consecutive-miss count (seeded from `priorMissingCounts`);
  *   the row is deleted only once it has been missing from
  *   {@link TOMBSTONE_MISSING_SYNCS} consecutive snapshots, and a reappearing
- *   row resets its count.
+ *   row resets its count. `options.pruneMissing` skips that grace and deletes
+ *   omitted rows on this snapshot — used for the refetch right after a source
+ *   edit, where a dropped symbol's absence is intentional, not a provider blip.
  */
+/**
+ * Decide the fate of rows absent from a snapshot: delete once missing from
+ * {@link TOMBSTONE_MISSING_SYNCS} consecutive snapshots (or immediately when
+ * `pruneMissing`), otherwise bump and return their consecutive-miss count.
+ */
+function computeTombstones(
+  rowsByExternalId: Map<string, LocalDatabaseRow>,
+  snapshotByExternalId: Map<string, ConnectorRow>,
+  priorMissingCounts: Record<string, number>,
+  pruneMissing: boolean
+): { deletes: string[]; missingCounts: Record<string, number> } {
+  const deletes: string[] = [];
+  const missingCounts: Record<string, number> = {};
+  for (const [externalId, row] of rowsByExternalId) {
+    if (snapshotByExternalId.has(externalId)) {
+      continue; // Present again — the grace count resets by omission.
+    }
+    const misses = (priorMissingCounts[externalId] ?? 0) + 1;
+    if (pruneMissing || misses >= TOMBSTONE_MISSING_SYNCS) {
+      deletes.push(row.id);
+    } else {
+      missingCounts[externalId] = misses;
+    }
+  }
+  return { deletes, missingCounts };
+}
+
 export function applySyncSnapshot(
   database: LocalDatabase,
   connectorRows: ConnectorRow[],
-  priorMissingCounts: Record<string, number> = {}
+  priorMissingCounts: Record<string, number> = {},
+  options: { pruneMissing?: boolean } = {}
 ): SyncSnapshotResult {
   // Record captured values for polled `captureHistory` fields too (the store
   // dedupes, so a static snapshot won't grow a flat series).
@@ -218,19 +248,12 @@ export function applySyncSnapshot(
     }
   }
 
-  const deletes: string[] = [];
-  const missingCounts: Record<string, number> = {};
-  for (const [externalId, row] of rowsByExternalId) {
-    if (snapshotByExternalId.has(externalId)) {
-      continue; // Present again — the grace count resets by omission.
-    }
-    const misses = (priorMissingCounts[externalId] ?? 0) + 1;
-    if (misses >= TOMBSTONE_MISSING_SYNCS) {
-      deletes.push(row.id);
-    } else {
-      missingCounts[externalId] = misses;
-    }
-  }
+  const { deletes, missingCounts } = computeTombstones(
+    rowsByExternalId,
+    snapshotByExternalId,
+    priorMissingCounts,
+    options.pruneMissing ?? false
+  );
 
   let persisted: Promise<void> = Promise.resolve();
   if (inserts.length > 0 || updates.length > 0 || deletes.length > 0) {
