@@ -1,4 +1,5 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
+// biome-ignore lint/correctness/noUnresolvedImports: React 19 exports Suspense; Biome types lag
 import { lazy, Suspense } from "react";
 
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
