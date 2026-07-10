@@ -52,6 +52,7 @@ import {
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
   type GridItem,
+  GUTTER_LANE_SCROLL_CLASS,
   isInlineEditableField,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
@@ -160,30 +161,42 @@ function resolveGridLayoutClasses(
   };
 }
 
+interface GutterBleedMetrics {
+  /** Block content width (the drop zone) — sizes the right overhang. */
+  hostWidthPx: number;
+  /**
+   * Left bleed: at least the select lane, extended to the boundary so
+   * scrolled content clips at the page's left side.
+   */
+  leftBleedPx: number;
+  /** Room between the block's right edge and the boundary's right edge. */
+  rightAvailPx: number;
+}
+
 /**
- * Total left bleed (px) of the scrollport in gutter row-select modes: at
- * least the select lane, extended to the nearest column box
- * (`[data-column-content]`) or the page panel (`[data-page-main-panel]`) so
+ * Live scrollport bleed measurements against the nearest column box
+ * (`[data-column-content]`) or the page panel (`[data-page-main-panel]`):
  * horizontally scrolled content clips at the page's left side instead of an
  * arbitrary line 48px before the table — matching the standalone database
- * page, and staying inside the column when the block sits in a column
- * layout. `0` outside gutter modes (the lane is a real in-table column
- * there). Nothing moves at rest — only the clip boundary for scrolled
- * content (and the sticky lane's viewport offset) extends.
+ * page — and overflowing tables extend rightward into the page margin as
+ * far as the boundary allows. Both stay inside the column when the block
+ * sits in a column layout. Nothing moves at rest on the left — only the
+ * clip boundary for scrolled content (and the sticky lane's viewport
+ * offset) extends.
  */
-function useGutterBleedPx(
-  scrollWrapRef: React.RefObject<HTMLDivElement | null>,
-  enabled: boolean
-): number {
-  const [bleed, setBleed] = useState(SELECTION_COLUMN_WIDTH_PX);
+function useGutterBleed(
+  scrollWrapRef: React.RefObject<HTMLDivElement | null>
+): GutterBleedMetrics {
+  const [metrics, setMetrics] = useState<GutterBleedMetrics>({
+    hostWidthPx: 0,
+    leftBleedPx: SELECTION_COLUMN_WIDTH_PX,
+    rightAvailPx: 0,
+  });
 
   useEffect(() => {
-    if (!enabled) {
-      return;
-    }
     const wrap = scrollWrapRef.current;
-    // The wrap's parent (the drop zone) sits at the block's content-left —
-    // the wrap itself carries the negative margin being measured.
+    // The wrap's parent (the drop zone) sits at the block's content box —
+    // the wrap itself carries the negative margins being measured.
     const host = wrap?.parentElement;
     const boundary = wrap?.closest(
       "[data-column-content], [data-page-main-panel]"
@@ -192,11 +205,19 @@ function useGutterBleedPx(
       return;
     }
     const measure = () => {
-      const distance = Math.round(
-        host.getBoundingClientRect().left -
-          boundary.getBoundingClientRect().left
-      );
-      setBleed(Math.max(SELECTION_COLUMN_WIDTH_PX, distance));
+      const hostRect = host.getBoundingClientRect();
+      const boundaryRect = boundary.getBoundingClientRect();
+      setMetrics({
+        hostWidthPx: Math.round(hostRect.width),
+        leftBleedPx: Math.max(
+          SELECTION_COLUMN_WIDTH_PX,
+          Math.round(hostRect.left - boundaryRect.left)
+        ),
+        rightAvailPx: Math.max(
+          0,
+          Math.round(boundaryRect.right - hostRect.right)
+        ),
+      });
     };
     // Panel/column resizes reposition the block relative to the boundary
     // (centered canvas, column drags, sidebar collapse) — remeasure on both.
@@ -205,9 +226,69 @@ function useGutterBleedPx(
     observer.observe(host);
     measure();
     return () => observer.disconnect();
-  }, [enabled, scrollWrapRef]);
+  }, [scrollWrapRef]);
 
-  return enabled ? bleed : 0;
+  return metrics;
+}
+
+/**
+ * Gutter select-lane scroll state machine: stamps `data-lane` on the
+ * scrollport — absent at rest, `"scrolled"` while horizontally scrolled
+ * (the lane is pushed off with the content; its cells go transparent and
+ * click-through), and `"peek"` while the pointer hovers the covered lane
+ * region (the lane column slides back in over the content). The lane cells'
+ * `in-data-[lane=…]` variants key off this.
+ */
+function useGutterLaneState(
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  gutterBleed: number
+): void {
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    let frame = 0;
+    let pointerX: number | null = null;
+    const apply = () => {
+      frame = 0;
+      if (element.scrollLeft <= 0) {
+        element.removeAttribute("data-lane");
+        return;
+      }
+      const inLaneZone =
+        pointerX !== null &&
+        pointerX <= element.getBoundingClientRect().left + gutterBleed;
+      element.setAttribute("data-lane", inLaneZone ? "peek" : "scrolled");
+    };
+    const schedule = () => {
+      if (frame === 0) {
+        frame = requestAnimationFrame(apply);
+      }
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      pointerX = event.clientX;
+      schedule();
+    };
+    const handlePointerLeave = () => {
+      pointerX = null;
+      schedule();
+    };
+    apply();
+    element.addEventListener("scroll", schedule, { passive: true });
+    element.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
+    element.addEventListener("pointerleave", handlePointerLeave);
+    return () => {
+      element.removeEventListener("scroll", schedule);
+      element.removeEventListener("pointermove", handlePointerMove);
+      element.removeEventListener("pointerleave", handlePointerLeave);
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, [gutterBleed, scrollRef]);
 }
 
 interface DatabaseTableGridProps {
@@ -301,8 +382,10 @@ export function DatabaseTableGrid({
   // Gutter modes: how far the scrollport extends left of the block (lane +
   // page/column margin); the grid pads content back by the extra so nothing
   // moves at rest — only the scrolled-content clip boundary widens.
-  const gutterBleed = useGutterBleedPx(scrollWrapRef, rowSelectGutter);
+  const bleedMetrics = useGutterBleed(scrollWrapRef);
+  const gutterBleed = rowSelectGutter ? bleedMetrics.leftBleedPx : 0;
   const extraBleed = Math.max(0, gutterBleed - SELECTION_COLUMN_WIDTH_PX);
+  useGutterLaneState(scrollRef, gutterBleed);
 
   const pinnedTotalWidth = useMemo(
     () =>
@@ -418,36 +501,14 @@ export function DatabaseTableGrid({
   // Border-box width of the grid element: content plus the bleed padding
   // that parks the content back at the block's left edge at rest.
   const paddedGridWidth = gridWidth + extraBleed;
-
-  // Gutter select-lane reveal state: while horizontally scrolled the
-  // transparent lane hides its controls (content shows through to the
-  // page's left boundary) until the boundary strip is hovered — the
-  // `in-data-[hscrolled]` variants on the lane cells key off this. A
-  // rAF-throttled scroll listener keeps the attribute current.
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      element.toggleAttribute("data-hscrolled", element.scrollLeft > 0);
-    };
-    const handleScroll = () => {
-      if (frame === 0) {
-        frame = requestAnimationFrame(update);
-      }
-    };
-    update();
-    element.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      element.removeEventListener("scroll", handleScroll);
-      if (frame !== 0) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  }, []);
+  // Overflowing tables extend rightward into the page/column margin as far
+  // as the boundary allows ("as needed"): exactly the overhang past the
+  // block, capped by the measured room. Non-overflowing tables get 0 and
+  // keep the block's right edge.
+  const rightBleed = Math.min(
+    Math.max(0, paddedGridWidth - bleedMetrics.hostWidthPx - gutterBleed),
+    bleedMetrics.rightAvailPx
+  );
 
   const handleAddField = useCallback(() => {
     const field = createDatabaseField("text", "Text");
@@ -798,7 +859,7 @@ export function DatabaseTableGrid({
         <div
           className={layoutClasses.scrollWrap}
           ref={scrollWrapRef}
-          style={{ marginLeft: -gutterBleed }}
+          style={{ marginLeft: -gutterBleed, marginRight: -rightBleed }}
         >
           <ScrollArea
             className={layoutClasses.scrollArea}
@@ -999,15 +1060,6 @@ export function DatabaseTableGrid({
   );
 }
 
-/**
- * Gutter select-lane cells are transparent overlays: horizontally scrolled
- * content stays visible to the page's left boundary, and while scrolled the
- * lane's controls hide until the boundary strip is hovered (the scrollport
- * carries `data-hscrolled`). Non-gutter mode keeps the opaque in-table lane.
- */
-const GUTTER_LANE_SCROLL_CLASS =
-  "transition-opacity in-data-[hscrolled]:opacity-0 in-data-[hscrolled]:hover:opacity-100";
-
 function GridSelectionHeaderCell({
   allSelected,
   onCheckedChange,
@@ -1030,8 +1082,7 @@ function GridSelectionHeaderCell({
       aria-colindex={1}
       className={cn(
         "sticky left-(--grid-bleed) z-10 flex h-9 shrink-0 items-center justify-center",
-        gutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background",
-        gutter && showControl && "in-data-[hscrolled]:opacity-100"
+        gutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background"
       )}
       // Own reveal group — do not put one on the grid root or every column
       // resize divider would light up on any table hover.
@@ -1276,9 +1327,14 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
       }}
     >
       {rowSelectGutter ? (
+        // Sticky like the row select cells so the peeked lane column stays
+        // continuous across group header rows.
         <div
           aria-hidden
-          className="shrink-0"
+          className={cn(
+            "sticky left-(--grid-bleed) z-10 shrink-0",
+            GUTTER_LANE_SCROLL_CLASS
+          )}
           style={{ width: SELECTION_COLUMN_WIDTH_PX }}
         />
       ) : null}
@@ -1479,10 +1535,7 @@ const GridRow = memo(function GridRowInner({
         isSelected && "bg-muted/40",
         rowSelectGutter
           ? GUTTER_LANE_SCROLL_CLASS
-          : !isSelected && "bg-background",
-        rowSelectGutter &&
-          showSelectControl &&
-          "in-data-[hscrolled]:opacity-100"
+          : !isSelected && "bg-background"
       )}
       role="gridcell"
       style={{ width: SELECTION_COLUMN_WIDTH_PX }}

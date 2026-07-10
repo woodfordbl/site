@@ -3,6 +3,7 @@ import { type ReactNode, useMemo } from "react";
 import {
   aggregateFnLabel,
   type GridColumn,
+  GUTTER_LANE_SCROLL_CLASS,
 } from "@/components/database/database-grid-helpers.ts";
 import {
   computeAggregate,
@@ -73,14 +74,14 @@ export function DatabaseCalculateRow({
     >
       {/* Leading selection-lane spacer — sticky at the lane's viewport
           offset (`--grid-bleed`, set on the grid root) so it stays under
-          the select header while horizontally scrolling. Gutter modes keep
-          it transparent like the lane above it. */}
+          the select header while horizontally scrolling. Gutter modes ride
+          the shared lane scroll behavior (pushed off / peek slide-in). */}
       {rowSelectLeadingWidth > 0 ? (
         <div
           aria-hidden
           className={cn(
             "sticky left-(--grid-bleed) z-10 h-9 shrink-0",
-            !rowSelectGutter && "bg-background"
+            rowSelectGutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background"
           )}
           style={{ width: rowSelectLeadingWidth }}
         />

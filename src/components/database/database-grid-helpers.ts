@@ -43,12 +43,30 @@ export function resolveRowSelectDisplay(
 
 /**
  * Gutter modes (`hover` / `number`) keep the select control in a leading
- * lane that bleeds into the canvas gutter (`-ml-12`) so the first data
- * column stays flush with the filter bar — not an overlay on cell content.
+ * lane that bleeds into the canvas gutter so the first data column stays
+ * flush with the filter bar — not an overlay on cell content.
  */
 export function usesRowSelectGutter(display: RowSelectDisplay): boolean {
   return display !== "always";
 }
+
+/**
+ * Gutter select-lane cells across the grid (header, rows, group spacers,
+ * Calculate footer) share one scroll behavior, keyed off the scrollport's
+ * `data-lane` attribute (see `useGutterLaneState`):
+ *
+ *   absent (rest)      — transparent gutter cell, controls hover-reveal.
+ *   `"scrolled"`       — the lane is pushed off with the content: cells go
+ *                        transparent, slide slightly left, and become
+ *                        click-through so they never cover scrolled cells.
+ *   `"peek"`           — pointer over the covered lane region: the lane
+ *                        slides back in as a solid column over the content.
+ *
+ * The two states are mutually exclusive on the attribute, so no variant
+ * ordering games are needed.
+ */
+export const GUTTER_LANE_SCROLL_CLASS =
+  "transition-[opacity,translate] duration-150 in-data-[lane=scrolled]:pointer-events-none in-data-[lane=scrolled]:-translate-x-1.5 in-data-[lane=scrolled]:opacity-0 in-data-[lane=peek]:border-border in-data-[lane=peek]:border-r in-data-[lane=peek]:bg-background";
 
 /**
  * Layout width reserved for the leading select lane. Always
