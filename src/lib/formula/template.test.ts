@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { type ExprScope, exprError } from "@/lib/expr/evaluate.ts";
 import {
   evaluateTemplateText,
   splitTemplateText,
-} from "@/lib/expr/template.ts";
+} from "@/lib/formula/template.ts";
+import { type FormulaScope, formulaError } from "@/lib/formula/values.ts";
 
-const scope: ExprScope = {
+const scope: FormulaScope = {
   getProperty: (name) => {
     if (name === "Name") {
       return "Ada";
@@ -14,7 +14,7 @@ const scope: ExprScope = {
     if (name === "Score") {
       return 1234.5;
     }
-    return exprError(`Unknown property "${name}"`);
+    return formulaError(`Unknown property "${name}"`);
   },
 };
 
@@ -122,8 +122,9 @@ describe("evaluateTemplateText", () => {
   });
 
   it("renders parse errors inline instead of throwing", () => {
+    // v2: parse errors carry an expectation hint after the em dash.
     expect(evaluateTemplateText("{{ 1 + }}", scope)).toBe(
-      "⚠ Unexpected end of expression"
+      "⚠ Unexpected end of expression — expected a value"
     );
     expect(evaluateTemplateText("{{}}", scope)).toBe("⚠ Empty expression");
   });

@@ -1,4 +1,4 @@
-import { canonicalizeExpression } from "@/lib/expr/ref-rewrite.ts";
+import { canonicalizeExpression } from "@/lib/formula/ref-rewrite.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**

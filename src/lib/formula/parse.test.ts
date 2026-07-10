@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { EXPR_FUNCTION_CATALOG } from "@/lib/expr/function-catalog.ts";
 import {
   type FormulaNode,
   formulaNodeChildren,
   walkFormula,
 } from "@/lib/formula/ast.ts";
+import { V1_GOLDEN_CORPUS } from "@/lib/formula/corpus.fixture.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
 
 function astOf(source: string): FormulaNode {
@@ -835,17 +835,19 @@ describe("walkFormula", () => {
 });
 
 describe("v1 golden corpus", () => {
-  it("parses every function-catalog example", () => {
-    expect(EXPR_FUNCTION_CATALOG.length).toBeGreaterThan(20);
-    for (const entry of EXPR_FUNCTION_CATALOG) {
-      const result = parseFormula(entry.example);
-      expect(result.ok, `${entry.name}: ${entry.example}`).toBe(true);
+  // The frozen v1 compatibility contract (`corpus.fixture.ts`): every
+  // example the retired v1 function catalog documented must keep parsing.
+  it("parses every frozen v1 catalog example", () => {
+    expect(V1_GOLDEN_CORPUS.length).toBeGreaterThan(20);
+    for (const entry of V1_GOLDEN_CORPUS) {
+      const result = parseFormula(entry.expression);
+      expect(result.ok, `${entry.name}: ${entry.expression}`).toBe(true);
     }
   });
 
-  it("parses catalog examples to a call of the documented function", () => {
-    for (const entry of EXPR_FUNCTION_CATALOG) {
-      const ast = astOf(entry.example);
+  it("parses corpus examples to a call of the documented function", () => {
+    for (const entry of V1_GOLDEN_CORPUS) {
+      const ast = astOf(entry.expression);
       let found = false;
       walkFormula(ast, (node) => {
         if (
@@ -855,7 +857,7 @@ describe("v1 golden corpus", () => {
           found = true;
         }
       });
-      expect(found, `${entry.name}: ${entry.example}`).toBe(true);
+      expect(found, `${entry.name}: ${entry.expression}`).toBe(true);
     }
   });
 

@@ -1,8 +1,8 @@
 /**
- * Display and text projections of v2 formula values — the `lib/formula`
- * analog of `lib/expr/format-result.ts`. `formulaValueToDisplay` renders any
- * value for a cell/badge; `formulaValueToText` is the plain coercion used by
- * text functions and `+` concatenation (v1's `toText`, extended to dates).
+ * Display and text projections of v2 formula values.
+ * `formulaValueToDisplay` renders any value for a cell/badge;
+ * `formulaValueToText` is the plain coercion used by text functions and `+`
+ * concatenation (v1's `toText`, extended to dates).
  */
 
 import { format as dateFnsFormat } from "date-fns/format";

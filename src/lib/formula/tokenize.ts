@@ -5,9 +5,9 @@
  * inclusive, `end` exclusive) so the parser can report precise errors and
  * attach exact spans to every AST node.
  *
- * Beyond the v1 lexer (`lib/expr/tokenize.ts`) this one skips `//` line
- * comments and slash-star block comments, accepts exponent number literals
- * (`1e5`, `2.5e-3`), and recognizes the `??`, `^`, and `=>` operators.
+ * Beyond the retired v1 lexer this one skips `//` line comments and
+ * slash-star block comments, accepts exponent number literals (`1e5`,
+ * `2.5e-3`), and recognizes the `??`, `^`, and `=>` operators.
  */
 
 /** A source-positioned lexer/parser error. `position` is a 0-based character index. */

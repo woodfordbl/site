@@ -113,7 +113,7 @@ import {
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import { compareManualOrder } from "@/lib/databases/row-sort.ts";
-import { canonicalizeExpression } from "@/lib/expr/ref-rewrite.ts";
+import { canonicalizeExpression } from "@/lib/formula/ref-rewrite.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,

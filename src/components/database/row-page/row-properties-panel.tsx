@@ -12,10 +12,10 @@ import {
   isInlineEditableField,
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
-import { evaluateExpression, exprError } from "@/lib/expr/evaluate.ts";
-import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
-import { parseExpression } from "@/lib/expr/parse.ts";
-import { createRowScope } from "@/lib/expr/row-scope.ts";
+import { computeFormulaRowValues } from "@/lib/databases/formula-values.ts";
+import { formulaValueToDisplay } from "@/lib/formula/display.ts";
+import { parseFormula } from "@/lib/formula/parse.ts";
+import { formulaError } from "@/lib/formula/values.ts";
 import type {
   DatabaseField,
   LocalDatabase,
@@ -33,7 +33,11 @@ import { cn } from "@/lib/utils.ts";
  * are always read-only, and formula fields render their computed value.
  */
 
-/** Evaluate a formula field's expression against the row for display. */
+/**
+ * Evaluate a formula field against the row for display, through the same
+ * plan the table overlay uses (`computeFormulaRowValues`) so
+ * formula-referencing-formula and cycle errors render identically here.
+ */
 function formulaDisplay(
   field: Extract<DatabaseField, { type: "formula" }>,
   fields: DatabaseField[],
@@ -42,12 +46,14 @@ function formulaDisplay(
   if (field.expression.trim() === "") {
     return "";
   }
-  const parsed = parseExpression(field.expression);
+  const parsed = parseFormula(field.expression);
   if (!parsed.ok) {
-    return exprValueToDisplay(exprError(parsed.error.message));
+    return formulaValueToDisplay(formulaError(parsed.error.message));
   }
-  const scope = createRowScope(fields, values, { now: () => new Date() });
-  return exprValueToDisplay(evaluateExpression(parsed.ast, scope));
+  const resolved = computeFormulaRowValues(fields, values, {
+    now: () => new Date(),
+  });
+  return formulaValueToDisplay(resolved.get(field.id) ?? null);
 }
 
 interface RowPropertyValueProps {

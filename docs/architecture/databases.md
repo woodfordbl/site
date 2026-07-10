@@ -264,15 +264,20 @@ UI surfaces:
 ## Formula fields
 
 Formula values are computed at **read time** — never stored in `row.values`.
-[`formula-values.ts`](../../src/lib/databases/formula-values.ts) is the pure overlay:
-`computeFormulaOverlay(fields, rows, { now? })` parses each formula's expression once
-per call (`lib/expr` engine), evaluates per row via `createRowScope`, and records
-`{ cellValue, display, isError }` per cell (`exprValueToCellValue` /
-`exprValueToDisplay`). `withFormulaValues` merges the results into row **copies**
-(inputs never mutated; parse-error and blank expressions yield `null` cells, shadowing
-any stale stored values under the field id). `database-table-view.tsx` feeds these
-merged rows to the whole pipeline — filter, sort, group, Calculate row, and the grid —
-so formulas participate in the view machinery like stored columns:
+[`formula-values.ts`](../../src/lib/databases/formula-values.ts) is the pure overlay
+over the v2 engine in [`src/lib/formula/`](../../src/lib/formula/) (typed values,
+static checker, id-canonical references — full reference:
+[formula-language](./formula-language.md)): `computeFormulaOverlay(fields, rows,
+{ now? })` parses and checks each formula's expression once per call (never per row),
+orders formula fields **topologically** over their formula→formula references, and
+evaluates column-major via `createFormulaRowScope` — so formulas may reference other
+formulas; reference cycles yield named per-cell errors (`Circular reference:
+Total → Subtotal → Total`). Each cell records `{ cellValue, display, isError }`.
+`withFormulaValues` merges the results into row **copies** (inputs never mutated;
+parse-error and blank expressions yield `null` cells, shadowing any stale stored
+values under the field id). `database-table-view.tsx` feeds these merged rows to the
+whole pipeline — filter, sort, group, Calculate row, and the grid — so formulas
+participate in the view machinery like stored columns:
 
 - **Coercion** — `coerceCellValue`'s formula case passes scalar string/number/boolean
   through; everything else reads as empty.
@@ -294,13 +299,18 @@ so formulas participate in the view machinery like stored columns:
 - **Editing** — the column menu's Edit property submenu becomes a formula **builder**
   ([`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx),
   width-fluid for the desktop submenu and the touch menu drawer alike): monospace
-  expression textarea with live parse feedback (positioned error / "✓ Valid") and a live
-  first-row preview, over a searchable Properties / Functions / Operators reference
-  (docs sourced from [`function-catalog.ts`](../../src/lib/expr/function-catalog.ts),
-  drift-tested against the evaluator) that inserts at the caret, plus an explicit Save;
-  broken expressions show a warning badge on the column header (`formulaDisplayInfo`).
-  Formula→formula references are per-cell errors v1 (cycle safety without a dependency
-  graph); the dependency-DAG upgrade is sketched in `createRowScope`'s docs.
+  expression textarea with live parse/check feedback (positioned error / "✓ Valid"
+  plus a result-type badge from the static checker) and a live first-row preview, over
+  a searchable Properties / Functions / Operators reference (docs sourced from the
+  typed catalog, [`catalog.ts`](../../src/lib/formula/catalog.ts)) that inserts at the
+  caret, plus an explicit Save; broken expressions show a warning badge on the column
+  header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
+  diagnostics warn but save (cells degrade per row, never crash).
+- **Id-canonical references** — stored expressions reference fields by id
+  (`prop("<fieldId>")`), humanized to `thisPage.Name` in the builder and
+  re-canonicalized on Save, so field renames never break formulas; a startup migration
+  rewrites legacy name-form expressions
+  ([formula-language — Property references](./formula-language.md#property-references-id-canonical)).
 
 ## Draft-proxy invariant (mutations)
 
@@ -334,7 +344,7 @@ title-row switcher.
 ## Review-hardening invariants
 
 Post-review guarantees worth knowing when editing this area: the expression
-parser enforces length/depth caps so `parseExpression` never throws (hostile
+parser enforces length/depth caps so `parseFormula` never throws (hostile
 synced cell text cannot crash render); formula columns filter on their
 displayed text; multiSelect plain text joins in field-option order so
 Calculate/sort/grouping agree; the editing grid row is pinned into the virtual
@@ -407,7 +417,8 @@ row-page template authoring UI and live tokens
 (virtual pages + copy-on-write with host-page nesting shipped — see
 [Row pages](#row-pages-virtual--copy-on-write)), sidebar database-row
 scroll-to-block navigation, relations/rollups,
-formula-aware typed filter operators and formula→formula references,
+formula-aware typed filter operators (formula→formula references shipped with the
+v2 engine — see [formula-language](./formula-language.md)),
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views
 shipped — see [Table view](#table-view)), workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push

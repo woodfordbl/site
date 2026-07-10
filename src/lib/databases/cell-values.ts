@@ -186,7 +186,7 @@ export function cellToPlainText(
 /**
  * Plain text for a coerced (scalar) formula cell: strings as-is, numbers via
  * `String`, booleans "Yes"/"No" (matching checkbox and the formula display
- * convention in `lib/expr`).
+ * convention in `lib/formula`).
  */
 function formulaPlainText(coerced: DatabaseCellValue): string {
   if (typeof coerced === "string") {
@@ -266,7 +266,7 @@ const DATE_DISPLAY_PATTERNS: Record<"default" | "long", string> = {
 export interface FormatCellValueOptions {
   /**
    * Injected clock for `relative` date fields; omit for real time. Mirrors
-   * the expr engine's injected-clock convention
+   * the formula engine's injected-clock convention
    * (`ComputeFormulaOverlayOptions.now`) so tests stay deterministic.
    */
   now?: () => Date;

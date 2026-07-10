@@ -108,12 +108,13 @@ describe("FormulaEditorPanel", () => {
     expect(screen.getByText("Preview: 4")).toBeDefined();
   });
 
-  it("excludes formula fields from Properties and previews errors honestly", async () => {
+  it("lists formula fields as Properties and previews errors honestly", async () => {
     renderPanel();
     await flushFrames();
 
-    // The formula field itself must not be insertable.
-    expect(screen.queryByText("Total")).toBeNull();
+    // v2: formula fields are insertable references too (formulas may
+    // reference other formulas; a self-reference surfaces as a cycle error).
+    expect(screen.getByText("Total")).toBeDefined();
 
     const textarea = screen.getByLabelText("Formula expression");
     fireEvent.change(textarea, { target: { value: "1 / 0" } });
@@ -134,15 +135,34 @@ describe("FormulaEditorPanel", () => {
     expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
   });
 
-  it("hands unparseable drafts to onSave unchanged", async () => {
+  it("disables Save for unparseable drafts, but not for blank ones", async () => {
     const onSave = renderPanel();
     await flushFrames();
 
     const textarea = screen.getByLabelText("Formula expression");
     fireEvent.change(textarea, { target: { value: "1 +" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
 
-    expect(onSave).toHaveBeenCalledWith("1 +");
+    // Clearing a formula stays saveable (blank draft = no parse to fail).
+    fireEvent.change(textarea, { target: { value: "  " } });
+    expect(save.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(save);
+    expect(onSave).toHaveBeenCalledWith("  ");
+  });
+
+  it("keeps Save enabled when only checker diagnostics are present", async () => {
+    const onSave = renderPanel();
+    await flushFrames();
+
+    const textarea = screen.getByLabelText("Formula expression");
+    fireEvent.change(textarea, { target: { value: 'abs("oops")' } });
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(save);
+    expect(onSave).toHaveBeenCalledWith('abs("oops")');
   });
 
   it("humanizes stored canonical expressions into the draft", async () => {

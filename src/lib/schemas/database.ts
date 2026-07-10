@@ -108,7 +108,7 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
   databaseFieldBaseSchema.extend({
     type: z.literal("formula"),
     /**
-     * Expression source (`lib/expr` grammar) evaluated per row with
+     * Expression source (`lib/formula` grammar) evaluated per row with
      * `thisRow`/`thisPage` property scope. Computed at read time — formula
      * values never live in `row.values`, and formula cells are read-only.
      */

@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
+import { formulaValueToDisplay } from "@/lib/formula/display.ts";
+import { evaluateFormula } from "@/lib/formula/evaluate.ts";
+import { parseFormula } from "@/lib/formula/parse.ts";
 import {
-  type ExprValue,
-  evaluateExpression,
-  isExprError,
-} from "@/lib/expr/evaluate.ts";
-import { parseExpression } from "@/lib/expr/parse.ts";
-import { createRowScope } from "@/lib/expr/row-scope.ts";
+  createFormulaRowScope,
+  type ResolvedFormulaValues,
+} from "@/lib/formula/row-scope.ts";
+import {
+  FormulaDate,
+  type FormulaValue,
+  formulaError,
+  isFormulaError,
+} from "@/lib/formula/values.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -51,23 +57,27 @@ const values: Record<string, DatabaseCellValue> = {
 
 function run(
   source: string,
-  rowValues: Record<string, DatabaseCellValue> = values
-): ExprValue {
-  const parsed = parseExpression(source);
+  rowValues: Record<string, DatabaseCellValue> = values,
+  resolved?: ResolvedFormulaValues
+): FormulaValue {
+  const parsed = parseFormula(source);
   if (!parsed.ok) {
     throw new Error(parsed.error.message);
   }
-  return evaluateExpression(parsed.ast, createRowScope(fields, rowValues));
+  return evaluateFormula(
+    parsed.ast,
+    createFormulaRowScope(fields, rowValues, resolved)
+  );
 }
 
-function errorMessage(value: ExprValue): string {
-  if (!isExprError(value)) {
-    throw new Error(`expected an ExprError, got ${JSON.stringify(value)}`);
+function errorMessage(value: FormulaValue): string {
+  if (!isFormulaError(value)) {
+    throw new Error(`expected a FormulaError, got ${JSON.stringify(value)}`);
   }
   return value.message;
 }
 
-describe("createRowScope name resolution", () => {
+describe("createFormulaRowScope name resolution", () => {
   it("resolves by exact field name", () => {
     expect(run("thisPage.Name")).toBe("Ada");
     expect(run("thisPage.Amount")).toBe(12.5);
@@ -80,8 +90,13 @@ describe("createRowScope name resolution", () => {
   });
 
   it("resolves bracket access for names with spaces", () => {
-    expect(run('thisPage["Due Date"]')).toBe("2026-03-05");
-    expect(run('thisPage["due date"]')).toBe("2026-03-05");
+    // v2: date cells are FormulaDate values (date-only), not ISO strings.
+    const due = run('thisPage["Due Date"]');
+    expect(due).toBeInstanceOf(FormulaDate);
+    expect(formulaValueToDisplay(due)).toBe("2026-03-05");
+    expect(formulaValueToDisplay(run('thisPage["due date"]'))).toBe(
+      "2026-03-05"
+    );
   });
 
   it("treats thisRow and thisPage as the same scope", () => {
@@ -97,16 +112,16 @@ describe("createRowScope name resolution", () => {
       { id: "a", name: "Score", type: "number" },
       { id: "b", name: "score", type: "text" },
     ];
-    const parsed = parseExpression("thisPage.Score");
+    const parsed = parseFormula("thisPage.Score");
     if (!parsed.ok) {
       throw new Error(parsed.error.message);
     }
-    const scope = createRowScope(clashing, { a: 1, b: "two" });
-    expect(evaluateExpression(parsed.ast, scope)).toBe(1);
+    const scope = createFormulaRowScope(clashing, { a: 1, b: "two" });
+    expect(evaluateFormula(parsed.ast, scope)).toBe(1);
   });
 });
 
-describe("createRowScope id resolution", () => {
+describe("createFormulaRowScope id resolution", () => {
   it("resolves prop() references by exact field id", () => {
     expect(run('prop("f-name")')).toBe("Ada");
     expect(run('prop("f-amount") * 2')).toBe(25);
@@ -117,12 +132,12 @@ describe("createRowScope id resolution", () => {
       { id: "score", name: "Points", type: "number" },
       { id: "other", name: "score", type: "text" },
     ];
-    const parsed = parseExpression('prop("score")');
+    const parsed = parseFormula('prop("score")');
     if (!parsed.ok) {
       throw new Error(parsed.error.message);
     }
-    const scope = createRowScope(clashing, { score: 7, other: "text" });
-    expect(evaluateExpression(parsed.ast, scope)).toBe(7);
+    const scope = createFormulaRowScope(clashing, { score: 7, other: "text" });
+    expect(evaluateFormula(parsed.ast, scope)).toBe(7);
   });
 
   it("falls back to name matching for prop() refs that are not ids", () => {
@@ -135,12 +150,6 @@ describe("createRowScope id resolution", () => {
     );
   });
 
-  it("keeps the formula-on-formula guard for id references", () => {
-    expect(errorMessage(run('prop("f-total")'))).toBe(
-      "Formulas cannot reference other formulas yet"
-    );
-  });
-
   it("does not trim or case-fold id matches", () => {
     // "F-NAME" is no field id; it falls through to name matching and misses.
     expect(errorMessage(run('prop("F-NAME")'))).toBe(
@@ -149,7 +158,7 @@ describe("createRowScope id resolution", () => {
   });
 });
 
-describe("createRowScope value mapping", () => {
+describe("createFormulaRowScope value mapping", () => {
   it("maps text, url, number, and checkbox directly", () => {
     expect(run("thisPage.Name")).toBe("Ada");
     expect(run("thisPage.Site")).toBe("https://example.com");
@@ -168,13 +177,22 @@ describe("createRowScope value mapping", () => {
     );
   });
 
-  it("joins multiSelect option names with commas", () => {
-    expect(run("thisPage.Tags")).toBe("Alpha, Beta");
+  it("maps multiSelect cells to lists of option names", () => {
+    // v2: multiSelect is a real list<text> (v1 comma-joined into one string).
+    expect(run("thisPage.Tags")).toEqual(["Alpha", "Beta"]);
+    expect(formulaValueToDisplay(run("thisPage.Tags"))).toBe("Alpha, Beta");
+    // contains() on a list checks membership (== semantics).
     expect(run('contains(thisPage.Tags, "Beta")')).toBe(true);
+    expect(run('contains(thisPage.Tags, "Bet")')).toBe(false);
   });
 
-  it("reduces dates to their ISO date part for lexical comparison", () => {
-    expect(run('thisPage["Due Date"] < "2026-04-01"')).toBe(true);
+  it("compares date cells as date values", () => {
+    // v2: dates compare with dates (v1 compared ISO date strings
+    // lexically); a raw text comparand is a type error, not a coercion.
+    expect(run('thisPage["Due Date"] < parseDate("2026-04-01")')).toBe(true);
+    expect(errorMessage(run('thisPage["Due Date"] < "2026-04-01"'))).toContain(
+      "Cannot compare"
+    );
   });
 
   it("maps missing and null cells to null", () => {
@@ -196,41 +214,58 @@ describe("createRowScope value mapping", () => {
   });
 });
 
-describe("createRowScope formula references", () => {
-  it("rejects referencing a formula field by name", () => {
-    expect(errorMessage(run("thisPage.Total"))).toBe(
-      "Formulas cannot reference other formulas yet"
-    );
+describe("createFormulaRowScope formula references", () => {
+  // v2: formulas may reference other formulas — the overlay threads a
+  // `resolved` map of already-computed values through the scope (v1 refused
+  // with "Formulas cannot reference other formulas yet").
+  it("reads formula fields from the resolved map by name and id", () => {
+    const resolved = new Map<string, FormulaValue>([["f-total", 2]]);
+    expect(run("thisPage.Total + 1", values, resolved)).toBe(3);
+    expect(run('prop("f-total") * 10', values, resolved)).toBe(20);
   });
 
-  it("rejects case-insensitive formula references too", () => {
-    expect(errorMessage(run("thisPage.total + 1"))).toBe(
-      "Formulas cannot reference other formulas yet"
+  it("reads a formula field absent from the map as blank", () => {
+    expect(run("thisPage.Total", values, new Map())).toBeNull();
+    expect(run("thisPage.Total")).toBeNull();
+  });
+
+  it("propagates error values placed in the map (cycle members)", () => {
+    const resolved = new Map<string, FormulaValue>([
+      ["f-total", formulaError("Circular reference: Total → Total")],
+    ]);
+    expect(errorMessage(run("thisPage.Total + 1", values, resolved))).toBe(
+      "Circular reference: Total → Total"
     );
   });
 });
 
-describe("createRowScope clock injection", () => {
+describe("createFormulaRowScope clock injection", () => {
   it("passes opts.now through to now()/today()", () => {
-    const parsed = parseExpression("now()");
+    const parsed = parseFormula("now()");
     if (!parsed.ok) {
       throw new Error(parsed.error.message);
     }
-    const scope = createRowScope(fields, values, {
+    const scope = createFormulaRowScope(fields, values, undefined, {
       now: () => new Date("2026-07-04T10:00:00.000Z"),
     });
-    expect(evaluateExpression(parsed.ast, scope)).toBe(
+    const result = evaluateFormula(parsed.ast, scope);
+    expect(result).toBeInstanceOf(FormulaDate);
+    expect((result as FormulaDate).date.toISOString()).toBe(
       "2026-07-04T10:00:00.000Z"
     );
   });
 
   it("stays deterministic without an injected clock", () => {
-    const parsed = parseExpression("now()");
+    const parsed = parseFormula("now()");
     if (!parsed.ok) {
       throw new Error(parsed.error.message);
     }
-    const scope = createRowScope(fields, values);
-    expect(evaluateExpression(parsed.ast, scope)).toBe(
+    const result = evaluateFormula(
+      parsed.ast,
+      createFormulaRowScope(fields, values)
+    );
+    expect(result).toBeInstanceOf(FormulaDate);
+    expect((result as FormulaDate).date.toISOString()).toBe(
       "2020-01-01T12:00:00.000Z"
     );
   });

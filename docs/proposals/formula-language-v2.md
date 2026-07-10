@@ -21,7 +21,7 @@ access, and a full editor redesign (desktop + mobile).
 
 ## 2. Where we are today (audit summary)
 
-Engine (`src/lib/expr/`): hand-written tokenizer → recursive-descent parser → AST →
+Engine (`lib/expr/`, since deleted): hand-written tokenizer → recursive-descent parser → AST →
 tree-walk evaluator. Solid bones (never throws, error-as-value `ExprError` propagation,
 depth/length guards, AST parse cache, volatile-function detection driving a 60 s clock).
 Limitations, all confirmed in code:
@@ -200,8 +200,8 @@ Outputs:
 ## 5. The engine
 
 New split: `src/lib/formula/` (pure language: lexer, parser, checker, evaluator, stdlib,
-catalog — replaces `src/lib/expr/` via re-exports during transition) and
-`src/db/formula-engine/` (stateful: dependency graph, caches, subscriptions).
+catalog — replaces `lib/expr/` via re-exports during transition) and
+`db/formula-engine/` (stateful: dependency graph, caches, subscriptions).
 
 ### 5.1 Dependency graph
 

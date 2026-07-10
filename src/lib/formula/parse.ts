@@ -6,7 +6,7 @@
  * `.name` / `.fn(…)` < primary. Parse failures are returned as a Result —
  * never thrown to callers.
  *
- * Everything the v1 grammar (`lib/expr/parse.ts`) accepted stays valid and
+ * Everything the retired v1 grammar accepted stays valid and
  * parses to equivalent shapes; new here are comments, exponent literals,
  * `??`/`^`, list literals, lambdas, bare-identifier name references, and
  * dot-chained member access and method calls.

@@ -1,8 +1,9 @@
+import { computeFormulaRowValues } from "@/lib/databases/formula-values.ts";
 import {
-  type CreateRowScopeOptions,
-  createRowScope,
-} from "@/lib/expr/row-scope.ts";
-import { evaluateTemplateText } from "@/lib/expr/template.ts";
+  type CreateFormulaRowScopeOptions,
+  createFormulaRowScope,
+} from "@/lib/formula/row-scope.ts";
+import { evaluateTemplateText } from "@/lib/formula/template.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 import type {
   DatabaseCellValue,
@@ -72,22 +73,25 @@ const TEMPLATE_TEXT_PROP_KEYS: Partial<Record<BlockType, readonly string[]>> = {
 /** Options for {@link instantiateTemplateBlocks}. */
 export interface InstantiateTemplateBlocksOptions {
   /**
-   * Injected clock for `now()`/`today()` in tokens. Omit for the expression
+   * Injected clock for `now()`/`today()` in tokens. Omit for the formula
    * engine's deterministic fixed epoch (tests); UI callers pass the real
    * clock.
    */
-  now?: CreateRowScopeOptions["now"];
+  now?: CreateFormulaRowScopeOptions["now"];
 }
 
 /**
  * Instantiate a row-page template for one row: deep-map the flat block array,
  * evaluating `{{ thisPage.X }}` tokens in every user-visible text prop
  * ({@link TEMPLATE_TEXT_PROP_KEYS}) via `evaluateTemplateText` +
- * `createRowScope`. Ids, `parentId` links, and all non-text props pass
- * through untouched; the input template is never mutated (changed blocks are
- * rebuilt, unchanged blocks are returned as-is). An absent or empty template
- * falls back to {@link defaultRowTemplateBlocks}. Evaluation errors render
- * inline ("⚠ message") — never thrown.
+ * `createFormulaRowScope`. Formula fields referenced in tokens resolve to
+ * their computed values (`computeFormulaRowValues` — the overlay's plan:
+ * topological order, cycles as inline errors). Ids, `parentId` links, and
+ * all non-text props pass through untouched; the input template is never
+ * mutated (changed blocks are rebuilt, unchanged blocks are returned as-is).
+ * An absent or empty template falls back to
+ * {@link defaultRowTemplateBlocks}. Evaluation errors render inline
+ * ("⚠ message") — never thrown.
  */
 export function instantiateTemplateBlocks(
   template: Block[] | undefined,
@@ -99,11 +103,9 @@ export function instantiateTemplateBlocks(
     template !== undefined && template.length > 0
       ? template
       : defaultRowTemplateBlocks();
-  const scope = createRowScope(
-    fields,
-    values,
-    opts?.now === undefined ? undefined : { now: opts.now }
-  );
+  const scopeOpts = opts?.now === undefined ? undefined : { now: opts.now };
+  const resolved = computeFormulaRowValues(fields, values, scopeOpts);
+  const scope = createFormulaRowScope(fields, values, resolved, scopeOpts);
 
   return source.map((block) => {
     const keys = TEMPLATE_TEXT_PROP_KEYS[block.type];

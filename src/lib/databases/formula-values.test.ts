@@ -76,23 +76,78 @@ describe("computeFormulaOverlay", () => {
     expect(result?.display.startsWith("⚠ ")).toBe(true);
   });
 
-  it("reports formula→formula references as per-cell errors (cycle guard)", () => {
-    const total = formulaField("f-total", "thisPage.Price * 2");
-    const chained: DatabaseField = {
-      id: "f-chain",
-      name: "Chain",
+  // v2: formulas may reference other formulas — evaluation is column-major
+  // in topological order (v1 refused with a per-cell guard error).
+  it("evaluates formula→formula references through the dependency order", () => {
+    const subtotal: DatabaseField = {
+      id: "f-sub",
+      name: "Subtotal",
       type: "formula",
-      expression: `thisPage["Formula f-total"] + 1`,
+      expression: "thisPage.Price * 2",
     };
+    const total: DatabaseField = {
+      id: "f-tot",
+      name: "Total",
+      type: "formula",
+      expression: "thisPage.Subtotal + 1",
+    };
+    // Total listed BEFORE Subtotal: schema order must not matter.
     const overlay = computeFormulaOverlay(
-      [priceField, total, chained],
+      [priceField, total, subtotal],
+      ROWS.slice(0, 2)
+    );
+
+    expect(overlay.get("r1")?.["f-sub"].cellValue).toBe(20);
+    expect(overlay.get("r1")?.["f-tot"].cellValue).toBe(21);
+    expect(overlay.get("r2")?.["f-sub"].cellValue).toBe(8);
+    expect(overlay.get("r2")?.["f-tot"].cellValue).toBe(9);
+  });
+
+  it("reports reference cycles as per-cell errors named by field names", () => {
+    const a: DatabaseField = {
+      id: "f-a",
+      name: "Alpha",
+      type: "formula",
+      expression: "thisPage.Beta + 1",
+    };
+    const b: DatabaseField = {
+      id: "f-b",
+      name: "Beta",
+      type: "formula",
+      expression: "thisPage.Alpha + 1",
+    };
+    // References INTO the cycle propagate the cycle member's error value.
+    const chained = formulaField("f-chain", "thisPage.Alpha + 1");
+    const overlay = computeFormulaOverlay(
+      [priceField, a, b, chained],
       [ROWS[0]]
     );
 
-    expect(overlay.get("r1")?.["f-chain"].isError).toBe(true);
-    expect(overlay.get("r1")?.["f-chain"].display).toContain(
-      "cannot reference other formulas"
+    const alpha = overlay.get("r1")?.["f-a"];
+    expect(alpha?.isError).toBe(true);
+    expect(alpha?.cellValue).toBeNull();
+    expect(alpha?.display).toBe("⚠ Circular reference: Alpha → Beta → Alpha");
+    expect(overlay.get("r1")?.["f-b"].display).toBe(
+      "⚠ Circular reference: Beta → Alpha → Beta"
     );
+    expect(overlay.get("r1")?.["f-chain"].isError).toBe(true);
+    expect(overlay.get("r1")?.["f-chain"].display).toBe(
+      "⚠ Circular reference: Alpha → Beta → Alpha"
+    );
+  });
+
+  it("reports a self-reference as a cycle too", () => {
+    const selfRef: DatabaseField = {
+      id: "f-self",
+      name: "Self",
+      type: "formula",
+      expression: "thisPage.Self + 1",
+    };
+    const overlay = computeFormulaOverlay([priceField, selfRef], [ROWS[0]]);
+
+    const cell = overlay.get("r1")?.["f-self"];
+    expect(cell?.isError).toBe(true);
+    expect(cell?.display).toBe("⚠ Circular reference: Self → Self");
   });
 
   it("maps blank and unparseable expressions to null cells for every row", () => {

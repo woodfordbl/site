@@ -214,4 +214,6 @@ Neither asset is stored in `site-local-pages` shards, and neither is statically 
 
 On first client load, legacy `site-local-pages` documents that still embed `blocks[]` are split into metadata + block shards (`site-local-storage-v2` flag). See `migrateLocalStorageToV2` in `src/db/collections/migrate-local-storage.ts`.
 
+**Formula references:** `startLocalCollectionsSync` also canonicalizes stored database formula expressions — name references (`thisPage.X`) rewrite to the field-id form (`prop("<id>")`) once the databases collection is live ([`formula-ref-migration.ts`](../../src/db/queries/formula-ref-migration.ts)). Idempotent (unchanged expressions are never written) and lossless (unparseable expressions and unresolvable names pass through untouched); see [formula-language — Property references](./formula-language.md#property-references-id-canonical).
+
 **User page routes:** `MigrateUserPageRoutesEffect` (`useMigrateUserPageRoutes`) fixes shadowed/duplicate user metadata slugs via [`planUserPageSlugMigrations`](../../src/lib/pages/migrate-user-page-routes.ts). Progress is keyed in `localStorage` as `site-user-page-slugs-v1`. Implementation: [`migrate-user-page-routes.ts`](../../src/lib/pages/migrate-user-page-routes.ts).

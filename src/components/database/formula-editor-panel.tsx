@@ -9,6 +9,7 @@ import {
 } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { Button } from "@/components/ui/button.tsx";
+import { TokenChip } from "@/components/ui/chip.tsx";
 import {
   InputGroup,
   InputGroupAddon,
@@ -18,19 +19,29 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import { evaluateExpression } from "@/lib/expr/evaluate.ts";
-import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
 import {
-  EXPR_FUNCTION_CATALOG,
-  EXPR_OPERATOR_CATALOG,
+  computeFormulaRowValues,
+  formulaCheckContext,
+} from "@/lib/databases/formula-values.ts";
+import {
+  FORMULA_FUNCTION_CATALOG,
+  FORMULA_OPERATOR_CATALOG,
+  formulaFunctionSignature,
   formulaPropertyReference,
-} from "@/lib/expr/function-catalog.ts";
-import { parseExpression } from "@/lib/expr/parse.ts";
+} from "@/lib/formula/catalog.ts";
+import {
+  checkFormula,
+  type FormulaCheckResult,
+  formulaTypeBadge,
+} from "@/lib/formula/check.ts";
+import { formulaValueToDisplay } from "@/lib/formula/display.ts";
+import { evaluateFormula } from "@/lib/formula/evaluate.ts";
+import { parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalizeExpression,
   humanizeExpression,
-} from "@/lib/expr/ref-rewrite.ts";
-import { createRowScope } from "@/lib/expr/row-scope.ts";
+} from "@/lib/formula/ref-rewrite.ts";
+import { createFormulaRowScope } from "@/lib/formula/row-scope.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -39,16 +50,19 @@ import { cn } from "@/lib/utils.ts";
 
 /**
  * Shared formula BUILDER panel (Notion-style): expression textarea with live
- * parse status and a first-row preview on top, then a searchable reference of
- * Properties / Functions / Operators that insert at the caret, with a
- * fixed-height detail strip documenting the focused entry. Width-fluid so it
- * works both in the desktop column-menu submenu (~360px) and full-width in
- * the mobile menu drawer. Stored expressions are field-id canonical
- * (`prop("<id>")`); the panel humanizes them into name references for the
- * draft and re-canonicalizes on Save, so users only ever see names. Save
- * hands the canonical text to the caller's `onSave` unconditionally (so the
- * menu can close); the caller compares against the stored expression and
- * skips the write for unchanged drafts.
+ * parse/check status (first checker diagnostic, or "✓ Valid" plus the
+ * result-type badge) and a first-row preview on top, then a searchable
+ * reference of Properties / Functions / Operators that insert at the caret,
+ * with a fixed-height detail strip documenting the focused entry.
+ * Width-fluid so it works both in the desktop column-menu submenu (~360px)
+ * and full-width in the mobile menu drawer. Stored expressions are field-id
+ * canonical (`prop("<id>")`); the panel humanizes them into name references
+ * for the draft and re-canonicalizes on Save, so users only ever see names.
+ * Save is blocked only by parse errors — checker diagnostics warn but still
+ * save (the overlay degrades per-cell, never crashes). Save hands the
+ * canonical text to the caller's `onSave` unconditionally (so the menu can
+ * close); the caller compares against the stored expression and skips the
+ * write for unchanged drafts.
  */
 
 /**
@@ -181,39 +195,54 @@ export function FormulaEditorPanel({
   };
 
   const trimmed = draft.trim();
-  const parsed = trimmed === "" ? null : parseExpression(draft);
+  const parsed = trimmed === "" ? null : parseFormula(draft);
 
-  // Live preview against the FIRST row: evaluate the parsed draft through the
-  // same scope the real overlay uses; errors render honestly ("⚠ …").
+  // Static check of the parsed draft against the schema — formula fields
+  // typed via the same topological pass the overlay uses.
+  const checkContext = useMemo(() => formulaCheckContext(fields), [fields]);
+  const checked: FormulaCheckResult | null = useMemo(
+    () => (parsed?.ok ? checkFormula(parsed.ast, checkContext) : null),
+    [parsed, checkContext]
+  );
+
+  // Live preview against the FIRST row: evaluate the parsed draft through
+  // the same scope the real overlay uses — other formula fields resolve to
+  // their computed values; errors render honestly ("⚠ …").
   const preview = useMemo(() => {
     if (!parsed?.ok || firstRowValues === null) {
       return null;
     }
-    const scope = createRowScope([...fields], firstRowValues, {
-      now: () => new Date(),
+    const now = () => new Date();
+    const resolved = computeFormulaRowValues(fields, firstRowValues, { now });
+    const scope = createFormulaRowScope(fields, firstRowValues, resolved, {
+      now,
     });
-    return exprValueToDisplay(evaluateExpression(parsed.ast, scope));
+    return formulaValueToDisplay(evaluateFormula(parsed.ast, scope));
   }, [parsed, fields, firstRowValues]);
 
   const normalizedQuery = query.trim().toLowerCase();
 
+  // Formula fields are insertable references too (formulas may reference
+  // other formulas); a self-reference surfaces as a named cycle error.
   const propertyFields = useMemo(
     () =>
-      fields.filter(
-        (field) =>
-          field.type !== "formula" &&
-          field.name.toLowerCase().includes(normalizedQuery)
+      fields.filter((field) =>
+        field.name.toLowerCase().includes(normalizedQuery)
       ),
     [fields, normalizedQuery]
   );
 
   const functionEntries = useMemo(
     () =>
-      EXPR_FUNCTION_CATALOG.filter((entry) =>
+      FORMULA_FUNCTION_CATALOG.map((entry) => ({
+        ...entry,
+        signature: formulaFunctionSignature(entry),
+      })).filter((entry) =>
         [
           entry.name,
           ...(entry.aliases ?? []),
           entry.signature,
+          entry.category,
           entry.description,
         ]
           .join(" ")
@@ -225,7 +254,7 @@ export function FormulaEditorPanel({
 
   const operatorEntries = useMemo(
     () =>
-      EXPR_OPERATOR_CATALOG.filter((entry) =>
+      FORMULA_OPERATOR_CATALOG.filter((entry) =>
         `${entry.symbol} ${entry.category} ${entry.description}`
           .toLowerCase()
           .includes(normalizedQuery)
@@ -238,16 +267,42 @@ export function FormulaEditorPanel({
     functionEntries.length === 0 &&
     operatorEntries.length === 0;
 
+  const firstDiagnostic = checked?.diagnostics[0];
   let status: ReactNode = null;
-  if (parsed !== null) {
-    status = parsed.ok ? (
-      <span className="px-0.5 text-muted-foreground text-xs">✓ Valid</span>
-    ) : (
-      <span className="px-0.5 text-destructive text-xs">
+  if (parsed !== null && !parsed.ok) {
+    status = (
+      <span className="min-w-0 truncate text-destructive text-xs">
         {parsed.error.message} (at character {parsed.error.position + 1})
       </span>
     );
+  } else if (firstDiagnostic !== undefined) {
+    status = (
+      <span className="min-w-0 truncate text-destructive text-xs">
+        {firstDiagnostic.message} (at character {firstDiagnostic.start + 1})
+      </span>
+    );
+  } else if (parsed !== null) {
+    status = (
+      <span className="min-w-0 truncate text-muted-foreground text-xs">
+        ✓ Valid
+      </span>
+    );
   }
+
+  const statusRow =
+    parsed === null ? null : (
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        {status}
+        {checked === null ? null : (
+          <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
+            Type:
+            <TokenChip tone="neutral">
+              {formulaTypeBadge(checked.resultType)}
+            </TokenChip>
+          </span>
+        )}
+      </div>
+    );
 
   return (
     <div className="flex w-full flex-col gap-1.5 p-1">
@@ -267,7 +322,7 @@ export function FormulaEditorPanel({
         spellCheck={false}
         value={draft}
       />
-      {status}
+      {statusRow}
       {preview === null ? null : (
         <span className="truncate px-0.5 text-muted-foreground text-xs">
           Preview: {preview === "" ? "(empty)" : preview}
@@ -324,7 +379,7 @@ export function FormulaEditorPanel({
               detail={{
                 title: entry.signature,
                 description: entry.description,
-                example: entry.example,
+                example: entry.examples[0],
               }}
               key={entry.name}
               onInsert={() => {
@@ -393,6 +448,7 @@ export function FormulaEditorPanel({
       </div>
       <Button
         className="self-end"
+        disabled={parsed !== null && !parsed.ok}
         onClick={() => {
           onSave(canonicalizeExpression(draft, fields).text);
         }}

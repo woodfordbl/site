@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeExpression,
   humanizeExpression,
-} from "@/lib/expr/ref-rewrite.ts";
+} from "@/lib/formula/ref-rewrite.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 const FIELDS: DatabaseField[] = [
@@ -76,6 +76,28 @@ describe("canonicalizeExpression", () => {
   it("leaves already-canonical references untouched", () => {
     expect(canonicalizeExpression('prop("f-price") + 1', FIELDS)).toEqual({
       text: 'prop("f-price") + 1',
+      changed: false,
+      unresolved: [],
+    });
+  });
+
+  // v2: a pasted name-form prop() reference (argument is a field NAME, not
+  // an id) canonicalizes too, instead of only resolving via the evaluator's
+  // name fallback.
+  it("rewrites prop() name references to the field id", () => {
+    expect(canonicalizeExpression('prop("Price") + 1', FIELDS)).toEqual({
+      text: 'prop("f-price") + 1',
+      changed: true,
+      unresolved: [],
+    });
+  });
+
+  // v2: a prop() whose argument matches neither id nor name is a broken id
+  // reference (visible in the UI), not an unresolved NAME — it stays as-is
+  // and is not reported.
+  it("keeps unknown prop() ids without reporting them as unresolved", () => {
+    expect(canonicalizeExpression('prop("f-gone") + 1', FIELDS)).toEqual({
+      text: 'prop("f-gone") + 1',
       changed: false,
       unresolved: [],
     });

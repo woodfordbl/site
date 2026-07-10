@@ -9,7 +9,7 @@ import {
   isCellEmpty,
 } from "@/lib/databases/cell-values.ts";
 import { formulaCellErrorDisplay } from "@/lib/databases/formula-values.ts";
-import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
+import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -87,8 +87,9 @@ interface DatabaseCellValueViewProps {
  * Formula cell display over the merged computed value (see
  * `lib/databases/formula-values.ts`): numbers right-aligned tabular-nums,
  * booleans "Yes"/"No" text (not a checkbox — the cell is read-only), strings
- * plain. Evaluation errors travel as the overlay's marker and render as
- * muted "⚠ …" text with the message in a title tooltip.
+ * plain, list results comma-joined. Evaluation errors travel as the
+ * overlay's marker and render as muted "⚠ …" text with the message in a
+ * title tooltip.
  */
 function DatabaseFormulaCellValue({
   value,
@@ -103,17 +104,19 @@ function DatabaseFormulaCellValue({
       </span>
     );
   }
-  if (value === null || value === undefined || Array.isArray(value)) {
+  if (value === null || value === undefined) {
     return null;
   }
   if (typeof value === "number") {
     return (
       <span className="ml-auto truncate text-right tabular-nums">
-        {exprValueToDisplay(value)}
+        {formulaValueToDisplay(value)}
       </span>
     );
   }
-  const display = exprValueToDisplay(value);
+  const display = Array.isArray(value)
+    ? value.join(", ")
+    : formulaValueToDisplay(value);
   return display === "" ? null : <span className="truncate">{display}</span>;
 }
 

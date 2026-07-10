@@ -1108,16 +1108,29 @@ const TEXT_FUNCTIONS: readonly FormulaFunctionEntry[] = [
     name: "contains",
     category: "text",
     description:
-      "True when the text contains the search text (case-sensitive).",
-    examples: ['contains("hello", "ell")'],
+      "True when the text contains the search text (case-sensitive), or when the list contains the value (== semantics).",
+    examples: ['contains("hello", "ell")', 'contains(["a", "b"], "b")'],
     params: [
-      { lenient: true, name: "text", type: TEXT_TYPE },
-      { lenient: true, name: "search", type: TEXT_TYPE },
+      {
+        lenient: true,
+        name: "value",
+        type: unionTypeOf(TEXT_TYPE, LIST_OF_T),
+      },
+      { lenient: true, name: "search", type: UNKNOWN_TYPE },
     ],
     returns: BOOLEAN_TYPE,
     kind: "eager",
-    apply: (args) =>
-      applyText2(args[0], args[1], (text, search) => text.includes(search)),
+    apply: (args) => {
+      const haystack = args[0];
+      if (Array.isArray(haystack)) {
+        // List membership — `includes` semantics (== equality), the
+        // back-compat path for multiSelect cells, which are lists in v2.
+        return haystack.some((item) => formulaValuesEqual(item, args[1]));
+      }
+      return applyText2(haystack, args[1], (text, search) =>
+        text.includes(search)
+      );
+    },
   },
   {
     name: "replace",
@@ -1626,3 +1639,134 @@ export const VOLATILE_FORMULA_FUNCTION_NAMES: ReadonlySet<string> = new Set(
     ]
   )
 );
+
+/**
+ * Human signature for a catalog entry, derived from its typed params —
+ * `round(value, digits?)`, `min(values, …)`, `if(condition, then, else?)`.
+ * Optional params suffix `?`; a variadic tail renders as `…`.
+ */
+export function formulaFunctionSignature(entry: FormulaFunctionEntry): string {
+  const parts = entry.params.map((param) => {
+    if (param.variadic) {
+      return "…";
+    }
+    return param.optional ? `${param.name}?` : param.name;
+  });
+  return `${entry.name}(${parts.join(", ")})`;
+}
+
+/** Section an operator is listed under in the docs UI. */
+export type FormulaOperatorCategory = "arithmetic" | "comparison" | "logic";
+
+/** One documented operator row: symbol as typed, plus a one-line description. */
+export interface FormulaOperatorCatalogEntry {
+  readonly category: FormulaOperatorCategory;
+  /** One sentence, sentence case. */
+  readonly description: string;
+  /** The operator exactly as typed in an expression. */
+  readonly symbol: string;
+}
+
+/** Every formula operator, grouped for the reference list in the editor. */
+export const FORMULA_OPERATOR_CATALOG: readonly FormulaOperatorCatalogEntry[] =
+  [
+    {
+      symbol: "+",
+      description: "Adds numbers, or joins text when either side is text.",
+      category: "arithmetic",
+    },
+    {
+      symbol: "-",
+      description: "Subtracts one number from another (or negates a number).",
+      category: "arithmetic",
+    },
+    {
+      symbol: "*",
+      description: "Multiplies two numbers.",
+      category: "arithmetic",
+    },
+    {
+      symbol: "/",
+      description: "Divides one number by another.",
+      category: "arithmetic",
+    },
+    {
+      symbol: "%",
+      description: "Returns the remainder after division.",
+      category: "arithmetic",
+    },
+    {
+      symbol: "^",
+      description: "Raises a number to a power (right-associative).",
+      category: "arithmetic",
+    },
+    {
+      symbol: "==",
+      description: "True when both values are equal.",
+      category: "comparison",
+    },
+    {
+      symbol: "!=",
+      description: "True when the values are not equal.",
+      category: "comparison",
+    },
+    {
+      symbol: "<",
+      description: "True when the left value is smaller (dates compare too).",
+      category: "comparison",
+    },
+    {
+      symbol: "<=",
+      description: "True when the left value is smaller or equal.",
+      category: "comparison",
+    },
+    {
+      symbol: ">",
+      description: "True when the left value is larger (dates compare too).",
+      category: "comparison",
+    },
+    {
+      symbol: ">=",
+      description: "True when the left value is larger or equal.",
+      category: "comparison",
+    },
+    {
+      symbol: "and",
+      description: "True when both sides are true.",
+      category: "logic",
+    },
+    {
+      symbol: "or",
+      description: "True when either side is true.",
+      category: "logic",
+    },
+    {
+      symbol: "not",
+      description: "Inverts a true/false value.",
+      category: "logic",
+    },
+    {
+      symbol: "??",
+      description: "Falls back to the right side when the left is blank.",
+      category: "logic",
+    },
+  ];
+
+/**
+ * Bare-identifier rule, mirroring the tokenizer's identifier syntax: names
+ * outside it need the bracket reference form.
+ */
+const BARE_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * The `thisPage` reference expression for a property name: dot form for
+ * bare identifiers (`thisPage.Price`), bracket form with string escaping
+ * otherwise (`thisPage["Unit Price"]`). Always parses.
+ */
+export function formulaPropertyReference(name: string): string {
+  if (BARE_IDENTIFIER_RE.test(name)) {
+    return `thisPage.${name}`;
+  }
+  const escaped = name.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  return `thisPage["${escaped}"]`;
+}

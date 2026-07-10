@@ -113,7 +113,7 @@ export interface FormulaCheckResult {
 
 /**
  * Name-reference normalization — the same rule evaluation uses
- * (`lib/expr/row-scope.ts`), so "which field does this name mean" can never
+ * (`lib/formula/row-scope.ts`), so "which field does this name mean" can never
  * drift between checking and evaluation.
  */
 export function normalizeFormulaPropertyName(name: string): string {
@@ -215,9 +215,17 @@ const PLUS_COERCIBLE = unionTypeOf(
  * members would exceed `unionTypeOf`'s width cap; this is an internal
  * acceptance set only, mismatch messages display the declared `text` type.
  */
+const LENIENT_TEXT_MEMBERS: readonly FormulaType[] = [
+  TEXT_TYPE,
+  NUMBER_TYPE,
+  BOOLEAN_TYPE,
+  DATE_TYPE,
+  BLANK_TYPE,
+];
+
 const LENIENT_TEXT_ACCEPTS: FormulaType = {
   kind: "union",
-  members: [TEXT_TYPE, NUMBER_TYPE, BOOLEAN_TYPE, DATE_TYPE, BLANK_TYPE],
+  members: LENIENT_TEXT_MEMBERS,
 };
 
 const ORDERABLE_KINDS = ["number", "text", "date"] as const;
@@ -404,15 +412,29 @@ function literalType(value: number | string | boolean | null): FormulaType {
 
 /**
  * The type set an argument must fit: lenient text parameters take
- * everything the runtime coerces to text; everything else is the declared
- * type with already-bound type variables substituted in.
+ * everything the runtime coerces to text — including the text member of a
+ * lenient union parameter (`contains`'s text-or-list value), whose other
+ * members stay accepted as declared; everything else is the declared type
+ * with already-bound type variables substituted in.
  */
 function acceptedTypeFor(
   param: FormulaParamSpec,
   bindings: TypevarBindings
 ): FormulaType {
-  if (param.lenient && param.type.kind === "text") {
+  if (!param.lenient) {
+    return substituteType(param.type, bindings, false);
+  }
+  if (param.type.kind === "text") {
     return LENIENT_TEXT_ACCEPTS;
+  }
+  if (
+    param.type.kind === "union" &&
+    param.type.members.some((member) => member.kind === "text")
+  ) {
+    const rest = param.type.members
+      .filter((member) => member.kind !== "text")
+      .map((member) => substituteType(member, bindings, false));
+    return { kind: "union", members: [...LENIENT_TEXT_MEMBERS, ...rest] };
   }
   return substituteType(param.type, bindings, false);
 }

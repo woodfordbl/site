@@ -1,11 +1,8 @@
 import { format as dateFnsFormat } from "date-fns/format";
 import { describe, expect, it } from "vitest";
 
-import { type ExprScope, evaluateExpression } from "@/lib/expr/evaluate.ts";
-import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
-import { EXPR_FUNCTION_CATALOG } from "@/lib/expr/function-catalog.ts";
-import { parseExpression } from "@/lib/expr/parse.ts";
 import type { FormulaNode } from "@/lib/formula/ast.ts";
+import { V1_GOLDEN_CORPUS } from "@/lib/formula/corpus.fixture.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula, isVolatileFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
@@ -924,12 +921,14 @@ describe("errors and the never-throw boundary", () => {
 });
 
 describe("v1 golden corpus", () => {
-  const blankExprScope: ExprScope = { getProperty: () => null };
+  // The frozen v1 compatibility contract: `corpus.fixture.ts` carries each
+  // retired catalog example with the display the v1 engine produced for it
+  // (blank scope, fixed clock), captured before the v1 engine was deleted.
   const blankFormulaScope: FormulaScope = { getProperty: () => null };
 
   /**
-   * Deliberate v2 divergences from the v1 engine, keyed by the old catalog
-   * example. Everything not listed here must display identically.
+   * Deliberate v2 divergences from the v1 engine, keyed by the frozen
+   * corpus expression. Everything not listed here must display identically.
    */
   const DIVERGENCES = new Map<string, { expected: string; reason: string }>([
     [
@@ -968,25 +967,17 @@ describe("v1 golden corpus", () => {
     ],
   ]);
 
-  for (const entry of EXPR_FUNCTION_CATALOG) {
-    it(`matches the v1 engine for ${entry.example}`, () => {
-      const oldParsed = parseExpression(entry.example);
-      expect(oldParsed.ok, `v1 parse: ${entry.example}`).toBe(true);
-      if (!oldParsed.ok) {
-        return;
-      }
-      const oldDisplay = exprValueToDisplay(
-        evaluateExpression(oldParsed.ast, blankExprScope)
-      );
+  for (const entry of V1_GOLDEN_CORPUS) {
+    it(`matches the frozen v1 display for ${entry.expression}`, () => {
       const newDisplay = formulaValueToDisplay(
-        run(entry.example, blankFormulaScope)
+        run(entry.expression, blankFormulaScope)
       );
-      const divergence = DIVERGENCES.get(entry.example);
+      const divergence = DIVERGENCES.get(entry.expression);
       if (divergence) {
         expect(newDisplay, divergence.reason).toBe(divergence.expected);
-        expect(newDisplay).not.toBe(oldDisplay);
+        expect(newDisplay).not.toBe(entry.expectedDisplay);
       } else {
-        expect(newDisplay).toBe(oldDisplay);
+        expect(newDisplay).toBe(entry.expectedDisplay);
       }
     });
   }
