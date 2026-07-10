@@ -66,6 +66,10 @@ Chevron open/close for parent rows is a client-only UI preference (not a `page.*
 
 See [pages — Nesting](../architecture/pages.md#nesting) for tree rules and ancestor expand behavior.
 
+### Previous / next page shortcuts
+
+**Previous page** (`Mod+Alt+ArrowUp`) and **Next page** (`Mod+Alt+ArrowDown`) in [`PageCommandHotkeys`](../../src/components/keyboard/page-command-hotkeys.tsx) walk visible **Pages** tree rows in pre-order via [`resolveSidebarNavPageIds`](../../src/lib/pages/resolve-sidebar-nav-page-ids.ts) — the same `buildPageTree` + [`flattenVisiblePageRows`](../../src/lib/pages/flatten-visible-page-rows.ts) sequence as the sidebar (respecting the expand cookie and auto-expanding ancestors of the active page). They do not follow the flat merged catalog order from [`mergePageList`](../../src/lib/pages/merge-page-list.ts) (title-sorted for search). Favorites and Databases sections are excluded; navigation does not wrap at the ends.
+
 ### Sidebar resize / collapse
 
 Workspace chrome ([`PageSidebarChromeProvider`](../../src/components/pages/page-sidebar-chrome.tsx), [`PageSidebar`](../../src/components/pages/page-sidebar.tsx)) is separate from page-tree commands:
