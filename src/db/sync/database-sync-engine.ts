@@ -463,10 +463,14 @@ function teardownStream(databaseId: string): void {
   if (!handle) {
     return;
   }
-  streams.delete(databaseId);
   if (handle.flushTimer !== undefined) {
     clearTimeout(handle.flushTimer);
+    handle.flushTimer = undefined;
   }
+  // Flush any coalesce-buffered ticks before tearing down so the latest prices
+  // aren't dropped on reconnect, symbol edit, tab hide, or socket error.
+  flushStream(databaseId);
+  streams.delete(databaseId);
   try {
     handle.unsubscribe();
   } catch {
