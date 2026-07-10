@@ -56,6 +56,11 @@ type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
   /** Overrides the default page sidebar (e.g. the template editor's chrome). */
   sidebar?: ReactNode;
+  /**
+   * Overrides the default editable title (`PageTitleEditor`) — e.g. the
+   * row-template editor's locked title + properties header.
+   */
+  titleSlot?: ReactNode;
 } & (
   | {
       kind: "server";
@@ -149,6 +154,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
         pageHasLocalDraft={pageHasLocalDraft}
         serverPage={serverPage}
         titleSeed={titleSeed}
+        titleSlot={props.titleSlot}
       />
     </PageSidebarChromeProvider>
   );
@@ -160,12 +166,14 @@ function PageWorkspaceBody({
   pageHasLocalDraft,
   serverPage,
   titleSeed,
+  titleSlot,
 }: {
   initialBlocks: Page["blocks"];
   page: Page | LocalPage;
   pageHasLocalDraft: boolean;
   serverPage: Page | null;
   titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
+  titleSlot?: ReactNode;
 }) {
   const isNarrowViewport = useIsNarrowViewport();
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
@@ -254,14 +262,16 @@ function PageWorkspaceBody({
         pageHasLocalDraft={pageHasLocalDraft}
         serverPage={toServerPageSource(page, initialBlocks)}
         titleSlot={
-          <PageTitleEditor
-            icon={page.icon}
-            pageHasLocalDraft={pageHasLocalDraft}
-            pageId={page.id}
-            seed={titleSeed}
-            slug={page.slug}
-            title={page.title}
-          />
+          titleSlot ?? (
+            <PageTitleEditor
+              icon={page.icon}
+              pageHasLocalDraft={pageHasLocalDraft}
+              pageId={page.id}
+              seed={titleSeed}
+              slug={page.slug}
+              title={page.title}
+            />
+          )
         }
       />
     </div>
