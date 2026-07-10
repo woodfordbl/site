@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { HTTP_STATUS_TOO_MANY_REQUESTS } from "@/lib/connectors/http.ts";
 import {
-  type ConnectorDefinition,
   ConnectorError,
   type ConnectorFetchContext,
   type ConnectorFetchResult,
-  type ConnectorFieldDef,
   type ConnectorHistoryPoint,
   type ConnectorHistoryRequest,
   type ConnectorRow,
@@ -14,12 +12,13 @@ import {
 } from "@/lib/connectors/types.ts";
 
 /**
- * Binance live crypto connector: one row per configured trading pair
- * (e.g. BTCUSDT), streamed in real time from Binance's keyless public
- * WebSocket. `fetchRows` seeds current price/24h-change from the REST
- * `/ticker/24hr` endpoint (open CORS, no auth); `stream.subscribe` opens the
- * combined `@ticker` WebSocket and pushes a keyed upsert per trade frame. No
- * key, no proxy — the browser connects directly.
+ * Binance crypto transport: the keyless price/24h-change plumbing behind the
+ * unified "Live" connector's `crypto` type (see `live-markets.ts`). One row
+ * per configured trading pair (e.g. BTCUSDT). `binanceFetchRows` seeds current
+ * price/24h-change from the REST `/ticker/24hr` endpoint (open CORS, no auth);
+ * `binanceSubscribe` opens the combined `@ticker` WebSocket and pushes a keyed
+ * upsert per trade frame; `binanceFetchHistory` backfills klines. No key, no
+ * proxy — the browser connects directly.
  *
  * Uses the `*.binance.vision` market-data domains rather than the primary
  * `api.binance.com` / `stream.binance.com` hosts: the `.vision` mirrors are
@@ -54,30 +53,9 @@ const binanceStreamFrameSchema = z.object({
   }),
 });
 
-const BINANCE_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "symbol", name: "Symbol", type: "text" },
-  {
-    sourceKey: "price",
-    name: "Price",
-    type: "number",
-    numberFormat: "currency",
-    captureHistory: true,
-  },
-  {
-    sourceKey: "change24h",
-    name: "24h change",
-    type: "number",
-    numberFormat: "percent",
-  },
-  { sourceKey: "updatedAt", name: "Updated", type: "date" },
-];
-
 /** Percent format renders fractions (0.025 → "2.5%"); Binance reports 2.5. */
 const PERCENT_TO_FRACTION = 100;
 const ISO_DATE_PART_LENGTH = 10;
-const SECOND_MS = 1000;
-const FIFTEEN_SECONDS_MS = 15 * SECOND_MS;
-const MINUTE_MS = 60 * SECOND_MS;
 
 function parseConfig(config: Record<string, unknown>): BinanceConfig {
   const parsed = binanceConfigSchema.safeParse(config);
@@ -112,7 +90,7 @@ function tickerToRow(
     values: {
       symbol,
       price: Number.isFinite(price) ? price : null,
-      change24h: Number.isFinite(change) ? change / PERCENT_TO_FRACTION : null,
+      change: Number.isFinite(change) ? change / PERCENT_TO_FRACTION : null,
       updatedAt: isoDateFromMs(eventMs),
     },
   };
@@ -290,28 +268,8 @@ async function fetchHistory(
   return points;
 }
 
-/** Binance live-crypto connector definition. */
-export const binanceStreamConnector: ConnectorDefinition<BinanceConfig> = {
-  id: "binance-stream",
-  title: "Live crypto",
-  description:
-    "Real-time price and 24h change for Binance trading pairs, streamed over WebSocket.",
-  icon: "tabler:IconCurrencyBitcoin",
-  configSchema: binanceConfigSchema,
-  configFields: [
-    {
-      key: "symbols",
-      label: "Trading pairs",
-      placeholder: "BTCUSDT, ETHUSDT",
-      kind: "list",
-    },
-  ],
-  fields() {
-    return BINANCE_FIELDS;
-  },
-  primarySourceKey: "symbol",
-  fetchRows,
-  fetchHistory,
-  stream: { subscribe },
-  pollPolicy: { minMs: FIFTEEN_SECONDS_MS, defaultMs: MINUTE_MS },
+export {
+  fetchHistory as binanceFetchHistory,
+  fetchRows as binanceFetchRows,
+  subscribe as binanceSubscribe,
 };

@@ -160,7 +160,8 @@ function DatabaseNumberFlowCell({
         numberFormatOptions(
           field.format ?? "plain",
           field.decimals,
-          field.useGrouping !== false
+          field.useGrouping !== false,
+          field.currencyCode
         ) as Format
       }
       locales="en-US"

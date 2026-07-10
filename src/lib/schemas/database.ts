@@ -96,6 +96,8 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
     decimals: z.number().int().min(0).max(6).optional(),
     /** Thousands separators in plain/integer displays; absent = on. */
     useGrouping: z.boolean().optional(),
+    /** ISO 4217 code for the `currency` format's symbol; absent = USD. */
+    currencyCode: z.string().optional(),
   }),
   databaseFieldBaseSchema.extend({ type: z.literal("checkbox") }),
   databaseFieldBaseSchema.extend({

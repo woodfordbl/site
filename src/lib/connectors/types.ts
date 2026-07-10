@@ -29,6 +29,12 @@ export interface ConnectorFieldDef {
    * the forward-only field-history series that time-axis charts read.
    */
   captureHistory?: boolean;
+  /**
+   * ISO 4217 code driving the `currency` number format's symbol; only
+   * meaningful when `type` is `"number"` and `numberFormat` is `"currency"`.
+   * Absent ⇒ USD. Display-only — it never converts the underlying value.
+   */
+  currencyCode?: string;
   /** Display name for the generated database field. */
   name: string;
   /** Number display format; only meaningful when `type` is `"number"`. */
@@ -137,14 +143,35 @@ export interface ConnectorHistoryPoint {
   v: number;
 }
 
+/** One choice in a `"select"` config field. */
+export interface ConnectorConfigOption {
+  /** Human-readable label shown in the control. */
+  label: string;
+  /** Value written to the config key. */
+  value: string;
+}
+
 /** One input in the synced-database creation form, mapped to a config key. */
 export interface ConnectorConfigField {
+  /**
+   * When true, the field is fixed at creation time and shown read-only in the
+   * post-creation settings editor (e.g. an asset-type that would drift the
+   * schema if changed). Absent = editable after creation.
+   */
+  creationOnly?: boolean;
+  /** For `kind: "select"`, the value used when the draft is left empty. */
+  defaultValue?: string;
   /** Config object key this input writes. */
   key: string;
-  /** `"text"` = single string; `"list"` = comma/newline-separated string[]. */
-  kind: "text" | "list";
+  /**
+   * `"text"` = single string; `"list"` = comma/newline-separated string[];
+   * `"select"` = one value from a fixed `options` set.
+   */
+  kind: "text" | "list" | "select";
   /** Input label. */
   label: string;
+  /** Choices for `kind: "select"`; ignored for other kinds. */
+  options?: ConnectorConfigOption[];
   /** Placeholder / example value. */
   placeholder?: string;
 }

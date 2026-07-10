@@ -4,19 +4,19 @@ import {
   HTTP_STATUS_UNAUTHORIZED,
 } from "@/lib/connectors/http.ts";
 import {
-  type ConnectorDefinition,
+  type ConnectorAuthSpec,
   ConnectorError,
   type ConnectorFetchContext,
   type ConnectorFetchResult,
-  type ConnectorFieldDef,
   type ConnectorRow,
   type ConnectorStreamHandlers,
 } from "@/lib/connectors/types.ts";
 
 /**
- * Finnhub live stocks connector: one row per configured symbol (e.g. AAPL),
- * seeded from the `/quote` REST endpoint and streamed in real time from
- * Finnhub's `trade` WebSocket.
+ * Finnhub stocks transport: the price/daily-change plumbing behind the unified
+ * "Live" connector's `stocks` type (see `live-markets.ts`). One row per
+ * configured symbol (e.g. AAPL), seeded from the `/quote` REST endpoint and
+ * streamed in real time from Finnhub's `trade` WebSocket.
  *
  * Finnhub requires an API key, so the transport is resolved from whether the
  * user supplied their own token:
@@ -70,30 +70,10 @@ const finnhubTradeFrameSchema = z.object({
   ),
 });
 
-const FINNHUB_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "symbol", name: "Symbol", type: "text" },
-  {
-    sourceKey: "price",
-    name: "Price",
-    type: "number",
-    numberFormat: "currency",
-    captureHistory: true,
-  },
-  {
-    sourceKey: "changePct",
-    name: "Change",
-    type: "number",
-    numberFormat: "percent",
-  },
-  { sourceKey: "updatedAt", name: "Updated", type: "date" },
-];
-
 /** Percent format renders fractions (0.015 → "1.5%"); Finnhub reports 1.5. */
 const PERCENT_TO_FRACTION = 100;
 const ISO_DATE_PART_LENGTH = 10;
 const SECOND_MS = 1000;
-const FIFTEEN_SECONDS_MS = 15 * SECOND_MS;
-const MINUTE_MS = 60 * SECOND_MS;
 
 const DIRECT_REST_ENDPOINT = "https://finnhub.io/api/v1/quote";
 const DIRECT_WS_ENDPOINT = "wss://ws.finnhub.io";
@@ -139,7 +119,7 @@ function quoteToRow(
     values: {
       symbol,
       price: Number.isFinite(price) ? price : null,
-      changePct:
+      change:
         percent !== null && Number.isFinite(percent)
           ? percent / PERCENT_TO_FRACTION
           : null,
@@ -149,7 +129,7 @@ function quoteToRow(
 }
 
 /** Partial row from a live trade tick (price only). `applyStreamTick` merges,
- * so the omitted `changePct` keeps its last seeded value. */
+ * so the omitted `change` keeps its last seeded value. */
 function tradeToRow(
   symbol: string,
   price: number,
@@ -342,33 +322,15 @@ function subscribe(
   };
 }
 
-/** Finnhub live-stocks connector definition. */
-export const finnhubQuotesConnector: ConnectorDefinition<FinnhubConfig> = {
-  id: "finnhub-quotes",
-  title: "Live stocks",
-  description:
-    "Real-time price and daily change for stock tickers, streamed over WebSocket via Finnhub.",
-  icon: "tabler:IconChartCandle",
-  configSchema: finnhubConfigSchema,
-  configFields: [
-    {
-      key: "symbols",
-      label: "Ticker symbols",
-      placeholder: "AAPL, MSFT, NVDA",
-      kind: "list",
-    },
-  ],
-  auth: {
-    kind: "token",
-    label: "Finnhub API token",
-    help: "Optional. Leave blank to use the site's shared key (routed through a same-origin proxy). Provide your own free finnhub.io token to connect directly instead.",
-    required: false,
-  },
-  fields() {
-    return FINNHUB_FIELDS;
-  },
-  primarySourceKey: "symbol",
-  fetchRows,
-  stream: { subscribe },
-  pollPolicy: { minMs: FIFTEEN_SECONDS_MS, defaultMs: MINUTE_MS },
+/**
+ * BYO-token auth for the Finnhub-backed stocks transport. Only consulted for
+ * the unified "Live" connector's `stocks` type; the `crypto` type is keyless.
+ */
+export const finnhubAuth: ConnectorAuthSpec = {
+  kind: "token",
+  label: "Finnhub API token",
+  help: "Optional. Leave blank to use the site's shared key (routed through a same-origin proxy). Provide your own free finnhub.io token to connect directly instead.",
+  required: false,
 };
+
+export { fetchRows as finnhubFetchRows, subscribe as finnhubSubscribe };

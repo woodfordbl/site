@@ -1,10 +1,9 @@
-import { binanceStreamConnector } from "@/lib/connectors/binance-stream.ts";
 import { coingeckoMarketsConnector } from "@/lib/connectors/coingecko-markets.ts";
-import { finnhubQuotesConnector } from "@/lib/connectors/finnhub-quotes.ts";
 import { frankfurterRatesConnector } from "@/lib/connectors/frankfurter-rates.ts";
 import { githubIssuesConnector } from "@/lib/connectors/github-issues.ts";
 import { githubPrsConnector } from "@/lib/connectors/github-prs.ts";
 import { githubReposConnector } from "@/lib/connectors/github-repos.ts";
+import { liveMarketsConnector } from "@/lib/connectors/live-markets.ts";
 import type { ConnectorDefinition } from "@/lib/connectors/types.ts";
 
 /**
@@ -17,8 +16,7 @@ export const CONNECTORS: Record<string, ConnectorDefinition> = {
   [githubPrsConnector.id]: githubPrsConnector,
   [githubIssuesConnector.id]: githubIssuesConnector,
   [coingeckoMarketsConnector.id]: coingeckoMarketsConnector,
-  [binanceStreamConnector.id]: binanceStreamConnector,
-  [finnhubQuotesConnector.id]: finnhubQuotesConnector,
+  [liveMarketsConnector.id]: liveMarketsConnector,
   [frankfurterRatesConnector.id]: frankfurterRatesConnector,
 };
 

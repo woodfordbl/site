@@ -62,6 +62,13 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.tsx";
+import {
   deleteDatabase,
   duplicateDatabaseView,
   removeDatabaseField,
@@ -81,6 +88,7 @@ import {
 import type {
   ConnectorAuthSpec,
   ConnectorConfigField,
+  ConnectorConfigOption,
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
@@ -858,6 +866,61 @@ function ConnectorTextConfigRow({
   );
 }
 
+interface ConnectorSelectConfigRowProps {
+  config: Record<string, unknown>;
+  configKey: string;
+  databaseId: string;
+  label: string;
+  options: ConnectorConfigOption[];
+  value: string;
+}
+
+/**
+ * Editor for an editable `select` config field (e.g. display currency).
+ * Writes the picked value straight through `updateDatabaseSource`, same
+ * dirty-check convention as {@link ConnectorTextConfigRow}.
+ */
+function ConnectorSelectConfigRow({
+  config,
+  configKey,
+  databaseId,
+  label,
+  options,
+  value,
+}: ConnectorSelectConfigRowProps) {
+  return (
+    <div className="space-y-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <Select
+        onValueChange={(next) => {
+          if (typeof next === "string" && next !== value) {
+            updateDatabaseSource(databaseId, {
+              config: { ...config, [configKey]: next },
+            });
+          }
+        }}
+        value={value}
+      >
+        <SelectTrigger aria-label={label}>
+          <SelectValue>
+            {(current) =>
+              options.find((option) => option.value === current)?.label ??
+              String(current ?? "")
+            }
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 interface ConnectorConfigEditorProps {
   config: Record<string, unknown>;
   databaseId: string;
@@ -867,7 +930,9 @@ interface ConnectorConfigEditorProps {
 /**
  * Live editor for one connector config field, replacing the old read-only
  * summary so a synced source's instruments can change after creation. `list`
- * fields get chips; `text` fields a single input.
+ * fields get chips; editable `select` fields a dropdown; `creationOnly`
+ * fields (e.g. asset type — schema-locked at create) show read-only; `text`
+ * fields a single input.
  */
 function ConnectorConfigEditor({
   config,
@@ -884,6 +949,25 @@ function ConnectorConfigEditor({
         label={field.label}
         placeholder={field.placeholder}
         values={Array.isArray(raw) ? raw.map(String) : []}
+      />
+    );
+  }
+  if (field.kind === "select") {
+    const options = field.options ?? [];
+    const value = String(config[field.key] ?? field.defaultValue ?? "");
+    const currentLabel =
+      options.find((option) => option.value === value)?.label ?? value;
+    if (field.creationOnly) {
+      return <InfoRow label={field.label} value={currentLabel} />;
+    }
+    return (
+      <ConnectorSelectConfigRow
+        config={config}
+        configKey={field.key}
+        databaseId={databaseId}
+        label={field.label}
+        options={options}
+        value={value}
       />
     );
   }

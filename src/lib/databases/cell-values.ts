@@ -205,14 +205,16 @@ function formulaPlainText(coerced: DatabaseCellValue): string {
  * Base `Intl.NumberFormat` options per number format. Percent follows `Intl`
  * semantics: the stored number is a fraction (0.42 → "42%"). `decimals`
  * (when set) pins min+max fraction digits over the format's natural
- * precision — for percent that means the digits AFTER the ×100 scaling;
- * currency stays USD. `useGrouping: false` drops thousands separators
- * (absent = on) in every format.
+ * precision — for percent that means the digits AFTER the ×100 scaling.
+ * `currencyCode` sets the currency format's symbol (absent = USD).
+ * `useGrouping: false` drops thousands separators (absent = on) in every
+ * format.
  */
 export function numberFormatOptions(
   format: DatabaseNumberFormat,
   decimals: number | undefined,
-  useGrouping: boolean
+  useGrouping: boolean,
+  currencyCode?: string
 ): Intl.NumberFormatOptions {
   const options: Intl.NumberFormatOptions = { useGrouping };
   if (format === "integer") {
@@ -222,7 +224,7 @@ export function numberFormatOptions(
     options.maximumFractionDigits = 2;
   } else if (format === "currency") {
     options.style = "currency";
-    options.currency = "USD";
+    options.currency = currencyCode ?? "USD";
   }
   if (decimals !== undefined) {
     options.minimumFractionDigits = decimals;
@@ -244,12 +246,13 @@ function numberFormatterFor(
 ): Intl.NumberFormat {
   const format = field.format ?? "plain";
   const useGrouping = field.useGrouping !== false;
-  const key = `${format}|${field.decimals ?? "auto"}|${useGrouping ? "group" : "plain"}`;
+  const currencyCode = field.currencyCode ?? "USD";
+  const key = `${format}|${field.decimals ?? "auto"}|${useGrouping ? "group" : "plain"}|${currencyCode}`;
   let formatter = NUMBER_FORMATTER_CACHE.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat(
       "en-US",
-      numberFormatOptions(format, field.decimals, useGrouping)
+      numberFormatOptions(format, field.decimals, useGrouping, currencyCode)
     );
     NUMBER_FORMATTER_CACHE.set(key, formatter);
   }

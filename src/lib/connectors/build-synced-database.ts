@@ -27,6 +27,9 @@ export function connectorFieldToDatabaseField(
   field.sourceKey = def.sourceKey;
   if (field.type === "number") {
     field.format = def.numberFormat;
+    if (def.currencyCode) {
+      field.currencyCode = def.currencyCode;
+    }
     if (def.captureHistory) {
       field.captureHistory = true;
     }
