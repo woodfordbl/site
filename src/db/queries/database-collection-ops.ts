@@ -267,6 +267,81 @@ export function deleteDatabaseRows(rowIds: string[]): void {
 }
 
 /**
+ * Duplicate local rows by id: clones `values`, assigns new ids, and inserts
+ * each copy after its source sibling (document order). Synced rows
+ * (`externalId`) and missing ids are skipped — copies never inherit
+ * `externalId` or `pageId`. Returns the inserted rows in the same order as
+ * the source ids that were duplicated.
+ * @see docs/architecture/databases.md#table-view
+ */
+export function duplicateDatabaseRows(rowIds: string[]): LocalDatabaseRow[] {
+  const sources: LocalDatabaseRow[] = [];
+  for (const rowId of rowIds) {
+    const row = localDatabaseRowsCollection.get(rowId);
+    if (row && row.externalId === undefined) {
+      sources.push(row);
+    }
+  }
+  if (sources.length === 0) {
+    return [];
+  }
+
+  // Group by database so each insert plans against that DB's sibling list.
+  // Within a database, process in current sibling order and always insert
+  // after the source (or its running copy), so multi-select keeps relative order.
+  const byDatabase = new Map<string, LocalDatabaseRow[]>();
+  for (const source of sources) {
+    const group = byDatabase.get(source.databaseId) ?? [];
+    group.push(source);
+    byDatabase.set(source.databaseId, group);
+  }
+
+  const createdBySourceId = new Map<string, LocalDatabaseRow>();
+  const timestamp = nowIso();
+
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const [databaseId, group] of byDatabase) {
+      const siblingOrder = new Map(
+        sortedDatabaseRows(databaseId).map((row, index) => [row.id, index])
+      );
+      const ordered = [...group].sort(
+        (left, right) =>
+          (siblingOrder.get(left.id) ?? 0) - (siblingOrder.get(right.id) ?? 0)
+      );
+
+      for (const source of ordered) {
+        // Insert immediately after the source so multi-select copies stack in
+        // document order beside their originals.
+        const siblings = sortedDatabaseRows(databaseId);
+        const afterIndex = siblings.findIndex((row) => row.id === source.id);
+        const targetIndex = afterIndex >= 0 ? afterIndex + 1 : siblings.length;
+        const plan = planRowOrderAt(siblings, targetIndex);
+        applyRowOrderRenumber(plan);
+
+        const copy: LocalDatabaseRow = {
+          id: crypto.randomUUID(),
+          databaseId,
+          values: { ...source.values },
+          order: plan.order,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        localDatabaseRowsCollection.insert(copy);
+        createdBySourceId.set(source.id, copy);
+      }
+    }
+  });
+  commitDatabaseTransaction(tx);
+
+  // Preserve the caller's id order for return (skip sources that were filtered).
+  return rowIds.flatMap((rowId) => {
+    const copy = createdBySourceId.get(rowId);
+    return copy ? [copy] : [];
+  });
+}
+
+/**
  * Move a row before/after another row by recomputing its sparse `order`
  * (midpoint between the new neighbors, renumbering the scope when the gap is
  * exhausted). With no placement given, the row moves to the end.

@@ -1,19 +1,20 @@
 "use client";
 
 import { IconArrowBackUp, IconX } from "@tabler/icons-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { SnapshotPreview } from "@/components/pages/snapshot-preview.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { ConfirmDialogFooter } from "@/components/ui/confirm-dialog-footer.tsx";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { usePageSnapshotContent } from "@/db/queries/use-page-snapshot-content.ts";
+import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import { formatRelativeTime } from "@/lib/pages/format-relative-time.ts";
 import type { PageSnapshotDescriptor } from "@/lib/pages/page-snapshot-types.ts";
 import { restorePageSnapshot } from "@/lib/pages/restore-page-snapshot.ts";
@@ -37,6 +38,10 @@ export function PageVersionPreview({
 }: PageVersionPreviewProps) {
   const { content, isLoading } = usePageSnapshotContent(pageId, descriptor.id);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleCancel = useCallback(() => {
+    setConfirmOpen(false);
+  }, []);
 
   const handleRestore = () => {
     restorePageSnapshot(pageId, descriptor.id, descriptor.timestamp).catch(
@@ -69,7 +74,13 @@ export function PageVersionPreview({
       />
 
       <Dialog onOpenChange={setConfirmOpen} open={confirmOpen}>
-        <DialogContent showCloseButton={false}>
+        <DialogContent
+          onKeyDownCapture={createConfirmDialogKeyDownHandler({
+            onCancel: handleCancel,
+            onConfirm: handleRestore,
+          })}
+          showCloseButton={false}
+        >
           <DialogHeader>
             <DialogTitle>Restore this version?</DialogTitle>
             <DialogDescription>
@@ -78,18 +89,12 @@ export function PageVersionPreview({
               the history will be discarded.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={() => setConfirmOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleRestore} type="button">
-              Restore
-            </Button>
-          </DialogFooter>
+          <ConfirmDialogFooter
+            confirmLabel="Restore"
+            confirmVariant="default"
+            onCancel={handleCancel}
+            onConfirm={handleRestore}
+          />
         </DialogContent>
       </Dialog>
     </div>

@@ -16,6 +16,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { toast } from "sonner";
 
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -50,6 +51,18 @@ import {
   type PageHeaderImage,
 } from "@/lib/schemas/page-settings.ts";
 import { cn } from "@/lib/utils.ts";
+
+async function copyCoverImage(
+  mediaProps: MediaProps,
+  renderUrl: string
+): Promise<void> {
+  const copied = await copyMediaImage(mediaProps, renderUrl);
+  if (copied) {
+    toast.success("Image copied to clipboard");
+    return;
+  }
+  toast.error("Could not copy image");
+}
 
 interface PageCoverProps {
   className?: string;
@@ -334,7 +347,7 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
               <ToolbarButton
                 label="Copy"
                 onClick={() => {
-                  copyMediaImage(mediaProps, renderUrl).catch(() => undefined);
+                  copyCoverImage(mediaProps, renderUrl).catch(() => undefined);
                 }}
               >
                 <IconCopy />
@@ -370,7 +383,7 @@ export function PageCover({ className, headerImage }: PageCoverProps) {
         </ContextMenuItem>
         <ContextMenuItem
           onClick={() => {
-            copyMediaImage(mediaProps, renderUrl).catch(() => undefined);
+            copyCoverImage(mediaProps, renderUrl).catch(() => undefined);
           }}
         >
           <IconCopy />

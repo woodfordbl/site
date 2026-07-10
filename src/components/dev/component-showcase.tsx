@@ -1643,6 +1643,23 @@ function KbdSection() {
           </div>
         </TabVariantColumn>
 
+        <TabVariantColumn label="Plain (inline)">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" type="button" variant="ghost">
+              Cancel
+              <Kbd data-icon="inline-end" variant="plain">
+                Esc
+              </Kbd>
+            </Button>
+            <Button size="sm" type="button" variant="destructive">
+              Delete
+              <Kbd data-icon="inline-end" variant="plain">
+                ↵
+              </Kbd>
+            </Button>
+          </div>
+        </TabVariantColumn>
+
         <div className="flex flex-wrap items-center gap-6">
           <TabVariantColumn label="Modifier combo">
             <KbdGroup>

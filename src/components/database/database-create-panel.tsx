@@ -8,6 +8,7 @@ import { useForm } from "@tanstack/react-form";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
+import { DatabaseLinkPicker } from "@/components/database/database-link-picker.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -49,7 +50,7 @@ import { createDefaultDatabaseSeed } from "@/lib/databases/database-defaults.ts"
 /**
  * Popover panel behind an unlinked database block's placeholder trigger
  * (media/embed source-picker conventions): **New** (default local seed),
- * **Linked** (existing workspace database — picker stub), and **Synced**
+ * **Linked** (existing workspace database — search picker), and **Synced**
  * (connector cards whose pick opens a config form generated from the
  * connector's `configFields`). Submit validates via the connector's zod
  * `configSchema` (inline errors per the url-input conventions), stores any
@@ -240,10 +241,7 @@ export function DatabaseCreatePanel({
         </Button>
       </TabsContent>
       <TabsContent className="mt-3 space-y-2" value="linked">
-        <p className="text-muted-foreground text-sm">
-          Link an existing database from your workspace. Database picker coming
-          soon.
-        </p>
+        <DatabaseLinkPicker onSelect={onCreated} />
       </TabsContent>
       <TabsContent className="mt-3" value="sync">
         {connector ? (

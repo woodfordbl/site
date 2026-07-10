@@ -237,7 +237,11 @@ export function DatabaseTitle({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1" data-reveal-group>
+    <div
+      className="flex min-w-0 items-center gap-1"
+      data-database-title=""
+      data-reveal-group
+    >
       {hideTitle ? null : (
         <>
           <DatabaseTitleIcon database={database} mode={mode} />

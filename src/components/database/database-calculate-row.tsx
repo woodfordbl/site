@@ -28,6 +28,10 @@ function isNumericAggregate(fn: DatabaseAggregateFn): boolean {
 interface DatabaseCalculateRowProps {
   calculations: Partial<Record<string, DatabaseAggregateFn>>;
   columns: readonly GridColumn[];
+  /** Skip the top rule under the select lane in gutter modes. */
+  rowSelectGutter: boolean;
+  /** Leading select-lane width (always {@link SELECTION_COLUMN_WIDTH_PX}). */
+  rowSelectLeadingWidth: number;
   /** The view's filtered (pre-aggregate) row set. */
   rows: readonly LocalDatabaseRow[];
   totalWidth: number;
@@ -37,6 +41,8 @@ interface DatabaseCalculateRowProps {
 export function DatabaseCalculateRow({
   calculations,
   columns,
+  rowSelectGutter,
+  rowSelectLeadingWidth,
   rows,
   totalWidth,
 }: DatabaseCalculateRowProps): ReactNode {
@@ -59,9 +65,21 @@ export function DatabaseCalculateRow({
 
   return (
     <div
-      className="sticky bottom-0 z-20 flex border-border border-t bg-background"
+      className={cn(
+        "sticky bottom-0 z-20 flex bg-background",
+        !rowSelectGutter && "border-border border-t"
+      )}
       style={{ width: totalWidth, minWidth: "100%" }}
     >
+      {/* Leading selection-lane spacer — sticky so it stays under the
+          select header while horizontally scrolling. */}
+      {rowSelectLeadingWidth > 0 ? (
+        <div
+          aria-hidden
+          className="sticky left-0 z-10 h-9 shrink-0 bg-background"
+          style={{ width: rowSelectLeadingWidth }}
+        />
+      ) : null}
       {columns.map((column) => {
         const result = results.get(column.field.id);
         const fn = calculations[column.field.id];
@@ -70,6 +88,7 @@ export function DatabaseCalculateRow({
           <div
             className={cn(
               "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden px-2 py-2",
+              rowSelectGutter && "border-border border-t",
               column.showVerticalLine && "border-border/60 border-r",
               alignEnd && "justify-end",
               column.pinned && "sticky z-10 bg-background",
@@ -78,6 +97,7 @@ export function DatabaseCalculateRow({
             key={column.field.id}
             style={{
               width: column.width,
+              // Pinned offsets already include the selection column width.
               left: column.left ?? undefined,
             }}
           >

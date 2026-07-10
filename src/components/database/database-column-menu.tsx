@@ -27,6 +27,7 @@ import { format as formatDate } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -795,6 +796,11 @@ export interface DatabaseColumnMenuProps {
   field: DatabaseField;
   /** The primary field can't be hidden or deleted. */
   isPrimary: boolean;
+  /**
+   * Optional imperative open handle — header right-click uses this so the
+   * normal column menu opens without a second menu surface.
+   */
+  openMenuRef?: RefObject<(() => void) | null>;
   triggerClassName?: string;
   view: DatabaseView;
 }
@@ -806,6 +812,7 @@ export function DatabaseColumnMenu({
   displayFieldIds,
   field,
   isPrimary,
+  openMenuRef,
   triggerClassName,
   view,
 }: DatabaseColumnMenuProps): ReactNode {
@@ -838,6 +845,18 @@ export function DatabaseColumnMenu({
     },
     [commitRename, field.name]
   );
+
+  useEffect(() => {
+    if (!openMenuRef) {
+      return;
+    }
+    openMenuRef.current = () => {
+      handleOpenChange(true);
+    };
+    return () => {
+      openMenuRef.current = null;
+    };
+  }, [handleOpenChange, openMenuRef]);
 
   const patchConfig = (patch: Partial<DatabaseTableViewConfig>) => {
     updateDatabaseView(databaseId, viewId, {

@@ -1,9 +1,17 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useRef, useState } from "react";
 
+export type ListReorderAxis = "horizontal" | "vertical";
+
+export interface UseListReorderOptions {
+  /** Default `vertical` (Properties list). Use `horizontal` for chip strips. */
+  axis?: ListReorderAxis;
+}
+
 /**
- * Pointer-driven vertical list reorder for a small, self-contained list (e.g.
- * the database Properties list) rendered inside a popover *or* a vaul drawer.
+ * Pointer-driven list reorder for a small, self-contained list (e.g. the
+ * database Properties list or sort chips) rendered inside a popover, drawer,
+ * or inline chip bar.
  *
  * It deliberately does not use the canvas DnD toolkit: those surfaces need a
  * `DndSurface` context with registered rects, which a portaled menu/submenu
@@ -14,11 +22,21 @@ import { useCallback, useRef, useState } from "react";
  * Rows must be tagged with `data-reorder-item` so their rects can be measured
  * in visual order.
  */
+export interface ListReorderDragPreview {
+  clientX: number;
+  clientY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+}
+
 export interface ListReorderState {
   /** Index of the row being dragged, or null when idle. */
   fromIndex: number | null;
   /** Insertion slot under the pointer (0..count), or null when idle. */
   overIndex: number | null;
+  /** Live pointer position for a follow-the-finger drag preview, or null when idle. */
+  preview: ListReorderDragPreview | null;
 }
 
 export interface ListReorderHandleProps {
@@ -36,7 +54,11 @@ export interface UseListReorderResult {
   state: ListReorderState;
 }
 
-const IDLE: ListReorderState = { fromIndex: null, overIndex: null };
+const IDLE: ListReorderState = {
+  fromIndex: null,
+  overIndex: null,
+  preview: null,
+};
 
 /**
  * Maps a pointer's insertion slot (0..count, measured in the pre-removal list)
@@ -53,8 +75,10 @@ export function resolveReorderTarget(from: number, overSlot: number): number {
  *   post-removal indices). Never called for a no-op move.
  */
 export function useListReorder(
-  onReorder: (from: number, to: number) => void
+  onReorder: (from: number, to: number) => void,
+  options?: UseListReorderOptions
 ): UseListReorderResult {
+  const axis = options?.axis ?? "vertical";
   const containerElRef = useRef<HTMLElement | null>(null);
   const pointerIdRef = useRef<number | null>(null);
   const [state, setState] = useState<ListReorderState>(IDLE);
@@ -64,22 +88,30 @@ export function useListReorder(
   }, []);
 
   /** The insertion slot (0..count) whose boundary the pointer sits nearest. */
-  const slotAt = useCallback((clientY: number): number => {
-    const container = containerElRef.current;
-    if (!container) {
-      return 0;
-    }
-    const rows = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-reorder-item]")
-    );
-    for (let index = 0; index < rows.length; index++) {
-      const rect = rows[index].getBoundingClientRect();
-      if (clientY < rect.top + rect.height / 2) {
-        return index;
+  const slotAt = useCallback(
+    (clientX: number, clientY: number): number => {
+      const container = containerElRef.current;
+      if (!container) {
+        return 0;
       }
-    }
-    return rows.length;
-  }, []);
+      const pointer = axis === "horizontal" ? clientX : clientY;
+      const rows = Array.from(
+        container.querySelectorAll<HTMLElement>("[data-reorder-item]")
+      );
+      for (let index = 0; index < rows.length; index++) {
+        const rect = rows[index].getBoundingClientRect();
+        const midpoint =
+          axis === "horizontal"
+            ? rect.left + rect.width / 2
+            : rect.top + rect.height / 2;
+        if (pointer < midpoint) {
+          return index;
+        }
+      }
+      return rows.length;
+    },
+    [axis]
+  );
 
   const finish = useCallback(
     (commit: boolean) => {
@@ -113,19 +145,44 @@ export function useListReorder(
           // Capture can fail on a fast flick; the drag still tracks via moves.
         }
         pointerIdRef.current = event.pointerId;
-        setState({ fromIndex: index, overIndex: index });
+        const row = event.currentTarget.closest<HTMLElement>(
+          "[data-reorder-item]"
+        );
+        const rowRect = row?.getBoundingClientRect();
+        setState({
+          fromIndex: index,
+          overIndex: index,
+          preview: {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            offsetX: rowRect ? event.clientX - rowRect.left : 0,
+            offsetY: rowRect ? event.clientY - rowRect.top : 0,
+            width: rowRect?.width ?? 0,
+          },
+        });
       },
       onPointerMove: (event) => {
         if (pointerIdRef.current !== event.pointerId) {
           return;
         }
         event.preventDefault();
-        const over = slotAt(event.clientY);
-        setState((prev) =>
-          prev.fromIndex === null || prev.overIndex === over
-            ? prev
-            : { ...prev, overIndex: over }
-        );
+        const over = slotAt(event.clientX, event.clientY);
+        setState((prev) => {
+          if (prev.fromIndex === null) {
+            return prev;
+          }
+          const preview = prev.preview
+            ? {
+                ...prev.preview,
+                clientX: event.clientX,
+                clientY: event.clientY,
+              }
+            : null;
+          if (prev.overIndex === over) {
+            return preview === prev.preview ? prev : { ...prev, preview };
+          }
+          return { ...prev, overIndex: over, preview };
+        });
       },
       onPointerUp: (event) => {
         if (pointerIdRef.current !== event.pointerId) {

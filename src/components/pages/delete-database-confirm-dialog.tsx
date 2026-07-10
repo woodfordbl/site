@@ -10,34 +10,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
-import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
-import { getDeletePageConfirmDescription } from "@/lib/pages/delete-page-confirm-copy.ts";
 
-interface DeletePageConfirmDialogProps {
-  description?: string;
+interface DeleteDatabaseConfirmDialogProps {
+  databaseName: string;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
-  pageId?: string;
 }
 
 /**
- * Shared "Delete page?" confirmation. Enter confirms; Escape cancels (same as
- * Cancel). Used by the sidebar, page header menu, canvas page-link delete, and
- * the delete-page keyboard command.
+ * Shared "Delete database?" confirmation for sidebar overflow and context
+ * menus. Enter confirms; Escape cancels (same as Cancel).
  */
-export function DeletePageConfirmDialog({
-  description,
+export function DeleteDatabaseConfirmDialog({
+  databaseName,
   onConfirm,
   onOpenChange,
   open,
-  pageId,
-}: DeletePageConfirmDialogProps) {
-  const localPage = useLocalPageById(pageId ?? "");
-  const resolvedDescription =
-    description ?? (pageId ? getDeletePageConfirmDescription(localPage) : "");
-
+}: DeleteDatabaseConfirmDialogProps) {
   const handleCancel = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
@@ -52,8 +43,10 @@ export function DeletePageConfirmDialog({
         showCloseButton={false}
       >
         <DialogHeader>
-          <DialogTitle>Delete page?</DialogTitle>
-          <DialogDescription>{resolvedDescription}</DialogDescription>
+          <DialogTitle>Delete database?</DialogTitle>
+          <DialogDescription>
+            {`"${databaseName}" and all of its rows will be permanently deleted. Linked database blocks will show as not found.`}
+          </DialogDescription>
         </DialogHeader>
         <ConfirmDialogFooter
           confirmLabel="Delete"

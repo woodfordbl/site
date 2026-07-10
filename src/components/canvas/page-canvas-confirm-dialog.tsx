@@ -1,9 +1,8 @@
-import { Button } from "@/components/ui/button.tsx";
+import { ConfirmDialogFooter } from "@/components/ui/confirm-dialog-footer.tsx";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
@@ -11,6 +10,7 @@ import {
   PAGE_CANVAS_CONFIRM_DIALOG_COPY,
   type PageCanvasConfirmAction,
 } from "@/hooks/use-page-canvas-footer-actions.ts";
+import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 
 interface PageCanvasConfirmDialogProps {
   confirmAction: PageCanvasConfirmAction | null;
@@ -23,9 +23,19 @@ export function PageCanvasConfirmDialog({
   onConfirm,
   onOpenChange,
 }: PageCanvasConfirmDialogProps) {
+  const handleCancel = () => {
+    onOpenChange(false);
+  };
+
   return (
     <Dialog onOpenChange={onOpenChange} open={confirmAction !== null}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent
+        onKeyDownCapture={createConfirmDialogKeyDownHandler({
+          onCancel: handleCancel,
+          onConfirm,
+        })}
+        showCloseButton={false}
+      >
         <DialogHeader>
           <DialogTitle>
             {confirmAction
@@ -38,20 +48,16 @@ export function PageCanvasConfirmDialog({
               : ""}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
-            Cancel
-          </Button>
-          <Button onClick={onConfirm} type="button" variant="destructive">
-            {confirmAction
+        <ConfirmDialogFooter
+          confirmLabel={
+            confirmAction
               ? PAGE_CANVAS_CONFIRM_DIALOG_COPY[confirmAction].confirmLabel
-              : ""}
-          </Button>
-        </DialogFooter>
+              : ""
+          }
+          confirmVariant="destructive"
+          onCancel={handleCancel}
+          onConfirm={onConfirm}
+        />
       </DialogContent>
     </Dialog>
   );
