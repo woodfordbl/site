@@ -7,7 +7,7 @@ import {
   PREVIEW_ROW_LIMIT,
 } from "@/components/database/row-page/database-template-editor-sidebar.tsx";
 import {
-  RowPropertiesRailExpandButton,
+  RowPropertiesPlacementMenu,
   RowPropertiesRailLayout,
   useRowPropertiesRail,
 } from "@/components/database/row-page/row-properties-rail.tsx";
@@ -91,7 +91,7 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
     [databaseId]
   );
   const previewRows = useMemo(() => pickPreviewRows(rows), [rows]);
-  const rail = useRowPropertiesRail();
+  const rail = useRowPropertiesRail(database);
 
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
   // A deleted/out-of-sample row silently falls back to editing.
@@ -136,12 +136,10 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
   const workspace = (
     <PageWorkspace
       contentWrapper={
-        rail.expanded
+        rail.panelMode
           ? (content) => (
               <RowPropertiesRailLayout
-                onCollapse={() => {
-                  rail.setExpanded(false);
-                }}
+                database={database}
                 panel={<RowTemplateDefaultsList database={database} />}
               >
                 {content}
@@ -156,15 +154,12 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
         <RowTemplateTitleSection
           database={database}
           propertiesExtra={
-            rail.available ? (
-              <RowPropertiesRailExpandButton
-                onExpand={() => {
-                  rail.setExpanded(true);
-                }}
-              />
-            ) : undefined
+            <RowPropertiesPlacementMenu
+              className="hover-reveal"
+              database={database}
+            />
           }
-          showProperties={!rail.expanded}
+          showProperties={!rail.panelMode}
           templatePage={templatePage}
         />
       }

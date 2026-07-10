@@ -404,6 +404,12 @@ export const localDatabaseSchema = z.object({
    * removes its key; explicit caller values always win over defaults.
    */
   rowDefaults: z.record(z.string(), databaseCellValueSchema).optional(),
+  /**
+   * Where row pages show their properties: the resizable side panel
+   * (default) or a section at the top of the page. Per database — the whole
+   * row-page family (rows, preview, template editor) shares it.
+   */
+  rowPropertiesPlacement: z.enum(["panel", "top"]).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   createdAt: z.string(),

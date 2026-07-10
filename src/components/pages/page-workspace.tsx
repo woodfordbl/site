@@ -56,9 +56,10 @@ import { cn } from "@/lib/utils.ts";
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
   /**
-   * Wraps the canvas scroll region below the header bar — e.g. the
-   * row-template editor's properties rail splits it into content + side
-   * panel while the header and footer actions keep their normal placement.
+   * Wraps the header bar + canvas scroll region — e.g. the row-template
+   * editor's properties rail splits them into content + side panel (its
+   * "Properties" band level with the header) while the footer actions keep
+   * their normal placement outside the canvas.
    */
   contentWrapper?: (content: ReactNode) => ReactNode;
   /** Overrides the default page sidebar (e.g. the template editor's chrome). */
@@ -299,6 +300,20 @@ function PageWorkspaceBody({
     </div>
   );
 
+  // Header + scroll region together, so a contentWrapper (the row-template
+  // properties rail) can sit its panel band level with the header bar.
+  const workspaceMain = (
+    <>
+      {/* Desktop with no cover: header is a fixed bar above the scroll
+        region. Mobile, or desktop with a cover: it lives inside the scroll
+        region (as headerSlot). */}
+      {isNarrowViewport || hasCover ? null : header}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden">
+        {canvasContent}
+      </div>
+    </>
+  );
+
   return (
     <PageCoverProvider
       headerImage={headerImage}
@@ -325,17 +340,7 @@ function PageWorkspaceBody({
                   pageId={page.id}
                 />
               ) : (
-                <>
-                  {/* Desktop with no cover: header is a fixed bar above the scroll
-                    region. Mobile, or desktop with a cover: it lives inside the
-                    scroll region (as headerSlot). */}
-                  {isNarrowViewport || hasCover ? null : header}
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden">
-                    {contentWrapper
-                      ? contentWrapper(canvasContent)
-                      : canvasContent}
-                  </div>
-                </>
+                (contentWrapper?.(workspaceMain) ?? workspaceMain)
               )}
             </div>
           </div>

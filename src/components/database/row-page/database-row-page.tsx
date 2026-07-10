@@ -20,7 +20,7 @@ import {
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
-  RowPropertiesRailExpandButton,
+  RowPropertiesPlacementMenu,
   RowPropertiesRailLayout,
   useRowPropertiesRail,
 } from "@/components/database/row-page/row-properties-rail.tsx";
@@ -262,7 +262,7 @@ function RowPageHeader({
       <RowPageSidebarToggle />
       <nav
         aria-label="Breadcrumb"
-        className="flex h-8 min-w-0 flex-1 items-center gap-0.5 text-muted-foreground text-sm"
+        className="flex h-7 min-w-0 flex-1 items-center gap-0.5 text-muted-foreground text-sm"
       >
         {ancestorCrumbs.map((ancestor) => (
           <span className="contents" key={ancestor.id}>
@@ -361,7 +361,7 @@ function RowPageBody({
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
   const navigate = useNavigate();
   const { pages } = useMergedPageListItems();
-  const rail = useRowPropertiesRail();
+  const rail = useRowPropertiesRail(database);
 
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
 
@@ -414,45 +414,45 @@ function RowPageBody({
     return null;
   }
 
-  // The scroll region below the full-width header — the part the properties
-  // rail splits when expanded.
-  const content = (
-    // biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path.
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button.
-    <div
-      {...pageContentTypographyProps({
-        font: resolvePageFont(template?.font),
-        textScale: undefined,
-      })}
-      className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-      onClick={handleBodyClick}
-    >
-      <CanvasBlocksReadOnly
-        blocks={templateBlocks}
-        isNarrowViewport={isNarrowViewport}
-        mode="view"
-        pageId={`db-row:${row.id}`}
-        titleSlot={
-          <RowPageTitleSection
-            database={database}
-            displayTitle={displayTitle}
-            icon={template?.icon}
-            propertiesExtra={
-              rail.available ? (
-                <RowPropertiesRailExpandButton
-                  onExpand={() => {
-                    rail.setExpanded(true);
-                  }}
+  // Header + scroll region — the rail wraps BOTH so its "Properties" band
+  // sits level with the header bar (same height, continuous border line).
+  const main = (
+    <>
+      <RowPageHeader database={database} rowTitle={displayTitle} />
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path. */}
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button. */}
+      <div
+        {...pageContentTypographyProps({
+          font: resolvePageFont(template?.font),
+          textScale: undefined,
+        })}
+        className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
+        onClick={handleBodyClick}
+      >
+        <CanvasBlocksReadOnly
+          blocks={templateBlocks}
+          isNarrowViewport={isNarrowViewport}
+          mode="view"
+          pageId={`db-row:${row.id}`}
+          titleSlot={
+            <RowPageTitleSection
+              database={database}
+              displayTitle={displayTitle}
+              icon={template?.icon}
+              propertiesExtra={
+                <RowPropertiesPlacementMenu
+                  className="hover-reveal"
+                  database={database}
                 />
-              ) : undefined
-            }
-            row={row}
-            showProperties={!rail.expanded}
-          />
-        }
-      />
-    </div>
+              }
+              row={row}
+              showProperties={!rail.panelMode}
+            />
+          }
+        />
+      </div>
+    </>
   );
 
   return (
@@ -463,18 +463,15 @@ function RowPageBody({
           className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
           data-page-main-panel=""
         >
-          <RowPageHeader database={database} rowTitle={displayTitle} />
-          {rail.expanded ? (
+          {rail.panelMode ? (
             <RowPropertiesRailLayout
-              onCollapse={() => {
-                rail.setExpanded(false);
-              }}
+              database={database}
               panel={<RowPropertiesPanel database={database} row={row} />}
             >
-              {content}
+              {main}
             </RowPropertiesRailLayout>
           ) : (
-            content
+            main
           )}
         </div>
       </div>
@@ -502,7 +499,7 @@ export function RowPageTitleSection({
   displayTitle: string;
   /** Template-inherited page icon; falls back to the default document glyph. */
   icon?: string;
-  /** Trailing affordance in the properties block (rail expand button). */
+  /** Trailing affordance in the properties block (placement menu). */
   propertiesExtra?: ReactNode;
   row: LocalDatabaseRow;
   /** False while the properties rail owns the panel (title only). */

@@ -449,10 +449,12 @@ offers a sidebar **Preview as row** picker (live-rendered under the same sidebar
 `{{`-triggered property-token autocomplete
 ([`row-template-token-autocomplete.tsx`](../../src/components/database/row-page/row-template-token-autocomplete.tsx),
 route-mounted, not threaded through the slash-menu plumbing). The whole row-page family
-(virtual page, preview, template editor) shares an optional Linear-style **properties
-rail** ([`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx)):
-a resizable right panel holding the properties instead of the in-page section, toggled
-per user (localStorage), always in-page on narrow viewports.
+(virtual page, preview, template editor) shares a Linear-style **properties rail**
+([`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx)):
+a resizable side panel — the default — whose "Properties" band sits level with the
+header bar. Where properties show is a per-database setting
+(`database.rowPropertiesPlacement`, side panel vs top of page) switched from the
+placement menu in the page's top right; always in-page on narrow viewports.
 
 **Copy-on-write:** the first body click instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids

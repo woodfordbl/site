@@ -312,6 +312,22 @@ describe("database collection ops", () => {
     expect(drafts[0]?.rowDefaults).toBeUndefined();
   });
 
+  it("setDatabaseRowPropertiesPlacement stores top and clears the default panel", async () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowPropertiesPlacement(databaseId, "top");
+    await flushAsync();
+
+    expect(drafts[0]?.rowPropertiesPlacement).toBe("top");
+
+    ops.setDatabaseRowPropertiesPlacement(databaseId, "panel");
+    await flushAsync();
+
+    expect(drafts[1]?.rowPropertiesPlacement).toBeUndefined();
+  });
+
   it("insertDatabaseRow after a row takes the midpoint to its successor", async () => {
     mocks.rowState = [
       makeRow("row-a", { order: 1000 }),
