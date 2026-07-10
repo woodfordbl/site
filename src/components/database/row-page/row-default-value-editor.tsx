@@ -23,6 +23,7 @@ import type {
   DatabaseField,
   LocalDatabase,
 } from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
 
 /**
  * Editors for a field's DEFAULT value (`database.rowDefaults`) in the
@@ -174,8 +175,16 @@ export function RowDefaultValueEditor({
 
   // Text/url/number/select/multiSelect: closed display button; clicking
   // mounts the grid's native inline/popover editor anchored to this slot.
+  // The slot only takes a fixed width while the inline editor (absolute
+  // inset overlay) needs one — at rest it shrinks so field names keep room
+  // in narrow surfaces like the properties rail.
   return (
-    <div className="relative flex min-h-7 w-44 min-w-0 items-center justify-end sm:w-56">
+    <div
+      className={cn(
+        "relative flex min-h-7 min-w-0 items-center justify-end",
+        editing && "w-44 shrink-0 sm:w-56"
+      )}
+    >
       <button
         className={valueButtonClassName}
         onClick={() => {
