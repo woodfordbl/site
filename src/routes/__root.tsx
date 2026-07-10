@@ -21,7 +21,10 @@ import { TemplatePageProvider } from "@/components/pages/template-page-provider.
 import { NotFoundPage } from "@/components/ui/not-found-page.tsx";
 import { AppProviders } from "@/db/provider.tsx";
 import { loadSiteAppearance } from "@/lib/appearance/load-site-appearance.ts";
-import { buildNotFoundMeta } from "@/lib/content/page-head.ts";
+import {
+  buildDefaultSiteMeta,
+  buildNotFoundMeta,
+} from "@/lib/content/page-head.ts";
 import { pageListQueryOptions } from "@/lib/content/page-list-query.ts";
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
 import { loadDeviceLayoutHints } from "@/lib/device/load-device-layout-hints.ts";
@@ -95,14 +98,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     ];
 
     return {
+      // Site-wide social-card fallback; page routes override via TanStack's
+      // name/property meta dedupe (leaf match wins).
       meta: isNotFound
         ? [...baseMeta, ...buildNotFoundMeta()]
-        : [
-            ...baseMeta,
-            {
-              title: "Blake Woodford",
-            },
-          ],
+        : [...baseMeta, ...buildDefaultSiteMeta()],
       links: [
         {
           rel: "stylesheet",

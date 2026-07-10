@@ -50,7 +50,12 @@ export function pageCanonicalUrl(page: Page): string {
  * determines the image (safe to cache immutably).
  */
 export function buildOgImageUrl(page: Page): string {
-  const params = new URLSearchParams({ title: page.title });
+  const params = new URLSearchParams();
+  // The home page's card carries the site name (the endpoint default), not
+  // its internal "Home" page title.
+  if (page.slug !== "/" && page.title !== SITE_NAME) {
+    params.set("title", page.title);
+  }
   const description = derivePageDescription(page);
   if (description) {
     params.set("desc", description);
@@ -59,7 +64,8 @@ export function buildOgImageUrl(page: Page): string {
   if (page.icon && !page.icon.startsWith(TABLER_ICON_PREFIX)) {
     params.set("icon", page.icon);
   }
-  return `${SITE_ORIGIN}/api/og?${params.toString()}`;
+  const query = params.toString();
+  return query ? `${SITE_ORIGIN}/api/og?${query}` : `${SITE_ORIGIN}/api/og`;
 }
 
 interface PageMetaTag {
@@ -80,12 +86,43 @@ export function buildPageMeta(page: Page): PageMetaTag[] {
   const description = derivePageDescription(page);
   const ogImage = buildOgImageUrl(page);
 
+  return buildSocialMeta({
+    title,
+    description,
+    url: pageCanonicalUrl(page),
+    ogImage,
+  });
+}
+
+/**
+ * Site-wide fallback meta for routes without their own page meta (applied at
+ * the root; TanStack dedupes by name/property with leaf routes winning). Keeps
+ * links to non-page routes rendering a full social card everywhere.
+ */
+export function buildDefaultSiteMeta(): PageMetaTag[] {
+  return buildSocialMeta({
+    title: SITE_NAME,
+    description: "",
+    url: `${SITE_ORIGIN}/`,
+    ogImage: `${SITE_ORIGIN}/api/og`,
+  });
+}
+
+function buildSocialMeta(input: {
+  description: string;
+  ogImage: string;
+  title: string;
+  url: string;
+}): PageMetaTag[] {
+  const { title, description, url, ogImage } = input;
+
   const meta: PageMetaTag[] = [
     { title },
     { property: "og:title", content: title },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: SITE_NAME },
-    { property: "og:url", content: pageCanonicalUrl(page) },
+    { property: "og:locale", content: "en_US" },
+    { property: "og:url", content: url },
     { property: "og:image", content: ogImage },
     { property: "og:image:width", content: OG_IMAGE_WIDTH },
     { property: "og:image:height", content: OG_IMAGE_HEIGHT },
@@ -93,6 +130,7 @@ export function buildPageMeta(page: Page): PageMetaTag[] {
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: title },
     { name: "twitter:image", content: ogImage },
+    { name: "twitter:image:alt", content: title },
   ];
 
   if (description) {
@@ -111,9 +149,15 @@ export function buildPageLinks(page: Page): PageLinkTag[] {
   return [{ rel: "canonical", href: pageCanonicalUrl(page) }];
 }
 
-/** Meta for private, local-only routes (`/p/…`): keep crawlers out. */
-export function buildNoIndexMeta(): PageMetaTag[] {
-  return [{ name: "robots", content: "noindex" }];
+/**
+ * Meta for private, local-only routes (`/p/…`, `/settings`, …): keep crawlers
+ * out, but still name the tab/preview when a section title is given.
+ */
+export function buildNoIndexMeta(sectionTitle?: string): PageMetaTag[] {
+  const robots: PageMetaTag = { name: "robots", content: "noindex" };
+  return sectionTitle
+    ? [{ title: `${sectionTitle} · ${SITE_NAME}` }, robots]
+    : [robots];
 }
 
 /** Meta for global not-found handling. */
