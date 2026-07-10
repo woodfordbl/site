@@ -258,6 +258,9 @@ function DatabaseViewBody({
       databaseId={databaseId}
       groups={groups}
       isSyncedDatabase={isSyncedDatabase}
+      // Remount clears session row-selection when the database or active
+      // view changes (selection is intentionally not persisted).
+      key={`${databaseId}:${view.id}`}
       mode={mode}
       now={clockNow}
       pinnedFields={pinnedFields}

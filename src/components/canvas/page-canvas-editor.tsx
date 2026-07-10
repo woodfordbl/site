@@ -107,6 +107,55 @@ function isTableRowDragSource(sourceId: string): boolean {
   );
 }
 
+/**
+ * Builds the touch-path follow-the-pointer preview for a canvas row. Detached
+ * synthetics (database grid cards) are mounted briefly to measure, then
+ * returned as-is for the overlay host.
+ */
+function measureCanvasRowDragPreview(
+  sourceId: string,
+  pointer: { x: number; y: number }
+): CanvasRowDragPreviewState | null {
+  const node = resolveCanvasRowDragPreviewNode(sourceId);
+  if (!node) {
+    return null;
+  }
+
+  const synthetic = !node.isConnected;
+  if (synthetic) {
+    Object.assign(node.style, {
+      position: "fixed",
+      top: "-10000px",
+      left: "-10000px",
+      pointerEvents: "none",
+    });
+    document.body.appendChild(node);
+  }
+
+  const rect = node.getBoundingClientRect();
+
+  if (synthetic) {
+    node.remove();
+    node.style.position = "";
+    node.style.top = "";
+    node.style.left = "";
+    node.style.pointerEvents = "";
+  }
+
+  const isDatabasePreview = node.hasAttribute("data-database-drag-preview");
+
+  return {
+    node: synthetic ? node : cloneNodeWithFieldValues(node),
+    offsetX: isDatabasePreview
+      ? Math.min(24, Math.max(rect.width / 2, 0))
+      : pointer.x - rect.left,
+    offsetY: isDatabasePreview
+      ? Math.min(rect.height / 2, Math.max(rect.height - 1, 0))
+      : pointer.y - rect.top,
+    width: Math.max(rect.width, 1),
+  };
+}
+
 type CanvasEditorState = ReturnType<typeof useCanvasEditor>;
 
 function CanvasOverclickListener({
@@ -395,17 +444,7 @@ function PageCanvasEditorBody({
         if (!pointerDrag) {
           return;
         }
-        const node = resolveCanvasRowDragPreviewNode(sourceId);
-        if (!node) {
-          return;
-        }
-        const rect = node.getBoundingClientRect();
-        setCanvasRowPreview({
-          node: cloneNodeWithFieldValues(node),
-          offsetX: pointer.x - rect.left,
-          offsetY: pointer.y - rect.top,
-          width: rect.width,
-        });
+        setCanvasRowPreview(measureCanvasRowDragPreview(sourceId, pointer));
       },
       onDragEnd: () => {
         pointerDragActiveRef.current = false;

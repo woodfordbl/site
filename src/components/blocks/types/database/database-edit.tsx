@@ -118,14 +118,15 @@ export function DatabaseEdit({
   }
 
   return (
-    // Visible focus target: keyboard users see where structural keys apply.
-    // The grid hosts its own interactive children (cells, headers), so a
-    // wrapping <button> would be invalid — a focusable group is correct.
+    // Focusable group for structural keys (cannot be a <button> — the grid
+    // hosts interactive children). No focus ring: a ring around the whole
+    // database reads as block chrome and fights the select gutter.
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: composite block focus surface for structural keys
     // biome-ignore lint/a11y/useSemanticElements: cannot be a <button>; contains interactive children
     <div
       aria-label="Database block"
-      className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+      data-database-block=""
       onKeyDown={handleWrapperKeyDown}
       ref={focusRef as React.RefObject<HTMLDivElement>}
       role="group"

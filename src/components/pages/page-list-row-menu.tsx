@@ -23,11 +23,13 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 
@@ -121,6 +123,9 @@ export function PageListRowDropdown({
               >
                 <IconCopy />
                 With content
+                <DropdownMenuShortcut>
+                  <Shortcut command="duplicate-page" />
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {

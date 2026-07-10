@@ -262,6 +262,12 @@ export const databaseTableViewConfigSchema = z.object({
   showVerticalLines: z.boolean().optional(),
   /** Page icon in the primary (title) column cells; absent means shown. */
   showPageIcons: z.boolean().optional(),
+  /**
+   * Row-selection checkbox column: `always` reserves a leading column;
+   * `hover` and `number` render controls in a left gutter (content stays
+   * flush). Absent defaults to `hover`.
+   */
+  rowSelectDisplay: z.enum(["always", "hover", "number"]).optional(),
   /** Collapsed group keys (groupBy value keys) for this view. */
   collapsedGroupKeys: z.array(z.string()).optional(),
   /** Board (kanban) settings — used when `view.type` is `board`. */
