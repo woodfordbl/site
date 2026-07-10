@@ -116,6 +116,7 @@ import {
 } from "@/components/ui/popover.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
+import { SequenceShortcut } from "@/components/ui/shortcut.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { SourceLinkPanel } from "@/components/ui/source-link-panel.tsx";
 import { SourceUploadPanel } from "@/components/ui/source-upload-panel.tsx";
@@ -613,7 +614,10 @@ function FormsSection() {
             <InputGroupInput placeholder="Search…" />
             <InputGroupAddon align="inline-end">
               <InputGroupButton>
-                <Kbd>⌘K</Kbd>
+                <KbdGroup>
+                  <Kbd>⌘</Kbd>
+                  <Kbd>K</Kbd>
+                </KbdGroup>
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
@@ -1212,7 +1216,10 @@ function OverlaysSection() {
           />
           <TooltipContent>
             <span>Add to library</span>
-            <Kbd>⌘E</Kbd>
+            <KbdGroup>
+              <Kbd>⌘</Kbd>
+              <Kbd>E</Kbd>
+            </KbdGroup>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -1629,11 +1636,11 @@ function TableSection() {
 function KbdSection() {
   return (
     <Section
-      description="Single keys, modifier groups, and inline shortcut hints."
+      description="Outline keycaps everywhere; default variant for inline confirm actions; char + char sequences use then."
       title="Keyboard hints"
     >
       <div className="flex flex-col gap-6">
-        <TabVariantColumn label="Single keys">
+        <TabVariantColumn label="Outline (default)">
           <div className="flex flex-wrap items-center gap-2">
             <Kbd>⌘</Kbd>
             <Kbd>K</Kbd>
@@ -1643,17 +1650,17 @@ function KbdSection() {
           </div>
         </TabVariantColumn>
 
-        <TabVariantColumn label="Plain (inline)">
+        <TabVariantColumn label="Default (inline confirm)">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" type="button" variant="ghost">
               Cancel
-              <Kbd data-icon="inline-end" variant="plain">
+              <Kbd data-icon="inline-end" variant="default">
                 Esc
               </Kbd>
             </Button>
             <Button size="sm" type="button" variant="destructive">
               Delete
-              <Kbd data-icon="inline-end" variant="plain">
+              <Kbd data-icon="inline-end" variant="default">
                 ↵
               </Kbd>
             </Button>
@@ -1671,11 +1678,8 @@ function KbdSection() {
 
           <Separator className="h-6" orientation="vertical" />
 
-          <TabVariantColumn label="With hint">
-            <KbdGroup>
-              <Kbd>Esc</Kbd>
-              <span className="text-muted-foreground text-sm">to close</span>
-            </KbdGroup>
+          <TabVariantColumn label="Char + char sequence">
+            <SequenceShortcut sequence={["G", "M"]} />
           </TabVariantColumn>
 
           <Separator className="h-6" orientation="vertical" />
@@ -1698,6 +1702,18 @@ function KbdSection() {
             </div>
           </TabVariantColumn>
         </div>
+
+        <TabVariantColumn label="Sequence tooltip">
+          <Tooltip>
+            <TooltipTrigger
+              render={<Button variant="outline">Go to my issues</Button>}
+            />
+            <TooltipContent>
+              Go to my issues
+              <SequenceShortcut sequence={["G", "M"]} />
+            </TooltipContent>
+          </Tooltip>
+        </TabVariantColumn>
       </div>
     </Section>
   );
