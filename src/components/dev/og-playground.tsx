@@ -147,7 +147,9 @@ function VariantCard({
 
 function IconAssets() {
   const assets = [
-    { label: "favicon.svg", src: "/favicon.svg", sizes: [64, 32, 16] },
+    { label: "prod", src: "/favicon.svg", sizes: [64, 32, 16] },
+    { label: "preview", src: "/favicon-preview.svg", sizes: [64, 32, 16] },
+    { label: "dev", src: "/favicon-dev.svg", sizes: [64, 32, 16] },
     { label: "apple-touch-icon", src: "/apple-touch-icon.png", sizes: [64] },
     { label: "maskable", src: "/icon-512-maskable.png", sizes: [64] },
   ];

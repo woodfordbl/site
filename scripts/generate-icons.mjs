@@ -14,6 +14,12 @@
  * apple-touch-icon.png (180, full-bleed square — iOS applies its own mask),
  * icon-192/512.png (rounded), icon-512-maskable.png (mark in the 80% safe
  * zone).
+ *
+ * Non-production environments get their own tab favicons (favicon-dev.*,
+ * favicon-preview.*) with distinct field colors from the block palette, so
+ * local/staging/production tabs are distinguishable at a glance. __root.tsx
+ * picks the set from VITE_DEPLOY_ENV. Only the svg+ico pair varies per env —
+ * the PWA/touch icons stay production terracotta.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -36,6 +42,15 @@ const SIZE = 512;
 const RADIUS = 113;
 const FONT_SIZE = 205;
 const LETTER_SPACING = -0.03; // em (opentype.js letterSpacing unit)
+
+// Tab favicon field per environment. Dev is block-blue, preview block-purple
+// (see --block-text-* in styles.css) — cool hues against production's warm
+// terracotta, readable at 16px.
+const ENVIRONMENTS = [
+  { suffix: "", field: FIELD }, // production
+  { suffix: "-preview", field: "#8059bb" }, // Vercel preview / staging
+  { suffix: "-dev", field: "#3772bb" }, // local dev
+];
 
 const fontBuffer = readFileSync(FONT);
 const font = parseFont(
@@ -70,11 +85,15 @@ function monogramPath(fontSize, box) {
 const d = monogramPath(FONT_SIZE, SIZE);
 
 // Rounded source (favicon.svg, tab icons, PWA "any" icons).
-const roundedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-  <rect width="${SIZE}" height="${SIZE}" rx="${RADIUS}" ry="${RADIUS}" fill="${FIELD}"/>
+function roundedSvgFor(field) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+  <rect width="${SIZE}" height="${SIZE}" rx="${RADIUS}" ry="${RADIUS}" fill="${field}"/>
   <path fill="${MARK}" d="${d}"/>
 </svg>
 `;
+}
+
+const roundedSvg = roundedSvgFor(FIELD);
 
 // Full-bleed square (apple-touch-icon — iOS applies its own mask).
 const squareSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
@@ -119,7 +138,6 @@ function writeIco(frames) {
   return Buffer.concat([header, ...dirs, ...frames.map((f) => f.data)]);
 }
 
-writeFileSync(path.join(PUBLIC_DIR, "favicon.svg"), roundedSvg);
 writeFileSync(
   path.join(PUBLIC_DIR, "icon-512.png"),
   await png(roundedSvg, 512)
@@ -137,10 +155,18 @@ writeFileSync(
   await png(squareSvg, 180)
 );
 
-const icoFrames = [];
-for (const size of [16, 32, 48]) {
-  icoFrames.push({ size, data: await png(roundedSvg, size) });
+// Per-environment tab favicons (svg + ico).
+for (const env of ENVIRONMENTS) {
+  const svg = roundedSvgFor(env.field);
+  writeFileSync(path.join(PUBLIC_DIR, `favicon${env.suffix}.svg`), svg);
+  const icoFrames = [];
+  for (const size of [16, 32, 48]) {
+    icoFrames.push({ size, data: await png(svg, size) });
+  }
+  writeFileSync(
+    path.join(PUBLIC_DIR, `favicon${env.suffix}.ico`),
+    writeIco(icoFrames)
+  );
 }
-writeFileSync(path.join(PUBLIC_DIR, "favicon.ico"), writeIco(icoFrames));
 
 console.log("Icon set written to public/.");

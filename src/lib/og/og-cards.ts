@@ -32,7 +32,6 @@ export const OG_VARIANTS = [
   { id: "poster", label: "Vermillion Poster", note: "title only" },
   { id: "split", label: "Sidebar Split", note: "full contract" },
   { id: "serif", label: "Serif Editorial", note: "ignores icon" },
-  { id: "spectrum", label: "Block Spectrum", note: "ignores icon" },
 ] as const;
 
 export type OgVariant = (typeof OG_VARIANTS)[number]["id"];
@@ -54,7 +53,6 @@ const LIGHT_BORDER = "#dededa";
 const DOT_GRID = "#e3e3db";
 // Dark theme tokens.
 const WARM_BLACK = "#181611";
-const WARM_BLACK_DEEP = "#15110a";
 const DARK_INK = "#edebe4";
 const DARK_MUTED = "#9a968c";
 const DARK_SURFACE = "#262219";
@@ -64,28 +62,6 @@ const DARK_BORDER = "#3e3a32";
 const ACCENT = "#e54723";
 const ACCENT_BRIGHT = "#f8461b";
 const CREAM_ON_ACCENT = "#fff7f2";
-// --block-text-* light values (see lib/blocks/block-colors.ts).
-const BLOCK_COLORS = {
-  gray: "#72726e",
-  brown: "#7e5a42",
-  orange: "#c56c21",
-  yellow: "#9a7d22",
-  green: "#3b834e",
-  blue: "#3772bb",
-  purple: "#8059bb",
-  pink: "#bb4e80",
-  red: "#c53732",
-};
-// Footer ticks skip the near-neutral gray/brown steps that vanish small.
-const TICK_COLORS = [
-  BLOCK_COLORS.orange,
-  BLOCK_COLORS.yellow,
-  BLOCK_COLORS.green,
-  BLOCK_COLORS.blue,
-  BLOCK_COLORS.purple,
-  BLOCK_COLORS.pink,
-  BLOCK_COLORS.red,
-];
 
 const PAD_X = 84;
 const PAD_TOP = 72;
@@ -320,8 +296,8 @@ function paperCard(content: OgCardContent): ReactElement {
     descriptionBlock(content, { color: MUTED })
   );
 
-  const brand = el(
-    "brand",
+  const footer = el(
+    "footer",
     { alignItems: "center" },
     ...brandLockup({
       badgeSize: 48,
@@ -329,26 +305,6 @@ function paperCard(content: OgCardContent): ReactElement {
       domainColor: MUTED,
       withName: !isSiteTitle(content),
     })
-  );
-
-  const ticks = el(
-    "ticks",
-    { alignItems: "center", gap: "9px" },
-    ...TICK_COLORS.map((color) =>
-      el(`tick-${color}`, {
-        width: "14px",
-        height: "14px",
-        borderRadius: "4px",
-        backgroundColor: color,
-      })
-    )
-  );
-
-  const footer = el(
-    "footer",
-    { alignItems: "center", justifyContent: "space-between" },
-    brand,
-    ticks
   );
 
   return el(
@@ -709,76 +665,6 @@ function serifCard(content: OgCardContent): ReactElement {
   );
 }
 
-/** F — deepest warm black with the nine-color block palette as a baseboard. */
-function spectrumCard(content: OgCardContent): ReactElement {
-  const top = el(
-    "top",
-    { alignItems: "center", justifyContent: "space-between" },
-    el(
-      "brand",
-      { alignItems: "center" },
-      monogramBadge("badge", {
-        background: ACCENT,
-        color: CREAM_ON_ACCENT,
-        fontSize: 23,
-        radius: 13,
-        size: 52,
-      }),
-      isSiteTitle(content)
-        ? null
-        : el(
-            "name",
-            { marginLeft: "16px", fontSize: "28px", fontWeight: 600 },
-            SITE_NAME
-          )
-    ),
-    el("domain", { fontSize: "27px", color: DARK_MUTED }, SITE_DOMAIN)
-  );
-
-  const body = el(
-    "body",
-    {
-      flexDirection: "column",
-      flexGrow: 1,
-      justifyContent: "center",
-      paddingBottom: "36px",
-    },
-    titleBlock(content, { base: 94, color: DARK_INK }),
-    descriptionBlock(content, { color: DARK_MUTED })
-  );
-
-  const spectrum = el(
-    "spectrum",
-    { height: "24px" },
-    ...Object.entries(BLOCK_COLORS).map(([name, color]) =>
-      el(`band-${name}`, { flexGrow: 1, backgroundColor: color })
-    )
-  );
-
-  return el(
-    "card",
-    {
-      width: "100%",
-      height: "100%",
-      flexDirection: "column",
-      backgroundColor: WARM_BLACK_DEEP,
-      color: DARK_INK,
-      fontFamily: "Geist",
-    },
-    el(
-      "content",
-      {
-        flexDirection: "column",
-        flexGrow: 1,
-        padding: `${PAD_TOP}px ${PAD_X}px 48px`,
-      },
-      top,
-      body
-    ),
-    spectrum
-  );
-}
-
 const CARD_BUILDERS: Record<
   OgVariant,
   (content: OgCardContent) => ReactElement
@@ -788,7 +674,6 @@ const CARD_BUILDERS: Record<
   poster: posterCard,
   split: splitCard,
   serif: serifCard,
-  spectrum: spectrumCard,
 };
 
 export function buildOgCard(

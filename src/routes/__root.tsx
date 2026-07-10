@@ -21,6 +21,7 @@ import { TemplatePageProvider } from "@/components/pages/template-page-provider.
 import { NotFoundPage } from "@/components/ui/not-found-page.tsx";
 import { AppProviders } from "@/db/provider.tsx";
 import { loadSiteAppearance } from "@/lib/appearance/load-site-appearance.ts";
+import { FAVICON_SUFFIX } from "@/lib/content/deploy-env.ts";
 import {
   buildDefaultSiteMeta,
   buildNotFoundMeta,
@@ -108,15 +109,17 @@ export const Route = createRootRouteWithContext<RouterContext>()({
           rel: "stylesheet",
           href: appCss,
         },
+        // Env-tinted tab favicon (terracotta prod, purple preview, blue dev)
+        // so tabs from different environments are distinguishable.
         {
           rel: "icon",
-          href: "/favicon.ico",
+          href: `/favicon${FAVICON_SUFFIX}.ico`,
           sizes: "any",
         },
         {
           rel: "icon",
           type: "image/svg+xml",
-          href: "/favicon.svg",
+          href: `/favicon${FAVICON_SUFFIX}.svg`,
         },
         {
           rel: "apple-touch-icon",

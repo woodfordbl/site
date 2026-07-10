@@ -15,6 +15,11 @@ import { resolveSiteOrigin } from "./scripts/resolve-origin.mjs";
 // for plain local dev (no Vercel / SITE_ORIGIN env).
 const SITE_ORIGIN = resolveSiteOrigin() ?? "http://localhost:3000";
 
+// Deployment environment, baked in for env-tinted favicons (see
+// scripts/generate-icons.mjs). Vercel sets VERCEL_ENV to "production" |
+// "preview" | "development"; plain local runs fall back to "development".
+const DEPLOY_ENV = process.env.VERCEL_ENV || "development";
+
 const ogHandler = fileURLToPath(
   new URL("./routes/api/og.get.ts", import.meta.url)
 );
@@ -92,6 +97,7 @@ function patchVercelAssetRoutes(configPath: string): void {
 const config = defineConfig({
   define: {
     "import.meta.env.VITE_SITE_ORIGIN": JSON.stringify(SITE_ORIGIN),
+    "import.meta.env.VITE_DEPLOY_ENV": JSON.stringify(DEPLOY_ENV),
   },
   server: {
     // Honor an externally-assigned port (e.g. a preview harness sets PORT);
