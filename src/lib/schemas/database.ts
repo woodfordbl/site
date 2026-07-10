@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { blockSchema } from "./block.ts";
 import { blockColorSchema } from "./rich-text.ts";
 
 /**
@@ -442,14 +441,6 @@ export const localDatabaseSchema = z.object({
   primaryFieldId: z.string(),
   /** Row origin; absent means a local (user-authored) database. */
   source: databaseSourceSchema.optional(),
-  /**
-   * Shared page template for rows-as-pages: blocks (with `{{ thisPage.X }}`
-   * expression tokens in text) rendered VIRTUALLY when a row page opens.
-   * Nothing is stored per row — a real page materializes copy-on-write only
-   * when the user first edits a specific row's page. Absent = default
-   * template (title + properties section).
-   */
-  rowTemplate: z.array(blockSchema).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   /**

@@ -19,6 +19,7 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
+import { useNavigate } from "@tanstack/react-router";
 import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
@@ -95,6 +96,7 @@ import type {
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
+import { readRowTemplateSnapshot } from "@/lib/databases/row-template-store.ts";
 import type {
   DatabaseField,
   DatabaseSource,
@@ -1229,23 +1231,30 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
 }
 
 /**
- * Row pages status row: whether row pages (`/db/{databaseId}/{rowId}`)
- * render from the built-in default template or the database's custom
- * `rowTemplate` (with its block count). A real menu item (not a hand-rolled
- * div) so its icon size, gap, and padding align with the sibling rows in
- * both the popover and drawer presentations; it performs no action yet —
- * template AUTHORING lands with a dedicated template editor (canvas-backed,
- * writing `database.rowTemplate`), and this row becomes its entry point.
+ * Row pages entry point: opens the row-template editor
+ * (`/db/$databaseId/template` — the route creates the template on first
+ * visit) and shows whether row pages render from the built-in default or the
+ * database's custom template (with its block count). The count reads the
+ * template store synchronously on render, which stays fresh because the menu
+ * content mounts on open.
  */
 function RowPagesItem({ database }: { database: LocalDatabase }) {
-  const blockCount = database.rowTemplate?.length ?? 0;
-  const status =
-    blockCount > 0
-      ? `Custom template · ${blockCount} ${blockCount === 1 ? "block" : "blocks"}`
-      : "Default template";
+  const navigate = useNavigate();
+  const template = readRowTemplateSnapshot(database.id);
+  const blockCount = template?.blocks.length ?? 0;
+  const status = template
+    ? `Custom template · ${blockCount} ${blockCount === 1 ? "block" : "blocks"}`
+    : "Default template";
 
   return (
-    <DropdownMenuItem closeOnClick={false}>
+    <DropdownMenuItem
+      onClick={() => {
+        navigate({
+          params: { databaseId: database.id },
+          to: "/db/$databaseId/template",
+        });
+      }}
+    >
       <IconFileText />
       Row pages
       <span className="ml-auto min-w-0 truncate text-muted-foreground text-xs">

@@ -456,7 +456,7 @@ client-only — SSR renders a neutral shell like `/p/$`) renders
 [`DatabaseRowPage`](../../src/components/database/row-page/database-row-page.tsx):
 title = primary field value, a properties panel reusing the grid's cell editors
 (local fields inline-editable, synced fields read-only, formulas computed), and a body
-instantiated per render from the shared `database.rowTemplate` via
+instantiated per render from the database's shared **row template** via
 [`instantiateTemplateBlocks`](../../src/lib/databases/row-template.ts) —
 `{{ thisPage.X }}` tokens in text-bearing props (`text`, tab `label`, embed `caption`;
 `code` stays literal) evaluate through `evaluateTemplateText` + `createRowScope`,
@@ -464,8 +464,25 @@ rendered read-only with `CanvasBlocksReadOnly`. Absent template = one **empty** 
 block, so a row with no custom template opens as a normal blank page — there is
 deliberately no "Edit page" button or placeholder copy. The grid's primary cells show a
 Page icon (the default document glyph, toggled per view by the ⋯ menu's
-**Page icons** switch) plus a hover-revealed "Open" pill (both modes) navigating there;
-the ⋯ settings menu shows the template status (authoring UI is deferred).
+**Page icons** switch) plus a hover-revealed "Open" pill (both modes) navigating there.
+
+**Template storage & authoring:** the template is a sentinel local page per database —
+id `db-template:<databaseId>`
+([`database-template-page.ts`](../../src/lib/databases/database-template-page.ts)),
+record + block shard managed by
+[`row-template-store.ts`](../../src/lib/databases/row-template-store.ts) — mirroring the
+site page template: excluded from the merged page list, slug resolution, id resolution,
+and `saveAllLocalPages`, so it never appears in the sidebar, dispatch, or publish. It's
+edited as a NORMAL page through the `/db/$databaseId/template` route
+([`db.$databaseId.template.tsx`](../../src/routes/db.$databaseId.template.tsx),
+`PageWorkspace` + a back-link sidebar; the template is created on first visit), entered
+from the database ⋯ menu's **Row pages** item (which shows default/custom status).
+Rendering reads the shard: virtual row pages via the reactive
+[`useRowTemplate`](../../src/hooks/use-row-template.ts) (template edits update open row
+pages live), materialization via the synchronous `readRowTemplateSnapshot`. Row pages
+inherit the template page's **icon**, and its **font** only when explicitly set;
+other page settings (header image, width, text scale) are not inherited yet.
+`deleteDatabase` deletes the template; a future duplicate-database op must clone it.
 
 **Copy-on-write:** the first body click instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids
@@ -502,8 +519,10 @@ viewports.
 ## Deferred
 
 Row drag-reorder UI (table grid — board card drag shipped),
-row-page template authoring UI and live tokens
-(virtual pages + copy-on-write with host-page nesting shipped — see
+row-page template polish — preview-as-row, `{{`-triggered token autocomplete,
+a locked-title + properties header in the editor, live tokens inside
+materialized pages, duplicate-database template cloning
+(template authoring via `/db/$databaseId/template` shipped — see
 [Row pages](#row-pages-virtual--copy-on-write)), relations/rollups,
 formula-aware typed filter operators and formula→formula references,
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views

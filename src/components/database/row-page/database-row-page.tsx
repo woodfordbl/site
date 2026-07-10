@@ -46,6 +46,7 @@ import {
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { useRowTemplate } from "@/hooks/use-row-template.ts";
 import {
   headingSurfaceClassName,
   headingTypographyClassNames,
@@ -57,6 +58,7 @@ import {
 import { findDatabaseHostPageId } from "@/lib/databases/resolve-database-host-page.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
+import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import {
   pageTitleEditorLayoutClassName,
   pageTitleIconSlotClassName,
@@ -66,13 +68,16 @@ import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import { resolvePageFont } from "@/lib/schemas/page-settings.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
  * The virtual row page (`/db/$databaseId/$rowId`): a database row rendered
  * as a page WITHOUT any per-row page storage. The body renders from the
- * database's shared `rowTemplate` (tokens evaluated per render against the
- * row's live values); the title is the primary field's value; properties
+ * database's shared row template — a sentinel page edited via
+ * `/db/$databaseId/template` ({@link useRowTemplate}) — with tokens evaluated
+ * per render against the row's live values, and inherits the template's icon
+ * and font; the title is the primary field's value; properties
  * edit inline through the same collection ops as the grid. The page reads as
  * a normal blank page (no "Edit page" affordance); a REAL user page
  * materializes copy-on-write the first time the user clicks into the body —
@@ -372,17 +377,17 @@ function RowPageBody({
 
   const materialize = useMaterializeRowPage(database, row, Boolean(linkedPage));
 
-  // Tokens re-evaluate per render, so property edits update the virtual body
-  // live — the zero-storage inverse of the materialized snapshot.
+  // The shared template lives in the sentinel page's block shard (edited via
+  // /db/$databaseId/template); tokens re-evaluate per render, so property and
+  // template edits both update the virtual body live — the zero-storage
+  // inverse of the materialized snapshot.
+  const template = useRowTemplate(database.id);
   const templateBlocks = useMemo(
     () =>
-      instantiateTemplateBlocks(
-        database.rowTemplate,
-        database.fields,
-        row.values,
-        { now: () => new Date() }
-      ),
-    [database.rowTemplate, database.fields, row.values]
+      instantiateTemplateBlocks(template?.blocks, database.fields, row.values, {
+        now: () => new Date(),
+      }),
+    [template?.blocks, database.fields, row.values]
   );
 
   // Clicking anywhere in the read-only body starts editing (Notion's "the
@@ -416,6 +421,10 @@ function RowPageBody({
           {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only. */}
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button. */}
           <div
+            {...pageContentTypographyProps({
+              font: resolvePageFont(template?.font),
+              textScale: undefined,
+            })}
             className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
             onClick={handleBodyClick}
           >
@@ -428,6 +437,7 @@ function RowPageBody({
                 <RowPageTitleSection
                   database={database}
                   displayTitle={displayTitle}
+                  icon={template?.icon}
                   row={row}
                 />
               }
@@ -449,10 +459,13 @@ function RowPageBody({
 function RowPageTitleSection({
   database,
   displayTitle,
+  icon,
   row,
 }: {
   database: LocalDatabase;
   displayTitle: string;
+  /** Template-inherited page icon; falls back to the default document glyph. */
+  icon?: string;
   row: LocalDatabaseRow;
 }): ReactNode {
   return (
@@ -467,7 +480,14 @@ function RowPageTitleSection({
       <div className={pageTitleEditorLayoutClassName}>
         <div className={pageTitleIconSlotClassName}>
           <span className="inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground sm:size-9">
-            <IconFileText aria-hidden className="size-7 stroke-[1.5px]" />
+            {icon ? (
+              <PageIconDisplay
+                className="text-[26px] [&_svg]:size-7"
+                icon={icon}
+              />
+            ) : (
+              <IconFileText aria-hidden className="size-7 stroke-[1.5px]" />
+            )}
           </span>
         </div>
         <h1

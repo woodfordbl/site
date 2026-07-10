@@ -10,10 +10,11 @@ import type {
 } from "@/lib/schemas/database.ts";
 
 /**
- * Row-page template instantiation: turns a database's shared `rowTemplate`
- * (a flat page-shaped `Block[]` with `parentId` links) into concrete blocks
- * for ONE row by evaluating every `{{ … }}` expression token in the blocks'
- * user-visible text props against that row's values.
+ * Row-page template instantiation: turns a database's shared row template
+ * (a flat page-shaped `Block[]` with `parentId` links, stored in the sentinel
+ * template page's block shard — see `row-template-store.ts`) into concrete
+ * blocks for ONE row by evaluating every `{{ … }}` expression token in the
+ * blocks' user-visible text props against that row's values.
  *
  * Used in two places:
  * - **Virtual rendering** — the `/db/$databaseId/$rowId` route instantiates

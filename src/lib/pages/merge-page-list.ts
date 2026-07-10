@@ -1,4 +1,5 @@
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { isCanvasFixturePageId } from "@/lib/pages/canvas-fixture-page.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
@@ -54,6 +55,7 @@ export function mergePageList(
     if (
       isUserCreatedPage(localPage) &&
       !isTemplatePageId(localPage.id) &&
+      !isDatabaseTemplatePageId(localPage.id) &&
       !isCanvasFixturePageId(localPage.id) &&
       !serverIds.has(localPage.id) &&
       !isLocallyDeletedPage(localPage)

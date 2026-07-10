@@ -9,6 +9,7 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { cellToPlainText } from "@/lib/databases/cell-values.ts";
 import { resolveDatabaseHostParentId } from "@/lib/databases/resolve-database-host-page.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
+import { readRowTemplateSnapshot } from "@/lib/databases/row-template-store.ts";
 import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import type {
   LocalDatabase,
@@ -106,13 +107,11 @@ export async function ensureDatabaseRowPage(options: {
   const title = resolveDatabaseRowPageTitle(database, row);
 
   try {
+    const template = readRowTemplateSnapshot(database.id);
     const blocks = clonePageBlocks(
-      instantiateTemplateBlocks(
-        database.rowTemplate,
-        database.fields,
-        row.values,
-        { now: () => new Date() }
-      )
+      instantiateTemplateBlocks(template?.blocks, database.fields, row.values, {
+        now: () => new Date(),
+      })
     );
     const parentId = resolveDatabaseHostParentId({
       blocks: localBlocksCollection.toArray,
@@ -127,6 +126,10 @@ export async function ensureDatabaseRowPage(options: {
       databaseRowSource: { databaseId: database.id, rowId: row.id },
       title,
       initialBlocks: blocks,
+      // The materialized page inherits the template's icon; font only when
+      // the template explicitly set one (page default otherwise).
+      icon: template?.icon,
+      font: template?.font,
       navigate,
     });
   } catch (error) {
