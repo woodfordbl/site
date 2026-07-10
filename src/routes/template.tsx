@@ -11,10 +11,11 @@ import {
 } from "@/hooks/use-local-pages.ts";
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
 import { TEMPLATE_PAGE_ID } from "@/lib/pages/template-page.ts";
+import { readTemplateLocalPage } from "@/lib/pages/template-store.ts";
 
 export const Route = createFileRoute("/template")({
   loader: () => ({ kind: "pending" as const }),
-  head: () => ({ meta: buildNoIndexMeta() }),
+  head: () => ({ meta: buildNoIndexMeta("Template") }),
   component: TemplateEditorRoute,
 });
 
@@ -31,7 +32,8 @@ function TemplateEditorRoute() {
 
 function TemplateEditorClient() {
   const navigate = useNavigate();
-  const templatePage = useLocalPageById(TEMPLATE_PAGE_ID);
+  const templatePageFromList = useLocalPageById(TEMPLATE_PAGE_ID);
+  const templatePage = templatePageFromList ?? readTemplateLocalPage();
   const isSettling = useLocalPagesSettling();
 
   useEffect(() => {

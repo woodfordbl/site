@@ -98,6 +98,7 @@ function toServerPageSource(
     title: page.title,
     icon: page.icon,
     parentId: page.parentId ?? null,
+    sidebarOrder: page.sidebarOrder,
     blocks,
   };
 }

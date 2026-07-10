@@ -1,7 +1,12 @@
-import { useRef, useState } from "react";
+import { m } from "motion/react";
+import { useId, useRef, useState } from "react";
 
 import { MediaHoverToolbar } from "@/components/blocks/types/media/media-hover-toolbar.tsx";
-import { MediaLightbox } from "@/components/blocks/types/media/media-lightbox.tsx";
+import {
+  MediaLightbox,
+  mediaMorphTransition,
+} from "@/components/blocks/types/media/media-lightbox.tsx";
+import { MediaMotionProvider } from "@/components/blocks/types/media/media-motion.tsx";
 import { MediaVideoPlayer } from "@/components/blocks/types/media/media-video-player.tsx";
 import { useMediaResize } from "@/components/blocks/types/media/use-media-resize.ts";
 import { ResizeHandle } from "@/components/ui/resize-handle.tsx";
@@ -38,6 +43,7 @@ export function MediaFrame({
   props,
 }: MediaFrameProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const morphLayoutId = useId();
   const [mediaElement, setMediaElement] = useState<
     HTMLImageElement | HTMLVideoElement | null
   >(null);
@@ -62,96 +68,103 @@ export function MediaFrame({
   };
 
   return (
-    <figure className={cn("w-full", className)}>
-      <div
-        className="group/media relative mx-auto"
-        data-media-frame
-        data-reveal-group=""
-        ref={frameRef}
-        style={{ width: `${displayWidthPercent}%` }}
-      >
-        <div className="relative">
-          {props.kind === "video" ? (
-            <MediaVideoPlayer
-              className={mediaElementClassName}
-              onLoadedMetadata={(event) => {
-                const video = event.currentTarget;
-                handleNaturalSize({
-                  width: video.videoWidth,
-                  height: video.videoHeight,
-                });
-              }}
-              ref={setMediaElement}
-              src={displayUrl}
-            />
-          ) : (
-            // biome-ignore lint/a11y/noNoninteractiveElementInteractions: onLoad measures natural size; not a user interaction
-            <img
-              alt={alt}
-              className={mediaElementClassName}
-              height={480}
-              loading="lazy"
-              onLoad={(event) => {
-                const image = event.currentTarget;
-                handleNaturalSize({
-                  width: image.naturalWidth,
-                  height: image.naturalHeight,
-                });
-              }}
-              ref={setMediaElement}
-              src={displayUrl}
-              width={800}
-            />
-          )}
-
-          {isResizable && contentBounds ? (
-            <>
-              <ResizeHandle
-                ariaLabel="Resize media from left"
-                className={cn(
-                  "absolute",
-                  resizeHandleVisibilityClassName,
-                  isResizing && "pointer-events-none opacity-0"
-                )}
-                onResizeStart={(event) => startResize("left", event)}
-                style={mediaResizeHandlePosition("left", contentBounds)}
-                variant="pill"
+    <MediaMotionProvider>
+      <figure className={cn("w-full", className)}>
+        <div
+          className="group/media relative mx-auto"
+          data-media-frame
+          data-reveal-group=""
+          ref={frameRef}
+          style={{ width: `${displayWidthPercent}%` }}
+        >
+          <div className="relative">
+            {props.kind === "video" ? (
+              <MediaVideoPlayer
+                className={mediaElementClassName}
+                onLoadedMetadata={(event) => {
+                  const video = event.currentTarget;
+                  handleNaturalSize({
+                    width: video.videoWidth,
+                    height: video.videoHeight,
+                  });
+                }}
+                ref={setMediaElement}
+                src={displayUrl}
               />
-              <ResizeHandle
-                ariaLabel="Resize media from right"
-                className={cn(
-                  "absolute",
-                  resizeHandleVisibilityClassName,
-                  isResizing && "pointer-events-none opacity-0"
-                )}
-                onResizeStart={(event) => startResize("right", event)}
-                style={mediaResizeHandlePosition("right", contentBounds)}
-                variant="pill"
+            ) : (
+              <m.img
+                alt={alt}
+                className={mediaElementClassName}
+                height={480}
+                // Only re-measure for the lightbox morph; resize drags and image
+                // loads must not trigger layout animations.
+                layoutDependency={lightboxOpen}
+                layoutId={morphLayoutId}
+                loading="lazy"
+                onLoad={(event) => {
+                  const image = event.currentTarget;
+                  handleNaturalSize({
+                    width: image.naturalWidth,
+                    height: image.naturalHeight,
+                  });
+                }}
+                ref={setMediaElement}
+                src={displayUrl}
+                transition={mediaMorphTransition}
+                width={800}
               />
-            </>
-          ) : null}
+            )}
 
-          <MediaHoverToolbar
-            displayUrl={displayUrl}
-            onView={() => setLightboxOpen(true)}
-            positionStyle={
-              contentBounds
-                ? mediaHoverToolbarPosition(contentBounds)
-                : undefined
-            }
-            props={props}
-          />
+            {isResizable && contentBounds ? (
+              <>
+                <ResizeHandle
+                  ariaLabel="Resize media from left"
+                  className={cn(
+                    "absolute",
+                    resizeHandleVisibilityClassName,
+                    isResizing && "pointer-events-none opacity-0"
+                  )}
+                  onResizeStart={(event) => startResize("left", event)}
+                  style={mediaResizeHandlePosition("left", contentBounds)}
+                  variant="pill"
+                />
+                <ResizeHandle
+                  ariaLabel="Resize media from right"
+                  className={cn(
+                    "absolute",
+                    resizeHandleVisibilityClassName,
+                    isResizing && "pointer-events-none opacity-0"
+                  )}
+                  onResizeStart={(event) => startResize("right", event)}
+                  style={mediaResizeHandlePosition("right", contentBounds)}
+                  variant="pill"
+                />
+              </>
+            ) : null}
+
+            <MediaHoverToolbar
+              displayUrl={displayUrl}
+              onView={() => setLightboxOpen(true)}
+              positionStyle={
+                contentBounds
+                  ? mediaHoverToolbarPosition(contentBounds)
+                  : undefined
+              }
+              props={props}
+            />
+          </div>
         </div>
-      </div>
 
-      <MediaLightbox
-        alt={alt}
-        displayUrl={displayUrl}
-        kind={props.kind}
-        naturalSize={naturalSize}
-        onOpenChange={setLightboxOpen}
-        open={lightboxOpen}
-      />
-    </figure>
+        <MediaLightbox
+          alt={alt}
+          displayUrl={displayUrl}
+          kind={props.kind}
+          layoutId={morphLayoutId}
+          naturalSize={naturalSize}
+          onOpenChange={setLightboxOpen}
+          open={lightboxOpen}
+        />
+      </figure>
+    </MediaMotionProvider>
   );
 }

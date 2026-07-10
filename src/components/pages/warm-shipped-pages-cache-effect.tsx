@@ -8,6 +8,9 @@ import { loadAllPages } from "@/lib/content/load-all-pages.ts";
 import { pageBySlugQueryOptions } from "@/lib/content/page-query.ts";
 import { scheduleIdleCallback } from "@/lib/dom/schedule-idle-callback.ts";
 
+const MAX_WARM_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 30_000;
+
 let warmedThisSession = false;
 
 /** Test-only: reset the once-per-session guard. */
@@ -37,24 +40,44 @@ export function WarmShippedPagesCacheEffect() {
     }
     warmedThisSession = true;
 
-    return scheduleIdleCallback(() => {
-      loadAllPages()
-        .then((pages) => {
-          for (const page of pages) {
-            // The index route queries home as the literal "home" slug;
-            // everything else keys by the page's leading-slash slug (`/$`).
-            const querySlug = page.slug === "/" ? "home" : page.slug;
-            queryClient.setQueryData(
-              pageBySlugQueryOptions(querySlug).queryKey,
-              page
-            );
-          }
-        })
-        .catch(() => {
-          // Best-effort warm-up; allow a retry on the next trigger.
-          warmedThisSession = false;
-        });
-    });
+    let cancelIdle: (() => void) | undefined;
+    let retryTimer: number | undefined;
+
+    // The effect deps never change once local data exists, so a failed fetch
+    // cannot rely on a re-run — retry here (bounded) instead.
+    const attempt = (attemptsLeft: number) => {
+      cancelIdle = scheduleIdleCallback(() => {
+        loadAllPages()
+          .then((pages) => {
+            for (const page of pages) {
+              // The index route queries home as the literal "home" slug;
+              // everything else keys by the page's leading-slash slug (`/$`).
+              const querySlug = page.slug === "/" ? "home" : page.slug;
+              queryClient.setQueryData(
+                pageBySlugQueryOptions(querySlug).queryKey,
+                page
+              );
+            }
+          })
+          .catch(() => {
+            if (attemptsLeft > 1) {
+              retryTimer = window.setTimeout(() => {
+                attempt(attemptsLeft - 1);
+              }, RETRY_DELAY_MS);
+              return;
+            }
+            // Out of retries — navigation falls back to per-page fetches.
+            warmedThisSession = false;
+          });
+      });
+    };
+
+    attempt(MAX_WARM_ATTEMPTS);
+
+    return () => {
+      cancelIdle?.();
+      window.clearTimeout(retryTimer);
+    };
   }, [hasLocalWorkspace, queryClient]);
 
   return null;
