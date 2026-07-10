@@ -454,9 +454,10 @@ function RowPageBody({
  * Stops click propagation so inline property editing never triggers the
  * body's copy-on-write click handler. There is deliberately no "Edit page"
  * affordance — the page reads as a normal blank page, and clicking into the
- * body starts editing (materializes) silently.
+ * body starts editing (materializes) silently. Also reused by the template
+ * editor's preview-as-row so the preview matches the real page exactly.
  */
-function RowPageTitleSection({
+export function RowPageTitleSection({
   database,
   displayTitle,
   icon,
