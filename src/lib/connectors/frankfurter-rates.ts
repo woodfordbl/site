@@ -31,9 +31,24 @@ const frankfurterResponseSchema = z.object({
 });
 
 const FRANKFURTER_RATE_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "currency", name: "Currency", type: "text" },
-  { sourceKey: "rate", name: "Rate", type: "number" },
-  { sourceKey: "asOf", name: "As of", type: "date" },
+  {
+    sourceKey: "currency",
+    name: "Currency",
+    type: "text",
+    icon: "tabler:IconCoin",
+  },
+  {
+    sourceKey: "rate",
+    name: "Rate",
+    type: "number",
+    icon: "tabler:IconArrowsExchange",
+  },
+  {
+    sourceKey: "asOf",
+    name: "As of",
+    type: "date",
+    icon: "tabler:IconCalendar",
+  },
 ];
 
 const HOUR_MS = 3_600_000;

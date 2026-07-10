@@ -25,6 +25,9 @@ export function connectorFieldToDatabaseField(
 ): DatabaseField {
   const field = createDatabaseField(def.type, def.name);
   field.sourceKey = def.sourceKey;
+  if (def.icon) {
+    field.icon = def.icon;
+  }
   if (field.type === "number") {
     field.format = def.numberFormat;
     if (def.currencyCode) {

@@ -406,5 +406,40 @@ describe("database sync ops", () => {
       expect(mocks.databaseUpdate).not.toHaveBeenCalled();
       expect(mocks.commit).not.toHaveBeenCalled();
     });
+
+    it("backfills icons onto synced fields with none, sparing local + re-iconed", async () => {
+      const database = makeDatabase();
+      // A user-set icon on "stars" must be preserved (sacrosanct).
+      database.fields[1].icon = "tabler:IconStarFilled";
+      const drafts = captureDatabaseDrafts(database);
+
+      const added = ops.reconcileSyncedFields(database, [
+        {
+          name: "Name",
+          sourceKey: "name",
+          type: "text",
+          icon: "tabler:IconBook",
+        },
+        {
+          name: "Stars",
+          sourceKey: "stars",
+          type: "number",
+          icon: "tabler:IconStar",
+        },
+      ]);
+      await flushAsync();
+
+      expect(added).toBe(0);
+      const byId = Object.fromEntries(
+        (drafts[0]?.fields ?? []).map((field) => [field.id, field])
+      );
+      // Empty synced icon → backfilled from the connector def.
+      expect(byId["f-name"]?.icon).toBe("tabler:IconBook");
+      // User-set synced icon → preserved.
+      expect(byId["f-stars"]?.icon).toBe("tabler:IconStarFilled");
+      // Local (non-synced) field → untouched.
+      expect(byId["f-notes"]?.icon).toBeUndefined();
+      expect(mocks.commit).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -73,24 +73,56 @@ const PR_STATE_OPTIONS = [
  * endpoint does).
  */
 const GITHUB_PR_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "title", name: "Title", type: "text" },
+  {
+    sourceKey: "title",
+    name: "Title",
+    type: "text",
+    icon: "tabler:IconGitPullRequest",
+  },
   {
     sourceKey: "number",
     name: "Number",
     type: "number",
     numberFormat: "integer",
+    icon: "tabler:IconHash",
   },
-  { sourceKey: "author", name: "Author", type: "text" },
+  {
+    sourceKey: "author",
+    name: "Author",
+    type: "text",
+    icon: "tabler:IconUser",
+  },
   {
     sourceKey: "state",
     name: "State",
     type: "select",
     options: [...PR_STATE_OPTIONS],
+    icon: "tabler:IconProgress",
   },
-  { sourceKey: "createdAt", name: "Created", type: "date" },
-  { sourceKey: "updatedAt", name: "Updated", type: "date" },
-  { sourceKey: "url", name: "URL", type: "url" },
-  { sourceKey: "branch", name: "Branch", type: "text" },
+  {
+    sourceKey: "createdAt",
+    name: "Created",
+    type: "date",
+    icon: "tabler:IconCalendarPlus",
+  },
+  {
+    sourceKey: "updatedAt",
+    name: "Updated",
+    type: "date",
+    icon: "tabler:IconClock",
+  },
+  {
+    sourceKey: "url",
+    name: "URL",
+    type: "url",
+    icon: "tabler:IconExternalLink",
+  },
+  {
+    sourceKey: "branch",
+    name: "Branch",
+    type: "text",
+    icon: "tabler:IconGitBranch",
+  },
 ];
 
 const ISO_DATE_PART_LENGTH = 10;

@@ -35,6 +35,13 @@ export interface ConnectorFieldDef {
    * Absent ⇒ USD. Display-only — it never converts the underlying value.
    */
   currencyCode?: string;
+  /**
+   * Optional per-field glyph (`tabler:IconName` or emoji, matching page/field
+   * icons). Stamped onto the generated field's `icon` so synced columns show a
+   * meaningful glyph instead of the generic field-type icon. Absent ⇒ the
+   * field-type icon.
+   */
+  icon?: string;
   /** Display name for the generated database field. */
   name: string;
   /** Number display format; only meaningful when `type` is `"number"`. */

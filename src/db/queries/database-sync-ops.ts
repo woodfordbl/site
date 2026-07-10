@@ -432,16 +432,42 @@ export function applyStreamTick(
   commitDatabaseTransaction(tx);
 }
 
+/** Existing synced fields (by id) whose unset icon a connector def can fill. */
+function computeIconBackfills(
+  database: LocalDatabase,
+  connectorFieldDefs: ConnectorFieldDef[]
+): { fieldId: string; icon: string }[] {
+  const iconBySourceKey = new Map<string, string>();
+  for (const def of connectorFieldDefs) {
+    if (def.icon) {
+      iconBySourceKey.set(def.sourceKey, def.icon);
+    }
+  }
+  const backfills: { fieldId: string; icon: string }[] = [];
+  for (const field of database.fields) {
+    if (field.sourceKey === undefined || field.icon !== undefined) {
+      continue;
+    }
+    const icon = iconBySourceKey.get(field.sourceKey);
+    if (icon) {
+      backfills.push({ fieldId: field.id, icon });
+    }
+  }
+  return backfills;
+}
+
 /**
- * Add connector fields (defs carrying a `sourceKey`) that the connector has
- * grown since the database was created. Strictly add-only:
+ * Reconcile a synced database's schema against the connector's current field
+ * defs. Never removes or retypes an existing field (users may have renamed,
+ * re-iconed, or reordered synced fields, and local fields are sacrosanct):
  *
- * - Never removes or retypes an existing field — users may have renamed,
- *   re-iconed, or reordered synced fields, and local fields are sacrosanct.
+ * - Adds connector columns the connector has grown since creation.
+ * - Backfills a field-type icon onto existing synced fields that have **no**
+ *   icon set, so tables created before a connector defined icons pick them up.
+ *   Fields the user already re-iconed keep their glyph.
  * - Columns removed upstream keep their field and simply stop updating.
  *
- * Matching is by `sourceKey` (the stable connector column identity), never by
- * name. Returns the number of fields added.
+ * Matching is by `sourceKey`, never by name. Returns the number of fields added.
  */
 export function reconcileSyncedFields(
   database: LocalDatabase,
@@ -457,15 +483,27 @@ export function reconcileSyncedFields(
   const added = connectorFieldDefs
     .filter((def) => !existingSourceKeys.has(def.sourceKey))
     .map((def) => connectorFieldToDatabaseField(def));
-  if (added.length === 0) {
+  const iconBackfills = computeIconBackfills(database, connectorFieldDefs);
+  if (added.length === 0 && iconBackfills.length === 0) {
     return 0;
   }
 
+  const iconByFieldId = new Map(
+    iconBackfills.map((backfill) => [backfill.fieldId, backfill.icon])
+  );
   const timestamp = nowIso();
   const tx = createDatabaseTransaction();
   tx.mutate(() => {
     localDatabasesCollection.update(database.id, (draft) => {
-      draft.fields = [...draft.fields, ...added];
+      for (const field of draft.fields) {
+        const icon = iconByFieldId.get(field.id);
+        if (icon) {
+          field.icon = icon;
+        }
+      }
+      if (added.length > 0) {
+        draft.fields = [...draft.fields, ...added];
+      }
       draft.updatedAt = timestamp;
     });
   });

@@ -76,8 +76,13 @@ function parseConfig(config: Record<string, unknown>): LiveConfig {
 /** Crypto columns: CoinGecko-backed, with Name + Market cap. */
 function cryptoFields(config: LiveConfig): ConnectorFieldDef[] {
   return [
-    { sourceKey: "symbol", name: "Symbol", type: "text" },
-    { sourceKey: "name", name: "Name", type: "text" },
+    {
+      sourceKey: "symbol",
+      name: "Symbol",
+      type: "text",
+      icon: "tabler:IconCurrencyBitcoin",
+    },
+    { sourceKey: "name", name: "Name", type: "text", icon: "tabler:IconTag" },
     {
       sourceKey: "price",
       name: "Price",
@@ -85,27 +90,40 @@ function cryptoFields(config: LiveConfig): ConnectorFieldDef[] {
       numberFormat: "currency",
       currencyCode: config.currency,
       captureHistory: true,
+      icon: "tabler:IconCash",
     },
     {
       sourceKey: "change",
       name: "24h change",
       type: "number",
       numberFormat: "percent",
+      icon: "tabler:IconTrendingUp",
     },
     {
       sourceKey: "marketCap",
       name: "Market cap",
       type: "number",
       numberFormat: "integer",
+      icon: "tabler:IconChartPie",
     },
-    { sourceKey: "updatedAt", name: "Updated", type: "date" },
+    {
+      sourceKey: "updatedAt",
+      name: "Updated",
+      type: "date",
+      icon: "tabler:IconClock",
+    },
   ];
 }
 
 /** Stock columns: Finnhub-backed price + daily change. */
 function stockFields(config: LiveConfig): ConnectorFieldDef[] {
   return [
-    { sourceKey: "symbol", name: "Symbol", type: "text" },
+    {
+      sourceKey: "symbol",
+      name: "Symbol",
+      type: "text",
+      icon: "tabler:IconChartCandle",
+    },
     {
       sourceKey: "price",
       name: "Price",
@@ -113,14 +131,21 @@ function stockFields(config: LiveConfig): ConnectorFieldDef[] {
       numberFormat: "currency",
       currencyCode: config.currency,
       captureHistory: true,
+      icon: "tabler:IconCash",
     },
     {
       sourceKey: "change",
       name: "Change",
       type: "number",
       numberFormat: "percent",
+      icon: "tabler:IconTrendingUp",
     },
-    { sourceKey: "updatedAt", name: "Updated", type: "date" },
+    {
+      sourceKey: "updatedAt",
+      name: "Updated",
+      type: "date",
+      icon: "tabler:IconClock",
+    },
   ];
 }
 
