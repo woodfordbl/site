@@ -42,10 +42,7 @@ import {
   localBlocksCollection,
   localDatabaseRowsCollection,
   localDatabasesCollection,
-  localPagesCollection,
 } from "@/db/collections/local-collections.ts";
-import { reportPersistenceError } from "@/db/persistence-errors.ts";
-import { setDatabaseRowPageId } from "@/db/queries/database-collection-ops.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
@@ -53,14 +50,13 @@ import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
-import { cellToPlainText } from "@/lib/databases/cell-values.ts";
 import {
-  findDatabaseHostPageId,
-  resolveDatabaseHostParentId,
-} from "@/lib/databases/resolve-database-host-page.ts";
+  ensureDatabaseRowPage,
+  resolveDatabaseRowPageTitle,
+} from "@/lib/databases/materialize-row-page.ts";
+import { findDatabaseHostPageId } from "@/lib/databases/resolve-database-host-page.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
-import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import {
   pageTitleEditorLayoutClassName,
   pageTitleIconSlotClassName,
@@ -87,9 +83,6 @@ import { cn } from "@/lib/utils.ts";
  * (those carrying an `externalId`) never materialize, though — the sync
  * engine owns their lifecycle — so the body click is inert for them.
  */
-
-/** Title shown (and used for the materialized page) when the primary cell is empty. */
-const ROW_PAGE_FALLBACK_TITLE = "Untitled";
 
 export interface DatabaseRowPageProps {
   databaseId: string;
@@ -243,10 +236,6 @@ function RowPageHeader({
       .filter((page): page is NonNullable<typeof page> => Boolean(page));
   }, [hostPageId, isNarrowViewport, pages]);
 
-  const databaseNavTarget = hostPageId
-    ? resolvePageNavTarget(hostPageId, pages)
-    : null;
-
   const databaseLabel = (
     <>
       {database.icon ? (
@@ -275,18 +264,13 @@ function RowPageHeader({
             {BREADCRUMB_SEPARATOR}
           </span>
         ))}
-        {databaseNavTarget ? (
-          <Link
-            className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/60"
-            {...databaseNavTarget}
-          >
-            {databaseLabel}
-          </Link>
-        ) : (
-          <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1.5">
-            {databaseLabel}
-          </span>
-        )}
+        <Link
+          className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/60"
+          params={{ databaseId: database.id }}
+          to="/db/$databaseId"
+        >
+          {databaseLabel}
+        </Link>
         {BREADCRUMB_SEPARATOR}
         <span className="min-w-0 truncate px-1.5 text-foreground">
           {rowTitle}
@@ -321,60 +305,15 @@ function RowPageSidebarToggle(): ReactNode {
   );
 }
 
-/** Poll cadence/budget while confirming the optimistic `page.create` landed. */
-const LINK_POLL_INTERVAL_MS = 50;
-/** ~5s total — `page.create` includes a page-list fetch before the insert. */
-const LINK_POLL_MAX_ATTEMPTS = 100;
-
 /**
- * Adopt the created page onto the row only once the page ACTUALLY exists in
- * the local pages collection — `page.create` is optimistic but async (it
- * awaits the page-list query before inserting), and its failures surface
- * nowhere the caller can await. Linking first would strand a dangling
- * `pageId` on the row when the create fails. Polls the collection directly
- * (not component state) so the link still lands if the create's own
- * navigation unmounts the row page first; gives up after the budget.
- */
-function linkRowOncePageExists(
-  rowId: string,
-  pageId: string,
-  onDone: (linked: boolean) => void,
-  attempt = 0
-): void {
-  if (localPagesCollection.get(pageId)) {
-    setDatabaseRowPageId(rowId, pageId);
-    onDone(true);
-    return;
-  }
-  if (attempt >= LINK_POLL_MAX_ATTEMPTS) {
-    onDone(false);
-    return;
-  }
-  window.setTimeout(() => {
-    linkRowOncePageExists(rowId, pageId, onDone, attempt + 1);
-  }, LINK_POLL_INTERVAL_MS);
-}
-
-/**
- * Copy-on-write materialization: instantiate the template with the row's
- * CURRENT values (a snapshot — live tokens inside real pages are a future
- * phase), remap block ids, create a real user page through the standard
- * `page.create` dispatch (which also navigates to it), and link the row via
- * `setDatabaseRowPageId` — create first, link only after the page exists
- * (see {@link linkRowOncePageExists}). Synced rows (`externalId`) never
- * materialize. The page nests under the database's **host page**
- * ({@link resolveDatabaseHostParentId}: local block scan, deterministic
- * first host across linked views, depth-clamped to `MAX_PAGE_DEPTH`) for
- * breadcrumb/depth semantics; the `null` top-level fallback only fires when
- * no host page exists — should be unreachable via the UI, where row pages
- * open from a `database` block. Regardless of parent, the page carries
- * `databaseRowSource`, which keeps it out of the sidebar tree entirely —
- * the database's own sidebar entry is the navigation surface.
+ * Copy-on-write materialization for the row-page shell: creates a real page
+ * (and navigates to it via `page.create`) when the body / Edit affordance is
+ * used. Synced rows never materialize. Shared implementation:
+ * {@link ensureDatabaseRowPage}.
  */
 function useMaterializeRowPage(
   database: LocalDatabase,
   row: LocalDatabaseRow,
-  title: string,
   alreadyLinked: boolean
 ): () => void {
   const { pages } = useMergedPageListItems();
@@ -386,59 +325,18 @@ function useMaterializeRowPage(
       return;
     }
     materializingRef.current = true;
-
-    const pageId = crypto.randomUUID();
-    try {
-      const blocks = clonePageBlocks(
-        instantiateTemplateBlocks(
-          database.rowTemplate,
-          database.fields,
-          row.values,
-          { now: () => new Date() }
-        )
-      );
-      const parentId = resolveDatabaseHostParentId({
-        blocks: localBlocksCollection.toArray,
-        databaseId: database.id,
-        pages,
+    ensureDatabaseRowPage({
+      database,
+      dispatch,
+      navigate: true,
+      pages,
+      row,
+    })
+      .catch(() => undefined)
+      .finally(() => {
+        materializingRef.current = false;
       });
-
-      dispatch({
-        type: "page.create",
-        pageId,
-        parentId,
-        databaseRowSource: { databaseId: database.id, rowId: row.id },
-        title,
-        initialBlocks: blocks,
-      });
-    } catch (error) {
-      // Template/parent resolution threw before the create was dispatched —
-      // re-arm the button and surface the failure.
-      materializingRef.current = false;
-      reportPersistenceError(error);
-      return;
-    }
-
-    linkRowOncePageExists(row.id, pageId, (linked) => {
-      materializingRef.current = false;
-      if (!linked) {
-        reportPersistenceError(
-          new Error("Row page creation did not complete — row left unlinked")
-        );
-      }
-    });
-  }, [
-    alreadyLinked,
-    database.fields,
-    database.id,
-    database.rowTemplate,
-    dispatch,
-    pages,
-    row.externalId,
-    row.id,
-    row.values,
-    title,
-  ]);
+  }, [alreadyLinked, database, dispatch, pages, row]);
 }
 
 function RowPageBody({
@@ -454,13 +352,7 @@ function RowPageBody({
   const navigate = useNavigate();
   const { pages } = useMergedPageListItems();
 
-  const primaryField = database.fields.find(
-    (field) => field.id === database.primaryFieldId
-  );
-  const rowTitle = primaryField
-    ? cellToPlainText(primaryField, row.values[primaryField.id]).trim()
-    : "";
-  const displayTitle = rowTitle === "" ? ROW_PAGE_FALLBACK_TITLE : rowTitle;
+  const displayTitle = resolveDatabaseRowPageTitle(database, row);
 
   // A linked page that actually exists wins over the virtual render. A
   // DANGLING pageId (page deleted, or the create not yet applied) keeps the
@@ -478,12 +370,7 @@ function RowPageBody({
     }
   }, [linkedPage, navigate, pages]);
 
-  const materialize = useMaterializeRowPage(
-    database,
-    row,
-    displayTitle,
-    Boolean(linkedPage)
-  );
+  const materialize = useMaterializeRowPage(database, row, Boolean(linkedPage));
 
   // Tokens re-evaluate per render, so property edits update the virtual body
   // live — the zero-storage inverse of the materialized snapshot.
