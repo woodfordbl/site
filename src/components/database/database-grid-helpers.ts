@@ -25,6 +25,76 @@ export const MIN_COLUMN_WIDTH_PX = 96;
  */
 export const CHECKBOX_COLUMN_WIDTH_PX = 48;
 
+/**
+ * Leading row-selection checkbox column (not a DatabaseField). Matches the
+ * checkbox field column's footprint so the select control + header fit.
+ */
+export const SELECTION_COLUMN_WIDTH_PX = CHECKBOX_COLUMN_WIDTH_PX;
+
+/** Per-view row checkbox gutter/column display mode. */
+export type RowSelectDisplay = "always" | "hover" | "number";
+
+/** Resolved row-select display; absent view config defaults to hover. */
+export function resolveRowSelectDisplay(
+  config: Pick<DatabaseTableViewConfig, "rowSelectDisplay">
+): RowSelectDisplay {
+  return config.rowSelectDisplay ?? "hover";
+}
+
+/**
+ * Gutter modes (`hover` / `number`) keep the select control in a leading
+ * lane that bleeds into the canvas gutter (`-ml-12`) so the first data
+ * column stays flush with the filter bar — not an overlay on cell content.
+ */
+export function usesRowSelectGutter(display: RowSelectDisplay): boolean {
+  return display !== "always";
+}
+
+/**
+ * Layout width reserved for the leading select lane. Always
+ * {@link SELECTION_COLUMN_WIDTH_PX} — gutter modes pull the grid left by the
+ * same amount so data columns still align with filters / page content.
+ */
+export function rowSelectLeadingWidthPx(): number {
+  return SELECTION_COLUMN_WIDTH_PX;
+}
+
+/**
+ * Next selected-id list after a checkbox toggle. Shift+click selects the
+ * inclusive range between `anchorRowId` and `rowId` in `visibleRowIds`
+ * (unioned with the current selection); plain toggles add/remove one id.
+ */
+export function nextSelectedRowIds(
+  current: readonly string[],
+  options: {
+    anchorRowId: string | null;
+    checked: boolean;
+    rowId: string;
+    shiftKey: boolean;
+    visibleRowIds: readonly string[];
+  }
+): readonly string[] {
+  const { anchorRowId, checked, rowId, shiftKey, visibleRowIds } = options;
+  if (shiftKey && anchorRowId) {
+    const anchorIndex = visibleRowIds.indexOf(anchorRowId);
+    const targetIndex = visibleRowIds.indexOf(rowId);
+    if (anchorIndex >= 0 && targetIndex >= 0) {
+      const start = Math.min(anchorIndex, targetIndex);
+      const end = Math.max(anchorIndex, targetIndex);
+      const range = visibleRowIds.slice(start, end + 1);
+      const next = new Set(current);
+      for (const id of range) {
+        next.add(id);
+      }
+      return [...next];
+    }
+  }
+  if (checked) {
+    return current.includes(rowId) ? current : [...current, rowId];
+  }
+  return current.filter((id) => id !== rowId);
+}
+
 /** Narrowest width a specific field's column may render/resize to. */
 export function minColumnWidthPx(field: Pick<DatabaseField, "type">): number {
   return field.type === "checkbox"

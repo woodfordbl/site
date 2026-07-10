@@ -75,6 +75,9 @@ export interface ClonedDragImageOptions {
  * Uses an off-screen clone of `node` as the native drag image, preserving the
  * dragged element's appearance and live form values. Opt-in alternative to the
  * empty-image + React overlay strategy (prefer overlay in embedded Chromium).
+ *
+ * Detached synthetic previews (e.g. sanitized database grid cards) are mounted
+ * as-is — they are already the preview, not a live DOM source to clone.
  */
 export function setClonedDragImage(
   event: DragEvent,
@@ -85,31 +88,57 @@ export function setClonedDragImage(
     return;
   }
 
-  const clone = node.cloneNode(true) as HTMLElement;
-  syncFormValues(node, clone);
+  const synthetic = !node.isConnected;
+  const sourceRect = synthetic ? null : node.getBoundingClientRect();
 
-  const rect = node.getBoundingClientRect();
-  const hotspotX = options.hotspotX ?? event.clientX - rect.left;
-  const hotspotY = options.hotspotY ?? event.clientY - rect.top;
+  let image: HTMLElement;
+  if (synthetic) {
+    image = node;
+  } else {
+    image = node.cloneNode(true) as HTMLElement;
+    syncFormValues(node, image);
+  }
 
-  Object.assign(clone.style, {
+  Object.assign(image.style, {
     position: "fixed",
     top: "-10000px",
     left: "-10000px",
-    width: `${rect.width}px`,
-    minHeight: `${Math.max(rect.height, CLONE_MIN_HEIGHT_PX)}px`,
+    ...(sourceRect
+      ? {
+          width: `${sourceRect.width}px`,
+          minHeight: `${Math.max(sourceRect.height, CLONE_MIN_HEIGHT_PX)}px`,
+          backgroundColor: "var(--background)",
+          borderRadius: "var(--radius-lg)",
+          overflow: "hidden",
+        }
+      : {}),
     boxSizing: "border-box",
-    borderRadius: "var(--radius-lg)",
     opacity: String(CANVAS_ROW_DRAG_PREVIEW_OPACITY),
     pointerEvents: "none",
     zIndex: "9999",
   });
 
-  document.body.appendChild(clone);
+  document.body.appendChild(image);
 
-  event.dataTransfer.setDragImage(clone, hotspotX, hotspotY);
+  const imageRect = image.getBoundingClientRect();
+  let hotspotX = options.hotspotX;
+  let hotspotY = options.hotspotY;
+  if (hotspotX === undefined || hotspotY === undefined) {
+    if (sourceRect) {
+      hotspotX ??= event.clientX - sourceRect.left;
+      hotspotY ??= event.clientY - sourceRect.top;
+    } else {
+      hotspotX ??= Math.min(24, Math.max(imageRect.width / 2, 0));
+      hotspotY ??= Math.min(
+        imageRect.height / 2,
+        Math.max(imageRect.height - 1, 0)
+      );
+    }
+  }
+
+  event.dataTransfer.setDragImage(image, hotspotX, hotspotY);
 
   requestAnimationFrame(() => {
-    clone.remove();
+    image.remove();
   });
 }

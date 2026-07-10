@@ -1,6 +1,7 @@
 import {
   IconChartBar,
   IconCheck,
+  IconCheckbox,
   IconClock,
   IconColumns3,
   IconCopy,
@@ -29,6 +30,7 @@ import {
 
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
+import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   AddDatabaseViewMenuItems,
@@ -406,6 +408,50 @@ function GroupSubmenu({ database, view }: GroupSubmenuProps) {
             </DropdownMenuItem>
           );
         })}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/** Table-only: leading row-select gutter/column display mode. */
+function RowSelectDisplaySubmenu({
+  databaseId,
+  view,
+}: {
+  databaseId: string;
+  view: DatabaseView;
+}) {
+  const active = resolveRowSelectDisplay(view.config);
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconCheckbox />
+        Row select
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => {
+            updateDatabaseView(databaseId, view.id, {
+              config: {
+                ...view.config,
+                rowSelectDisplay:
+                  value === "hover" ? undefined : (value as typeof active),
+              },
+            });
+          }}
+          value={active}
+        >
+          <DropdownMenuRadioItem value="always">
+            Always show
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="hover">
+            Show on hover
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="number">
+            Show number
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -1059,6 +1105,9 @@ export function DatabaseSettingsMenu({
             <IconEyeOff />
             Hide title
           </DropdownMenuSwitchItem>
+        ) : null}
+        {view && view.type === "table" ? (
+          <RowSelectDisplaySubmenu databaseId={database.id} view={view} />
         ) : null}
         {view && view.type === "table" ? (
           <DropdownMenuSwitchItem
