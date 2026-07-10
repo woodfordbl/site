@@ -23,7 +23,8 @@ function isUnchanged(
  * checkpoint, create a new one, or be skipped as a no-op.
  *
  * - Same bucket as the latest checkpoint → coalesce (UPDATE in place), unless
- *   the content + metadata are unchanged → SKIP.
+ *   the content + metadata are unchanged → SKIP, or the latest checkpoint is
+ *   `pinned` (a pre-merge/pre-restore escape hatch that must survive) → CREATE.
  * - New bucket → CREATE, unless the content + metadata still match the latest
  *   checkpoint (a no-op edit that merely crossed a bucket boundary) → SKIP.
  */
@@ -41,6 +42,9 @@ export function resolveSnapshotCaptureAction(
   if (latest.bucketId === candidate.bucketId) {
     if (isUnchanged(latest, candidate)) {
       return { kind: "skip" };
+    }
+    if (latest.pinned) {
+      return { kind: "create", descriptor: { ...candidate, id: newId } };
     }
     return { kind: "update", descriptor: { ...candidate, id: latest.id } };
   }

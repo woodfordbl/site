@@ -2,12 +2,15 @@
 
 import { IconInfoCircle } from "@tabler/icons-react";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { toast } from "sonner";
 
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { keepLocalPageVersion } from "@/lib/pages/keep-local-page-version.ts";
+import { mergeStalePageFromServer } from "@/lib/pages/merge-stale-page-from-server.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
 import { computePageStaleState } from "@/lib/pages/resolve-page-state.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
@@ -62,10 +65,30 @@ interface PageStaleBannerProps {
   serverPage: Page;
 }
 
+function mergeSuccessMessage(outcome: {
+  tookRemote: number;
+  conflicts: number;
+  changed: boolean;
+}): string {
+  if (!outcome.changed) {
+    return "Already up to date — kept your edits.";
+  }
+  const changes = `Merged ${outcome.tookRemote} site ${
+    outcome.tookRemote === 1 ? "change" : "changes"
+  }`;
+  if (outcome.conflicts === 0) {
+    return `${changes}.`;
+  }
+  return `${changes}; kept your version of ${outcome.conflicts} conflicting ${
+    outcome.conflicts === 1 ? "block" : "blocks"
+  }.`;
+}
+
 /**
  * Conflict strip for a locally-edited shipped page whose shipped content
- * changed since the overlay was seeded. Offers the three v1 resolutions:
- * keep the local edits (fast-forward the baseline), preview the site version,
+ * changed since the overlay was seeded. Resolutions: merge the site changes
+ * into the local edits (three-way, local wins on conflicts — the default),
+ * preview the site version, keep the local edits (fast-forward the baseline),
  * or replace the local edits with the site version.
  *
  * Client-only by design: staleness is judged from real localStorage overlay
@@ -80,12 +103,37 @@ export function PageStaleBanner({
   const isClient = useIsClient();
   const localPage = useLiveLocalPageById(serverPage.id);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [merging, setMerging] = useState(false);
 
   const { isStale } = computePageStaleState(serverPage, localPage);
 
   if (!(isClient && isStale)) {
     return null;
   }
+
+  const handleMerge = async () => {
+    setMerging(true);
+    try {
+      const outcome = await mergeStalePageFromServer(serverPage);
+      if (outcome.status === "no-baseline") {
+        toast.info(
+          "No merge base is stored for this page — use Preview to compare, then keep or replace your edits."
+        );
+        return;
+      }
+      if (outcome.status === "no-local") {
+        return;
+      }
+      if (outcome.changed) {
+        onAfterReset();
+      }
+      toast.success(mergeSuccessMessage(outcome));
+    } catch (error) {
+      reportPersistenceError(error);
+    } finally {
+      setMerging(false);
+    }
+  };
 
   const handleKeepMine = () => {
     keepLocalPageVersion(serverPage);
@@ -126,9 +174,20 @@ export function PageStaleBanner({
           }}
           size="sm"
           type="button"
-          variant="outline"
+          variant="ghost"
         >
           Use site version
+        </Button>
+        <Button
+          disabled={merging}
+          onClick={() => {
+            handleMerge().catch(() => undefined);
+          }}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Merge site changes
         </Button>
       </span>
 

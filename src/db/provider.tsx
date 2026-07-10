@@ -8,6 +8,7 @@ import { OrphanLocalPagesEffect } from "@/components/pages/orphan-local-pages-ef
 import { SyncPageListLocalPreviewEffect } from "@/components/pages/sync-page-list-local-preview-effect.tsx";
 import { SyncPagesCatalogRevisionEffect } from "@/components/pages/sync-pages-catalog-revision-effect.tsx";
 import { WarmPageIconPickerCacheEffect } from "@/components/pages/warm-page-icon-picker-cache-effect.tsx";
+import { WarmShippedPagesCacheEffect } from "@/components/pages/warm-shipped-pages-cache-effect.tsx";
 import { NativeScrollbarEffect } from "@/components/ui/native-scrollbar-effect.tsx";
 import { Toaster } from "@/components/ui/sonner.tsx";
 import { TooltipProvider } from "@/components/ui/tooltip.tsx";
@@ -31,6 +32,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       <SyncPageListLocalPreviewEffect />
       <OrphanLocalPagesEffect />
       <WarmPageIconPickerCacheEffect />
+      <WarmShippedPagesCacheEffect />
       <PrefetchPageCanvasEditorEffect />
       <NativeScrollbarEffect />
       <TooltipProvider>
