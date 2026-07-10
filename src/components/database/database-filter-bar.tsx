@@ -17,8 +17,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import type { DateRange } from "react-day-picker";
+import { createPortal } from "react-dom";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
@@ -282,7 +282,7 @@ export function DatabaseSortChips({
     state.overIndex !== null &&
     resolveReorderTarget(state.fromIndex, state.overIndex) === state.fromIndex;
   const draggingSort =
-    state.fromIndex === null ? null : sorts[state.fromIndex] ?? null;
+    state.fromIndex === null ? null : (sorts[state.fromIndex] ?? null);
   const draggingFieldName =
     draggingSort === null
       ? null
@@ -314,9 +314,7 @@ export function DatabaseSortChips({
               applySortsChange(flippedSortDirection(sorts, sort.fieldId))
             }
             onRemove={() => applySortsChange(withoutSort(sorts, sort.fieldId))}
-            reorderHandleProps={
-              canReorder ? getHandleProps(index) : undefined
-            }
+            reorderHandleProps={canReorder ? getHandleProps(index) : undefined}
           />
         ))}
       </div>
@@ -1155,7 +1153,12 @@ function SortChipDragPreview({
         width: preview.width > 0 ? preview.width : undefined,
       }}
     >
-      <div className={cn(CHIP_CLASS, "cursor-grabbing shadow-md ring-1 ring-border")}>
+      <div
+        className={cn(
+          CHIP_CLASS,
+          "cursor-grabbing shadow-md ring-1 ring-border"
+        )}
+      >
         <SortChipBody direction={direction} fieldName={fieldName} />
       </div>
     </div>

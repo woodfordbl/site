@@ -61,7 +61,10 @@ describe("copyMediaImage", () => {
     vi.stubGlobal(
       "ClipboardItem",
       class {
-        constructor(public items: Record<string, unknown>) {}
+        items: Record<string, unknown>;
+        constructor(items: Record<string, unknown>) {
+          this.items = items;
+        }
       }
     );
 

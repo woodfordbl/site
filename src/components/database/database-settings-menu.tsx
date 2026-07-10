@@ -30,8 +30,8 @@ import {
 
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
-import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
 import {
   AddDatabaseViewMenuItems,
   DATABASE_VIEW_TYPE_ICONS,
