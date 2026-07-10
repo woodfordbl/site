@@ -48,8 +48,6 @@ const coingeckoMarketListSchema = z.array(coingeckoMarketSchema);
  */
 const PERCENT_TO_FRACTION = 100;
 
-const ISO_DATE_PART_LENGTH = 10;
-
 function parseConfig(config: Record<string, unknown>): {
   symbols: string[];
   currency: string;
@@ -79,9 +77,8 @@ function toConnectorRow(
           ? null
           : coin.price_change_percentage_24h / PERCENT_TO_FRACTION,
       marketCap: coin.market_cap,
-      updatedAt: coin.last_updated
-        ? coin.last_updated.slice(0, ISO_DATE_PART_LENGTH)
-        : null,
+      // Full ISO timestamp (with time) so the Updated column reflects the poll.
+      updatedAt: coin.last_updated,
     },
   };
 }

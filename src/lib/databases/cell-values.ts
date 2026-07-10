@@ -265,6 +265,15 @@ const DATE_DISPLAY_PATTERNS: Record<"default" | "long", string> = {
   long: "MMMM d, yyyy",
 };
 
+/** Same as above but with a time — used when the stored value carries one. */
+const DATE_TIME_DISPLAY_PATTERNS: Record<"default" | "long", string> = {
+  default: "MMM d, yyyy, h:mm a",
+  long: "MMMM d, yyyy, h:mm a",
+};
+
+/** A stored date string carries a clock time (real-time "updated" instants). */
+const HAS_TIME_RE = /\d{2}:\d{2}/;
+
 /** Options for {@link formatCellValue}. */
 export interface FormatCellValueOptions {
   /**
@@ -280,26 +289,34 @@ function formatIsoDate(
   dateFormat: DatabaseDateFormat,
   opts?: FormatCellValueOptions
 ): string {
-  const datePart = toIsoDatePart(value);
+  const trimmed = value.trim();
+  const datePart = toIsoDatePart(trimmed);
   if (datePart === "") {
     return "";
   }
+  // A stored value carrying a clock time (a real-time "updated" instant)
+  // renders with time and resolves `relative` against the true instant; a
+  // date-only value keeps the local-midnight day (never shifting timezone).
+  const timed = HAS_TIME_RE.test(trimmed) ? new Date(trimmed) : null;
+  const instant = timed && !Number.isNaN(timed.getTime()) ? timed : null;
   if (dateFormat === "iso") {
     return datePart;
   }
   const [year, month, day] = datePart.split("-").map(Number);
-  // Construct in local time from date parts so the rendered day never shifts
-  // across timezones (new Date("yyyy-mm-dd") would parse as UTC midnight).
-  const date = new Date(year, month - 1, day);
+  const localDay = new Date(year, month - 1, day);
+  const base = instant ?? localDay;
   if (dateFormat === "relative") {
-    // `formatDistanceToNow` minus the hardwired clock: identical output,
-    // with the base instant injectable via `opts.now`. Cells re-render on
-    // the table view's visible clock tick so the text keeps up with time.
-    return formatDistance(date, opts?.now?.() ?? new Date(), {
-      addSuffix: true,
-    });
+    // Cells re-render on the table view's visible clock tick, so the text
+    // keeps up with time (base instant injectable via `opts.now`). A real-time
+    // instant can't be in the future — clamp clock skew to now so an "updated"
+    // never reads "in 6 seconds". Date-only values (e.g. due dates) keep their
+    // natural future distance ("in 3 days").
+    const now = opts?.now?.() ?? new Date();
+    const safeBase = instant && base.getTime() > now.getTime() ? now : base;
+    return formatDistance(safeBase, now, { addSuffix: true });
   }
-  return format(date, DATE_DISPLAY_PATTERNS[dateFormat]);
+  const patterns = instant ? DATE_TIME_DISPLAY_PATTERNS : DATE_DISPLAY_PATTERNS;
+  return format(base, patterns[dateFormat]);
 }
 
 /**

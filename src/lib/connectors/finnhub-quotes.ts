@@ -72,7 +72,6 @@ const finnhubTradeFrameSchema = z.object({
 
 /** Percent format renders fractions (0.015 → "1.5%"); Finnhub reports 1.5. */
 const PERCENT_TO_FRACTION = 100;
-const ISO_DATE_PART_LENGTH = 10;
 const SECOND_MS = 1000;
 
 const DIRECT_REST_ENDPOINT = "https://finnhub.io/api/v1/quote";
@@ -102,9 +101,10 @@ function hasToken(ctx: ConnectorFetchContext): ctx is ConnectorFetchContext & {
   return typeof ctx.token === "string" && ctx.token.length > 0;
 }
 
-function isoDateFromMs(ms: number): string {
+/** Full ISO timestamp (with time) so the Updated column reflects the quote. */
+function isoTimestampFromMs(ms: number): string {
   const safeMs = ms > 0 ? ms : Date.now();
-  return new Date(safeMs).toISOString().slice(0, ISO_DATE_PART_LENGTH);
+  return new Date(safeMs).toISOString();
 }
 
 /** Full row from a quote seed (price + percent change + time). */
@@ -123,7 +123,7 @@ function quoteToRow(
         percent !== null && Number.isFinite(percent)
           ? percent / PERCENT_TO_FRACTION
           : null,
-      updatedAt: isoDateFromMs(timeMs),
+      updatedAt: isoTimestampFromMs(timeMs),
     },
   };
 }
@@ -140,7 +140,7 @@ function tradeToRow(
     values: {
       symbol,
       price: Number.isFinite(price) ? price : null,
-      updatedAt: isoDateFromMs(timeMs),
+      updatedAt: isoTimestampFromMs(timeMs),
     },
   };
 }

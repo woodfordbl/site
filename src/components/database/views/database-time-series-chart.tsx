@@ -261,10 +261,16 @@ export function DatabaseTimeSeriesChart({
     );
   }
 
-  const seriesEntries = (data?.series ?? []).map((series, index) => ({
-    key: `s${String(index + 1)}`,
-    points: percent ? toPercentChange(series.points) : series.points,
-  }));
+  const seriesEntries = (data?.series ?? []).map((series, index) => {
+    const key = `s${String(index + 1)}`;
+    const scaled = percent ? toPercentChange(series.points) : series.points;
+    // Key each series' value by its own `key` (not a shared "v") so the legend
+    // and tooltip — which resolve config by dataKey — can tell them apart.
+    return {
+      key,
+      points: scaled.map((point) => ({ t: point.t, [key]: point.v })),
+    };
+  });
 
   const axes = (
     <>
@@ -291,14 +297,22 @@ export function DatabaseTimeSeriesChart({
       <ChartTooltip
         content={
           <ChartTooltipContent
-            formatter={(value, name) => {
+            formatter={(value, name, item) => {
               const label = chartConfig[String(name)]?.label ?? String(name);
+              const swatch =
+                (item as { color?: string })?.color ??
+                `var(--color-${String(name)})`;
               const display =
                 typeof value === "number" ? formatValue(value) : String(value);
               return (
-                <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+                <div className="flex flex-1 items-center gap-2 leading-none">
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: swatch }}
+                  />
                   <span className="text-muted-foreground">{label}</span>
-                  <span className="font-medium font-mono text-foreground tabular-nums">
+                  <span className="ml-auto font-medium font-mono text-foreground tabular-nums">
                     {display}
                   </span>
                 </div>
@@ -328,7 +342,7 @@ export function DatabaseTimeSeriesChart({
           <Area
             connectNulls
             data={points}
-            dataKey="v"
+            dataKey={key}
             fill={dither.fill(key)}
             fillOpacity={dither.enabled ? 1 : 0.3}
             isAnimationActive={false}
@@ -347,7 +361,7 @@ export function DatabaseTimeSeriesChart({
           <Line
             connectNulls
             data={points}
-            dataKey="v"
+            dataKey={key}
             dot={false}
             isAnimationActive={false}
             key={key}

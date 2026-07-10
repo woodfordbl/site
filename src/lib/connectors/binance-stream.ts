@@ -58,7 +58,6 @@ const binanceStreamFrameSchema = z.object({
 
 /** Percent format renders fractions (0.025 → "2.5%"); Binance reports 2.5. */
 const PERCENT_TO_FRACTION = 100;
-const ISO_DATE_PART_LENGTH = 10;
 
 function parseConfig(config: Record<string, unknown>): BinanceConfig {
   const parsed = binanceConfigSchema.safeParse(config);
@@ -85,8 +84,9 @@ function quoteAssetFor(currency: string): string | undefined {
   return CURRENCY_TO_BINANCE_QUOTE[currency.trim().toUpperCase()];
 }
 
-function isoDateFromMs(ms: number): string {
-  return new Date(ms).toISOString().slice(0, ISO_DATE_PART_LENGTH);
+/** Full ISO timestamp (with time) so the Updated column reflects the tick. */
+function isoTimestampFromMs(ms: number): string {
+  return new Date(ms).toISOString();
 }
 
 /**
@@ -108,7 +108,7 @@ function tickToRow(
       symbol: base,
       price: Number.isFinite(price) ? price : null,
       change: Number.isFinite(change) ? change / PERCENT_TO_FRACTION : null,
-      updatedAt: isoDateFromMs(eventMs),
+      updatedAt: isoTimestampFromMs(eventMs),
     },
   };
 }
