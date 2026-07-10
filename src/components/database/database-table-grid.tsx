@@ -148,22 +148,69 @@ function resolveGridLayoutClasses(
   return {
     dropZone: cn(
       "w-full min-w-0 rounded-lg",
-      // Gutter modes bleed the select lane into the canvas padding;
-      // keep overflow visible so `-ml-12` is not clipped.
+      // Gutter modes bleed the select lane (and the scroll clip boundary)
+      // left of the block; keep overflow visible so the negative margin on
+      // the scroll wrap is not clipped.
       rowSelectGutter ? "overflow-visible" : "overflow-hidden",
       fillHeight && "flex min-h-0 flex-1 flex-col"
     ),
-    scrollWrap: cn(
-      "relative",
-      rowSelectGutter && "-ml-12",
-      fillHeight && "flex min-h-0 flex-col"
-    ),
+    scrollWrap: cn("relative", fillHeight && "flex min-h-0 flex-col"),
     scrollArea: cn(
       "w-full overflow-hidden rounded-lg",
       GRID_MAX_HEIGHT_CLASS,
       fillHeight && "min-h-0 md:max-h-none"
     ),
   };
+}
+
+/**
+ * Total left bleed (px) of the scrollport in gutter row-select modes: at
+ * least the select lane, extended to the nearest column box
+ * (`[data-column-content]`) or the page panel (`[data-page-main-panel]`) so
+ * horizontally scrolled content clips at the page's left side instead of an
+ * arbitrary line 48px before the table — matching the standalone database
+ * page, and staying inside the column when the block sits in a column
+ * layout. `0` outside gutter modes (the lane is a real in-table column
+ * there). Nothing moves at rest — only the clip boundary for scrolled
+ * content (and the sticky lane's viewport offset) extends.
+ */
+function useGutterBleedPx(
+  scrollWrapRef: React.RefObject<HTMLDivElement | null>,
+  enabled: boolean
+): number {
+  const [bleed, setBleed] = useState(SELECTION_COLUMN_WIDTH_PX);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const wrap = scrollWrapRef.current;
+    // The wrap's parent (the drop zone) sits at the block's content-left —
+    // the wrap itself carries the negative margin being measured.
+    const host = wrap?.parentElement;
+    const boundary = wrap?.closest(
+      "[data-column-content], [data-page-main-panel]"
+    );
+    if (!(wrap && host && boundary)) {
+      return;
+    }
+    const measure = () => {
+      const distance = Math.round(
+        host.getBoundingClientRect().left -
+          boundary.getBoundingClientRect().left
+      );
+      setBleed(Math.max(SELECTION_COLUMN_WIDTH_PX, distance));
+    };
+    // Panel/column resizes reposition the block relative to the boundary
+    // (centered canvas, column drags, sidebar collapse) — remeasure on both.
+    const observer = new ResizeObserver(measure);
+    observer.observe(boundary);
+    observer.observe(host);
+    measure();
+    return () => observer.disconnect();
+  }, [enabled, scrollWrapRef]);
+
+  return enabled ? bleed : 0;
 }
 
 interface DatabaseTableGridProps {
@@ -254,9 +301,16 @@ export function DatabaseTableGrid({
   const rowSelectGutter = usesRowSelectGutter(rowSelectDisplay);
   const rowSelectLeadingWidth = rowSelectLeadingWidthPx();
   const layoutClasses = resolveGridLayoutClasses(fillHeight, rowSelectGutter);
+  const scrollWrapRef = useRef<HTMLDivElement | null>(null);
+  // Gutter modes: how far the scrollport extends left of the block (lane +
+  // page/column margin); the grid pads content back by the extra so nothing
+  // moves at rest — only the scrolled-content clip boundary widens.
+  const gutterBleed = useGutterBleedPx(scrollWrapRef, rowSelectGutter);
+  const extraBleed = Math.max(0, gutterBleed - SELECTION_COLUMN_WIDTH_PX);
 
   const pinnedTotalWidth = useMemo(
     () =>
+      extraBleed +
       rowSelectLeadingWidth +
       pinnedFields.reduce(
         (total, field) =>
@@ -269,7 +323,7 @@ export function DatabaseTableGrid({
           ),
         0
       ),
-    [pinnedFields, rowSelectLeadingWidth, view.config]
+    [extraBleed, pinnedFields, rowSelectLeadingWidth, view.config]
   );
   // Keep at least one minimum-width column of scrollable room; SSR/first
   // paint (width unknown) keeps the configured pinning for desktop parity.
@@ -292,9 +346,11 @@ export function DatabaseTableGrid({
       ...columns.filter((field) => !pinnedIds.has(field.id)),
     ];
     const verticalLines = view.config.showVerticalLines !== false;
-    // Pinned sticky offsets start after the leading selection column so
-    // frozen fields sit flush against it.
-    let offset = rowSelectLeadingWidth;
+    // Pinned sticky offsets start after the bleed padding and the leading
+    // selection column so frozen fields sit flush against the lane (sticky
+    // insets are viewport-relative; the scrollport starts `extraBleed` left
+    // of the grid content in gutter modes).
+    let offset = extraBleed + rowSelectLeadingWidth;
     return ordered.map((field, index) => {
       const width =
         liveWidths?.[field.id] ??
@@ -322,6 +378,7 @@ export function DatabaseTableGrid({
   }, [
     columns,
     effectivePinnedFields,
+    extraBleed,
     liveWidths,
     rowSelectLeadingWidth,
     view.config,
@@ -362,6 +419,9 @@ export function DatabaseTableGrid({
   const totalWidth = table.getTotalSize() + rowSelectLeadingWidth;
   const gridWidth =
     mode === "edit" ? totalWidth + ADD_FIELD_CELL_WIDTH_PX : totalWidth;
+  // Border-box width of the grid element: content plus the bleed padding
+  // that parks the content back at the block's left edge at rest.
+  const paddedGridWidth = gridWidth + extraBleed;
 
   // Pinned-edge boundary in scrollport coordinates: the last frozen column's
   // right edge (pinned cells stick at these exact offsets, so the boundary is
@@ -396,7 +456,7 @@ export function DatabaseTableGrid({
     let frame = 0;
     const update = () => {
       frame = 0;
-      const overflowing = gridWidth > element.clientWidth;
+      const overflowing = paddedGridWidth > element.clientWidth;
       const fade = overflowing
         ? Math.min(element.scrollLeft / PINNED_FADE_RAMP_PX, 1)
         : 0;
@@ -420,7 +480,7 @@ export function DatabaseTableGrid({
         cancelAnimationFrame(frame);
       }
     };
-  }, [gridWidth, pinnedEdgeLeft]);
+  }, [paddedGridWidth, pinnedEdgeLeft]);
 
   const handleAddField = useCallback(() => {
     const field = createDatabaseField("text", "Text");
@@ -765,9 +825,14 @@ export function DatabaseTableGrid({
       <DatabaseColumnDropZone className={layoutClasses.dropZone}>
         {/* Positioning parent for the pinned-edge shadow: exactly the
             scrollport (header through calculate row), not the add-row strip
-            below it. Gutter modes pull the scrollport left by the select
-            lane width so the first data column stays flush with filters. */}
-        <div className={layoutClasses.scrollWrap}>
+            below it. Gutter modes pull the scrollport left by the measured
+            bleed (select lane + page/column margin); the grid pads content
+            back so the first data column stays flush with filters at rest. */}
+        <div
+          className={layoutClasses.scrollWrap}
+          ref={scrollWrapRef}
+          style={{ marginLeft: -gutterBleed }}
+        >
           <ScrollArea
             className={layoutClasses.scrollArea}
             fadeEdges
@@ -780,7 +845,17 @@ export function DatabaseTableGrid({
               className="relative"
               ref={gridRef}
               role="grid"
-              style={{ width: gridWidth, minWidth: "100%" }}
+              style={
+                {
+                  width: paddedGridWidth,
+                  minWidth: "100%",
+                  paddingLeft: extraBleed,
+                  // Sticky lane cells offset by the extra bleed (insets are
+                  // viewport-relative) so the lane stays at the block's
+                  // gutter, not the page edge.
+                  "--grid-bleed": `${extraBleed}px`,
+                } as React.CSSProperties
+              }
             >
               {/* biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above. */}
               {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
@@ -858,7 +933,9 @@ export function DatabaseTableGrid({
                     className="shrink-0"
                     style={{ width: SELECTION_COLUMN_WIDTH_PX }}
                   />
-                  <span className="sticky left-2 px-2">No rows</span>
+                  <span className="sticky left-(--grid-bleed) px-2">
+                    No rows
+                  </span>
                 </div>
               ) : (
                 // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
@@ -994,7 +1071,7 @@ function GridSelectionHeaderCell({
     <div
       aria-colindex={1}
       className={cn(
-        "sticky left-0 z-10 flex h-9 shrink-0 items-center justify-center",
+        "sticky left-(--grid-bleed) z-10 flex h-9 shrink-0 items-center justify-center",
         gutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background",
         gutter && showControl && "in-data-[hscrolled]:opacity-100"
       )}
@@ -1268,7 +1345,7 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
         />
         {/* Visible content: sticky against horizontal scroll, click-through
             to the full-row toggle underneath (the "+" opts back in). */}
-        <div className="pointer-events-none sticky left-0 z-10 flex max-w-full items-center gap-1.5 px-2">
+        <div className="pointer-events-none sticky left-(--grid-bleed) z-10 flex max-w-full items-center gap-1.5 px-2">
           <IconChevronRight
             className={cn(
               "size-4 shrink-0 stroke-[1.5px] text-muted-foreground transition-transform",
@@ -1440,7 +1517,7 @@ const GridRow = memo(function GridRowInner({
     <div
       aria-colindex={1}
       className={cn(
-        "sticky left-0 z-10 flex shrink-0 items-center justify-center",
+        "sticky left-(--grid-bleed) z-10 flex shrink-0 items-center justify-center",
         isSelected && "bg-muted/40",
         rowSelectGutter
           ? GUTTER_LANE_SCROLL_CLASS
