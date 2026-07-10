@@ -4,11 +4,20 @@ import { type CSSProperties, createElement, type ReactElement } from "react";
  * The /api/og card designs. Each variant builds a 1200×630 element tree for
  * Satori (the @vercel/og renderer) from the same content contract, so any of
  * them can be the production default and all of them are previewable on
- * /dev/og.
+ * /dev/og. Variants may deliberately ignore parts of the contract (see
+ * `note` on OG_VARIANTS) — a poster has no room for a description, an
+ * editorial card doesn't wear an emoji.
  *
  * Satori constraints honored throughout: explicit `display: flex` on every
  * element, sRGB hex only (no oklch), linear/radial gradients, no CSS grid.
  * All colors are the styles.css tokens gamut-mapped to sRGB.
+ *
+ * Layout system shared by every variant:
+ * - 84px horizontal padding; 72px top / 64px bottom (posters may deviate).
+ * - The body is centered in the leftover space but carries its own bottom
+ *   padding, so long content can never crowd the footer to zero gap.
+ * - Titles/descriptions are line-clamped as a hard overflow stop on top of
+ *   the endpoint's character clamps.
  */
 
 export interface OgCardContent {
@@ -18,12 +27,12 @@ export interface OgCardContent {
 }
 
 export const OG_VARIANTS = [
-  { id: "paper", label: "Paper Canvas" },
-  { id: "ember", label: "Warm Ember" },
-  { id: "poster", label: "Vermillion Poster" },
-  { id: "split", label: "Sidebar Split" },
-  { id: "serif", label: "Serif Editorial" },
-  { id: "spectrum", label: "Block Spectrum" },
+  { id: "paper", label: "Paper Canvas", note: "full contract" },
+  { id: "ember", label: "Warm Ember", note: "ignores icon" },
+  { id: "poster", label: "Vermillion Poster", note: "title only" },
+  { id: "split", label: "Sidebar Split", note: "full contract" },
+  { id: "serif", label: "Serif Editorial", note: "ignores icon" },
+  { id: "spectrum", label: "Block Spectrum", note: "ignores icon" },
 ] as const;
 
 export type OgVariant = (typeof OG_VARIANTS)[number]["id"];
@@ -42,7 +51,7 @@ const CREAM = "#f9f9f5";
 const INK = "#2e2e2b";
 const MUTED = "#737373";
 const LIGHT_BORDER = "#dededa";
-const DOT_GRID = "#dcdcd6";
+const DOT_GRID = "#e3e3db";
 // Dark theme tokens.
 const WARM_BLACK = "#181611";
 const WARM_BLACK_DEEP = "#15110a";
@@ -78,6 +87,12 @@ const TICK_COLORS = [
   BLOCK_COLORS.red,
 ];
 
+const PAD_X = 84;
+const PAD_TOP = 72;
+const PAD_BOTTOM = 64;
+// Minimum air between centered body content and whatever sits below it.
+const BODY_GUARD = 44;
+
 type OgNode = ReactElement | string | null;
 
 /**
@@ -99,16 +114,21 @@ function el(
   return createElement("div", { key, style: cleanStyle }, ...children);
 }
 
-/** Title size scaled down for long titles, relative to a variant's base. */
-function titleSize(base: number, length: number): string {
-  if (length > 70) {
-    return `${Math.round(base * 0.67)}px`;
+/**
+ * Title size scaled down for long titles, relative to a variant's base.
+ * `charsPerLine` describes the column the title lives in (~13 chars per
+ * 100px of column width at these sizes); narrower columns step down sooner.
+ */
+function titleSize(base: number, length: number, charsPerLine = 34): string {
+  const lines = length / charsPerLine;
+  if (lines > 2.1) {
+    return `${Math.round(base * 0.62)}px`;
   }
-  if (length > 48) {
-    return `${Math.round(base * 0.76)}px`;
+  if (lines > 1.4) {
+    return `${Math.round(base * 0.74)}px`;
   }
-  if (length > 28) {
-    return `${Math.round(base * 0.9)}px`;
+  if (lines > 0.8) {
+    return `${Math.round(base * 0.88)}px`;
   }
   return `${base}px`;
 }
@@ -143,10 +163,69 @@ function monogramBadge(
   );
 }
 
+/**
+ * True when the card's headline already is the site name (the home card) —
+ * variants then suppress their secondary name text so it doesn't repeat.
+ */
+function isSiteTitle(content: OgCardContent): boolean {
+  return content.title === SITE_NAME;
+}
+
+/** Name · domain lockup with even spacing around the separator. */
+function brandLockup(options: {
+  badgeSize: number;
+  domainColor: string;
+  nameColor: string;
+  withName: boolean;
+}): ReactElement[] {
+  const { badgeSize, nameColor, domainColor, withName } = options;
+  const lockup = [
+    monogramBadge("badge", {
+      background: ACCENT,
+      color: CREAM_ON_ACCENT,
+      fontSize: Math.round(badgeSize * 0.44),
+      radius: Math.round(badgeSize * 0.25),
+      size: badgeSize,
+    }),
+  ];
+  if (withName) {
+    lockup.push(
+      el(
+        "name",
+        {
+          marginLeft: "16px",
+          fontSize: "27px",
+          fontWeight: 600,
+          color: nameColor,
+        },
+        SITE_NAME
+      ),
+      el(
+        "middot",
+        { marginLeft: "12px", fontSize: "27px", color: domainColor },
+        "·"
+      )
+    );
+  }
+  lockup.push(
+    el(
+      "domain",
+      {
+        marginLeft: withName ? "12px" : "16px",
+        fontSize: "27px",
+        color: domainColor,
+      },
+      SITE_DOMAIN
+    )
+  );
+  return lockup;
+}
+
 function titleBlock(
   content: OgCardContent,
   options: {
     base: number;
+    charsPerLine?: number;
     color: string;
     letterSpacing?: string;
     lineHeight?: number;
@@ -156,12 +235,20 @@ function titleBlock(
   return el(
     "title",
     {
-      fontSize: titleSize(options.base, content.title.length),
+      // display block: Satori's lineClamp (the hard overflow stop on top of
+      // the endpoint's character clamps) only applies to block elements.
+      display: "block",
+      fontSize: titleSize(
+        options.base,
+        content.title.length,
+        options.charsPerLine
+      ),
       fontWeight: 600,
-      lineHeight: options.lineHeight ?? 1.06,
-      letterSpacing: options.letterSpacing ?? "-0.03em",
+      lineHeight: options.lineHeight ?? 1.08,
+      letterSpacing: options.letterSpacing ?? "-0.025em",
       maxWidth: `${options.maxWidth ?? 1010}px`,
       color: options.color,
+      lineClamp: 4,
     },
     content.title
   );
@@ -169,7 +256,7 @@ function titleBlock(
 
 function descriptionBlock(
   content: OgCardContent,
-  options: { color: string; maxWidth?: number }
+  options: { color: string; fontSize?: number; maxWidth?: number }
 ): OgNode {
   if (!content.description) {
     return null;
@@ -177,11 +264,13 @@ function descriptionBlock(
   return el(
     "desc",
     {
-      fontSize: "33px",
+      display: "block",
+      fontSize: `${options.fontSize ?? 32}px`,
       color: options.color,
-      marginTop: "26px",
-      lineHeight: 1.42,
-      maxWidth: `${options.maxWidth ?? 930}px`,
+      marginTop: "24px",
+      lineHeight: 1.45,
+      maxWidth: `${options.maxWidth ?? 900}px`,
+      lineClamp: 3,
     },
     content.description
   );
@@ -199,14 +288,14 @@ function iconTile(
     {
       alignItems: "center",
       justifyContent: "center",
-      width: "104px",
-      height: "104px",
-      borderRadius: "24px",
+      width: "100px",
+      height: "100px",
+      borderRadius: "22px",
       backgroundColor: options.background,
       border: options.border,
       boxShadow: options.shadow,
-      fontSize: "58px",
-      marginBottom: "34px",
+      fontSize: "54px",
+      marginBottom: "36px",
     },
     content.icon
   );
@@ -216,7 +305,12 @@ function iconTile(
 function paperCard(content: OgCardContent): ReactElement {
   const body = el(
     "body",
-    { flexDirection: "column", flexGrow: 1, justifyContent: "center" },
+    {
+      flexDirection: "column",
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingBottom: `${BODY_GUARD}px`,
+    },
     iconTile(content, {
       background: "#ffffff",
       border: `1px solid ${LIGHT_BORDER}`,
@@ -229,33 +323,22 @@ function paperCard(content: OgCardContent): ReactElement {
   const brand = el(
     "brand",
     { alignItems: "center" },
-    monogramBadge("badge", {
-      background: ACCENT,
-      color: CREAM_ON_ACCENT,
-      fontSize: 23,
-      radius: 13,
-      size: 52,
-    }),
-    el(
-      "name",
-      { marginLeft: "18px", fontSize: "29px", fontWeight: 600, color: INK },
-      SITE_NAME
-    ),
-    el(
-      "site",
-      { marginLeft: "14px", fontSize: "29px", color: MUTED },
-      `· ${SITE_DOMAIN}`
-    )
+    ...brandLockup({
+      badgeSize: 48,
+      nameColor: INK,
+      domainColor: MUTED,
+      withName: !isSiteTitle(content),
+    })
   );
 
   const ticks = el(
     "ticks",
-    { gap: "10px" },
+    { alignItems: "center", gap: "9px" },
     ...TICK_COLORS.map((color) =>
       el(`tick-${color}`, {
-        width: "18px",
-        height: "18px",
-        borderRadius: "6px",
+        width: "14px",
+        height: "14px",
+        borderRadius: "4px",
         backgroundColor: color,
       })
     )
@@ -274,10 +357,10 @@ function paperCard(content: OgCardContent): ReactElement {
       width: "100%",
       height: "100%",
       flexDirection: "column",
-      padding: "72px 84px 60px",
+      padding: `${PAD_TOP}px ${PAD_X}px ${PAD_BOTTOM}px`,
       backgroundColor: CREAM,
-      backgroundImage: `radial-gradient(circle at 22px 22px, ${DOT_GRID} 0%, ${DOT_GRID} 6%, transparent 6%)`,
-      backgroundSize: "44px 44px",
+      backgroundImage: `radial-gradient(circle at 20px 20px, ${DOT_GRID} 0%, ${DOT_GRID} 4.5%, transparent 4.5%)`,
+      backgroundSize: "40px 40px",
       color: INK,
       fontFamily: "Geist",
     },
@@ -286,7 +369,7 @@ function paperCard(content: OgCardContent): ReactElement {
   );
 }
 
-/** A — warm charcoal with a terracotta glow and bottom rule. */
+/** A — warm charcoal, terracotta glow and bottom rule. Type does the work. */
 function emberCard(content: OgCardContent): ReactElement {
   const header = el(
     "header",
@@ -298,21 +381,27 @@ function emberCard(content: OgCardContent): ReactElement {
         background: DARK_SURFACE,
         border: `1px solid ${DARK_BORDER}`,
         color: DARK_INK,
-        fontSize: 30,
-        radius: 16,
-        size: 64,
+        fontSize: 25,
+        radius: 14,
+        size: 56,
       }),
-      el("name", { marginLeft: "22px", fontSize: "32px" }, SITE_NAME)
+      isSiteTitle(content)
+        ? null
+        : el(
+            "name",
+            { marginLeft: "18px", fontSize: "28px", fontWeight: 600 },
+            SITE_NAME
+          )
     ),
     el(
       "domain",
-      { alignItems: "center", fontSize: "28px", color: DARK_MUTED },
+      { alignItems: "center", fontSize: "27px", color: DARK_MUTED },
       el("dot", {
-        width: "14px",
-        height: "14px",
+        width: "12px",
+        height: "12px",
         borderRadius: "9999px",
         backgroundColor: ACCENT,
-        marginRight: "14px",
+        marginRight: "12px",
       }),
       SITE_DOMAIN
     )
@@ -320,18 +409,19 @@ function emberCard(content: OgCardContent): ReactElement {
 
   const body = el(
     "body",
-    { flexDirection: "column", flexGrow: 1, justifyContent: "center" },
-    iconTile(content, {
-      background: DARK_SURFACE,
-      border: `1px solid ${DARK_BORDER}`,
-    }),
-    titleBlock(content, { base: 84, color: DARK_INK, lineHeight: 1.05 }),
-    descriptionBlock(content, { color: DARK_MUTED, maxWidth: 920 })
+    {
+      flexDirection: "column",
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingBottom: `${BODY_GUARD}px`,
+    },
+    titleBlock(content, { base: 88, color: DARK_INK }),
+    descriptionBlock(content, { color: DARK_MUTED })
   );
 
   const rule = el("rule", {
     width: "96px",
-    height: "8px",
+    height: "6px",
     borderRadius: "9999px",
     backgroundColor: ACCENT,
   });
@@ -342,10 +432,10 @@ function emberCard(content: OgCardContent): ReactElement {
       width: "100%",
       height: "100%",
       flexDirection: "column",
-      padding: "72px 84px",
+      padding: `${PAD_TOP}px ${PAD_X}px ${PAD_BOTTOM}px`,
       backgroundColor: WARM_BLACK,
       backgroundImage:
-        "radial-gradient(1100px 520px at 100% 0%, rgba(229, 71, 35, 0.16), rgba(24, 22, 17, 0) 62%)",
+        "radial-gradient(1100px 520px at 100% 0%, rgba(229, 71, 35, 0.18), rgba(24, 22, 17, 0) 62%)",
       color: DARK_INK,
       fontFamily: "Geist",
     },
@@ -355,22 +445,21 @@ function emberCard(content: OgCardContent): ReactElement {
   );
 }
 
-/** C — full-bleed terracotta poster; drops icon and description by design. */
+/** C — full-bleed terracotta poster; title only, bottom-anchored. */
 function posterCard(content: OgCardContent): ReactElement {
   const top = el(
     "top",
     { alignItems: "center", justifyContent: "space-between" },
     monogramBadge("badge", {
-      background: "transparent",
-      border: "2px solid rgba(255, 247, 242, 0.55)",
-      color: CREAM_ON_ACCENT,
-      fontSize: 28,
-      radius: 16,
-      size: 64,
+      background: CREAM_ON_ACCENT,
+      color: ACCENT,
+      fontSize: 24,
+      radius: 14,
+      size: 56,
     }),
     el(
       "domain",
-      { fontSize: "28px", color: "rgba(255, 247, 242, 0.85)" },
+      { fontSize: "27px", color: "rgba(255, 247, 242, 0.85)" },
       SITE_DOMAIN
     )
   );
@@ -378,23 +467,31 @@ function posterCard(content: OgCardContent): ReactElement {
   const body = el(
     "body",
     { flexDirection: "column", flexGrow: 1, justifyContent: "flex-end" },
+    isSiteTitle(content)
+      ? null
+      : el(
+          "kicker",
+          {
+            fontSize: "24px",
+            letterSpacing: "0.16em",
+            color: "rgba(255, 247, 242, 0.78)",
+            marginBottom: "22px",
+          },
+          SITE_NAME.toUpperCase()
+        ),
     el(
-      "kicker",
+      "title",
       {
-        fontSize: "26px",
-        letterSpacing: "0.14em",
-        color: "rgba(255, 247, 242, 0.8)",
-        marginBottom: "20px",
+        display: "block",
+        fontSize: titleSize(104, content.title.length),
+        fontWeight: 600,
+        lineHeight: 1.05,
+        letterSpacing: "-0.03em",
+        maxWidth: "1030px",
+        lineClamp: 4,
       },
-      SITE_NAME.toUpperCase()
-    ),
-    titleBlock(content, {
-      base: 104,
-      color: CREAM_ON_ACCENT,
-      letterSpacing: "-0.035em",
-      lineHeight: 1.0,
-      maxWidth: 1030,
-    })
+      content.title
+    )
   );
 
   return el(
@@ -403,7 +500,7 @@ function posterCard(content: OgCardContent): ReactElement {
       width: "100%",
       height: "100%",
       flexDirection: "column",
-      padding: "76px 84px",
+      padding: `${PAD_TOP}px ${PAD_X}px 72px`,
       backgroundImage: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_BRIGHT} 60%, #ff6b35 100%)`,
       color: CREAM_ON_ACCENT,
       fontFamily: "Geist",
@@ -415,24 +512,24 @@ function posterCard(content: OgCardContent): ReactElement {
 
 /** D — a miniature of the app: dark sidebar with ghost rows, cream content. */
 function splitCard(content: OgCardContent): ReactElement {
-  const rowWidths = [120, 170, 96, 140, 110];
+  const rowWidths = [128, 176, 104, 150, 118, 88, 140];
   const activeRow = 1;
 
   const rows = rowWidths.map((width, index) =>
     el(
-      `row-${width}`,
-      { alignItems: "center", gap: "14px" },
-      el(`row-icon-${width}`, {
-        width: "22px",
-        height: "22px",
-        borderRadius: "6px",
+      `row-${index}`,
+      { alignItems: "center", gap: "13px" },
+      el(`row-icon-${index}`, {
+        width: "20px",
+        height: "20px",
+        borderRadius: "5px",
         backgroundColor: index === activeRow ? ACCENT : DARK_SURFACE_RAISED,
       }),
-      el(`row-bar-${width}`, {
+      el(`row-bar-${index}`, {
         width: `${width}px`,
-        height: "12px",
+        height: "11px",
         borderRadius: "9999px",
-        backgroundColor: index === activeRow ? "#4a453b" : DARK_SURFACE_RAISED,
+        backgroundColor: index === activeRow ? "#59523f" : DARK_SURFACE_RAISED,
       })
     )
   );
@@ -440,31 +537,33 @@ function splitCard(content: OgCardContent): ReactElement {
   const sidebar = el(
     "sidebar",
     {
-      width: "330px",
+      width: "320px",
       flexDirection: "column",
-      gap: "30px",
-      padding: "56px 44px",
+      gap: "28px",
+      padding: "52px 40px",
       backgroundColor: WARM_BLACK,
     },
     el(
       "brand",
-      { alignItems: "center", gap: "16px" },
+      { alignItems: "center", gap: "14px" },
       monogramBadge("badge", {
         background: ACCENT,
         color: CREAM_ON_ACCENT,
-        fontSize: 20,
-        radius: 12,
-        size: 46,
+        fontSize: 19,
+        radius: 11,
+        size: 44,
       }),
-      el(
-        "name",
-        { fontSize: "26px", fontWeight: 600, color: DARK_INK },
-        "Blake"
-      )
+      isSiteTitle(content)
+        ? null
+        : el(
+            "name",
+            { fontSize: "25px", fontWeight: 600, color: DARK_INK },
+            "Blake"
+          )
     ),
     el(
       "rows",
-      { flexDirection: "column", gap: "18px", marginTop: "8px" },
+      { flexDirection: "column", gap: "17px", marginTop: "4px" },
       ...rows
     )
   );
@@ -473,12 +572,18 @@ function splitCard(content: OgCardContent): ReactElement {
     "crumb",
     {
       alignItems: "center",
-      gap: "14px",
-      fontSize: "27px",
+      gap: "12px",
+      fontSize: "26px",
       color: MUTED,
-      marginBottom: "30px",
+      marginBottom: "28px",
     },
-    content.icon ? el("crumb-icon", { fontSize: "30px" }, content.icon) : null,
+    content.icon
+      ? el(
+          "crumb-icon",
+          { fontSize: "26px", alignItems: "center", height: "26px" },
+          content.icon
+        )
+      : null,
     SITE_DOMAIN
   );
 
@@ -488,11 +593,16 @@ function splitCard(content: OgCardContent): ReactElement {
       flexDirection: "column",
       flexGrow: 1,
       justifyContent: "center",
-      padding: "72px 76px",
+      padding: "72px 80px",
     },
     crumb,
-    titleBlock(content, { base: 80, color: INK, maxWidth: 720 }),
-    descriptionBlock(content, { color: MUTED, maxWidth: 720 })
+    titleBlock(content, {
+      base: 78,
+      charsPerLine: 24,
+      color: INK,
+      maxWidth: 720,
+    }),
+    descriptionBlock(content, { color: MUTED, fontSize: 30, maxWidth: 700 })
   );
 
   return el(
@@ -509,7 +619,7 @@ function splitCard(content: OgCardContent): ReactElement {
   );
 }
 
-/** E — bookish: heavy ink rule, Source Serif 4 headline, hairline footer. */
+/** E — bookplate: heavy ink rules top and bottom, Source Serif 4 headline. */
 function serifCard(content: OgCardContent): ReactElement {
   const topRule = el(
     "top-rule",
@@ -517,28 +627,39 @@ function serifCard(content: OgCardContent): ReactElement {
       alignItems: "center",
       justifyContent: "space-between",
       borderBottom: `3px solid ${INK}`,
-      paddingBottom: "26px",
+      paddingBottom: "24px",
     },
-    el("name", { fontSize: "30px", fontWeight: 600 }, SITE_NAME),
-    el("domain", { fontSize: "26px", color: MUTED }, SITE_DOMAIN)
+    isSiteTitle(content)
+      ? el("dot", {
+          width: "12px",
+          height: "12px",
+          borderRadius: "9999px",
+          backgroundColor: ACCENT,
+        })
+      : el("name", { fontSize: "29px", fontWeight: 600 }, SITE_NAME),
+    el("domain", { fontSize: "25px", color: MUTED }, SITE_DOMAIN)
   );
 
   const body = el(
     "body",
-    { flexDirection: "column", flexGrow: 1, justifyContent: "center" },
-    content.icon
-      ? el("icon", { fontSize: "64px", marginBottom: "28px" }, content.icon)
-      : null,
+    {
+      flexDirection: "column",
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingBottom: "24px",
+    },
     el(
       "title",
       {
+        display: "block",
         fontFamily: "Source Serif 4",
-        fontSize: titleSize(92, content.title.length),
+        fontSize: titleSize(94, content.title.length),
         fontWeight: 600,
-        lineHeight: 1.08,
-        letterSpacing: "-0.015em",
-        maxWidth: "1010px",
+        lineHeight: 1.12,
+        letterSpacing: "-0.01em",
+        maxWidth: "1000px",
         color: INK,
+        lineClamp: 4,
       },
       content.title
     ),
@@ -546,32 +667,29 @@ function serifCard(content: OgCardContent): ReactElement {
       ? el(
           "desc",
           {
-            fontSize: "32px",
+            display: "block",
+            fontSize: "30px",
             color: MUTED,
-            marginTop: "30px",
-            lineHeight: 1.45,
-            maxWidth: "900px",
+            marginTop: "28px",
+            lineHeight: 1.5,
+            maxWidth: "880px",
+            lineClamp: 3,
           },
           content.description
         )
       : null
   );
 
-  const footer = el(
-    "footer",
-    {
-      alignItems: "center",
-      gap: "18px",
-      borderTop: `1px solid ${LIGHT_BORDER}`,
-      paddingTop: "26px",
-    },
-    el("dot", {
-      width: "12px",
-      height: "12px",
-      borderRadius: "9999px",
+  // Bottom rule mirrors the top; a short terracotta segment signs it.
+  const bottomRule = el(
+    "bottom-rule",
+    { height: "3px" },
+    el("accent-segment", {
+      width: "96px",
+      height: "3px",
       backgroundColor: ACCENT,
     }),
-    el("label", { fontSize: "24px", color: MUTED }, SITE_DOMAIN)
+    el("ink-segment", { flexGrow: 1, height: "3px", backgroundColor: INK })
   );
 
   return el(
@@ -580,14 +698,14 @@ function serifCard(content: OgCardContent): ReactElement {
       width: "100%",
       height: "100%",
       flexDirection: "column",
-      padding: "70px 84px",
+      padding: `64px ${PAD_X}px`,
       backgroundColor: CREAM,
       color: INK,
       fontFamily: "Geist",
     },
     topRule,
     body,
-    footer
+    bottomRule
   );
 }
 
@@ -598,33 +716,40 @@ function spectrumCard(content: OgCardContent): ReactElement {
     { alignItems: "center", justifyContent: "space-between" },
     el(
       "brand",
-      { alignItems: "center", gap: "18px" },
+      { alignItems: "center" },
       monogramBadge("badge", {
         background: ACCENT,
         color: CREAM_ON_ACCENT,
-        fontSize: 25,
-        radius: 14,
-        size: 56,
+        fontSize: 23,
+        radius: 13,
+        size: 52,
       }),
-      el("name", { fontSize: "30px" }, SITE_NAME)
+      isSiteTitle(content)
+        ? null
+        : el(
+            "name",
+            { marginLeft: "16px", fontSize: "28px", fontWeight: 600 },
+            SITE_NAME
+          )
     ),
     el("domain", { fontSize: "27px", color: DARK_MUTED }, SITE_DOMAIN)
   );
 
   const body = el(
     "body",
-    { flexDirection: "column", flexGrow: 1, justifyContent: "center" },
-    iconTile(content, {
-      background: DARK_SURFACE_RAISED,
-      border: `1px solid ${DARK_BORDER}`,
-    }),
-    titleBlock(content, { base: 92, color: DARK_INK, lineHeight: 1.04 }),
-    descriptionBlock(content, { color: DARK_MUTED, maxWidth: 920 })
+    {
+      flexDirection: "column",
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingBottom: "36px",
+    },
+    titleBlock(content, { base: 94, color: DARK_INK }),
+    descriptionBlock(content, { color: DARK_MUTED })
   );
 
   const spectrum = el(
     "spectrum",
-    { height: "26px" },
+    { height: "24px" },
     ...Object.entries(BLOCK_COLORS).map(([name, color]) =>
       el(`band-${name}`, { flexGrow: 1, backgroundColor: color })
     )
@@ -645,7 +770,7 @@ function spectrumCard(content: OgCardContent): ReactElement {
       {
         flexDirection: "column",
         flexGrow: 1,
-        padding: "76px 84px 56px",
+        padding: `${PAD_TOP}px ${PAD_X}px 48px`,
       },
       top,
       body

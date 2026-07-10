@@ -67,11 +67,13 @@ function VariantCard({
   bust,
   content,
   label,
+  note,
   variantId,
 }: {
   bust: number;
   content: CardContent;
   label: string;
+  note: string;
   variantId: string;
 }) {
   const url = useMemo(
@@ -119,7 +121,12 @@ function VariantCard({
         width={1200}
       />
       <figcaption className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="font-medium">{label}</span>
+        <span className="font-medium">
+          {label}{" "}
+          <span className="font-normal text-muted-foreground text-xs">
+            {note}
+          </span>
+        </span>
         <span className="font-mono text-muted-foreground text-xs">
           {failed ? "render failed" : null}
           {bytes === null || failed ? null : `${Math.round(bytes / 1024)} KB`}
@@ -253,6 +260,7 @@ export function OgPlayground() {
             content={content}
             key={variant.id}
             label={variant.label}
+            note={variant.note}
             variantId={variant.id}
           />
         ))}
