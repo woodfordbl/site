@@ -40,6 +40,7 @@ import { isoDateToLocalDate } from "@/components/database/database-grid-helpers.
 import { DatabaseOptionCombobox } from "@/components/database/database-option-combobox.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { Calendar } from "@/components/ui/calendar.tsx";
+import { Chip, ChipButton, ChipSegment } from "@/components/ui/chip.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,31 +101,6 @@ import { cn } from "@/lib/utils.ts";
  * - Inner groups already present in data render as read-only bracketed chips
  *   with a remove action; creating/editing groups via UI arrives later.
  */
-
-// `pointer-coarse:` bumps: 24px-tall chip segments are too small a touch
-// target, so chips grow to 32px with wider segment padding on touch devices.
-const CHIP_CLASS =
-  "flex h-6 shrink-0 items-stretch divide-x divide-border overflow-hidden rounded-md border border-border bg-background text-xs pointer-coarse:h-8";
-
-const CHIP_SEGMENT_CLASS =
-  "flex items-center gap-1 px-1.5 text-muted-foreground outline-none transition-colors pointer-coarse:px-2";
-
-const CHIP_BUTTON_CLASS = cn(
-  CHIP_SEGMENT_CLASS,
-  "hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
-);
-
-/** Small dashed "+ Filter"/"+ Sort" chip trigger (inline bars). */
-const ADD_CHIP_CLASS =
-  "flex h-6 pointer-coarse:h-8 shrink-0 items-center gap-1 rounded-md border border-border border-dashed pointer-coarse:px-2 px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground";
-
-/**
- * Full-width dashed add trigger for the mobile filter/sort drawers — fills the
- * surface width inside the container's own padding (`w-full` under the
- * popover/drawer `p-2`).
- */
-const ADD_FULL_WIDTH_CLASS =
-  "flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border border-dashed px-2 text-muted-foreground text-sm outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground";
 
 interface ChipStripProps {
   /**
@@ -304,12 +280,12 @@ export function DatabaseGroupByChip({
     "Unknown field";
 
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>
+    <Chip>
+      <ChipSegment>
         <IconLayoutGrid className="size-3.5 shrink-0 stroke-[1.5px]" />
         Grouped by
         <span className="max-w-32 truncate text-foreground">{fieldName}</span>
-      </span>
+      </ChipSegment>
       <RemoveChipButton
         label={`Clear grouping by ${fieldName}`}
         onRemove={() => {
@@ -319,7 +295,7 @@ export function DatabaseGroupByChip({
           });
         }}
       />
-    </div>
+    </Chip>
   );
 }
 
@@ -434,10 +410,10 @@ function FilterConditionChip({
   if (!field) {
     // Stale condition (field deleted elsewhere): removable label only.
     return (
-      <div className={CHIP_CLASS}>
-        <span className={CHIP_SEGMENT_CLASS}>Unknown field</span>
+      <Chip>
+        <ChipSegment>Unknown field</ChipSegment>
         <RemoveChipButton label="Remove filter" onRemove={onRemove} />
-      </div>
+      </Chip>
     );
   }
 
@@ -452,18 +428,14 @@ function FilterConditionChip({
   };
 
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>
+    <Chip>
+      <ChipSegment>
         <Icon className="size-3.5 shrink-0 stroke-[1.5px]" />
         <span className="max-w-32 truncate text-foreground">{field.name}</span>
-      </span>
+      </ChipSegment>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={
-            <button className={CHIP_BUTTON_CLASS} type="button">
-              {operatorLabel(condition.operator)}
-            </button>
-          }
+          render={<ChipButton>{operatorLabel(condition.operator)}</ChipButton>}
         />
         <DropdownMenuContent align="start">
           <DropdownMenuRadioGroup
@@ -494,7 +466,7 @@ function FilterConditionChip({
         <Popover onOpenChange={handleValueOpenChange} open={valueOpen}>
           <PopoverTrigger
             render={
-              <button className={CHIP_BUTTON_CLASS} type="button">
+              <ChipButton>
                 {valueLabel === "" ? (
                   <span className="text-muted-foreground/70">Value</span>
                 ) : (
@@ -502,7 +474,7 @@ function FilterConditionChip({
                     {valueLabel}
                   </span>
                 )}
-              </button>
+              </ChipButton>
             }
           />
           <PopoverContent
@@ -519,7 +491,7 @@ function FilterConditionChip({
         </Popover>
       ) : null}
       <RemoveChipButton label="Remove filter" onRemove={onRemove} />
-    </div>
+    </Chip>
   );
 }
 
@@ -767,10 +739,10 @@ function FilterGroupChip({
   onRemove: () => void;
 }): ReactNode {
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>{innerGroupChipLabel(group)}</span>
+    <Chip>
+      <ChipSegment>{innerGroupChipLabel(group)}</ChipSegment>
       <RemoveChipButton label="Remove filter group" onRemove={onRemove} />
-    </div>
+    </Chip>
   );
 }
 
@@ -783,14 +755,9 @@ function RemoveChipButton({
   onRemove: () => void;
 }): ReactNode {
   return (
-    <button
-      aria-label={label}
-      className={cn(CHIP_BUTTON_CLASS, "px-1")}
-      onClick={onRemove}
-      type="button"
-    >
+    <ChipButton aria-label={label} className="px-1" onClick={onRemove}>
       <IconX className="size-3.5 stroke-[1.5px]" />
-    </button>
+    </ChipButton>
   );
 }
 
@@ -932,21 +899,22 @@ export function FieldPickerDropdown({
 }
 
 /**
- * Dashed add trigger element for `FieldPickerPopover`'s `render` prop — a raw
- * `<button>` (not a component wrapper) so Base UI can clone the popover's
- * onClick/ref onto it. Small inline chip, or full-width for the drawers.
+ * Dashed add trigger element for `FieldPickerPopover`'s `render` prop — a
+ * `Chip` rendered as a `<button>` (via `useRender`, so Base UI can still merge
+ * the popover's onClick/ref onto it). Small inline chip, or full-width for
+ * the drawers.
  */
 function addTriggerButton(fullWidth: boolean, label: string): ReactElement {
   return (
-    <button
-      className={fullWidth ? ADD_FULL_WIDTH_CLASS : ADD_CHIP_CLASS}
-      type="button"
+    <Chip
+      render={<button type="button" />}
+      variant={fullWidth ? "dashed-wide" : "dashed"}
     >
       <IconPlus
         className={cn("stroke-[1.5px]", fullWidth ? "size-4" : "size-3.5")}
       />
       {label}
-    </button>
+    </Chip>
   );
 }
 
@@ -1070,34 +1038,32 @@ function SortChip({
 }: SortChipProps): ReactNode {
   const Arrow = direction === "asc" ? IconArrowUp : IconArrowDown;
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>
+    <Chip>
+      <ChipSegment>
         {priority === null ? null : (
           <span className="tabular-nums">{priority}</span>
         )}
         <span className="max-w-32 truncate text-foreground">{fieldName}</span>
-      </span>
-      <button
+      </ChipSegment>
+      <ChipButton
         aria-label={`Sort ${fieldName} ${
           direction === "asc" ? "descending" : "ascending"
         }`}
-        className={cn(CHIP_BUTTON_CLASS, "px-1")}
+        className="px-1"
         onClick={onFlip}
-        type="button"
       >
         <Arrow className="size-3.5 stroke-[1.5px]" />
-      </button>
+      </ChipButton>
       {priority === null ? null : (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <button
+              <ChipButton
                 aria-label={`Change sort priority for ${fieldName}`}
-                className={cn(CHIP_BUTTON_CLASS, "px-1")}
-                type="button"
+                className="px-1"
               >
                 <IconChevronDown className="size-3.5 stroke-[1.5px]" />
-              </button>
+              </ChipButton>
             }
           />
           <DropdownMenuContent align="start">
@@ -1127,6 +1093,6 @@ function SortChip({
         label={`Remove sort by ${fieldName}`}
         onRemove={onRemove}
       />
-    </div>
+    </Chip>
   );
 }
