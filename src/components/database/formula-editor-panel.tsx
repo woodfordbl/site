@@ -26,6 +26,10 @@ import {
   formulaPropertyReference,
 } from "@/lib/expr/function-catalog.ts";
 import { parseExpression } from "@/lib/expr/parse.ts";
+import {
+  canonicalizeExpression,
+  humanizeExpression,
+} from "@/lib/expr/ref-rewrite.ts";
 import { createRowScope } from "@/lib/expr/row-scope.ts";
 import type {
   DatabaseCellValue,
@@ -39,9 +43,12 @@ import { cn } from "@/lib/utils.ts";
  * Properties / Functions / Operators that insert at the caret, with a
  * fixed-height detail strip documenting the focused entry. Width-fluid so it
  * works both in the desktop column-menu submenu (~360px) and full-width in
- * the mobile menu drawer. Save hands the draft to the caller's `onSave`
- * unconditionally (so the menu can close); the caller compares against the
- * stored expression and skips the write for unchanged drafts.
+ * the mobile menu drawer. Stored expressions are field-id canonical
+ * (`prop("<id>")`); the panel humanizes them into name references for the
+ * draft and re-canonicalizes on Save, so users only ever see names. Save
+ * hands the canonical text to the caller's `onSave` unconditionally (so the
+ * menu can close); the caller compares against the stored expression and
+ * skips the write for unchanged drafts.
  */
 
 /**
@@ -115,7 +122,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 export interface FormulaEditorPanelProps {
-  /** Stored expression the draft starts from (and is compared against on Save). */
+  /** Stored (canonical) expression the draft starts from, humanized on open. */
   expression: string;
   /**
    * Full database schema: non-formula fields become the Properties section,
@@ -124,7 +131,7 @@ export interface FormulaEditorPanelProps {
   fields: readonly DatabaseField[];
   /** First row's cell values for the live preview; `null` when the table is empty. */
   firstRowValues: Record<string, DatabaseCellValue> | null;
-  /** Called with the draft on Save (even when unchanged — the caller decides). */
+  /** Called with the CANONICAL text on Save (even when unchanged — the caller decides). */
   onSave: (expression: string) => void;
 }
 
@@ -135,7 +142,9 @@ export function FormulaEditorPanel({
   firstRowValues,
   onSave,
 }: FormulaEditorPanelProps): ReactNode {
-  const [draft, setDraft] = useState(expression);
+  const [draft, setDraft] = useState(() =>
+    humanizeExpression(expression, fields)
+  );
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<ReferenceDetail | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -385,7 +394,7 @@ export function FormulaEditorPanel({
       <Button
         className="self-end"
         onClick={() => {
-          onSave(draft);
+          onSave(canonicalizeExpression(draft, fields).text);
         }}
         size="xs"
         variant="outline"

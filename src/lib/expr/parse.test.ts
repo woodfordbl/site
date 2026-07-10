@@ -89,16 +89,19 @@ describe("parse precedence", () => {
 });
 
 describe("parse property references", () => {
-  it("parses dot access", () => {
+  it("parses dot access with the full source span", () => {
     expect(astOf("thisPage.Score")).toEqual({
       kind: "property",
       name: "Score",
       position: 0,
+      end: "thisPage.Score".length,
+      via: "scope",
     });
   });
 
   it("treats thisRow as a synonym for thisPage", () => {
-    expect(astOf("thisRow.Score")).toEqual(astOf("thisPage.Score"));
+    // Spans differ (the roots have different lengths); the reference doesn't.
+    expect(sexpr(astOf("thisRow.Score"))).toBe(sexpr(astOf("thisPage.Score")));
   });
 
   it("matches scope roots case-insensitively", () => {
@@ -111,6 +114,8 @@ describe("parse property references", () => {
       kind: "property",
       name: "Due Date",
       position: 0,
+      end: 'thisPage["Due Date"]'.length,
+      via: "scope",
     });
   });
 
@@ -132,6 +137,67 @@ describe("parse property references", () => {
 
   it("rejects a bare scope root", () => {
     expect(errorOf("thisPage").message).toContain('Expected "." or "["');
+  });
+});
+
+describe("parse prop references", () => {
+  it("parses prop() as a property node with the full source span", () => {
+    expect(astOf('prop("f_8a2c")')).toEqual({
+      kind: "property",
+      name: "f_8a2c",
+      position: 0,
+      end: 'prop("f_8a2c")'.length,
+      via: "prop",
+    });
+  });
+
+  it("matches prop case-insensitively", () => {
+    expect(sexpr(astOf('PROP("x")'))).toBe("prop:x");
+    expect(sexpr(astOf('Prop("x")'))).toBe("prop:x");
+  });
+
+  it("accepts single-quoted ids and string escapes", () => {
+    expect(sexpr(astOf("prop('abc')"))).toBe("prop:abc");
+    expect(sexpr(astOf('prop("a\\"b")'))).toBe('prop:a"b');
+  });
+
+  it("parses prop() inside larger expressions with correct spans", () => {
+    const source = '1 + prop("f1") * 2';
+    const ast = astOf(source);
+    expect(sexpr(ast)).toBe("(+ 1 (* prop:f1 2))");
+    if (ast.kind !== "binary" || ast.right.kind !== "binary") {
+      throw new Error("expected nested binary");
+    }
+    expect(ast.right.left).toMatchObject({
+      kind: "property",
+      position: source.indexOf("prop"),
+      end: source.indexOf(")") + 1,
+    });
+  });
+
+  it("rejects prop with no argument", () => {
+    expect(errorOf("prop()").message).toContain("one quoted field id");
+  });
+
+  it("rejects prop with two arguments", () => {
+    expect(errorOf('prop("a", "b")').message).toContain(
+      "exactly one quoted field id"
+    );
+  });
+
+  it("rejects non-string arguments", () => {
+    expect(errorOf("prop(42)").message).toContain("one quoted field id");
+    expect(errorOf("prop(thisPage.X)").message).toContain(
+      "one quoted field id"
+    );
+  });
+
+  it("rejects a bare prop identifier", () => {
+    expect(errorOf("prop").message).toContain('"prop(…)"');
+  });
+
+  it("rejects an unclosed prop reference", () => {
+    expect(errorOf('prop("a"').message).toContain('close the "prop(…)"');
   });
 });
 

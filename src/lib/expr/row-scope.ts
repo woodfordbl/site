@@ -1,8 +1,9 @@
 /**
  * Bridges database rows into the expression engine: builds an
- * {@link ExprScope} that resolves `thisPage.X` / `thisRow.X` property
- * references against a row's fields and cell values by field NAME
- * (case-insensitive, trimmed).
+ * {@link ExprScope} that resolves property references against a row's fields
+ * and cell values — by exact field ID first (the canonical `prop("<id>")`
+ * form), then by field NAME (case-insensitive, trimmed) for the
+ * `thisPage.X` / `thisRow.X` display forms.
  */
 
 import {
@@ -25,7 +26,12 @@ export interface CreateRowScopeOptions {
   now?: () => Date;
 }
 
-function normalizeName(name: string): string {
+/**
+ * Name-reference normalization shared with the source rewriters
+ * (`ref-rewrite.ts`) so "which field does this name mean" never drifts
+ * between evaluation and canonicalization.
+ */
+export function normalizePropertyName(name: string): string {
   return name.trim().toLowerCase();
 }
 
@@ -62,10 +68,11 @@ function cellToExprValue(
 }
 
 /**
- * Create an {@link ExprScope} over one row. Property lookup is by field name
- * (case-insensitive, trimmed); when two fields share a normalized name the
- * first in schema order wins. Unknown names return an `ExprError` value —
- * never a throw.
+ * Create an {@link ExprScope} over one row. Property lookup tries an exact
+ * field ID match first (canonical `prop("<id>")` references survive renames),
+ * then falls back to field name (case-insensitive, trimmed); when two fields
+ * share a normalized name the first in schema order wins. Unknown references
+ * return an `ExprError` value — never a throw.
  *
  * Formula fields are EXCLUDED from the scope in v1: referencing one returns
  * "Formulas cannot reference other formulas yet". This guarantees cycle
@@ -80,15 +87,18 @@ export function createRowScope(
   values: Record<string, DatabaseCellValue>,
   opts?: CreateRowScopeOptions
 ): ExprScope {
+  const fieldsById = new Map<string, DatabaseField>();
   const fieldsByName = new Map<string, DatabaseField>();
   for (const field of fields) {
-    const key = normalizeName(field.name);
+    fieldsById.set(field.id, field);
+    const key = normalizePropertyName(field.name);
     if (!fieldsByName.has(key)) {
       fieldsByName.set(key, field);
     }
   }
   const getProperty = (name: string): ExprValue => {
-    const field = fieldsByName.get(normalizeName(name));
+    const field =
+      fieldsById.get(name) ?? fieldsByName.get(normalizePropertyName(name));
     if (field === undefined) {
       return exprError(`Unknown property "${name}"`);
     }

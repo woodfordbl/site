@@ -40,15 +40,23 @@ export interface ExprLiteralNode {
 }
 
 /**
- * Property reference — `thisPage.Name`, `thisRow.Name`, or the bracket form
- * `thisPage["Property With Spaces"]`. `thisPage` and `thisRow` are synonyms
- * for the same scope, so the AST keeps only the property name; resolution
- * against a scope is by field name (case-insensitive, trimmed).
+ * Property reference — `thisPage.Name`, `thisRow.Name`, the bracket form
+ * `thisPage["Property With Spaces"]`, or the canonical id form
+ * `prop("<fieldId>")`. `thisPage` and `thisRow` are synonyms for the same
+ * scope, so the AST keeps only the raw reference string (`name`); resolution
+ * against a scope is by exact field id first, then field name
+ * (case-insensitive, trimmed) — see `createRowScope`. `via` records how the
+ * reference was written so source rewriters (`ref-rewrite.ts`) can translate
+ * between the two spellings; `position`/`end` span the whole reference in
+ * the source (end-exclusive) for the same reason.
  */
 export interface ExprPropertyNode {
+  /** End offset (exclusive) of the full reference in the source. */
+  end: number;
   kind: "property";
   name: string;
   position: number;
+  via: "prop" | "scope";
 }
 
 /** Unary operation (numeric negation or boolean `not`). */
@@ -94,6 +102,13 @@ export type ParseExpressionResult =
 
 /** Scope roots accepted before `.property` / `["property"]` (lowercased). */
 const SCOPE_ROOTS = new Set(["thispage", "thisrow"]);
+
+/**
+ * The canonical reference form `prop("<fieldId>")` (lowercased). Syntax, not
+ * a catalog function — it parses straight to a property node, so it never
+ * appears in `EXPR_FUNCTIONS` or the UI catalog.
+ */
+const PROP_ROOT = "prop";
 
 /**
  * Longest accepted expression source, in characters. Longer input becomes a
@@ -379,6 +394,9 @@ class Parser {
     if (SCOPE_ROOTS.has(lower)) {
       return this.parsePropertyAccess(token.value, token.position);
     }
+    if (lower === PROP_ROOT) {
+      return this.parsePropReference(token.position);
+    }
     if (this.matchPunct("(") !== null) {
       return this.parseCallArgs(token.value, token.position);
     }
@@ -398,7 +416,13 @@ class Parser {
         );
       }
       this.advance();
-      return { kind: "property", name: name.value, position };
+      return {
+        kind: "property",
+        name: name.value,
+        position,
+        end: name.position + name.value.length,
+        via: "scope",
+      };
     }
     if (this.matchPunct("[") !== null) {
       const name = this.peek();
@@ -409,14 +433,47 @@ class Parser {
         );
       }
       this.advance();
-      this.expectPunct("]", "to close the property access");
-      return { kind: "property", name: name.value, position };
+      const close = this.expectPunct("]", "to close the property access");
+      return {
+        kind: "property",
+        name: name.value,
+        position,
+        end: close.position + 1,
+        via: "scope",
+      };
     }
     const found = this.peek();
     throw new ExprParseFailure(
       `Expected "." or "[" after "${root}"`,
       found.position
     );
+  }
+
+  private parsePropReference(position: number): ExprNode {
+    this.expectPunct("(", 'to open the "prop(…)" reference');
+    const name = this.peek();
+    if (name.type !== "string") {
+      throw new ExprParseFailure(
+        `prop() expects one quoted field id, like prop("abc123") — got ${describeToken(name)}`,
+        name.position
+      );
+    }
+    this.advance();
+    const comma = this.matchPunct(",");
+    if (comma !== null) {
+      throw new ExprParseFailure(
+        "prop() expects exactly one quoted field id",
+        comma.position
+      );
+    }
+    const close = this.expectPunct(")", 'to close the "prop(…)" reference');
+    return {
+      kind: "property",
+      name: name.value,
+      position,
+      end: close.position + 1,
+      via: "prop",
+    };
   }
 
   private parseCallArgs(name: string, position: number): ExprNode {

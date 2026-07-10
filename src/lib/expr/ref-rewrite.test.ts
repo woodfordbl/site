@@ -1,0 +1,178 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  canonicalizeExpression,
+  humanizeExpression,
+} from "@/lib/expr/ref-rewrite.ts";
+import type { DatabaseField } from "@/lib/schemas/database.ts";
+
+const FIELDS: DatabaseField[] = [
+  { id: "f-price", name: "Price", type: "number" },
+  { id: "f-unit", name: "Unit Count", type: "number" },
+  { id: "f-quote", name: 'A "B" \\C', type: "text" },
+];
+
+/** FIELDS plus a duplicate normalized name (first in schema order wins). */
+const CLASHING_FIELDS: DatabaseField[] = [
+  ...FIELDS,
+  { id: "f-dup1", name: "Score", type: "number" },
+  { id: "f-dup2", name: "score", type: "text" },
+];
+
+describe("canonicalizeExpression", () => {
+  it("rewrites dot references to prop() by field id", () => {
+    expect(canonicalizeExpression("thisPage.Price * 2", FIELDS)).toEqual({
+      text: 'prop("f-price") * 2',
+      changed: true,
+      unresolved: [],
+    });
+  });
+
+  it("resolves names case-insensitively and via thisRow", () => {
+    expect(canonicalizeExpression("thisrow.price", FIELDS).text).toBe(
+      'prop("f-price")'
+    );
+    expect(canonicalizeExpression('THISPAGE["  price  "]', FIELDS).text).toBe(
+      'prop("f-price")'
+    );
+  });
+
+  it("rewrites bracket references", () => {
+    expect(
+      canonicalizeExpression('thisPage["Unit Count"] + 1', FIELDS).text
+    ).toBe('prop("f-unit") + 1');
+  });
+
+  it("rewrites bracket names containing quotes and backslashes", () => {
+    expect(
+      canonicalizeExpression('thisPage["A \\"B\\" \\\\C"]', FIELDS).text
+    ).toBe('prop("f-quote")');
+  });
+
+  it("leaves unresolvable names untouched and reports them", () => {
+    expect(
+      canonicalizeExpression("thisPage.Nope + thisPage.Price", FIELDS)
+    ).toEqual({
+      text: 'thisPage.Nope + prop("f-price")',
+      changed: true,
+      unresolved: ["Nope"],
+    });
+  });
+
+  it("returns changed: false when every name is unresolvable", () => {
+    expect(canonicalizeExpression("thisPage.Nope", FIELDS)).toEqual({
+      text: "thisPage.Nope",
+      changed: false,
+      unresolved: ["Nope"],
+    });
+  });
+
+  it("resolves duplicate normalized names to the first field in schema order", () => {
+    expect(canonicalizeExpression("thisPage.SCORE", CLASHING_FIELDS).text).toBe(
+      'prop("f-dup1")'
+    );
+  });
+
+  it("leaves already-canonical references untouched", () => {
+    expect(canonicalizeExpression('prop("f-price") + 1', FIELDS)).toEqual({
+      text: 'prop("f-price") + 1',
+      changed: false,
+      unresolved: [],
+    });
+  });
+
+  it("handles mixed canonical and name input", () => {
+    expect(
+      canonicalizeExpression('prop("f-price") + thisPage["Unit Count"]', FIELDS)
+        .text
+    ).toBe('prop("f-price") + prop("f-unit")');
+  });
+
+  it("returns unparseable input unchanged", () => {
+    expect(canonicalizeExpression("1 +", FIELDS)).toEqual({
+      text: "1 +",
+      changed: false,
+      unresolved: [],
+    });
+    expect(canonicalizeExpression("", FIELDS).changed).toBe(false);
+  });
+
+  it("splices multiple references position-correctly", () => {
+    expect(
+      canonicalizeExpression(
+        "thisPage.Price + thisPage.Price * thisPage.Price",
+        FIELDS
+      ).text
+    ).toBe('prop("f-price") + prop("f-price") * prop("f-price")');
+  });
+
+  it("rewrites references nested inside calls without reformatting", () => {
+    expect(
+      canonicalizeExpression(
+        "round( max(thisPage.Price,  thisPage.Price) , 2 )",
+        FIELDS
+      ).text
+    ).toBe('round( max(prop("f-price"),  prop("f-price")) , 2 )');
+  });
+});
+
+describe("humanizeExpression", () => {
+  it("rewrites prop() to dot references for bare-identifier names", () => {
+    expect(humanizeExpression('prop("f-price") * 2', FIELDS)).toBe(
+      "thisPage.Price * 2"
+    );
+  });
+
+  it("uses the bracket form for non-identifier names", () => {
+    expect(humanizeExpression('prop("f-unit")', FIELDS)).toBe(
+      'thisPage["Unit Count"]'
+    );
+  });
+
+  it("escapes quotes and backslashes in bracket names", () => {
+    expect(humanizeExpression('prop("f-quote")', FIELDS)).toBe(
+      'thisPage["A \\"B\\" \\\\C"]'
+    );
+  });
+
+  it("keeps unknown ids as visibly broken prop() references", () => {
+    expect(humanizeExpression('prop("f-gone") + prop("f-price")', FIELDS)).toBe(
+      'prop("f-gone") + thisPage.Price'
+    );
+  });
+
+  it("leaves name references and unparseable input unchanged", () => {
+    expect(humanizeExpression("thisPage.Price", FIELDS)).toBe("thisPage.Price");
+    expect(humanizeExpression("1 +", FIELDS)).toBe("1 +");
+  });
+});
+
+describe("round-trips", () => {
+  it("humanize(canonicalize(t)) equals the humanize-normalized form", () => {
+    const cases: [string, string][] = [
+      ["thispage.price * 2", "thisPage.Price * 2"],
+      [
+        'thisRow["unit count"] + thisPage.PRICE',
+        'thisPage["Unit Count"] + thisPage.Price',
+      ],
+      ['thisPage["A \\"B\\" \\\\C"]', 'thisPage["A \\"B\\" \\\\C"]'],
+      [
+        "if(thisPage.Price > 10, thisPage.Price, 0)",
+        "if(thisPage.Price > 10, thisPage.Price, 0)",
+      ],
+    ];
+    for (const [input, normalized] of cases) {
+      const canonical = canonicalizeExpression(input, FIELDS).text;
+      expect(humanizeExpression(canonical, FIELDS)).toBe(normalized);
+      // Normalized display text re-canonicalizes to the same stored form.
+      expect(canonicalizeExpression(normalized, FIELDS).text).toBe(canonical);
+    }
+  });
+
+  it("canonicalize(humanize(c)) returns canonical text unchanged", () => {
+    const canonical = 'prop("f-price") + prop("f-unit") * prop("f-quote")';
+    expect(
+      canonicalizeExpression(humanizeExpression(canonical, FIELDS), FIELDS).text
+    ).toBe(canonical);
+  });
+});

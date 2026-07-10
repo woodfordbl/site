@@ -106,6 +106,49 @@ describe("createRowScope name resolution", () => {
   });
 });
 
+describe("createRowScope id resolution", () => {
+  it("resolves prop() references by exact field id", () => {
+    expect(run('prop("f-name")')).toBe("Ada");
+    expect(run('prop("f-amount") * 2')).toBe(25);
+  });
+
+  it("prefers an exact id match over a name match", () => {
+    const clashing: DatabaseField[] = [
+      { id: "score", name: "Points", type: "number" },
+      { id: "other", name: "score", type: "text" },
+    ];
+    const parsed = parseExpression('prop("score")');
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+    const scope = createRowScope(clashing, { score: 7, other: "text" });
+    expect(evaluateExpression(parsed.ast, scope)).toBe(7);
+  });
+
+  it("falls back to name matching for prop() refs that are not ids", () => {
+    expect(run('prop("Amount")')).toBe(12.5);
+  });
+
+  it("errors on unknown ids without throwing", () => {
+    expect(errorMessage(run('prop("f-gone")'))).toBe(
+      'Unknown property "f-gone"'
+    );
+  });
+
+  it("keeps the formula-on-formula guard for id references", () => {
+    expect(errorMessage(run('prop("f-total")'))).toBe(
+      "Formulas cannot reference other formulas yet"
+    );
+  });
+
+  it("does not trim or case-fold id matches", () => {
+    // "F-NAME" is no field id; it falls through to name matching and misses.
+    expect(errorMessage(run('prop("F-NAME")'))).toBe(
+      'Unknown property "F-NAME"'
+    );
+  });
+});
+
 describe("createRowScope value mapping", () => {
   it("maps text, url, number, and checkbox directly", () => {
     expect(run("thisPage.Name")).toBe("Ada");

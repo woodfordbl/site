@@ -113,6 +113,7 @@ import {
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import { compareManualOrder } from "@/lib/databases/row-sort.ts";
+import { canonicalizeExpression } from "@/lib/expr/ref-rewrite.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
@@ -425,8 +426,10 @@ interface FormulaExpressionEditorProps {
  * and the FIRST row's values (manual/table order) into the shared
  * `FormulaEditorPanel` so it can render the Properties section and the live
  * preview. Mounted only while the submenu is open, so the live queries here
- * cost nothing for non-formula columns. Save writes the expression only when
- * it changed (evaluation is read-time — the overlay recomputes on write).
+ * cost nothing for non-formula columns. The panel emits field-id canonical
+ * text; Save writes it only when it differs from the stored expression's
+ * canonical form (evaluation is read-time — the overlay recomputes on
+ * write).
  */
 function FormulaExpressionEditor({
   databaseId,
@@ -435,6 +438,7 @@ function FormulaExpressionEditor({
 }: FormulaExpressionEditorProps) {
   const database = useDatabase(databaseId);
   const rows = useDatabaseRows(databaseId);
+  const fields = database?.fields ?? [];
   const firstRow = useMemo(
     () => (rows.length > 0 ? [...rows].sort(compareManualOrder)[0] : null),
     [rows]
@@ -443,10 +447,12 @@ function FormulaExpressionEditor({
   return (
     <FormulaEditorPanel
       expression={field.expression}
-      fields={database?.fields ?? []}
+      fields={fields}
       firstRowValues={firstRow?.values ?? null}
       onSave={(expression) => {
-        if (expression !== field.expression) {
+        if (
+          expression !== canonicalizeExpression(field.expression, fields).text
+        ) {
           updateDatabaseField(
             databaseId,
             field.id,

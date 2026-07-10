@@ -20,8 +20,10 @@ import {
   BLOCK_COLLECTION_STORAGE_KEY,
   pageShardedBlockStorage,
 } from "@/db/collections/page-sharded-block-storage.ts";
+import { migrateFormulaExpressionsToIdRefs } from "@/db/queries/formula-ref-migration.ts";
 import { scheduleSnapshotPurge } from "@/db/snapshots/snapshot-purge.ts";
 import { reconcileDirtyPagesCookie } from "@/lib/local-draft/reconcile-dirty-pages-cookie.ts";
+import type { DatabaseField } from "@/lib/schemas/database.ts";
 import {
   localDatabaseRowSchema,
   localDatabaseSchema,
@@ -226,6 +228,25 @@ function startLocalCollectionsSync(): void {
   localFavoritesCollection.startSyncImmediate();
   localDatabasesCollection.startSyncImmediate();
   localDatabaseRowsCollection.startSyncImmediate();
+  // Canonicalize stored formula references (name → field id) now that the
+  // databases collection is live. The writer is injected to keep the module
+  // graph acyclic; direct collection updates persist like any other
+  // localStorage-collection write.
+  migrateFormulaExpressionsToIdRefs(
+    localDatabasesCollection.toArray,
+    (databaseId, fieldId, expression) => {
+      localDatabasesCollection.update(databaseId, (draft) => {
+        draft.fields = draft.fields.map((field) =>
+          field.id === fieldId
+            ? // The migration only ever targets formula fields, so the merged
+              // object stays a valid union member.
+              ({ ...field, expression } as DatabaseField)
+            : field
+        );
+        draft.updatedAt = new Date().toISOString();
+      });
+    }
+  );
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;

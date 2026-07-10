@@ -44,10 +44,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderPanel(onSave = vi.fn()) {
+function renderPanel(onSave = vi.fn(), expression = "") {
   render(
     <FormulaEditorPanel
-      expression=""
+      expression={expression}
       fields={FIELDS}
       firstRowValues={FIRST_ROW_VALUES}
       onSave={onSave}
@@ -123,7 +123,7 @@ describe("FormulaEditorPanel", () => {
     expect(screen.getByText(PARSE_ERROR_RE)).toBeDefined();
   });
 
-  it("hands the draft to onSave", async () => {
+  it("hands the field-id canonical draft to onSave", async () => {
     const onSave = renderPanel();
     await flushFrames();
 
@@ -131,6 +131,29 @@ describe("FormulaEditorPanel", () => {
     fireEvent.change(textarea, { target: { value: "thisPage.Price * 2" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenCalledWith("thisPage.Price * 2");
+    expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
+  });
+
+  it("hands unparseable drafts to onSave unchanged", async () => {
+    const onSave = renderPanel();
+    await flushFrames();
+
+    const textarea = screen.getByLabelText("Formula expression");
+    fireEvent.change(textarea, { target: { value: "1 +" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith("1 +");
+  });
+
+  it("humanizes stored canonical expressions into the draft", async () => {
+    renderPanel(vi.fn(), 'prop("f-price") * prop("f-qty")');
+    await flushFrames();
+
+    const textarea = screen.getByLabelText(
+      "Formula expression"
+    ) as HTMLTextAreaElement;
+    expect(textarea.value).toBe('thisPage.Price * thisPage["Unit Count"]');
+    // Name resolution keeps the live preview working on the display text.
+    expect(screen.getByText("Preview: 40")).toBeDefined();
   });
 });
