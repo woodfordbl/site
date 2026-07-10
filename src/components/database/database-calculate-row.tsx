@@ -71,12 +71,17 @@ export function DatabaseCalculateRow({
       )}
       style={{ width: totalWidth, minWidth: "100%" }}
     >
-      {/* Leading selection-lane spacer — sticky so it stays under the
-          select header while horizontally scrolling. */}
+      {/* Leading selection-lane spacer — sticky at the lane's viewport
+          offset (`--grid-bleed`, set on the grid root) so it stays under
+          the select header while horizontally scrolling. Gutter modes keep
+          it transparent like the lane above it. */}
       {rowSelectLeadingWidth > 0 ? (
         <div
           aria-hidden
-          className="sticky left-0 z-10 h-9 shrink-0 bg-background"
+          className={cn(
+            "sticky left-(--grid-bleed) z-10 h-9 shrink-0",
+            !rowSelectGutter && "bg-background"
+          )}
           style={{ width: rowSelectLeadingWidth }}
         />
       ) : null}
@@ -97,7 +102,8 @@ export function DatabaseCalculateRow({
             key={column.field.id}
             style={{
               width: column.width,
-              // Pinned offsets already include the selection column width.
+              // Pinned offsets already include the gutter bleed and the
+              // selection column width (see the grid's `gridColumns` memo).
               left: column.left ?? undefined,
             }}
           >
