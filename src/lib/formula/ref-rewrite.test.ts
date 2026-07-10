@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalizeExpression,
+  canonicalPropertyReference,
+  canonicalPropertyRewrites,
   humanizeExpression,
 } from "@/lib/formula/ref-rewrite.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
@@ -196,5 +198,49 @@ describe("round-trips", () => {
     expect(
       canonicalizeExpression(humanizeExpression(canonical, FIELDS), FIELDS).text
     ).toBe(canonical);
+  });
+
+  it("humanize∘canonicalize is display-stable, parseable or not", () => {
+    // The panel's textarea shows humanize(draft) and re-canonicalizes on
+    // every change; these are the invariants that keep the visible text from
+    // jumping under the caret (unparseable text passes through BOTH
+    // rewriters, and resolvable display references round-trip to
+    // themselves).
+    const displayStable = [
+      "thisPage.Price * 2",
+      'if(thisPage["Unit Count"] > 3, 1, 0)',
+      "thisPage.Price +",
+      'prop("f-price',
+      "1 +",
+      "",
+    ];
+    for (const text of displayStable) {
+      expect(
+        humanizeExpression(canonicalizeExpression(text, FIELDS).text, FIELDS)
+      ).toBe(text);
+    }
+  });
+});
+
+describe("canonicalPropertyRewrites", () => {
+  it("returns the individual span rewrites in source order", () => {
+    const text = 'thisPage.Price + thisPage["Unit Count"]';
+    expect(canonicalPropertyRewrites(text, FIELDS)).toEqual([
+      { start: 0, end: 14, text: 'prop("f-price")' },
+      { start: 17, end: text.length, text: 'prop("f-unit")' },
+    ]);
+  });
+
+  it("is empty for unparseable text, canonical text, and unresolved names", () => {
+    expect(canonicalPropertyRewrites("1 +", FIELDS)).toEqual([]);
+    expect(canonicalPropertyRewrites('prop("f-price")', FIELDS)).toEqual([]);
+    expect(canonicalPropertyRewrites("thisPage.Ghost", FIELDS)).toEqual([]);
+  });
+});
+
+describe("canonicalPropertyReference", () => {
+  it("escapes quotes and backslashes in the id", () => {
+    expect(canonicalPropertyReference("f-price")).toBe('prop("f-price")');
+    expect(canonicalPropertyReference('a"b\\c')).toBe('prop("a\\"b\\\\c")');
   });
 });

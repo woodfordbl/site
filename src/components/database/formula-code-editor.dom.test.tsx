@@ -1,5 +1,12 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { EditorView } from "@codemirror/view";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +14,12 @@ import {
   FormulaCodeEditor,
   type FormulaCodeEditorHandle,
 } from "@/components/database/formula-code-editor.tsx";
+import type { DatabaseField } from "@/lib/schemas/database.ts";
+
+const FIELDS: DatabaseField[] = [
+  { id: "f-price", name: "Price", type: "number" },
+  { id: "f-qty", name: "Unit Count", type: "number" },
+];
 
 /**
  * jsdom has no layout: CodeMirror measures text through
@@ -57,6 +70,7 @@ describe("FormulaCodeEditor", () => {
     render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        fields={FIELDS}
         onChange={vi.fn()}
         value={"thisPage.Price + round(1.5) // note"}
       />
@@ -82,6 +96,7 @@ describe("FormulaCodeEditor", () => {
     const { rerender } = render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        fields={FIELDS}
         onChange={onChange}
         value="1 + 2"
       />
@@ -91,6 +106,7 @@ describe("FormulaCodeEditor", () => {
     rerender(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        fields={FIELDS}
         onChange={onChange}
         value="3 * 4"
       />
@@ -106,6 +122,7 @@ describe("FormulaCodeEditor", () => {
       <FormulaCodeEditor
         ariaLabel="Formula expression"
         editorRef={editorRef}
+        fields={FIELDS}
         onChange={onChange}
         value=""
       />
@@ -128,6 +145,7 @@ describe("FormulaCodeEditor", () => {
     render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        fields={FIELDS}
         onChange={vi.fn()}
         onSubmit={onSubmit}
         value="1 + 2"
@@ -147,6 +165,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          fields={FIELDS}
           onChange={vi.fn()}
           value=""
         />
@@ -160,5 +179,166 @@ describe("FormulaCodeEditor", () => {
     } finally {
       document.removeEventListener("keydown", onOuterKeyDown);
     }
+  });
+
+  describe("property chips", () => {
+    function chip(): HTMLElement {
+      const element = document.querySelector(".cm-formula-chip");
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("chip not rendered");
+      }
+      return element;
+    }
+
+    it("renders prop() spans as schema-labeled chips that relabel on rename", () => {
+      const { rerender } = render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'prop("f-price") * 2'}
+        />
+      );
+
+      // The chip shows the CURRENT field name + its type icon; the raw id is
+      // replaced, not displayed.
+      expect(chip().textContent).toBe("Price");
+      expect(chip().getAttribute("aria-label")).toBe("Property Price");
+      expect(chip().querySelector("svg")).not.toBeNull();
+      expect(cmContent().textContent).not.toContain("f-price");
+
+      // A rename while the editor is open relabels the chip in place.
+      rerender(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          fields={[{ id: "f-price", name: "Cost", type: "number" }]}
+          onChange={vi.fn()}
+          value={'prop("f-price") * 2'}
+        />
+      );
+      expect(chip().textContent).toBe("Cost");
+    });
+
+    it("renders unknown ids as destructive Unknown-property chips", () => {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'prop("f-ghost") + 1'}
+        />
+      );
+
+      expect(chip().textContent).toBe("f-ghost");
+      expect(chip().title).toBe("Unknown property");
+      expect(chip().className).toContain("text-destructive");
+      expect(chip().className).toContain("line-through");
+    });
+
+    it("is atomic: backspace removes the whole reference, arrows skip over it", () => {
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          fields={FIELDS}
+          onChange={onChange}
+          value={'1 + prop("f-price")'}
+        />
+      );
+
+      const editor = document.querySelector(".cm-editor") as HTMLElement;
+      const view = EditorView.findFromDOM(editor);
+      const doc = '1 + prop("f-price")';
+
+      // Caret starts at the end of the doc. One ArrowLeft jumps across the
+      // whole chip — no intermediate positions inside the canonical text —
+      // and one ArrowRight jumps back over it.
+      fireEvent.keyDown(cmContent(), { key: "ArrowLeft" });
+      expect(view?.state.selection.main.head).toBe("1 + ".length);
+      fireEvent.keyDown(cmContent(), { key: "ArrowRight" });
+      expect(view?.state.selection.main.head).toBe(doc.length);
+
+      // One Backspace at its right edge deletes the entire reference.
+      fireEvent.keyDown(cmContent(), { key: "Backspace" });
+      expect(onChange).toHaveBeenLastCalledWith("1 + ");
+      expect(document.querySelector(".cm-formula-chip")).toBeNull();
+    });
+
+    it("insert-then-type round trip: canonical insert chips immediately, caret lands after", () => {
+      const editorRef = createRef<FormulaCodeEditorHandle>();
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          editorRef={editorRef}
+          fields={FIELDS}
+          onChange={onChange}
+          value=""
+        />
+      );
+
+      const reference = 'prop("f-price")';
+      act(() => {
+        editorRef.current?.insertText(reference, reference.length);
+      });
+      expect(chip().textContent).toBe("Price");
+
+      // The caret-offset convention put the caret after the chip, so the
+      // next insert continues the expression.
+      act(() => {
+        editorRef.current?.insertText(" + 2", " + 2".length);
+      });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-price") + 2');
+      expect(chip().textContent).toBe("Price");
+    });
+
+    it("converts a completed typed reference once the caret leaves its span", async () => {
+      const editorRef = createRef<FormulaCodeEditorHandle>();
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          editorRef={editorRef}
+          fields={FIELDS}
+          onChange={onChange}
+          value=""
+        />
+      );
+
+      // Caret ends at the reference's right edge — still "mid-word", so the
+      // canonicalizer must leave it alone.
+      act(() => {
+        editorRef.current?.insertText(
+          "thisPage.Price",
+          "thisPage.Price".length
+        );
+      });
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 250);
+          })
+      );
+      expect(document.querySelector(".cm-formula-chip")).toBeNull();
+      expect(onChange).toHaveBeenLastCalledWith("thisPage.Price");
+
+      // Typing past the reference moves the caret off its span; the debounce
+      // then converts it into a canonical chip without moving the caret's
+      // logical position.
+      act(() => {
+        editorRef.current?.insertText(" + 1", " + 1".length);
+      });
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+      });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-price") + 1');
+
+      // The mapped caret still points at the end of the doc: an appended
+      // insert lands after the converted text.
+      act(() => {
+        editorRef.current?.insertText(" + 2", " + 2".length);
+      });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-price") + 1 + 2');
+    });
   });
 });

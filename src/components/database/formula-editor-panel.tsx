@@ -44,6 +44,7 @@ import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalizeExpression,
+  canonicalPropertyReference,
   humanizeExpression,
 } from "@/lib/formula/ref-rewrite.ts";
 import { createFormulaRowScope } from "@/lib/formula/row-scope.ts";
@@ -60,22 +61,32 @@ import { cn } from "@/lib/utils.ts";
  * reference of Properties / Functions / Operators that insert at the caret,
  * with a fixed-height detail strip documenting the focused entry.
  * Width-fluid so it works both in the desktop column-menu submenu (~360px)
- * and full-width in the mobile menu drawer. Stored expressions are field-id
- * canonical (`prop("<id>")`); the panel humanizes them into name references
- * for the draft and re-canonicalizes on Save, so users only ever see names.
- * Save is blocked only by parse errors — checker diagnostics warn but still
- * save (the overlay degrades per-cell, never crashes). Save hands the
- * canonical text to the caller's `onSave` unconditionally (so the menu can
- * close); the caller compares against the stored expression and skips the
- * write for unchanged drafts.
+ * and full-width in the mobile menu drawer.
+ *
+ * The `draft` state is the CANONICAL expression (`prop("<id>")` — exactly
+ * what gets stored), so parse/check/preview/save all operate on it directly.
+ * The CM6 editor edits the canonical text natively and renders property
+ * spans as schema-labeled chips; the plain textarea (coarse pointers, and
+ * the Suspense/error fallback on fine ones) displays
+ * `humanizeExpression(draft)` and re-canonicalizes on every change —
+ * humanize∘canonicalize is display-stable, so users still only ever see
+ * names there. Save is blocked only by parse errors — checker diagnostics
+ * warn but still save (the overlay degrades per-cell, never crashes). Save
+ * runs one final `canonicalizeExpression` (idempotent; catches any typed
+ * name refs the editor hasn't converted yet) and hands the canonical text to
+ * the caller's `onSave` unconditionally (so the menu can close); the caller
+ * compares against the stored expression and skips the write for unchanged
+ * drafts.
  *
  * On fine pointers the expression input is the lazy-loaded CodeMirror 6
- * editor (formula-code-editor.tsx) — syntax highlighting, soft wrap,
+ * editor (formula-code-editor.tsx) — chips, syntax highlighting, soft wrap,
  * Mod+Enter saves — with the plain textarea as the Suspense fallback while
  * the CM6 chunk loads. Coarse pointers keep the textarea entirely (mobile
  * gets its own treatment in a later phase). Caret insertion from the
- * reference list goes through the editor's imperative handle when mounted,
- * else through the textarea's selection range.
+ * reference list goes through the editor's imperative handle when mounted
+ * (properties insert the canonical `prop("<id>")` text, which renders as a
+ * chip with the caret placed after it), else through the textarea's
+ * selection range (properties insert the display `thisPage.Name` form).
  */
 
 /**
@@ -216,7 +227,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 export interface FormulaEditorPanelProps {
-  /** Stored (canonical) expression the draft starts from, humanized on open. */
+  /** Stored (canonical) expression the draft starts from. */
   expression: string;
   /**
    * Full database schema: non-formula fields become the Properties section,
@@ -236,9 +247,9 @@ export function FormulaEditorPanel({
   firstRowValues,
   onSave,
 }: FormulaEditorPanelProps): ReactNode {
-  const [draft, setDraft] = useState(() =>
-    humanizeExpression(expression, fields)
-  );
+  // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
+  // natively; the textarea path humanizes for display below.
+  const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<ReferenceDetail | null>(null);
   const coarsePointer = useIsCoarsePrimaryPointer();
@@ -259,12 +270,23 @@ export function FormulaEditorPanel({
     };
   }, []);
 
+  // What the textarea shows: the canonical draft with `prop("<id>")`
+  // references humanized to names. humanize∘canonicalize is display-stable
+  // (both pass unparseable text through, and resolvable name references
+  // round-trip to themselves), so typing never sees the text change under
+  // the caret.
+  const displayDraft = useMemo(
+    () => humanizeExpression(draft, fields),
+    [draft, fields]
+  );
+
   /**
-   * Splice `text` into the draft at the caret (replacing any selection),
-   * then restore focus with the caret `caretOffset` characters into the
-   * inserted text. Goes through the CM6 handle when the code editor is
-   * mounted; otherwise through the textarea's selection range (which
-   * survives blur).
+   * Splice `text` at the caret (replacing any selection), then restore focus
+   * with the caret `caretOffset` characters into the inserted text. Goes
+   * through the CM6 handle when the code editor is mounted (its doc is the
+   * canonical draft); otherwise through the textarea's selection range
+   * (which survives blur) — those offsets index the DISPLAY text, so the
+   * splice happens there and the result re-canonicalizes into the draft.
    */
   const insertAtCaret = (text: string, caretOffset: number) => {
     const editor = codeEditorRef.current;
@@ -273,9 +295,11 @@ export function FormulaEditorPanel({
       return;
     }
     const element = textareaRef.current;
-    const start = element?.selectionStart ?? draft.length;
-    const end = element?.selectionEnd ?? draft.length;
-    setDraft(draft.slice(0, start) + text + draft.slice(end));
+    const start = element?.selectionStart ?? displayDraft.length;
+    const end = element?.selectionEnd ?? displayDraft.length;
+    const nextDisplay =
+      displayDraft.slice(0, start) + text + displayDraft.slice(end);
+    setDraft(canonicalizeExpression(nextDisplay, fields).text);
     const caret = start + caretOffset;
     requestAnimationFrame(() => {
       const target = textareaRef.current;
@@ -284,6 +308,22 @@ export function FormulaEditorPanel({
         target.setSelectionRange(caret, caret);
       }
     });
+  };
+
+  /**
+   * Property rows insert per surface: the CM6 editor takes the canonical
+   * `prop("<id>")` text directly (it renders as an atomic chip, caret placed
+   * after it); the textarea takes the display `thisPage.Name` form.
+   */
+  const insertPropertyReference = (propertyField: DatabaseField) => {
+    const editor = codeEditorRef.current;
+    if (editor !== null) {
+      const canonical = canonicalPropertyReference(propertyField.id);
+      editor.insertText(canonical, canonical.length);
+      return;
+    }
+    const display = formulaPropertyReference(propertyField.name);
+    insertAtCaret(display, display.length);
   };
 
   const trimmed = draft.trim();
@@ -393,13 +433,13 @@ export function FormulaEditorPanel({
       autoComplete="off"
       className="max-h-32 min-h-16 font-mono text-xs md:text-xs"
       onChange={(event) => {
-        setDraft(event.target.value);
+        setDraft(canonicalizeExpression(event.target.value, fields).text);
       }}
       onKeyDown={stopMenuKeys}
       placeholder="thisPage.Price * 1.1"
       ref={textareaRef}
       spellCheck={false}
-      value={draft}
+      value={displayDraft}
     />
   );
 
@@ -417,6 +457,7 @@ export function FormulaEditorPanel({
               ariaLabel="Formula expression"
               autoFocus
               editorRef={codeEditorRef}
+              fields={fields}
               onChange={setDraft}
               onSubmit={save}
               placeholder="thisPage.Price * 1.1"
@@ -465,7 +506,7 @@ export function FormulaEditorPanel({
                 }}
                 key={propertyField.id}
                 onInsert={() => {
-                  insertAtCaret(reference, reference.length);
+                  insertPropertyReference(propertyField);
                 }}
                 onShowDetail={setDetail}
               >

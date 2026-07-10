@@ -186,8 +186,34 @@ describe("FormulaEditorPanel", () => {
       "Formula expression"
     ) as HTMLTextAreaElement;
     expect(textarea.value).toBe('thisPage.Price * thisPage["Unit Count"]');
-    // Name resolution keeps the live preview working on the display text.
+    // The draft behind the display text is canonical, so the preview
+    // evaluates ids directly (no humanize round-trip).
     expect(screen.getByText("Preview: 40")).toBeDefined();
+  });
+
+  it("keeps the textarea display stable across the humanize∘canonicalize loop", async () => {
+    const onSave = renderPanel();
+    await flushFrames();
+    const textarea = screen.getByLabelText(
+      "Formula expression"
+    ) as HTMLTextAreaElement;
+
+    // Parseable display text round-trips to itself: each change is
+    // canonicalized into the draft and humanized back for display.
+    fireEvent.change(textarea, { target: { value: "thisPage.Price + 1" } });
+    expect(textarea.value).toBe("thisPage.Price + 1");
+
+    // Unparseable text passes through BOTH rewriters unchanged (identity),
+    // so mid-keystroke states never jump.
+    fireEvent.change(textarea, { target: { value: "thisPage.Price +" } });
+    expect(textarea.value).toBe("thisPage.Price +");
+
+    // Pasted canonical text is legible: the display humanizes it while the
+    // saved draft stays canonical.
+    fireEvent.change(textarea, { target: { value: 'prop("f-qty") * 2' } });
+    expect(textarea.value).toBe('thisPage["Unit Count"] * 2');
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledWith('prop("f-qty") * 2');
   });
 
   describe("code editor (fine pointers)", () => {
@@ -229,22 +255,59 @@ describe("FormulaEditorPanel", () => {
       expect(document.querySelector("textarea")).toBeNull();
 
       // Reference-list insertion goes through the editor handle: function
-      // first (caret lands inside the parens), then a property at the caret.
+      // first (caret lands inside the parens), then a property at the caret —
+      // inserted as canonical `prop("<id>")` text, which renders as an atomic
+      // chip labeled with the field's name.
       fireEvent.click(screen.getByText("average"));
       fireEvent.click(screen.getByText("Price"));
       await waitFor(() => {
         expect(screen.getByText("Preview: 10")).toBeDefined();
       });
+      const chip = document.querySelector(".cm-formula-chip");
+      expect(chip?.textContent).toBe("Price");
 
       // Mod+Enter saves (same gate as the button)…
       const content = document.querySelector(".cm-content") as HTMLElement;
       fireEvent.keyDown(content, { key: "Enter", ctrlKey: true });
       expect(onSave).toHaveBeenCalledWith('average(prop("f-price"))');
 
-      // …and so does the Save button, canonicalizing the humanized draft.
+      // …and so does the Save button (the draft is already canonical; the
+      // final canonicalize pass is an idempotent no-op).
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
       expect(onSave).toHaveBeenCalledTimes(2);
       expect(onSave).toHaveBeenLastCalledWith('average(prop("f-price"))');
+    });
+
+    it("relabels open chips when a field is renamed while editing", async () => {
+      const expression = 'prop("f-price") * 2';
+      const panelWith = (fields: DatabaseField[]) => (
+        <FormulaEditorPanel
+          expression={expression}
+          fields={fields}
+          firstRowValues={FIRST_ROW_VALUES}
+          onSave={vi.fn()}
+        />
+      );
+      const { rerender } = render(panelWith(FIELDS));
+
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+      });
+      expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+        "Price"
+      );
+
+      // Rename lands as a new fields prop; the open chip relabels in place.
+      rerender(
+        panelWith(
+          FIELDS.map((field) =>
+            field.id === "f-price" ? { ...field, name: "Cost" } : field
+          )
+        )
+      );
+      expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+        "Cost"
+      );
     });
 
     it("degrades to the fallback when the editor fails to mount", () => {

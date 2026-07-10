@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   type FormulaHighlightSpan,
+  formulaPropIdSpans,
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
 
@@ -132,5 +133,33 @@ describe("highlightFormula", () => {
     expect(highlightFormula("")).toEqual([]);
     expect(highlightFormula("@@@@")).toEqual([]);
     expect(highlightFormula("\\")).toEqual([]);
+  });
+});
+
+describe("formulaPropIdSpans", () => {
+  it("locates canonical prop() spans with unescaped ids", () => {
+    const source = 'prop("f-a") + thisPage.B * prop("f-c\\"d")';
+    expect(formulaPropIdSpans(source)).toEqual([
+      { start: 0, end: 11, id: "f-a" },
+      { start: 27, end: source.length, id: 'f-c"d' },
+    ]);
+  });
+
+  it("skips incomplete or non-string prop calls", () => {
+    expect(formulaPropIdSpans('prop("open')).toEqual([]);
+    expect(formulaPropIdSpans("prop(name)")).toEqual([]);
+    expect(formulaPropIdSpans('prop("a", "b")')).toEqual([]);
+  });
+
+  it("still scans the lexable prefix of unlexable input", () => {
+    expect(formulaPropIdSpans('prop("f-a") + "open')).toEqual([
+      { start: 0, end: 11, id: "f-a" },
+    ]);
+  });
+
+  it("matches unparseable-but-lexable drafts (mid-keystroke chips)", () => {
+    expect(formulaPropIdSpans('prop("f-a") +')).toEqual([
+      { start: 0, end: 11, id: "f-a" },
+    ]);
   });
 });

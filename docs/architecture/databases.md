@@ -307,12 +307,14 @@ participate in the view machinery like stored columns:
   header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
   diagnostics warn but save (cells degrade per row, never crash). On fine pointers the
   input is a lazy-loaded CodeMirror 6 editor with tokenizer-driven syntax highlighting
+  and atomic, schema-labeled property chips over the canonical `prop("<id>")` text
   ([formula-language — Editor panel](./formula-language.md#editor-panel)); coarse
   pointers keep a plain textarea.
 - **Id-canonical references** — stored expressions reference fields by id
-  (`prop("<fieldId>")`), humanized to `thisPage.Name` in the builder and
-  re-canonicalized on Save, so field renames never break formulas; a startup migration
-  rewrites legacy name-form expressions
+  (`prop("<fieldId>")`), so field renames never break formulas; the CM6 editor shows
+  each reference as a chip labeled with the field's current name, while the textarea
+  path humanizes to `thisPage.Name` for display and re-canonicalizes on change; a
+  startup migration rewrites legacy name-form expressions
   ([formula-language — Property references](./formula-language.md#property-references-id-canonical)).
 
 ## Draft-proxy invariant (mutations)

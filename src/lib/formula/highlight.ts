@@ -39,6 +39,16 @@ export interface FormulaHighlightSpan {
   start: number;
 }
 
+/**
+ * One canonical `prop("<id>")` reference span; `id` is the unescaped string
+ * argument (the raw field id). `start` inclusive, `end` exclusive.
+ */
+export interface FormulaPropIdSpan {
+  end: number;
+  id: string;
+  start: number;
+}
+
 /** Word operators (`and`/`or`/`not`), matched case-insensitively like the parser. */
 const WORD_OPERATORS = new Set(["and", "or", "not"]);
 
@@ -225,6 +235,43 @@ function tailKind(
     return "comment";
   }
   return null;
+}
+
+/** Tokens of `source`'s lexable prefix (whole stream when fully lexable). */
+function lexablePrefixTokens(source: string): readonly FormulaToken[] {
+  const lexed = tokenizeFormula(source);
+  if (lexed.ok) {
+    return lexed.tokens;
+  }
+  const prefix = tokenizeFormula(source.slice(0, lexed.error.position));
+  return prefix.ok ? prefix.tokens : [];
+}
+
+/**
+ * Locate every canonical `prop("<id>")` reference in `source` using the same
+ * token-level lookahead the highlighter (and parser) applies, so chip
+ * placement can't drift from what highlights as a property. Never throws;
+ * on unlexable input the lexable prefix is still scanned (references stay
+ * chips while an unterminated string is open later in the doc).
+ */
+export function formulaPropIdSpans(source: string): FormulaPropIdSpan[] {
+  const tokens = lexablePrefixTokens(source);
+  const spans: FormulaPropIdSpan[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (
+      token.type !== "identifier" ||
+      token.value.toLowerCase() !== FORMULA_PROP_ROOT
+    ) {
+      continue;
+    }
+    const [open, arg, close] = tokens.slice(index + 1, index + 4);
+    if (isPunct(open, "(") && arg?.type === "string" && isPunct(close, ")")) {
+      spans.push({ start: token.position, end: close.end, id: arg.value });
+      index += 3;
+    }
+  }
+  return spans;
 }
 
 /**

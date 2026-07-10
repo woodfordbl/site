@@ -167,22 +167,39 @@ hidden). `formulaDisplayInfo` supplies the parse-error badge on column headers.
 ## Editor panel
 
 [`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx)
-(the column menu's Edit-property builder): the stored canonical expression is
-**humanized** into name references on open and **re-canonicalized** on Save, so users
-only ever see names. Status line shows the first parse error or checker diagnostic
-(with 1-based character position) or "✓ Valid" plus the result-type badge; a live
-preview evaluates the draft against the first row through the same scope the overlay
-uses (other formulas resolve to their computed values). Save is blocked only by parse
-errors — checker diagnostics warn but save, since the overlay degrades per-cell.
-The searchable Properties / Functions / Operators reference inserts at the caret,
-docs sourced from the catalog.
+(the column menu's Edit-property builder): the draft state is the **canonical**
+expression (`prop("<id>")` — exactly what gets stored), so parse/check/preview/save
+operate on it directly; Save runs one final idempotent `canonicalizeExpression` to
+catch typed name refs the editor hasn't converted yet. The plain textarea (coarse
+pointers, and the fallback on fine ones) displays `humanizeExpression(draft)` and
+re-canonicalizes on every change — humanize∘canonicalize is display-stable, so
+textarea users still only ever see names. Status line shows the first parse error or
+checker diagnostic (with a 1-based character position into the canonical text) or
+"✓ Valid" plus the result-type badge; a live preview evaluates the draft against
+the first row through the same scope the overlay uses (other formulas resolve to
+their computed values). Save is blocked only by parse errors — checker diagnostics
+warn but save, since the overlay degrades per-cell. The searchable Properties /
+Functions / Operators reference inserts at the caret, docs sourced from the catalog.
 
 On fine pointers the expression input is
 [`formula-code-editor.tsx`](../../src/components/database/formula-code-editor.tsx),
 a CodeMirror 6 editor **lazy-loaded** at the panel boundary (`React.lazy`, plain
 textarea as the Suspense fallback) so CM6 stays out of the main bundle; coarse
-pointers keep the textarea until the mobile editor phase. Soft-wrapped, autogrowing,
-no line numbers; Mod+Enter saves; every key except Escape stops propagating so the
+pointers keep the textarea until the mobile editor phase. The CM6 doc is the
+canonical text; canonical property spans (located token-level by
+`formulaPropIdSpans`) render as **atomic schema-labeled chips**:
+`Decoration.replace` widgets (TokenChip-styled DOM built without React — field-type
+icon from `DATABASE_FIELD_TYPE_ICON_NODES`, emoji custom icons inline, `tabler:`
+custom glyphs fall back to the type icon) provided as `EditorView.atomicRanges`, so
+arrows skip a chip, backspace deletes the whole reference, and selection treats it
+as one unit. Chip labels recompute from the live schema (a rename while the editor
+is open relabels chips in place); unknown ids render a destructive strikethrough
+"Unknown property" chip. Property rows insert canonical `prop("<id>")` text with
+the caret placed after the chip; hand-typed `thisPage.X` stays plain highlighted
+text and converts to a chip (via `canonicalPropertyRewrites`) once the doc parses,
+on a short debounce, and only when the caret isn't touching the reference's span —
+conversion never fights the caret mid-word. Soft-wrapped, autogrowing, no line
+numbers; Mod+Enter saves; every key except Escape stops propagating so the
 enclosing menu's typeahead never steals keystrokes. Caret insertion from the
 reference list goes through the editor's imperative `editorRef` handle. Syntax
 highlighting is **not** a second grammar:
@@ -190,8 +207,9 @@ highlighting is **not** a second grammar:
 spans by running the real tokenizer plus the parser's own lookahead rules (scope
 roots, `prop("…")`, call syntax, word operators; comments recovered from inter-token
 gaps), so editor colors can't drift from what the parser accepts, and
-unparseable-mid-keystroke drafts still highlight. Chips, fused autocomplete, the
-info card, and diagnostics-in-editor are later stages (proposal §6).
+unparseable-mid-keystroke drafts still highlight. Fused autocomplete, the chip
+option menu, the info card, and diagnostics-in-editor (squiggles) are later stages
+(proposal §6).
 
 ## Templates
 

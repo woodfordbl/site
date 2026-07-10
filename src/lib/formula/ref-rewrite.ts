@@ -42,19 +42,23 @@ function propertyNodesOf(text: string): FormulaPropertyNode[] | null {
 }
 
 /** The canonical reference source for a field id (quotes/backslashes escaped). */
-function propReference(fieldId: string): string {
+export function canonicalPropertyReference(fieldId: string): string {
   const escaped = fieldId.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
   return `prop("${escaped}")`;
 }
 
-interface SpanRewrite {
+/** One source splice: replace `[start, end)` with `text`. */
+export interface FormulaSpanRewrite {
   end: number;
   start: number;
   text: string;
 }
 
 /** Splice replacements right-to-left so earlier spans' offsets stay valid. */
-function spliceRewrites(source: string, rewrites: SpanRewrite[]): string {
+function spliceRewrites(
+  source: string,
+  rewrites: readonly FormulaSpanRewrite[]
+): string {
   const ordered = [...rewrites].sort((a, b) => b.start - a.start);
   let result = source;
   for (const rewrite of ordered) {
@@ -100,13 +104,42 @@ export function canonicalizeExpression(
   text: string,
   fields: readonly DatabaseField[]
 ): CanonicalizeExpressionResult {
+  const collected = collectCanonicalRewrites(text, fields);
+  if (collected === null) {
+    return { text, changed: false, unresolved: [] };
+  }
+  const { rewrites, unresolved } = collected;
+  if (rewrites.length === 0) {
+    return { text, changed: false, unresolved };
+  }
+  return { text: spliceRewrites(text, rewrites), changed: true, unresolved };
+}
+
+/**
+ * The individual span rewrites {@link canonicalizeExpression} would apply, in
+ * source order, without applying them — the CM6 editor converts completed
+ * display references to chips one span at a time so it can skip any span the
+ * caret is still touching. Empty for unparseable input.
+ */
+export function canonicalPropertyRewrites(
+  text: string,
+  fields: readonly DatabaseField[]
+): FormulaSpanRewrite[] {
+  return collectCanonicalRewrites(text, fields)?.rewrites ?? [];
+}
+
+/** Shared core of the canonicalizers; `null` when `text` doesn't parse. */
+function collectCanonicalRewrites(
+  text: string,
+  fields: readonly DatabaseField[]
+): { rewrites: FormulaSpanRewrite[]; unresolved: string[] } | null {
   const nodes = propertyNodesOf(text);
   if (nodes === null) {
-    return { text, changed: false, unresolved: [] };
+    return null;
   }
   const fieldIds = new Set(fields.map((field) => field.id));
   const byName = fieldsByNormalizedName(fields);
-  const rewrites: SpanRewrite[] = [];
+  const rewrites: FormulaSpanRewrite[] = [];
   const unresolved: string[] = [];
   for (const node of nodes) {
     if (node.via === "prop" && fieldIds.has(node.name)) {
@@ -122,13 +155,10 @@ export function canonicalizeExpression(
     rewrites.push({
       start: node.position,
       end: node.end,
-      text: propReference(field.id),
+      text: canonicalPropertyReference(field.id),
     });
   }
-  if (rewrites.length === 0) {
-    return { text, changed: false, unresolved };
-  }
-  return { text: spliceRewrites(text, rewrites), changed: true, unresolved };
+  return { rewrites, unresolved };
 }
 
 /**
@@ -148,7 +178,7 @@ export function humanizeExpression(
     return text;
   }
   const fieldsById = new Map(fields.map((field) => [field.id, field]));
-  const rewrites: SpanRewrite[] = [];
+  const rewrites: FormulaSpanRewrite[] = [];
   for (const node of nodes) {
     if (node.via !== "prop") {
       continue;

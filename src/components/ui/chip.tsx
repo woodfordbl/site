@@ -158,4 +158,11 @@ function TokenChip({
   });
 }
 
-export { Chip, ChipButton, ChipSegment, chipVariants, TokenChip };
+export {
+  Chip,
+  ChipButton,
+  ChipSegment,
+  chipVariants,
+  TokenChip,
+  tokenChipVariants,
+};
