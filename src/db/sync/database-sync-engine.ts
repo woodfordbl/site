@@ -1,4 +1,5 @@
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
+import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import {
   applyStreamTick,
   applySyncSnapshot,
@@ -88,6 +89,8 @@ interface ScheduleEntry {
    */
   pruneOnNextSnapshot: boolean;
   running: boolean;
+  /** Fingerprint of non-symbol config (currency); a change resets history. */
+  scalarFingerprint: string;
   /** JSON fingerprint of `database.source`; a change resumes a halted entry. */
   sourceFingerprint: string;
   timer?: ReturnType<typeof setTimeout>;
@@ -347,6 +350,34 @@ function configListFingerprint(
     }
   }
   return JSON.stringify(listValues);
+}
+
+/**
+ * Fingerprint of the connector config EXCLUDING `list` (symbol) fields — the
+ * config that changes the value *scale* of captured samples (e.g. display
+ * currency, which re-quotes prices). A change here invalidates the captured
+ * field history (old-currency samples must not stitch with new-currency ones).
+ */
+function configScalarFingerprint(
+  database: LocalDatabase,
+  connector: ConnectorDefinition
+): string {
+  if (database.source?.kind !== "connector") {
+    return "";
+  }
+  const config = database.source.config ?? {};
+  const listKeys = new Set(
+    (connector.configFields ?? [])
+      .filter((field) => field.kind === "list")
+      .map((field) => field.key)
+  );
+  const scalar: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (!listKeys.has(key)) {
+      scalar[key] = value;
+    }
+  }
+  return JSON.stringify(scalar);
 }
 
 const streams = new Map<string, StreamHandle>();
@@ -786,6 +817,7 @@ function ensureSchedule(database: LocalDatabase): void {
   );
   const sourceFingerprint = JSON.stringify(database.source);
   const listFingerprint = configListFingerprint(database, connector);
+  const scalarFingerprint = configScalarFingerprint(database, connector);
   const existing = entries.get(database.id);
   if (existing) {
     // Config/interval edits take effect on the next pass; an in-flight or
@@ -794,8 +826,19 @@ function ensureSchedule(database: LocalDatabase): void {
     existing.minIntervalMs = connector.pollPolicy.minMs;
     const sourceChanged = existing.sourceFingerprint !== sourceFingerprint;
     const listChanged = existing.listFingerprint !== listFingerprint;
+    const scalarChanged = existing.scalarFingerprint !== scalarFingerprint;
     existing.sourceFingerprint = sourceFingerprint;
     existing.listFingerprint = listFingerprint;
+    existing.scalarFingerprint = scalarFingerprint;
+    // A scale-changing config edit (e.g. display currency) invalidates the
+    // captured field history — old-currency samples must not stitch with new
+    // ones. Drop it so the chart rebuilds from the new-currency backfill +
+    // captures. Derived data; failures are non-fatal.
+    if (scalarChanged) {
+      clearDatabaseFieldHistory(database.id).catch(() => {
+        // Best-effort — history is rebuildable from backfill + capture.
+      });
+    }
     // A source edit refetches now (e.g. a currency change refetches in the new
     // quote currency), instead of waiting for the next scheduled pass. Other
     // database edits (rename, view tweaks) don't change the fingerprint, so
@@ -823,6 +866,7 @@ function ensureSchedule(database: LocalDatabase): void {
     pendingWhileHidden: false,
     pruneOnNextSnapshot: false,
     running: false,
+    scalarFingerprint,
     sourceFingerprint,
   });
   // First pass runs immediately — conditional requests make cold runs cheap.

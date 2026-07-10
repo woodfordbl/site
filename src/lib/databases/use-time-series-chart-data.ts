@@ -72,7 +72,10 @@ async function loadBackfill(
   if (!connector.fetchHistory) {
     return [];
   }
-  const key = `${databaseId}:${request.externalId}:${request.resolution}`;
+  // Include the display currency: it changes the fetched pair (e.g. BTCUSDT vs
+  // BTCEUR), so cached candles from the old currency must not be reused.
+  const currency = String(ctx.config.currency ?? "");
+  const key = `${databaseId}:${request.externalId}:${request.resolution}:${currency}`;
   const cached = backfillCache.get(key);
   if (cached && cached.from <= request.from) {
     return cached.points;
