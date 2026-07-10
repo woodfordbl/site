@@ -4,34 +4,32 @@ import { lazy, Suspense } from "react";
 
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
 
-const ComponentShowcase = import.meta.env.DEV
+const OgPlayground = import.meta.env.DEV
   ? lazy(() =>
-      import("@/components/dev/component-showcase.tsx").then((module) => ({
-        default: module.ComponentShowcase,
+      import("@/components/dev/og-playground.tsx").then((module) => ({
+        default: module.OgPlayground,
       }))
     )
   : null;
 
-function DevPage() {
-  if (!ComponentShowcase) {
+function OgPlaygroundRoute() {
+  if (!OgPlayground) {
     throw notFound();
   }
 
   return (
     <Suspense fallback={null}>
-      <ComponentShowcase />
+      <OgPlayground />
     </Suspense>
   );
 }
 
-export const Route = createFileRoute("/dev")({
+export const Route = createFileRoute("/dev_/og")({
   beforeLoad: () => {
     if (!import.meta.env.DEV) {
       throw notFound();
     }
   },
-  head: () => ({
-    meta: buildNoIndexMeta("Dev"),
-  }),
-  component: DevPage,
+  head: () => ({ meta: buildNoIndexMeta("Dev") }),
+  component: OgPlaygroundRoute,
 });
