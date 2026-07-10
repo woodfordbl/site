@@ -256,12 +256,6 @@ export const githubReposConnector: ConnectorDefinition<GithubReposConfig> = {
       kind: "text",
     },
   ],
-  auth: {
-    kind: "token",
-    label: "Personal access token",
-    help: "Optional fine-grained PAT with public-read-only access and no account permissions. Raises the rate limit from 60 to 5,000 requests/hour; unchanged polls (304) are free.",
-    required: false,
-  },
   fields() {
     return GITHUB_REPO_FIELDS;
   },

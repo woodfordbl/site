@@ -4,7 +4,6 @@ import {
   HTTP_STATUS_UNAUTHORIZED,
 } from "@/lib/connectors/http.ts";
 import {
-  type ConnectorAuthSpec,
   ConnectorError,
   type ConnectorFetchContext,
   type ConnectorFetchResult,
@@ -321,16 +320,5 @@ function subscribe(
     socket.close();
   };
 }
-
-/**
- * BYO-token auth for the Finnhub-backed stocks transport. Only consulted for
- * the unified "Live" connector's `stocks` type; the `crypto` type is keyless.
- */
-export const finnhubAuth: ConnectorAuthSpec = {
-  kind: "token",
-  label: "Finnhub API token",
-  help: "Optional. Leave blank to use the site's shared key (routed through a same-origin proxy). Provide your own free finnhub.io token to connect directly instead.",
-  required: false,
-};
 
 export { fetchRows as finnhubFetchRows, subscribe as finnhubSubscribe };

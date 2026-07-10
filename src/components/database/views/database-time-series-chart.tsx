@@ -274,7 +274,9 @@ export function DatabaseTimeSeriesChart({
 
   const axes = (
     <>
-      {chart.showGrid === false ? null : <CartesianGrid vertical={false} />}
+      {chart.showGrid === false ? null : (
+        <CartesianGrid vertical={chart.gridVertical === true} />
+      )}
       <XAxis
         allowDataOverflow
         axisLine={false}
@@ -290,6 +292,7 @@ export function DatabaseTimeSeriesChart({
       <YAxis
         axisLine={false}
         domain={["auto", "auto"]}
+        tickCount={chart.gridCount}
         tickFormatter={formatValue}
         tickLine={false}
         width="auto"

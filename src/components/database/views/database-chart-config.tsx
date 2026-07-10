@@ -136,6 +136,15 @@ function PaletteSwatch({ palette }: { palette: ChartPaletteId }): ReactNode {
   );
 }
 
+/** Grid-line count choices (horizontal gridlines / Y ticks); "auto" clears. */
+const GRID_COUNT_OPTIONS: RadioSubmenuOption[] = [
+  { value: "auto", label: "Auto" },
+  ...["3", "4", "5", "6", "8", "10", "12"].map((n) => ({
+    value: n,
+    label: n,
+  })),
+];
+
 /** Field picker option with the field's (custom or type) icon. */
 function fieldOption(field: DatabaseField): RadioSubmenuOption {
   const FieldIcon = resolveFieldIcon(field);
@@ -253,6 +262,29 @@ function ChartToggleItems({
           Grid lines
         </DropdownMenuSwitchItem>
       )}
+      {mark !== "pie" && chart.showGrid !== false ? (
+        <>
+          <DropdownMenuSwitchItem
+            checked={chart.gridVertical === true}
+            onCheckedChange={(next) => {
+              write({ gridVertical: next });
+            }}
+          >
+            Vertical grid
+          </DropdownMenuSwitchItem>
+          <RadioSubmenu
+            currentLabel={chart.gridCount ? String(chart.gridCount) : "Auto"}
+            label="Grid line count"
+            onValueChange={(value) => {
+              write({
+                gridCount: value === "auto" ? undefined : Number(value),
+              });
+            }}
+            options={GRID_COUNT_OPTIONS}
+            value={chart.gridCount ? String(chart.gridCount) : "auto"}
+          />
+        </>
+      ) : null}
     </>
   );
 }

@@ -333,6 +333,10 @@ export const databaseTableViewConfigSchema = z.object({
       /** Per-series color overrides: series key → chart token index 1-5. */
       colorOverrides: z.record(z.string(), z.number()).optional(),
       showGrid: z.boolean().optional(),
+      /** Draw vertical grid lines too (absent = horizontal only). */
+      gridVertical: z.boolean().optional(),
+      /** Target number of horizontal grid lines (absent = auto). 2–12. */
+      gridCount: z.number().int().min(2).max(12).optional(),
       stacked: z.boolean().optional(),
     })
     .optional(),

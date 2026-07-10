@@ -5,7 +5,6 @@ import {
 } from "@/lib/connectors/binance-stream.ts";
 import { coingeckoCryptoFetchRows } from "@/lib/connectors/coingecko-markets.ts";
 import {
-  finnhubAuth,
   finnhubFetchRows,
   finnhubSubscribe,
 } from "@/lib/connectors/finnhub-quotes.ts";
@@ -218,7 +217,6 @@ export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
       options: CURRENCY_OPTIONS,
     },
   ],
-  auth: finnhubAuth,
   fields(config) {
     return config.type === "crypto"
       ? cryptoFields(config)

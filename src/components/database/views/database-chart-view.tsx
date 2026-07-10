@@ -233,7 +233,9 @@ function CartesianChart({
   const stacked = chart.stacked === true;
   const showGrid = chart.showGrid !== false;
 
-  const grid = showGrid ? <CartesianGrid vertical={false} /> : null;
+  const grid = showGrid ? (
+    <CartesianGrid vertical={chart.gridVertical === true} />
+  ) : null;
   const xAxis = (
     <XAxis
       axisLine={false}
@@ -247,6 +249,7 @@ function CartesianChart({
     <YAxis
       allowDecimals={aggregate !== "count"}
       axisLine={false}
+      tickCount={chart.gridCount}
       tickFormatter={formatValue}
       tickLine={false}
       width={48}

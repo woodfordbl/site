@@ -322,12 +322,6 @@ export const githubPrsConnector: ConnectorDefinition<GithubPrsConfig> = {
       kind: "text",
     },
   ],
-  auth: {
-    kind: "token",
-    label: "Personal access token",
-    help: "Optional fine-grained PAT with read access to the repository. Raises the rate limit from 60 to 5,000 requests/hour; unchanged polls (304) are free. Tokens are stored per connector, so paste the same PAT you use for the GitHub repositories connector if you have one.",
-    required: false,
-  },
   fields() {
     return GITHUB_PR_FIELDS;
   },

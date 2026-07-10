@@ -317,12 +317,6 @@ export const githubIssuesConnector: ConnectorDefinition<GithubIssuesConfig> = {
       kind: "text",
     },
   ],
-  auth: {
-    kind: "token",
-    label: "Personal access token",
-    help: "Optional fine-grained PAT with read access to the repository. Raises the rate limit from 60 to 5,000 requests/hour; unchanged polls (304) are free. Tokens are stored per connector, so paste the same PAT you use for other GitHub connectors if you have one.",
-    required: false,
-  },
   fields() {
     return GITHUB_ISSUE_FIELDS;
   },
