@@ -1,16 +1,16 @@
 "use client";
 
-import { type KeyboardEvent, useCallback } from "react";
+import { useCallback } from "react";
 
-import { Button } from "@/components/ui/button.tsx";
+import { ConfirmDialogFooter } from "@/components/ui/confirm-dialog-footer.tsx";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 
 interface DeleteDatabaseConfirmDialogProps {
   databaseName: string;
@@ -33,41 +33,27 @@ export function DeleteDatabaseConfirmDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        onConfirm();
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        handleCancel();
-      }
-    },
-    [handleCancel, onConfirm]
-  );
-
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent onKeyDownCapture={handleKeyDown} showCloseButton={false}>
+      <DialogContent
+        onKeyDownCapture={createConfirmDialogKeyDownHandler({
+          onCancel: handleCancel,
+          onConfirm,
+        })}
+        showCloseButton={false}
+      >
         <DialogHeader>
           <DialogTitle>Delete database?</DialogTitle>
           <DialogDescription>
             {`"${databaseName}" and all of its rows will be permanently deleted. Linked database blocks will show as not found.`}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button onClick={handleCancel} type="button" variant="outline">
-            Cancel
-          </Button>
-          <Button onClick={onConfirm} type="button" variant="destructive">
-            Delete
-          </Button>
-        </DialogFooter>
+        <ConfirmDialogFooter
+          confirmLabel="Delete"
+          confirmVariant="destructive"
+          onCancel={handleCancel}
+          onConfirm={onConfirm}
+        />
       </DialogContent>
     </Dialog>
   );
