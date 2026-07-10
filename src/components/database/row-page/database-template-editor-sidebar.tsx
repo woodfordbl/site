@@ -71,10 +71,6 @@ export function DatabaseTemplateEditorSidebar({
           <SidebarGroupContent>
             <div className="flex flex-col gap-1 px-2 py-1.5 text-sidebar-foreground/60 text-sm">
               <p>Rows in {database.name} start from this template.</p>
-              <p>
-                Type <code className="font-mono text-xs">{"{{"}</code> to insert
-                a property.
-              </p>
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
