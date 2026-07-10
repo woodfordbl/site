@@ -445,13 +445,23 @@ export function DatabaseTableView({
     return sortRowsForView(filtered, database.fields, view);
   }, [mergedRows, database, view, clockNow]);
 
-  // Row buckets for grouped views, built AFTER filter + sort so buckets
-  // preserve the view's row order; `null` keeps the grid ungrouped (also the
-  // fallback for stale/formula group-by fields). User-hidden buckets
-  // (`config.hiddenGroupKeys`, written by the group header context menu)
-  // drop out here — recovery lives in that menu and the Group submenu.
+  // Row buckets for grouped TABLE views (the grid is the only consumer —
+  // list/board/chart bodies bucket their own data or render flat), built
+  // AFTER filter + sort so buckets preserve the view's row order; `null`
+  // keeps the grid ungrouped (also the fallback for stale/formula group-by
+  // fields). User-hidden buckets (`config.hiddenGroupKeys`, written by the
+  // group header context menu) drop out here — recovery lives in that menu,
+  // the Group submenu, and the hidden-rows notice. Non-table views must stay
+  // `null` or the notice would count "hidden" rows the body still renders.
   const groups = useMemo<DatabaseRowGroup[] | null>(() => {
-    if (!(database && view && resolveGroupByField(database.fields, view))) {
+    if (
+      !(
+        database &&
+        view &&
+        view.type === "table" &&
+        resolveGroupByField(database.fields, view)
+      )
+    ) {
       return null;
     }
     const buckets = groupRowsForView(rows, database.fields, view);
