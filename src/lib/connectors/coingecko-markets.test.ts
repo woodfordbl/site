@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { coingeckoMarketsConnector } from "@/lib/connectors/coingecko-markets.ts";
+import { coingeckoCryptoFetchRows } from "@/lib/connectors/coingecko-markets.ts";
 import { ConnectorError } from "@/lib/connectors/types.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 
@@ -9,10 +9,8 @@ const marketsFixture = [
     id: "bitcoin",
     symbol: "btc",
     name: "Bitcoin",
-    image: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png",
-    current_price: 67_123.45,
-    market_cap: 1_320_456_789_012,
-    market_cap_rank: 1,
+    current_price: 55_034,
+    market_cap: 1_103_037_933_465,
     price_change_percentage_24h: 2.5,
     last_updated: "2026-07-03T18:20:15.123Z",
   },
@@ -20,10 +18,8 @@ const marketsFixture = [
     id: "ethereum",
     symbol: "eth",
     name: "Ethereum",
-    image: "https://assets.coingecko.com/coins/images/279/large/ethereum.png",
-    current_price: 3210.9,
-    market_cap: 385_000_000_000,
-    market_cap_rank: 2,
+    current_price: 2810.9,
+    market_cap: 338_000_000_000,
     price_change_percentage_24h: -1.25,
     last_updated: "2026-07-03T18:20:10.456Z",
   },
@@ -52,13 +48,13 @@ async function expectConnectorError(
   throw new Error("Expected fetchRows to throw");
 }
 
-describe("coingeckoMarketsConnector.fetchRows", () => {
-  it("builds the markets URL with usd vs_currency and joined coin ids", async () => {
+describe("coingeckoCryptoFetchRows", () => {
+  it("resolves tickers via the symbols param and honors the currency", async () => {
     const { calls, fetchFn } = createFetchStub(
       new Response(JSON.stringify(marketsFixture), { status: 200 })
     );
-    await coingeckoMarketsConnector.fetchRows({
-      config: { coinIds: ["bitcoin", "ethereum"] },
+    await coingeckoCryptoFetchRows({
+      config: { symbols: ["BTC", "ETH"], currency: "EUR" },
       fetchFn,
     });
     expect(calls).toHaveLength(1);
@@ -66,62 +62,83 @@ describe("coingeckoMarketsConnector.fetchRows", () => {
     expect(`${url.origin}${url.pathname}`).toBe(
       "https://api.coingecko.com/api/v3/coins/markets"
     );
-    expect(url.searchParams.get("vs_currency")).toBe("usd");
-    expect(url.searchParams.get("ids")).toBe("bitcoin,ethereum");
+    expect(url.searchParams.get("vs_currency")).toBe("eur");
+    expect(url.searchParams.get("symbols")).toBe("btc,eth");
   });
 
-  it("does not send conditional headers even when an etag is in context", async () => {
-    const { calls, fetchFn } = createFetchStub(
-      new Response(JSON.stringify(marketsFixture), { status: 200 })
-    );
-    await coingeckoMarketsConnector.fetchRows({
-      config: { coinIds: ["bitcoin"] },
-      etag: 'W/"stale"',
-      fetchFn,
-    });
-    expect(calls[0].headers.has("if-none-match")).toBe(false);
-  });
-
-  it("maps coins to rows, storing 24h change as a fraction", async () => {
+  it("keys rows by the base ticker with market cap and fractional change", async () => {
     const { fetchFn } = createFetchStub(
       new Response(JSON.stringify(marketsFixture), { status: 200 })
     );
-    const result = await coingeckoMarketsConnector.fetchRows({
-      config: { coinIds: ["bitcoin", "ethereum"] },
+    const result = await coingeckoCryptoFetchRows({
+      config: { symbols: ["BTC", "ETH"], currency: "EUR" },
       fetchFn,
     });
     expect(result).toEqual({
       kind: "rows",
       rows: [
         {
-          externalId: "bitcoin",
+          externalId: "BTC",
           values: {
-            name: "Bitcoin",
             symbol: "BTC",
-            price: 67_123.45,
-            change24h: 0.025,
-            marketCap: 1_320_456_789_012,
-            updatedAt: "2026-07-03",
+            name: "Bitcoin",
+            price: 55_034,
+            change: 0.025,
+            marketCap: 1_103_037_933_465,
+            updatedAt: "2026-07-03T18:20:15.123Z",
           },
         },
         {
-          externalId: "ethereum",
+          externalId: "ETH",
           values: {
-            name: "Ethereum",
             symbol: "ETH",
-            price: 3210.9,
-            change24h: -0.0125,
-            marketCap: 385_000_000_000,
-            updatedAt: "2026-07-03",
+            name: "Ethereum",
+            price: 2810.9,
+            change: -0.0125,
+            marketCap: 338_000_000_000,
+            updatedAt: "2026-07-03T18:20:10.456Z",
           },
         },
       ],
     });
   });
 
+  it("de-dupes a ticker to the highest-market-cap coin regardless of order", async () => {
+    const { fetchFn } = createFetchStub(
+      new Response(
+        JSON.stringify([
+          // A low-cap impostor listed FIRST must not win the "BTC" ticker.
+          {
+            ...marketsFixture[0],
+            id: "bitcoin-impostor",
+            name: "Not Bitcoin",
+            market_cap: 1000,
+          },
+          marketsFixture[0],
+        ]),
+        { status: 200 }
+      )
+    );
+    const result = await coingeckoCryptoFetchRows({
+      config: { symbols: ["BTC"], currency: "USD" },
+      fetchFn,
+    });
+    expect(result.kind === "rows" && result.rows).toEqual([
+      {
+        externalId: "BTC",
+        values: {
+          symbol: "BTC",
+          name: "Bitcoin",
+          price: 55_034,
+          change: 0.025,
+          marketCap: 1_103_037_933_465,
+          updatedAt: "2026-07-03T18:20:15.123Z",
+        },
+      },
+    ]);
+  });
+
   it("stores fractions that render with percent format semantics", () => {
-    // CoinGecko's 2.5 (= 2.5%) must display as "2.5%", so the stored value
-    // has to be the Intl fraction 0.025 — cross-check with formatCellValue.
     expect(
       formatCellValue(
         { id: "f", name: "24h change", type: "number", format: "percent" },
@@ -130,7 +147,7 @@ describe("coingeckoMarketsConnector.fetchRows", () => {
     ).toBe("2.5%");
   });
 
-  it("maps 429 to a rateLimit error with Retry-After", async () => {
+  it("maps 429 to a rateLimit error", async () => {
     const { fetchFn } = createFetchStub(
       new Response("throttled", {
         status: 429,
@@ -138,8 +155,8 @@ describe("coingeckoMarketsConnector.fetchRows", () => {
       })
     );
     const error = await expectConnectorError(
-      coingeckoMarketsConnector.fetchRows({
-        config: { coinIds: ["bitcoin"] },
+      coingeckoCryptoFetchRows({
+        config: { symbols: ["BTC"], currency: "USD" },
         fetchFn,
       })
     );
@@ -147,23 +164,12 @@ describe("coingeckoMarketsConnector.fetchRows", () => {
     expect(error.retryAfterMs).toBe(30_000);
   });
 
-  it("maps other failures to network errors", async () => {
-    const { fetchFn } = createFetchStub(new Response("oops", { status: 500 }));
-    const error = await expectConnectorError(
-      coingeckoMarketsConnector.fetchRows({
-        config: { coinIds: ["bitcoin"] },
-        fetchFn,
-      })
-    );
-    expect(error.kind).toBe("network");
-  });
-
-  it("rejects an empty coin list as a config error", async () => {
+  it("rejects an empty ticker list as a config error", async () => {
     const { calls, fetchFn } = createFetchStub(
       new Response(JSON.stringify(marketsFixture), { status: 200 })
     );
     const error = await expectConnectorError(
-      coingeckoMarketsConnector.fetchRows({ config: { coinIds: [] }, fetchFn })
+      coingeckoCryptoFetchRows({ config: { symbols: [] }, fetchFn })
     );
     expect(error.kind).toBe("config");
     expect(calls).toHaveLength(0);

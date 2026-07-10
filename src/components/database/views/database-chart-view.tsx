@@ -19,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { DatabaseTimeSeriesChart } from "@/components/database/views/database-time-series-chart.tsx";
 import {
   type ChartConfig,
   ChartContainer,
@@ -232,7 +233,9 @@ function CartesianChart({
   const stacked = chart.stacked === true;
   const showGrid = chart.showGrid !== false;
 
-  const grid = showGrid ? <CartesianGrid vertical={false} /> : null;
+  const grid = showGrid ? (
+    <CartesianGrid vertical={chart.gridVertical === true} />
+  ) : null;
   const xAxis = (
     <XAxis
       axisLine={false}
@@ -246,6 +249,7 @@ function CartesianChart({
     <YAxis
       allowDecimals={aggregate !== "count"}
       axisLine={false}
+      tickCount={chart.gridCount}
       tickFormatter={formatValue}
       tickLine={false}
       width={48}
@@ -446,6 +450,7 @@ function ChartEmptyState({
 }
 
 export function DatabaseChartView({
+  database,
   fields,
   mode,
   rows,
@@ -461,6 +466,22 @@ export function DatabaseChartView({
     () => buildChartData(fields, rows, chart),
     [fields, rows, chart]
   );
+
+  // Time-axis charts take a separate async-loaded path (history + backfill).
+  if (chart.xMode === "time") {
+    return (
+      <div className="relative">
+        <DatabaseTimeSeriesChart
+          chart={chart}
+          database={database}
+          fields={fields}
+          mode={mode}
+          rows={rows}
+          view={view}
+        />
+      </div>
+    );
+  }
 
   let body: ReactNode;
   if (!xField) {

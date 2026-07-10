@@ -23,6 +23,25 @@ import type {
  * diff can tell synced columns from user-added local ones).
  */
 export interface ConnectorFieldDef {
+  /**
+   * When true (numeric fields only), the seed builder tags the generated field
+   * with `captureHistory`, so the sync engine records each changed value into
+   * the forward-only field-history series that time-axis charts read.
+   */
+  captureHistory?: boolean;
+  /**
+   * ISO 4217 code driving the `currency` number format's symbol; only
+   * meaningful when `type` is `"number"` and `numberFormat` is `"currency"`.
+   * Absent ⇒ USD. Display-only — it never converts the underlying value.
+   */
+  currencyCode?: string;
+  /**
+   * Optional per-field glyph (`tabler:IconName` or emoji, matching page/field
+   * icons). Stamped onto the generated field's `icon` so synced columns show a
+   * meaningful glyph instead of the generic field-type icon. Absent ⇒ the
+   * field-type icon.
+   */
+  icon?: string;
   /** Display name for the generated database field. */
   name: string;
   /** Number display format; only meaningful when `type` is `"number"`. */
@@ -78,14 +97,88 @@ export type ConnectorFetchResult =
     }
   | { kind: "notModified" };
 
+/**
+ * Handlers the sync engine passes to a streaming connector. `onRows` delivers
+ * keyed upserts (same `ConnectorRow` shape as `fetchRows`) as ticks arrive —
+ * the engine coalesces and applies them by `externalId`. `onError` surfaces a
+ * `ConnectorError` (e.g. the socket dropped) for status/reconnect handling.
+ */
+export interface ConnectorStreamHandlers {
+  onError(err: ConnectorError): void;
+  onRows(rows: ConnectorRow[]): void;
+}
+
+/**
+ * Optional live-streaming capability on a connector. `subscribe` opens a
+ * real-time subscription (a WebSocket, directly to the provider for keyless
+ * feeds or to a same-origin proxy for keyed ones) and returns an unsubscribe
+ * that tears it down. The engine only subscribes while a view is watched in
+ * the visible leader tab; `fetchRows` still provides the initial snapshot
+ * seed and the unwatched-refresh fallback. Reconnect/backoff is the engine's
+ * job — `subscribe` should surface a drop via `onError` and return.
+ */
+export interface ConnectorStream {
+  subscribe(
+    ctx: ConnectorFetchContext,
+    handlers: ConnectorStreamHandlers
+  ): () => void;
+}
+
+/**
+ * Canonical candle resolutions a `fetchHistory` request can ask for. The
+ * time-series chart picks one from the visible window (finer for short windows,
+ * coarser for long ones); each connector maps these onto its provider's own
+ * interval names.
+ */
+export type HistoryResolution = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
+
+/** One historical-backfill request for a single row/symbol over a time range. */
+export interface ConnectorHistoryRequest {
+  /** Row identity to fetch history for (same as `ConnectorRow.externalId`). */
+  externalId: string;
+  /** Inclusive range start, epoch milliseconds. */
+  from: number;
+  /** Requested candle resolution. */
+  resolution: HistoryResolution;
+  /** Inclusive range end, epoch milliseconds. */
+  to: number;
+}
+
+/** One historical sample: `t` = epoch milliseconds, `v` = value (close price). */
+export interface ConnectorHistoryPoint {
+  t: number;
+  v: number;
+}
+
+/** One choice in a `"select"` config field. */
+export interface ConnectorConfigOption {
+  /** Human-readable label shown in the control. */
+  label: string;
+  /** Value written to the config key. */
+  value: string;
+}
+
 /** One input in the synced-database creation form, mapped to a config key. */
 export interface ConnectorConfigField {
+  /**
+   * When true, the field is fixed at creation time and shown read-only in the
+   * post-creation settings editor (e.g. an asset-type that would drift the
+   * schema if changed). Absent = editable after creation.
+   */
+  creationOnly?: boolean;
+  /** For `kind: "select"`, the value used when the draft is left empty. */
+  defaultValue?: string;
   /** Config object key this input writes. */
   key: string;
-  /** `"text"` = single string; `"list"` = comma/newline-separated string[]. */
-  kind: "text" | "list";
+  /**
+   * `"text"` = single string; `"list"` = comma/newline-separated string[];
+   * `"select"` = one value from a fixed `options` set.
+   */
+  kind: "text" | "list" | "select";
   /** Input label. */
   label: string;
+  /** Choices for `kind: "select"`; ignored for other kinds. */
+  options?: ConnectorConfigOption[];
   /** Placeholder / example value. */
   placeholder?: string;
 }
@@ -130,6 +223,17 @@ export interface ConnectorDefinition<
   /** One-line description for the connector picker. */
   description: string;
   /**
+   * Optional historical backfill for the connector's `captureHistory` value
+   * (e.g. price) over a time range. Present = time-axis charts can draw a
+   * "last 7 days" window before local capture exists, stitching provider
+   * candles (older) under the forward-only local series (finer, recent).
+   * Returns points ascending by `t`; transport-resolved like `fetchRows`.
+   */
+  fetchHistory?(
+    ctx: ConnectorFetchContext,
+    request: ConnectorHistoryRequest
+  ): Promise<ConnectorHistoryPoint[]>;
+  /**
    * Fetch one complete row snapshot. Throws `ConnectorError` on failure;
    * returns `notModified` on a 304 conditional hit.
    */
@@ -144,6 +248,13 @@ export interface ConnectorDefinition<
   pollPolicy: ConnectorPollPolicy;
   /** `sourceKey` of the title-like field (becomes `primaryFieldId`). */
   primarySourceKey: string;
+  /**
+   * Optional live-streaming capability. Present = the engine opens a real-time
+   * subscription (via {@link ConnectorStream.subscribe}) while the database is
+   * watched in the visible leader tab, applying ticks on top of the `fetchRows`
+   * seed. Absent = poll-only (the existing behavior).
+   */
+  stream?: ConnectorStream;
   /** Display title (also the default synced-database name). */
   title: string;
 }

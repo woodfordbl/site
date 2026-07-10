@@ -73,6 +73,13 @@ const databaseFieldBaseSchema = z.object({
    * user-added columns survive every refresh.
    */
   sourceKey: z.string().optional(),
+  /**
+   * When true on a numeric synced field, each changed value is appended to a
+   * forward-only `{ t, v }` time series in the field-history store
+   * (`src/db/history/field-history-store.ts`) as ticks/polls arrive. Powers
+   * time-axis charts; ignored for non-numeric fields.
+   */
+  captureHistory: z.boolean().optional(),
 });
 
 /**
@@ -89,6 +96,8 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
     decimals: z.number().int().min(0).max(6).optional(),
     /** Thousands separators in plain/integer displays; absent = on. */
     useGrouping: z.boolean().optional(),
+    /** ISO 4217 code for the `currency` format's symbol; absent = USD. */
+    currencyCode: z.string().optional(),
   }),
   databaseFieldBaseSchema.extend({ type: z.literal("checkbox") }),
   databaseFieldBaseSchema.extend({
@@ -294,6 +303,28 @@ export const databaseTableViewConfigSchema = z.object({
   chart: z
     .object({
       mark: z.enum(["bar", "line", "area", "pie"]).optional(),
+      /**
+       * X axis mode. `category` (default) buckets by a groupable field;
+       * `time` plots a continuous time axis from captured field history
+       * (`timeSeries` below), one series per synced row.
+       */
+      xMode: z.enum(["category", "time"]).optional(),
+      /** Time-axis settings — used when `xMode` is `time`. */
+      timeSeries: z
+        .object({
+          /** Captured numeric field (`captureHistory`) to plot over time. */
+          fieldId: z.string(),
+          /**
+           * Y scale. `absolute` (default) plots raw values; `percent`
+           * normalizes each series to its % change from the first in-window
+           * point, so symbols of very different magnitude share one axis and
+           * their movement is visible/comparable.
+           */
+          scale: z.enum(["absolute", "percent"]).optional(),
+          /** Visible window in ms (e.g. 7d); absent = the default window. */
+          windowMs: z.number().positive().optional(),
+        })
+        .optional(),
       /** X axis / category field. */
       xFieldId: z.string().optional(),
       /** Y aggregate: count of rows, or an aggregate over a number field. */
@@ -308,6 +339,10 @@ export const databaseTableViewConfigSchema = z.object({
       /** Per-series color overrides: series key → chart token index 1-5. */
       colorOverrides: z.record(z.string(), z.number()).optional(),
       showGrid: z.boolean().optional(),
+      /** Draw vertical grid lines too (absent = horizontal only). */
+      gridVertical: z.boolean().optional(),
+      /** Target number of horizontal grid lines (absent = auto). 2–12. */
+      gridCount: z.number().int().min(2).max(12).optional(),
       stacked: z.boolean().optional(),
     })
     .optional(),

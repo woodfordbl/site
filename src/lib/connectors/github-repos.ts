@@ -54,23 +54,45 @@ const githubRepoListSchema = z.array(githubRepoSchema);
  * row-only at the cost of colored chips.
  */
 const GITHUB_REPO_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "name", name: "Name", type: "text" },
-  { sourceKey: "description", name: "Description", type: "text" },
+  { sourceKey: "name", name: "Name", type: "text", icon: "tabler:IconBook" },
+  {
+    sourceKey: "description",
+    name: "Description",
+    type: "text",
+    icon: "tabler:IconFileDescription",
+  },
   {
     sourceKey: "stars",
     name: "Stars",
     type: "number",
     numberFormat: "integer",
+    icon: "tabler:IconStar",
   },
   {
     sourceKey: "forks",
     name: "Forks",
     type: "number",
     numberFormat: "integer",
+    icon: "tabler:IconGitFork",
   },
-  { sourceKey: "language", name: "Language", type: "text" },
-  { sourceKey: "updatedAt", name: "Last pushed", type: "date" },
-  { sourceKey: "url", name: "URL", type: "url" },
+  {
+    sourceKey: "language",
+    name: "Language",
+    type: "text",
+    icon: "tabler:IconCode",
+  },
+  {
+    sourceKey: "updatedAt",
+    name: "Last pushed",
+    type: "date",
+    icon: "tabler:IconGitCommit",
+  },
+  {
+    sourceKey: "url",
+    name: "URL",
+    type: "url",
+    icon: "tabler:IconExternalLink",
+  },
 ];
 
 const ISO_DATE_PART_LENGTH = 10;
@@ -234,12 +256,6 @@ export const githubReposConnector: ConnectorDefinition<GithubReposConfig> = {
       kind: "text",
     },
   ],
-  auth: {
-    kind: "token",
-    label: "Personal access token",
-    help: "Optional fine-grained PAT with public-read-only access and no account permissions. Raises the rate limit from 60 to 5,000 requests/hour; unchanged polls (304) are free.",
-    required: false,
-  },
   fields() {
     return GITHUB_REPO_FIELDS;
   },

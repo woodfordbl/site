@@ -67,31 +67,69 @@ const ISSUE_STATE_OPTIONS = [
 ] as const;
 
 const GITHUB_ISSUE_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "title", name: "Title", type: "text" },
+  {
+    sourceKey: "title",
+    name: "Title",
+    type: "text",
+    icon: "tabler:IconCircleDot",
+  },
   {
     sourceKey: "number",
     name: "Number",
     type: "number",
     numberFormat: "integer",
+    icon: "tabler:IconHash",
   },
-  { sourceKey: "author", name: "Author", type: "text" },
+  {
+    sourceKey: "author",
+    name: "Author",
+    type: "text",
+    icon: "tabler:IconUser",
+  },
   {
     sourceKey: "state",
     name: "State",
     type: "select",
     options: [...ISSUE_STATE_OPTIONS],
+    icon: "tabler:IconProgress",
   },
-  { sourceKey: "labels", name: "Labels", type: "text" },
-  { sourceKey: "assignees", name: "Assignees", type: "text" },
+  {
+    sourceKey: "labels",
+    name: "Labels",
+    type: "text",
+    icon: "tabler:IconTags",
+  },
+  {
+    sourceKey: "assignees",
+    name: "Assignees",
+    type: "text",
+    icon: "tabler:IconUsers",
+  },
   {
     sourceKey: "comments",
     name: "Comments",
     type: "number",
     numberFormat: "integer",
+    icon: "tabler:IconMessageCircle",
   },
-  { sourceKey: "createdAt", name: "Created", type: "date" },
-  { sourceKey: "updatedAt", name: "Updated", type: "date" },
-  { sourceKey: "url", name: "URL", type: "url" },
+  {
+    sourceKey: "createdAt",
+    name: "Created",
+    type: "date",
+    icon: "tabler:IconCalendarPlus",
+  },
+  {
+    sourceKey: "updatedAt",
+    name: "Updated",
+    type: "date",
+    icon: "tabler:IconClock",
+  },
+  {
+    sourceKey: "url",
+    name: "URL",
+    type: "url",
+    icon: "tabler:IconExternalLink",
+  },
 ];
 
 const ISO_DATE_PART_LENGTH = 10;
@@ -279,12 +317,6 @@ export const githubIssuesConnector: ConnectorDefinition<GithubIssuesConfig> = {
       kind: "text",
     },
   ],
-  auth: {
-    kind: "token",
-    label: "Personal access token",
-    help: "Optional fine-grained PAT with read access to the repository. Raises the rate limit from 60 to 5,000 requests/hour; unchanged polls (304) are free. Tokens are stored per connector, so paste the same PAT you use for other GitHub connectors if you have one.",
-    required: false,
-  },
   fields() {
     return GITHUB_ISSUE_FIELDS;
   },

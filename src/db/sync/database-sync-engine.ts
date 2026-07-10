@@ -1,5 +1,7 @@
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
+import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import {
+  applyStreamTick,
   applySyncSnapshot,
   reconcileSyncedFields,
 } from "@/db/queries/database-sync-ops.ts";
@@ -19,6 +21,10 @@ import {
 } from "@/db/sync/sync-schedule.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
+import type {
+  ConnectorDefinition,
+  ConnectorRow,
+} from "@/lib/connectors/types.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
@@ -67,13 +73,24 @@ interface ScheduleEntry {
   halted: boolean;
   intervalMs: number;
   lastAttemptAt?: number;
+  /** Fingerprint of the connector's `list` config values (the symbol set). */
+  listFingerprint: string;
   /** Connector floor (`pollPolicy.minMs`) — the watched cadence. */
   minIntervalMs: number;
   /** Epoch ms the pending timer aims at; drives overdue checks on refocus. */
   nextRunAt?: number;
   /** Timer fired while the document was hidden; run on next `visible`. */
   pendingWhileHidden: boolean;
+  /**
+   * Set when the symbol set changed (a `list` config edit): the next snapshot
+   * deletes rows for dropped symbols immediately, skipping the tombstone grace.
+   * Other source edits (currency, refreshMs) never set it, so a partial
+   * provider response can't delete live rows. Cleared once a pass consumes it.
+   */
+  pruneOnNextSnapshot: boolean;
   running: boolean;
+  /** Fingerprint of non-symbol config (currency); a change resets history. */
+  scalarFingerprint: string;
   /** JSON fingerprint of `database.source`; a change resumes a halted entry. */
   sourceFingerprint: string;
   timer?: ReturnType<typeof setTimeout>;
@@ -207,6 +224,8 @@ export function watchDatabaseSync(databaseId: string): () => void {
   watcherCounts.set(databaseId, next);
   if (next === 1) {
     applyWatchedCadence(databaseId);
+    // A newly-watched streaming database opens its socket here.
+    reconcileStreams();
   }
 
   let released = false;
@@ -219,6 +238,8 @@ export function watchDatabaseSync(databaseId: string): () => void {
     if (count <= 1) {
       watcherCounts.delete(databaseId);
       restoreConfiguredCadence(databaseId);
+      // Last watcher gone — close the socket.
+      reconcileStreams();
     } else {
       watcherCounts.set(databaseId, count - 1);
     }
@@ -261,6 +282,303 @@ function restoreConfiguredCadence(databaseId: string): void {
   const now = Date.now();
   const dueAt = (entry.lastAttemptAt ?? now) + entry.intervalMs;
   scheduleRun(databaseId, Math.max(0, dueAt - now));
+}
+
+// ---------------------------------------------------------------------------
+// Live streaming (S1). A connector with a `stream` capability gets a WebSocket
+// subscription — held ONLY by the visible leader tab, and only while a view is
+// watching the database. Ticks are coalesced to bound collection writes, then
+// applied via `applyStreamTick`; the localStorage-sharded row collection
+// propagates them to follower tabs through storage events (same path snapshots
+// use), so no separate cross-tab channel is needed. A dropped socket surfaces
+// via `onError` and reconnects with backoff. Polling continues underneath as
+// the seed + unwatched-refresh path; streaming just layers live updates on top.
+// ---------------------------------------------------------------------------
+
+/** Coalesce window: ticks within this window collapse to one collection write
+ * per row (last-value-wins), capping writes at ~4/sec even on a fast feed. */
+const STREAM_FLUSH_MS = 250;
+/** Base unit for stream reconnect backoff (grows via `computeRetryDelay`). */
+const STREAM_RECONNECT_BASE_MS = 1000;
+
+interface StreamHandle {
+  flushTimer?: ReturnType<typeof setTimeout>;
+  /** Latest value per `externalId` awaiting the next flush. */
+  pending: Map<string, ConnectorRow>;
+  /**
+   * Fingerprint of the source config this socket was opened against (the
+   * symbol list). When it drifts from the live database's config the symbol
+   * set was edited, so `reconcileStreams` tears the socket down and reopens it
+   * against the new set — the provider bound the old symbols at connect time.
+   */
+  signature: string;
+  /** Tears down the provider subscription (set once `subscribe` returns). */
+  unsubscribe: () => void;
+}
+
+/**
+ * Fingerprint of the config that binds a connector's live socket — just the
+ * connector config record (the symbol list). `refreshMs` lives as a sibling of
+ * `config`, so poll-interval edits deliberately don't churn this and never
+ * reopen the socket.
+ */
+function streamConfigSignature(database: LocalDatabase): string {
+  return database.source?.kind === "connector"
+    ? JSON.stringify(database.source.config ?? {})
+    : "";
+}
+
+/**
+ * Fingerprint of just the connector's `list` config values (the symbol set) —
+ * the only edits that change which rows a snapshot should contain. Used to gate
+ * immediate pruning: editing symbols prunes dropped rows now, but editing a
+ * non-row config (display currency) or `refreshMs` must keep the tombstone
+ * grace so a partial provider response never deletes live rows.
+ */
+function configListFingerprint(
+  database: LocalDatabase,
+  connector: ConnectorDefinition
+): string {
+  if (database.source?.kind !== "connector") {
+    return "";
+  }
+  const config = database.source.config ?? {};
+  const listValues: Record<string, unknown> = {};
+  for (const field of connector.configFields ?? []) {
+    if (field.kind === "list") {
+      listValues[field.key] = config[field.key];
+    }
+  }
+  return JSON.stringify(listValues);
+}
+
+/**
+ * Fingerprint of the connector config EXCLUDING `list` (symbol) fields — the
+ * config that changes the value *scale* of captured samples (e.g. display
+ * currency, which re-quotes prices). A change here invalidates the captured
+ * field history (old-currency samples must not stitch with new-currency ones).
+ */
+function configScalarFingerprint(
+  database: LocalDatabase,
+  connector: ConnectorDefinition
+): string {
+  if (database.source?.kind !== "connector") {
+    return "";
+  }
+  const config = database.source.config ?? {};
+  const listKeys = new Set(
+    (connector.configFields ?? [])
+      .filter((field) => field.kind === "list")
+      .map((field) => field.key)
+  );
+  const scalar: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (!listKeys.has(key)) {
+      scalar[key] = value;
+    }
+  }
+  return JSON.stringify(scalar);
+}
+
+const streams = new Map<string, StreamHandle>();
+const streamReconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const streamFailures = new Map<string, number>();
+
+/** A database should stream iff this tab is the visible leader and a view is
+ * watching it — the same predicate that gates watch-mode acceleration. */
+function shouldStream(databaseId: string): boolean {
+  return (
+    isLeader && isDocumentVisible() && (watcherCounts.get(databaseId) ?? 0) > 0
+  );
+}
+
+/** Buffer a tick batch; schedule a flush if none is pending. */
+function enqueueTick(databaseId: string, rows: ConnectorRow[]): void {
+  const handle = streams.get(databaseId);
+  if (!handle) {
+    return;
+  }
+  // A tick means the socket is healthy — clear any reconnect backoff.
+  streamFailures.delete(databaseId);
+  for (const row of rows) {
+    handle.pending.set(row.externalId, row);
+  }
+  if (handle.flushTimer === undefined) {
+    handle.flushTimer = setTimeout(
+      () => flushStream(databaseId),
+      STREAM_FLUSH_MS
+    );
+  }
+}
+
+/** Apply the buffered ticks in one transaction and refresh liveness status. */
+function flushStream(databaseId: string): void {
+  const handle = streams.get(databaseId);
+  if (!handle) {
+    return;
+  }
+  handle.flushTimer = undefined;
+  if (handle.pending.size === 0) {
+    return;
+  }
+  const rows = [...handle.pending.values()];
+  handle.pending.clear();
+
+  const database = localDatabasesCollection.get(databaseId);
+  if (!(database && isConnectorDatabase(database))) {
+    return;
+  }
+  applyStreamTick(database, rows);
+  const previous = getSyncStatus(databaseId);
+  setStatus(databaseId, {
+    ...previous,
+    error: undefined,
+    lastSyncedAt: new Date().toISOString(),
+    syncing: false,
+  });
+}
+
+/** Open a stream for a database (idempotent). The handle is registered
+ * synchronously so a concurrent reconcile can't double-subscribe; the actual
+ * `subscribe` runs once the connector token (if any) resolves. */
+function ensureStream(databaseId: string): void {
+  if (streams.has(databaseId)) {
+    return;
+  }
+  const database = localDatabasesCollection.get(databaseId);
+  if (!(database && isConnectorDatabase(database))) {
+    return;
+  }
+  const connector = resolveConnector(database.source.connectorId);
+  const stream = connector?.stream;
+  if (!stream) {
+    return;
+  }
+
+  const handle: StreamHandle = {
+    pending: new Map(),
+    signature: streamConfigSignature(database),
+    unsubscribe: () => undefined,
+  };
+  streams.set(databaseId, handle);
+
+  Promise.resolve(getConnectorToken(database.source.connectorId))
+    .catch(() => undefined)
+    .then((token) => {
+      // Watch/leadership/visibility may have changed while resolving the token.
+      if (streams.get(databaseId) !== handle) {
+        return;
+      }
+      try {
+        handle.unsubscribe = stream.subscribe(
+          {
+            config: database.source.config,
+            fetchFn: (input, init) => fetch(input, init),
+            token: token ?? undefined,
+          },
+          {
+            onError: (error) => handleStreamError(databaseId, error),
+            onRows: (rows) => enqueueTick(databaseId, rows),
+          }
+        );
+      } catch (error) {
+        handleStreamError(databaseId, error);
+      }
+    });
+}
+
+/** Tear down a stream's subscription and flush timer (does not touch reconnect
+ * scheduling — that's `reconcileStreams`' job). */
+function teardownStream(databaseId: string): void {
+  const handle = streams.get(databaseId);
+  if (!handle) {
+    return;
+  }
+  if (handle.flushTimer !== undefined) {
+    clearTimeout(handle.flushTimer);
+    handle.flushTimer = undefined;
+  }
+  // Flush any coalesce-buffered ticks before tearing down so the latest prices
+  // aren't dropped on reconnect, symbol edit, tab hide, or socket error.
+  flushStream(databaseId);
+  streams.delete(databaseId);
+  try {
+    handle.unsubscribe();
+  } catch {
+    // A connector's unsubscribe should never throw; ignore if it does.
+  }
+}
+
+/** A dropped/failed socket: surface the error, then reconnect with backoff if
+ * we still should be streaming. */
+function handleStreamError(databaseId: string, error: unknown): void {
+  const { kind, message } = readConnectorError(error);
+  setStatus(databaseId, {
+    error: { at: new Date().toISOString(), kind, message },
+    lastSyncedAt: getSyncStatus(databaseId).lastSyncedAt,
+    syncing: false,
+  });
+  teardownStream(databaseId);
+  if (!shouldStream(databaseId)) {
+    return;
+  }
+  const failures = (streamFailures.get(databaseId) ?? 0) + 1;
+  streamFailures.set(databaseId, failures);
+  const delay = computeRetryDelay({
+    consecutiveFailures: failures,
+    intervalMs: STREAM_RECONNECT_BASE_MS,
+  });
+  const timer = setTimeout(() => {
+    streamReconnectTimers.delete(databaseId);
+    if (shouldStream(databaseId)) {
+      ensureStream(databaseId);
+    }
+  }, delay);
+  streamReconnectTimers.set(databaseId, timer);
+}
+
+/** Reconcile live streams against current leadership/visibility/watch state:
+ * open streams that should run, tear down those that shouldn't, and cancel
+ * reconnect timers that are no longer wanted. Called whenever any of those
+ * inputs change. Idempotent. */
+function reconcileStreams(): void {
+  const canStream = isLeader && isDocumentVisible();
+  for (const databaseId of [...streams.keys()]) {
+    if (!canStream || (watcherCounts.get(databaseId) ?? 0) === 0) {
+      teardownStream(databaseId);
+      continue;
+    }
+    // Symbols edited: the socket is bound to the old set. Drop it here; the
+    // open-loop below reopens against the current config.
+    const handle = streams.get(databaseId);
+    const database = localDatabasesCollection.get(databaseId);
+    if (
+      handle &&
+      database &&
+      handle.signature !== streamConfigSignature(database)
+    ) {
+      teardownStream(databaseId);
+    }
+  }
+  for (const [databaseId, timer] of [...streamReconnectTimers]) {
+    if (!(canStream && (watcherCounts.get(databaseId) ?? 0) > 0)) {
+      clearTimeout(timer);
+      streamReconnectTimers.delete(databaseId);
+      streamFailures.delete(databaseId);
+    }
+  }
+  if (!canStream) {
+    return;
+  }
+  for (const [databaseId, count] of watcherCounts) {
+    if (
+      count > 0 &&
+      !streams.has(databaseId) &&
+      !streamReconnectTimers.has(databaseId)
+    ) {
+      ensureStream(databaseId);
+    }
+  }
 }
 
 /** Registry lookup hardened against unknown ids, whether the registry
@@ -353,6 +671,10 @@ async function runSync(databaseId: string): Promise<void> {
   // re-arms scheduling, a repeat config/auth failure re-halts.
   entry.halted = false;
   entry.lastAttemptAt = Date.now();
+  // Consume the one-shot prune request from the last source edit; this pass
+  // deletes rows for symbols dropped from the config with no tombstone grace.
+  const pruneMissing = entry.pruneOnNextSnapshot;
+  entry.pruneOnNextSnapshot = false;
   const previous = getSyncStatus(databaseId);
   setStatus(databaseId, { ...previous, syncing: true });
 
@@ -395,7 +717,8 @@ async function runSync(databaseId: string): Promise<void> {
       const applied = applySyncSnapshot(
         latest,
         result.rows,
-        meta?.missingCounts ?? {}
+        meta?.missingCounts ?? {},
+        { pruneMissing }
       );
       // Only record the new validator once the row transaction has actually
       // committed. If the commit fails (e.g. storage quota) the rows were
@@ -493,6 +816,8 @@ function ensureSchedule(database: LocalDatabase): void {
     connector.pollPolicy
   );
   const sourceFingerprint = JSON.stringify(database.source);
+  const listFingerprint = configListFingerprint(database, connector);
+  const scalarFingerprint = configScalarFingerprint(database, connector);
   const existing = entries.get(database.id);
   if (existing) {
     // Config/interval edits take effect on the next pass; an in-flight or
@@ -500,13 +825,33 @@ function ensureSchedule(database: LocalDatabase): void {
     existing.intervalMs = intervalMs;
     existing.minIntervalMs = connector.pollPolicy.minMs;
     const sourceChanged = existing.sourceFingerprint !== sourceFingerprint;
+    const listChanged = existing.listFingerprint !== listFingerprint;
+    const scalarChanged = existing.scalarFingerprint !== scalarFingerprint;
     existing.sourceFingerprint = sourceFingerprint;
-    // A halted entry (non-transient config/auth failure) resumes only when
-    // the source actually changed — other database edits (rename, view
-    // tweaks) must not restart a poll loop that would fail identically.
-    if (existing.halted && sourceChanged && !existing.running) {
-      existing.halted = false;
-      existing.consecutiveFailures = 0;
+    existing.listFingerprint = listFingerprint;
+    existing.scalarFingerprint = scalarFingerprint;
+    // A scale-changing config edit (e.g. display currency) invalidates the
+    // captured field history — old-currency samples must not stitch with new
+    // ones. Drop it so the chart rebuilds from the new-currency backfill +
+    // captures. Derived data; failures are non-fatal.
+    if (scalarChanged) {
+      clearDatabaseFieldHistory(database.id).catch(() => {
+        // Best-effort — history is rebuildable from backfill + capture.
+      });
+    }
+    // A source edit refetches now (e.g. a currency change refetches in the new
+    // quote currency), instead of waiting for the next scheduled pass. Other
+    // database edits (rename, view tweaks) don't change the fingerprint, so
+    // they don't restart polling — and a halted loop (non-transient config/auth
+    // failure) resumes only on a genuine source change, never on an identical
+    // retry. Only a symbol-set edit (`listChanged`) prunes immediately; other
+    // edits keep the tombstone grace so a partial response can't delete rows.
+    if (sourceChanged && !existing.running) {
+      existing.pruneOnNextSnapshot = listChanged;
+      if (existing.halted) {
+        existing.halted = false;
+        existing.consecutiveFailures = 0;
+      }
       scheduleRun(database.id, 0);
     }
     return;
@@ -516,9 +861,12 @@ function ensureSchedule(database: LocalDatabase): void {
     consecutiveFailures: 0,
     halted: false,
     intervalMs,
+    listFingerprint,
     minIntervalMs: connector.pollPolicy.minMs,
     pendingWhileHidden: false,
+    pruneOnNextSnapshot: false,
     running: false,
+    scalarFingerprint,
     sourceFingerprint,
   });
   // First pass runs immediately — conditional requests make cold runs cheap.
@@ -538,6 +886,9 @@ function dropSchedule(databaseId: string): void {
 }
 
 function handleVisibilityChange(): void {
+  // Streams follow visibility both ways: torn down when hidden, reopened when
+  // shown (the overdue-poll logic below only applies while visible).
+  reconcileStreams();
   if (document.visibilityState !== "visible") {
     return;
   }
@@ -590,10 +941,16 @@ function becomeLeader(): void {
         }
         ensureSchedule(change.value);
       }
+      // A source edit (e.g. the symbol list changed) may need the live socket
+      // reopened against the new config; reconcile detects the drift.
+      reconcileStreams();
     },
     { includeInitialState: true }
   );
   unsubscribeDatabases = () => subscription.unsubscribe();
+
+  // Newly the leader — open streams for any already-watched databases.
+  reconcileStreams();
 }
 
 /**
@@ -619,6 +976,8 @@ function resignLeadership(): void {
     }
   }
   entries.clear();
+  // No longer leader — close every stream (canStream is now false).
+  reconcileStreams();
 
   const release = releaseLeaderLock;
   releaseLeaderLock = undefined;
