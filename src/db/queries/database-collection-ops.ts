@@ -943,6 +943,32 @@ export function setDatabaseRowDefault(
 }
 
 /**
+ * Set where the database's row pages show their properties — the side panel
+ * (default) or a section at the top of the page — bumping `updatedAt`. The
+ * default ("panel") is stored as an absent field so records stay sparse.
+ */
+export function setDatabaseRowPropertiesPlacement(
+  databaseId: string,
+  placement: "panel" | "top"
+): void {
+  if (!localDatabasesCollection.get(databaseId)) {
+    return;
+  }
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.rowPropertiesPlacement =
+        placement === "panel" ? undefined : placement;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
  * Set (or clear, with `undefined`) a database's icon — an emoji or
  * `tabler:IconName`, matching page icons — and bump its `updatedAt`.
  */
