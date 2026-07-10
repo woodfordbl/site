@@ -102,6 +102,18 @@ function buildFixtureBlocks(): Block[] {
     )
   );
 
+  push(
+    block("media", {
+      kind: "image",
+      source: "url",
+      src: `data:image/svg+xml,${encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#4a7c59"/><circle cx="600" cy="400" r="220" fill="#f4f1e8"/><text x="600" y="415" font-size="48" text-anchor="middle" fill="#333">fixture</text></svg>'
+      )}`,
+      alt: "Fixture image",
+      widthPercent: 50,
+    })
+  );
+
   push(text("Trailing paragraph below the containers."));
 
   return blocks;
