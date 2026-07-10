@@ -155,6 +155,23 @@ export function formulaMaxArgs(entry: FormulaFunctionEntry): number {
   return last?.variadic ? Number.POSITIVE_INFINITY : entry.params.length;
 }
 
+/**
+ * The signature parameter governing the argument at `index` — a variadic
+ * tail governs every index past it; `undefined` past a non-variadic end.
+ * Shared by the checker's argument loop and the editor autocomplete's
+ * expected-type ranking.
+ */
+export function formulaParamAt(
+  entry: FormulaFunctionEntry,
+  index: number
+): FormulaParamSpec | undefined {
+  if (index < entry.params.length) {
+    return entry.params[index];
+  }
+  const last = entry.params.at(-1);
+  return last?.variadic ? last : undefined;
+}
+
 /** v1-shaped arity error message, using the call name as written. */
 export function formulaArityMessage(
   name: string,

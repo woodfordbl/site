@@ -36,6 +36,7 @@ import {
   formulaFunctionMessageName,
   formulaMaxArgs,
   formulaMinArgs,
+  formulaParamAt,
 } from "@/lib/formula/catalog.ts";
 import {
   BLANK_TYPE,
@@ -258,8 +259,16 @@ const DELETED_FIELD_MESSAGE = "References a deleted or unknown field";
  * Optimistic acceptance: `unknown` fits everywhere and accepts everything, a
  * union fits when ANY member fits, an unbound type variable accepts anything
  * (it binds afterwards), and `error` never cascades into a second
- * diagnostic.
+ * diagnostic. Exported for the editor autocomplete's type-aware ranking —
+ * the same relation the checker diagnoses against.
  */
+export function formulaTypeFits(
+  actual: FormulaType,
+  expected: FormulaType
+): boolean {
+  return typeFits(actual, expected);
+}
+
 function typeFits(actual: FormulaType, expected: FormulaType): boolean {
   if (actual.kind === "unknown" || actual.kind === "error") {
     return true;
@@ -535,18 +544,6 @@ function similarBindingName(
     }
   }
   return null;
-}
-
-/** The signature parameter governing the argument at `index`. */
-function paramForIndex(
-  entry: FormulaFunctionEntry,
-  index: number
-): FormulaParamSpec | undefined {
-  if (index < entry.params.length) {
-    return entry.params[index];
-  }
-  const last = entry.params.at(-1);
-  return last?.variadic ? last : undefined;
 }
 
 interface Span {
@@ -1108,7 +1105,7 @@ class Checker {
     const bindings: TypevarBindings = new Map();
     let ok = true;
     for (const [index, arg] of node.args.entries()) {
-      const param = paramForIndex(entry, index);
+      const param = formulaParamAt(entry, index);
       if (param === undefined) {
         continue;
       }

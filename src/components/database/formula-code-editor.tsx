@@ -1,8 +1,17 @@
+import {
+  acceptCompletion,
+  autocompletion,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+  completionStatus,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { bracketMatching } from "@codemirror/language";
 import {
   type EditorSelection,
   EditorState,
+  Prec,
   RangeSetBuilder,
   StateEffect,
   StateField,
@@ -13,6 +22,7 @@ import {
   EditorView,
   keymap,
   placeholder as placeholderOf,
+  tooltips,
   ViewPlugin,
   type ViewUpdate,
   WidgetType,
@@ -20,15 +30,36 @@ import {
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { DATABASE_FIELD_TYPE_ICON_NODES } from "@/components/database/database-field-icons.ts";
 import { tokenChipVariants } from "@/components/ui/chip.tsx";
+import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
+import {
+  FORMULA_FUNCTION_CATALOG,
+  type FormulaFunctionEntry,
+  formulaFunctionForName,
+  formulaFunctionSignature,
+  formulaParamAt,
+} from "@/lib/formula/catalog.ts";
+import {
+  formulaPropertyValueType,
+  formulaTypeBadge,
+  formulaTypeFits,
+} from "@/lib/formula/check.ts";
 import {
   type FormulaHighlightKind,
+  formulaEnclosingCallAt,
   formulaPropIdSpans,
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
+import { FORMULA_SCOPE_ROOTS } from "@/lib/formula/parse.ts";
 import {
+  canonicalPropertyReference,
   canonicalPropertyRewrites,
   type FormulaSpanRewrite,
 } from "@/lib/formula/ref-rewrite.ts";
+import {
+  BOOLEAN_TYPE,
+  type FormulaType,
+  UNKNOWN_TYPE,
+} from "@/lib/formula/types.ts";
 import {
   TABLER_PAGE_ICON_PREFIX,
   type TablerIconNode,
@@ -59,11 +90,22 @@ import { cn } from "@/lib/utils.ts";
  *
  * Soft-wrapped, autogrowing (min ~3 rows, capped with internal scroll), no
  * line numbers, syntax highlighting driven by the real tokenizer
- * ({@link highlightFormula}) — autocomplete and the info card are later
- * stages. Menu integration is built in: every key except Escape stops
- * propagating (the panel lives inside a Base UI menu popup whose typeahead
- * would otherwise steal keystrokes), Escape bubbles so the menu closes, and
- * Mod+Enter fires `onSubmit`.
+ * ({@link highlightFormula}).
+ *
+ * FUSED AUTOCOMPLETE (proposal §6.2): one completion source
+ * ({@link formulaCompletionSource}) merges properties (insert as canonical
+ * chips), catalog functions (caret lands inside the parens), and the word
+ * operators/keywords, opened by typing an identifier or explicit Ctrl+Space.
+ * Ranking is type-aware: when the caret sits in an argument position whose
+ * expected type the catalog knows ({@link expectedArgumentType}), candidates
+ * whose result type fits rank first.
+ *
+ * Menu integration is built in: every key except Escape stops propagating
+ * (the panel lives inside a Base UI menu popup whose typeahead would
+ * otherwise steal keystrokes), Escape closes the completion popup WITHOUT
+ * bubbling while it's open and bubbles (closing the menu) otherwise, and
+ * Mod+Enter fires `onSubmit`. The completion tooltip parents to
+ * `document.body` so the menu popup's overflow can't clip it.
  */
 
 /** Imperative surface the panel drives for reference-list caret insertion. */
@@ -383,6 +425,279 @@ const typedReferenceCanonicalizer = ViewPlugin.fromClass(
   }
 );
 
+// --- fused autocomplete ------------------------------------------------------
+
+/** Identifier being typed at the caret (completion trigger + filter range). */
+const IDENTIFIER_TAIL_RE = /[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Keep the open popup filtering while identifier characters are typed. */
+const IDENTIFIER_VALID_FOR_RE = /^[A-Za-z0-9_]*$/;
+
+/**
+ * A scope-root reference prefix (`thisPage.` / `thisRow.`, any casing)
+ * directly before a position: completions triggered there narrow to
+ * properties and replace the WHOLE reference with one canonical chip.
+ */
+const SCOPE_PREFIX_RE = new RegExp(
+  `(?:${[...FORMULA_SCOPE_ROOTS].join("|")})\\s*\\.\\s*$`,
+  "i"
+);
+
+/** Start of the scope-root prefix ending at `prefix`'s end, else its length. */
+function scopePrefixStart(prefix: string): number {
+  const match = SCOPE_PREFIX_RE.exec(prefix);
+  return match === null ? prefix.length : match.index;
+}
+
+/**
+ * Per-schema property VALUE types (formula fields typed via the same
+ * topological pass the checker uses), memoized on the `fields` identity —
+ * the completion source runs per keystroke, the schema changes rarely.
+ */
+const fieldValueTypesCache = new WeakMap<
+  readonly DatabaseField[],
+  ReadonlyMap<string, FormulaType>
+>();
+
+function fieldValueTypes(
+  fields: readonly DatabaseField[]
+): ReadonlyMap<string, FormulaType> {
+  let types = fieldValueTypesCache.get(fields);
+  if (types === undefined) {
+    const map = new Map<string, FormulaType>();
+    for (const property of formulaCheckContext(fields).properties) {
+      map.set(property.id, formulaPropertyValueType(property));
+    }
+    types = map;
+    fieldValueTypesCache.set(fields, types);
+  }
+  return types;
+}
+
+/**
+ * The declared type of the argument position at `position`, when the
+ * innermost unclosed call resolves to a catalog signature — the "fused"
+ * ranking signal. `null` when unknowable or unhelpful (unknown/typevar
+ * params accept everything; lambda params never match a value candidate).
+ */
+function expectedArgumentType(
+  source: string,
+  position: number
+): FormulaType | null {
+  const call = formulaEnclosingCallAt(source, position);
+  if (call === null) {
+    return null;
+  }
+  const entry = formulaFunctionForName(call.name);
+  const param =
+    entry === undefined ? undefined : formulaParamAt(entry, call.argIndex);
+  if (param === undefined) {
+    return null;
+  }
+  const { type } = param;
+  const unhelpful =
+    type.kind === "unknown" ||
+    type.kind === "typevar" ||
+    type.kind === "lambda";
+  return unhelpful ? null : type;
+}
+
+/**
+ * Ranking weights. CM adds `boost` raw to the fuzzy-match score, whose
+ * quality tiers step by 100+ (case fold −200, non-start −700…) and vary by
+ * label length within a tier — so these sit well above label-length noise
+ * (dominating ties) while staying inside the documented −99..99 range, below
+ * a full quality tier: a genuinely better textual match still wins.
+ */
+const TYPE_MATCH_BOOST = 50;
+const PROPERTY_BASE_BOOST = 10;
+const KEYWORD_BASE_BOOST = -10;
+
+/**
+ * Boost for a candidate whose result type fits the expected argument type.
+ * Only CONCRETE results count — `unknown` fits everywhere by the checker's
+ * optimism, and boosting everything is boosting nothing.
+ */
+function typeMatchBoost(
+  result: FormulaType,
+  expected: FormulaType | null
+): number {
+  if (expected === null) {
+    return 0;
+  }
+  const concrete =
+    result.kind !== "unknown" &&
+    result.kind !== "typevar" &&
+    result.kind !== "error";
+  return concrete && formulaTypeFits(result, expected) ? TYPE_MATCH_BOOST : 0;
+}
+
+/** Field behind a property completion, for the icon-slot renderer. */
+const completionFields = new WeakMap<Completion, DatabaseField>();
+
+/**
+ * The leading icon of each completion row (replaces CM's built-in icon
+ * classes): the field-type/custom icon for properties, a function glyph for
+ * functions, an empty spacer for keywords so columns stay aligned.
+ */
+function renderCompletionIcon(completion: Completion): Node {
+  const holder = document.createElement("span");
+  holder.className = "cm-formula-completion-icon";
+  holder.setAttribute("aria-hidden", "true");
+  const field = completionFields.get(completion);
+  if (field !== undefined) {
+    holder.append(chipIcon(field));
+  } else if (completion.type === "function") {
+    holder.textContent = "ƒ";
+  }
+  return holder;
+}
+
+/** Splice `insert` over `[from, to)`, caret at `caret`, as a completion. */
+function applyInsert(
+  view: EditorView,
+  range: { from: number; to: number },
+  insert: string,
+  caret: number
+): void {
+  view.dispatch({
+    changes: { from: range.from, insert, to: range.to },
+    selection: { anchor: caret },
+    userEvent: "input.complete",
+  });
+}
+
+/**
+ * A property option: labeled/filtered by the field NAME, applied as the
+ * canonical `prop("<id>")` text (which renders as one atomic chip), detail
+ * showing the field's value type. Any typed scope-root prefix
+ * (`thisPage.Pri`) is replaced along with the partial name.
+ */
+function propertyCompletion(
+  field: DatabaseField,
+  valueType: FormulaType,
+  expected: FormulaType | null
+): Completion {
+  const completion: Completion = {
+    apply: (view, _completion, from, to) => {
+      const start = scopePrefixStart(view.state.sliceDoc(0, from));
+      const insert = canonicalPropertyReference(field.id);
+      applyInsert(view, { from: start, to }, insert, start + insert.length);
+    },
+    boost: PROPERTY_BASE_BOOST + typeMatchBoost(valueType, expected),
+    detail: formulaTypeBadge(valueType),
+    label: field.name,
+    type: "property",
+  };
+  completionFields.set(completion, field);
+  return completion;
+}
+
+/**
+ * A catalog-function option: signature as detail, description as the info
+ * card, applied as `name()` with the caret inside the parens — after them
+ * for zero-argument functions (`now()`/`today()`).
+ */
+function functionCompletion(
+  entry: FormulaFunctionEntry,
+  expected: FormulaType | null
+): Completion {
+  return {
+    apply: (view, _completion, from, to) => {
+      const insert = `${entry.name}()`;
+      const caret =
+        from + entry.name.length + (entry.params.length === 0 ? 2 : 1);
+      applyInsert(view, { from, to }, insert, caret);
+    },
+    boost: typeMatchBoost(entry.returns, expected),
+    detail: formulaFunctionSignature(entry).slice(entry.name.length),
+    info: entry.description,
+    label: entry.name,
+    type: "function",
+  };
+}
+
+/**
+ * The word operators/keywords that read naturally as completions. All five
+ * head boolean expressions, so a boolean argument position boosts them.
+ */
+const KEYWORD_LABELS = ["and", "or", "not", "true", "false"] as const;
+
+function keywordCompletions(expected: FormulaType | null): Completion[] {
+  return KEYWORD_LABELS.map((label) => ({
+    boost: KEYWORD_BASE_BOOST + typeMatchBoost(BOOLEAN_TYPE, expected),
+    label,
+    type: "keyword",
+  }));
+}
+
+/** Is `position` inside a string or comment (no completions there)? */
+function insideStringOrComment(source: string, position: number): boolean {
+  return highlightFormula(source).some(
+    (span) =>
+      (span.kind === "string" || span.kind === "comment") &&
+      span.start < position &&
+      position <= span.end
+  );
+}
+
+/**
+ * The single fused completion source: properties + functions + keywords in
+ * one ranked list (CM's default fuzzy filter handles case-insensitive
+ * prefix/word-boundary matching; `boost` layers the type-aware ranking on
+ * top). Triggers on a typed identifier, right after a scope-root dot
+ * (properties only there), or explicitly via Ctrl+Space.
+ */
+function formulaCompletionSource(
+  context: CompletionContext
+): CompletionResult | null {
+  const word = context.matchBefore(IDENTIFIER_TAIL_RE);
+  const from = word?.from ?? context.pos;
+  const doc = context.state.doc.toString();
+  const scopeStart = scopePrefixStart(doc.slice(0, from));
+  const propertyOnly = scopeStart < from;
+  if (word === null && !(context.explicit || propertyOnly)) {
+    return null;
+  }
+  if (insideStringOrComment(doc, context.pos)) {
+    return null;
+  }
+  const fields = context.state.field(chipFields);
+  const valueTypes = fieldValueTypes(fields);
+  const expected = expectedArgumentType(doc, scopeStart);
+  const options: Completion[] = fields.map((field) =>
+    propertyCompletion(
+      field,
+      valueTypes.get(field.id) ?? UNKNOWN_TYPE,
+      expected
+    )
+  );
+  if (!propertyOnly) {
+    for (const entry of FORMULA_FUNCTION_CATALOG) {
+      options.push(functionCompletion(entry, expected));
+    }
+    options.push(...keywordCompletions(expected));
+  }
+  return { from, options, validFor: IDENTIFIER_VALID_FOR_RE };
+}
+
+/**
+ * Keeps menu typeahead/arrow handling away from the editor (the panel lives
+ * inside a Base UI menu popup): every key except Escape stops propagating.
+ * Escape stops propagating ONLY while the completion popup is open/pending —
+ * the completion keymap (which runs after this handler) closes the popup and
+ * the enclosing menu stays open; with no popup, Escape bubbles so the menu
+ * closes (the original contract). Registered at the highest precedence,
+ * ahead of the completion keymap, so it observes the popup state BEFORE the
+ * close is dispatched. Returning false lets CM handle the key.
+ */
+function menuKeydownGuard(event: KeyboardEvent, view: EditorView): boolean {
+  if (event.key !== "Escape" || completionStatus(view.state) !== null) {
+    event.stopPropagation();
+  }
+  return false;
+}
+
 /**
  * Editor chrome + the restrained token palette from the v2 proposal §6:
  * functions/operators in plain foreground, literals in muted block colors,
@@ -412,6 +727,64 @@ const formulaEditorTheme = EditorView.theme({
   "&.cm-focused .cm-nonmatchingBracket": {
     backgroundColor: "transparent",
     textDecoration: "underline wavy var(--color-destructive)",
+  },
+  // Completion popup (parented to document.body — CM mirrors the editor's
+  // theme classes onto the external container, so these rules still apply).
+  // Popover look via theme variables; above the Base UI menu popup's z-50.
+  ".cm-tooltip": {
+    backgroundColor: "var(--color-popover)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "0.5rem",
+    color: "var(--color-popover-foreground)",
+    zIndex: "60",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+    fontFamily: "var(--font-sans)",
+    fontSize: "0.75rem",
+    maxHeight: "13.5rem",
+    minWidth: "12rem",
+    padding: "4px",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+    alignItems: "center",
+    borderRadius: "0.375rem",
+    display: "flex",
+    gap: "6px",
+    lineHeight: "1.5",
+    padding: "3px 6px",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+    backgroundColor: "var(--color-accent)",
+    color: "var(--color-accent-foreground)",
+  },
+  ".cm-formula-completion-icon": {
+    color: "var(--color-muted-foreground)",
+    display: "inline-flex",
+    flexShrink: "0",
+    justifyContent: "center",
+    width: "1rem",
+  },
+  ".cm-completionLabel": { flexShrink: "0" },
+  ".cm-completionMatchedText": {
+    fontWeight: "600",
+    textDecoration: "none",
+  },
+  ".cm-completionDetail": {
+    color: "var(--color-muted-foreground)",
+    fontFamily: "var(--font-mono)",
+    fontStyle: "normal",
+    marginLeft: "auto",
+    overflow: "hidden",
+    paddingLeft: "0.5rem",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  ".cm-tooltip.cm-completionInfo": {
+    color: "var(--color-muted-foreground)",
+    fontFamily: "var(--font-sans)",
+    fontSize: "0.75rem",
+    maxWidth: "16rem",
+    padding: "6px 8px",
   },
   ".cm-formula-comment": {
     color: "var(--color-muted-foreground)",
@@ -480,6 +853,11 @@ export function FormulaCodeEditor({
         // than prepend before the user has clicked into the text.
         selection: { anchor: valueRef.current.length },
         extensions: [
+          // First + highest precedence: must observe the completion popup
+          // state before the completion keymap (also Prec.highest) closes it.
+          Prec.highest(
+            EditorView.domEventHandlers({ keydown: menuKeydownGuard })
+          ),
           keymap.of([
             {
               key: "Mod-Enter",
@@ -488,6 +866,9 @@ export function FormulaCodeEditor({
                 return true;
               },
             },
+            // Tab accepts like Enter while the popup is open; when it's
+            // closed the binding declines and Tab keeps moving focus.
+            { key: "Tab", run: acceptCompletion },
             ...historyKeymap,
             ...defaultKeymap,
           ]),
@@ -501,17 +882,15 @@ export function FormulaCodeEditor({
             autocorrect: "off",
             spellcheck: "false",
           }),
-          // Keep menu typeahead/arrow handling away from the editor; Escape
-          // still bubbles so the enclosing menu closes (same contract as the
-          // panel's stopMenuKeys). Returning false lets CM handle the key.
-          EditorView.domEventHandlers({
-            keydown: (event) => {
-              if (event.key !== "Escape") {
-                event.stopPropagation();
-              }
-              return false;
-            },
+          autocompletion({
+            activateOnTyping: true,
+            addToOptions: [{ position: 20, render: renderCompletionIcon }],
+            icons: false,
+            override: [formulaCompletionSource],
           }),
+          // Fixed positioning off document.body: the Base UI menu popup the
+          // panel lives in must not clip or transform-offset the popup.
+          tooltips({ parent: document.body, position: "fixed" }),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) {
               return;

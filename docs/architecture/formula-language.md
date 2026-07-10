@@ -174,8 +174,11 @@ catch typed name refs the editor hasn't converted yet. The plain textarea (coars
 pointers, and the fallback on fine ones) displays `humanizeExpression(draft)` and
 re-canonicalizes on every change — humanize∘canonicalize is display-stable, so
 textarea users still only ever see names. Status line shows the first parse error or
-checker diagnostic (with a 1-based character position into the canonical text) or
-"✓ Valid" plus the result-type badge; a live preview evaluates the draft against
+checker diagnostic or "✓ Valid" plus the result-type badge; positions are 1-based
+characters into what the user SEES — `formulaDisplayOffset`
+([`highlight.ts`](../../src/lib/formula/highlight.ts)) maps canonical offsets past
+each `prop("<id>")` span's display length (the chip's field-name label in the CM6
+editor, the humanized reference in the textarea). A live preview evaluates the draft against
 the first row through the same scope the overlay uses (other formulas resolve to
 their computed values). Save is blocked only by parse errors — checker diagnostics
 warn but save, since the overlay degrades per-cell. The searchable Properties /
@@ -207,9 +210,24 @@ highlighting is **not** a second grammar:
 spans by running the real tokenizer plus the parser's own lookahead rules (scope
 roots, `prop("…")`, call syntax, word operators; comments recovered from inter-token
 gaps), so editor colors can't drift from what the parser accepts, and
-unparseable-mid-keystroke drafts still highlight. Fused autocomplete, the chip
-option menu, the info card, and diagnostics-in-editor (squiggles) are later stages
-(proposal §6).
+unparseable-mid-keystroke drafts still highlight.
+
+**Fused autocomplete** (proposal §6.2): one completion source merges properties
+(labeled/filtered by field name, applied as the canonical `prop("<id>")` text — one
+atomic chip — with the field-type icon and value type as detail; a typed
+`thisPage.`-prefix narrows to properties and is replaced whole), catalog functions
+(signature as detail, description as the info card, caret placed inside the inserted
+parens — after them for zero-argument functions), and the word operators/keywords
+(`and`/`or`/`not`/`true`/`false`). It opens on typed identifiers or explicit
+Ctrl+Space; Enter/Tab accept. Ranking is **type-aware**: `formulaEnclosingCallAt`
+(token-level, works mid-keystroke) finds the innermost unclosed call and argument
+index, the catalog's typed params give the expected type, and candidates whose
+result type fits (`formulaTypeFits` — the checker's own acceptance relation) are
+boosted above CM's fuzzy-match score, with properties leading ties. The popup is
+theme-styled via CSS variables and parents to `document.body` so the enclosing menu
+popup can't clip it; while it's open, Escape closes only the popup (its bubble is
+consumed so the menu stays open), and bubbles to close the menu otherwise. The chip
+option menu and diagnostics-in-editor (squiggles) are later stages (proposal §6).
 
 ## Templates
 

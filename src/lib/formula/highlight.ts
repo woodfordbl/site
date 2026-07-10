@@ -275,6 +275,110 @@ export function formulaPropIdSpans(source: string): FormulaPropIdSpan[] {
 }
 
 /**
+ * Map an offset into canonical formula text to the equivalent offset in a
+ * DISPLAY rendering where every canonical `prop("<id>")` span shows as a
+ * label whose length `labelLength` supplies (the chip's field name in the
+ * CM6 editor, the humanized `thisPage.Name` form in the textarea). Offsets
+ * inside a span clamp to the span's rendered extent, so a position can never
+ * point past the label it lands in. Never throws; text without canonical
+ * references maps to itself.
+ */
+export function formulaDisplayOffset(
+  source: string,
+  offset: number,
+  labelLength: (id: string) => number
+): number {
+  let delta = 0;
+  for (const span of formulaPropIdSpans(source)) {
+    if (span.end <= offset) {
+      delta += labelLength(span.id) - (span.end - span.start);
+      continue;
+    }
+    if (span.start < offset) {
+      const into = Math.min(offset - span.start, labelLength(span.id));
+      return span.start + delta + into;
+    }
+    break;
+  }
+  return offset + delta;
+}
+
+/** The innermost unclosed call around a source position. */
+export interface FormulaCallSite {
+  /** 0-based index of the argument the position falls in. */
+  argIndex: number;
+  /** The callee identifier as written. */
+  name: string;
+}
+
+type CallFrame =
+  | { kind: "call"; site: FormulaCallSite }
+  | { kind: "group" }
+  | { kind: "list" };
+
+/** Track one punct's effect on the open call/group/list nesting. */
+function pushCallFrame(
+  stack: CallFrame[],
+  value: FormulaPunct,
+  previous: FormulaToken | undefined
+): void {
+  if (value === "(") {
+    stack.push(
+      previous?.type === "identifier"
+        ? { kind: "call", site: { argIndex: 0, name: previous.value } }
+        : { kind: "group" }
+    );
+  } else if (value === "[") {
+    stack.push({ kind: "list" });
+  } else if (value === ")" || value === "]") {
+    stack.pop();
+  } else if (value === ",") {
+    const top = stack.at(-1);
+    if (top?.kind === "call") {
+      top.site.argIndex += 1;
+    }
+  }
+}
+
+/**
+ * The innermost unclosed function call containing `position`, with the
+ * 0-based index of the argument the position falls in — the editor
+ * autocomplete's "what does this argument position expect" anchor.
+ * Token-level (no parse), so it works on the unparseable mid-typing drafts
+ * where completion actually fires; unlexable input scans its lexable prefix
+ * (same policy as {@link formulaPropIdSpans}). Grouping parens are
+ * transparent (the enclosing call still governs the type); a list literal is
+ * a hard boundary (its elements aren't the call's argument). `null` at the
+ * top level or when no call is open.
+ */
+export function formulaEnclosingCallAt(
+  source: string,
+  position: number
+): FormulaCallSite | null {
+  const stack: CallFrame[] = [];
+  let previous: FormulaToken | undefined;
+  for (const token of lexablePrefixTokens(source)) {
+    if (token.type === "eof" || token.position >= position) {
+      break;
+    }
+    if (token.type === "punct") {
+      pushCallFrame(stack, token.value, previous);
+    }
+    previous = token;
+  }
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const frame = stack[index];
+    if (frame.kind === "call") {
+      return frame.site;
+    }
+    if (frame.kind === "list") {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Classify `source` into sorted, non-overlapping highlight spans. Never
  * throws. When the source doesn't lex (unterminated string mid-keystroke),
  * the lexable prefix still highlights and the tail is classified by what it

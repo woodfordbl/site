@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   type FormulaHighlightSpan,
+  formulaDisplayOffset,
+  formulaEnclosingCallAt,
   formulaPropIdSpans,
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
@@ -161,5 +163,89 @@ describe("formulaPropIdSpans", () => {
     expect(formulaPropIdSpans('prop("f-a") +')).toEqual([
       { start: 0, end: 11, id: "f-a" },
     ]);
+  });
+});
+
+describe("formulaDisplayOffset", () => {
+  // `prop("f-a")` (11 chars) renders as the 5-char label "Price".
+  const labels = new Map([["f-a", "Price"]]);
+  const labelLength = (id: string) => labels.get(id)?.length ?? id.length;
+
+  it("is the identity for text without canonical references", () => {
+    expect(formulaDisplayOffset("1 + thisPage.X", 8, labelLength)).toBe(8);
+  });
+
+  it("shifts offsets past a span by the label/canonical length difference", () => {
+    // canonical: prop("f-a") + 2   display: Price + 2
+    const source = 'prop("f-a") + 2';
+    expect(formulaDisplayOffset(source, 11, labelLength)).toBe(5);
+    expect(formulaDisplayOffset(source, 14, labelLength)).toBe(8);
+  });
+
+  it("accumulates across multiple spans", () => {
+    // canonical: prop("f-a") * prop("f-a") + 9 → display: Price * Price + 9
+    const source = 'prop("f-a") * prop("f-a") + 9';
+    expect(formulaDisplayOffset(source, source.length - 1, labelLength)).toBe(
+      "Price * Price + ".length
+    );
+  });
+
+  it("clamps offsets inside a span to the rendered label extent", () => {
+    const source = 'prop("f-a") + 2';
+    // 8 chars into the canonical form, but the label is only 5 long.
+    expect(formulaDisplayOffset(source, 8, labelLength)).toBe(5);
+    expect(formulaDisplayOffset(source, 2, labelLength)).toBe(2);
+  });
+
+  it("uses the raw id length for unknown ids (the chip's fallback label)", () => {
+    // canonical: prop("f-ghost") + 1 → chip label: f-ghost
+    const source = 'prop("f-ghost") + 1';
+    expect(formulaDisplayOffset(source, source.length, labelLength)).toBe(
+      "f-ghost + 1".length
+    );
+  });
+
+  it("maps offsets in unparseable drafts (token-level spans still count)", () => {
+    expect(formulaDisplayOffset('prop("f-a") +', 13, labelLength)).toBe(7);
+  });
+});
+
+describe("formulaEnclosingCallAt", () => {
+  const at = (source: string) => formulaEnclosingCallAt(source, source.length);
+
+  it("returns null at the top level and inside grouping-only parens", () => {
+    expect(at("1 + ")).toBeNull();
+    expect(at("(1 + ")).toBeNull();
+  });
+
+  it("finds the innermost unclosed call and its argument index", () => {
+    expect(at("round(")).toEqual({ argIndex: 0, name: "round" });
+    expect(at("round(1.234, ")).toEqual({ argIndex: 1, name: "round" });
+    expect(at("if(x, round(")).toEqual({ argIndex: 0, name: "round" });
+  });
+
+  it("steps back out of closed calls", () => {
+    expect(at("if(round(1), ")).toEqual({ argIndex: 1, name: "if" });
+  });
+
+  it("looks through grouping parens to the governing call", () => {
+    expect(at("round((1 + ")).toEqual({ argIndex: 0, name: "round" });
+  });
+
+  it("treats list brackets as a boundary (elements aren't the argument)", () => {
+    expect(at("sum([1, ")).toBeNull();
+  });
+
+  it("does not count commas of nested closed contexts", () => {
+    expect(at('dateDiff(parseDate("a"), ')).toEqual({
+      argIndex: 1,
+      name: "dateDiff",
+    });
+  });
+
+  it("scans the lexable prefix of unlexable input (open string mid-typing)", () => {
+    // The position is inside a string — the completion source suppresses
+    // completions there separately; the call scan still sees `round(`.
+    expect(at('round("open')).toEqual({ argIndex: 0, name: "round" });
   });
 });

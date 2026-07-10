@@ -41,6 +41,7 @@ import {
 } from "@/lib/formula/check.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
+import { formulaDisplayOffset } from "@/lib/formula/highlight.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalizeExpression,
@@ -185,12 +186,15 @@ function ReferenceRow({
 
 /**
  * Left half of the status row: the first parse error, else the first checker
- * diagnostic (both with a 1-based character position), else "✓ Valid".
- * `null` for a blank draft.
+ * diagnostic, else "✓ Valid". `null` for a blank draft. Positions are
+ * 1-based indexes into what the user SEES — `displayPosition` maps each
+ * canonical-draft offset past the `prop("<id>")` spans that render as short
+ * labels (chips / humanized references).
  */
 function statusLine(
   parsed: ParseFormulaResult | null,
-  checked: FormulaCheckResult | null
+  checked: FormulaCheckResult | null,
+  displayPosition: (offset: number) => number
 ): ReactNode {
   if (parsed === null) {
     return null;
@@ -198,7 +202,8 @@ function statusLine(
   if (!parsed.ok) {
     return (
       <span className="min-w-0 truncate text-destructive text-xs">
-        {parsed.error.message} (at character {parsed.error.position + 1})
+        {parsed.error.message} (at character{" "}
+        {displayPosition(parsed.error.position) + 1})
       </span>
     );
   }
@@ -206,7 +211,8 @@ function statusLine(
   if (firstDiagnostic !== undefined) {
     return (
       <span className="min-w-0 truncate text-destructive text-xs">
-        {firstDiagnostic.message} (at character {firstDiagnostic.start + 1})
+        {firstDiagnostic.message} (at character{" "}
+        {displayPosition(firstDiagnostic.start) + 1})
       </span>
     );
   }
@@ -362,6 +368,26 @@ export function FormulaEditorPanel({
     return formulaValueToDisplay(evaluateFormula(parsed.ast, scope));
   }, [parsed, fields, firstRowValues]);
 
+  // Canonical-offset → visible-offset mapping for status positions: each
+  // `prop("<id>")` span before an offset renders shorter than its canonical
+  // text — as a name-labeled chip in the CM6 editor, as the humanized
+  // `thisPage.Name` reference in the textarea (unknown ids stay canonical
+  // there; a chip shows the raw id). Keyed off the pointer class, matching
+  // which editor is mounted.
+  const displayPosition = useMemo(() => {
+    const fieldsById = new Map(fields.map((field) => [field.id, field]));
+    const labelLength = (id: string): number => {
+      const field = fieldsById.get(id);
+      if (coarsePointer) {
+        return field === undefined
+          ? canonicalPropertyReference(id).length
+          : formulaPropertyReference(field.name).length;
+      }
+      return field === undefined ? id.length : field.name.length;
+    };
+    return (offset: number) => formulaDisplayOffset(draft, offset, labelLength);
+  }, [draft, fields, coarsePointer]);
+
   const normalizedQuery = query.trim().toLowerCase();
 
   // Formula fields are insertable references too (formulas may reference
@@ -412,7 +438,7 @@ export function FormulaEditorPanel({
   const statusRow =
     parsed === null ? null : (
       <div className="flex items-center justify-between gap-2 px-0.5">
-        {statusLine(parsed, checked)}
+        {statusLine(parsed, checked, displayPosition)}
         {checked === null ? null : (
           <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
             Type:

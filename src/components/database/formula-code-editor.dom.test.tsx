@@ -341,4 +341,210 @@ describe("FormulaCodeEditor", () => {
       expect(onChange).toHaveBeenLastCalledWith('prop("f-price") + 1 + 2');
     });
   });
+
+  describe("fused autocomplete", () => {
+    function editorView(): EditorView {
+      const editor = document.querySelector(".cm-editor");
+      const view =
+        editor instanceof HTMLElement ? EditorView.findFromDOM(editor) : null;
+      if (view === null) {
+        throw new Error("editor view not mounted");
+      }
+      return view;
+    }
+
+    /** Simulate typing: splice at the caret as an `input.type` user event. */
+    function typeText(text: string): void {
+      act(() => {
+        const view = editorView();
+        const { from, to } = view.state.selection.main;
+        view.dispatch({
+          changes: { from, insert: text, to },
+          selection: { anchor: from + text.length },
+          userEvent: "input.type",
+        });
+      });
+    }
+
+    function popup(): HTMLElement | null {
+      const element = document.querySelector(".cm-tooltip-autocomplete");
+      return element instanceof HTMLElement ? element : null;
+    }
+
+    async function waitForPopup(): Promise<HTMLElement> {
+      await waitFor(() => {
+        expect(popup()).not.toBeNull();
+      });
+      const element = popup();
+      if (element === null) {
+        throw new Error("completion popup not open");
+      }
+      return element;
+    }
+
+    /**
+     * CM ignores accept/move commands for `interactionDelay` (75ms) after
+     * the popup opens (accidental-Enter protection); settle past it before
+     * accepting.
+     */
+    async function settleInteractionDelay(): Promise<void> {
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 100);
+          })
+      );
+    }
+
+    function optionLabels(element: HTMLElement): string[] {
+      return [...element.querySelectorAll("li .cm-completionLabel")].map(
+        (label) => label.textContent ?? ""
+      );
+    }
+
+    function renderEditor(onChange = vi.fn(), fields = FIELDS) {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          fields={fields}
+          onChange={onChange}
+          value=""
+        />
+      );
+      return onChange;
+    }
+
+    it("opens on typed identifiers with properties, functions, and keywords fused", async () => {
+      renderEditor();
+      typeText("pri");
+
+      const open = await waitForPopup();
+      // "pri" fuzzy-matches the Price property; its row carries the value
+      // type as detail and the field-type icon in the icon slot.
+      const labels = optionLabels(open);
+      expect(labels).toContain("Price");
+      const priceRow = [...open.querySelectorAll("li")].find((li) =>
+        li.textContent?.includes("Price")
+      );
+      expect(priceRow?.textContent).toContain("number");
+      expect(
+        priceRow?.querySelector(".cm-formula-completion-icon svg")
+      ).not.toBeNull();
+    });
+
+    it("applies a property completion as one canonical chip", async () => {
+      const onChange = renderEditor();
+      typeText("pri");
+      await waitForPopup();
+      await settleInteractionDelay();
+
+      // Price is the top-ranked option; Enter accepts it.
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-price")');
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+          "Price"
+        );
+      });
+      // Caret sits after the chip, ready to continue the expression.
+      expect(editorView().state.selection.main.head).toBe(
+        'prop("f-price")'.length
+      );
+    });
+
+    it("replaces a typed scope-root prefix along with the partial name", async () => {
+      const onChange = renderEditor();
+      typeText("thisPage.pri");
+      await waitForPopup();
+      await settleInteractionDelay();
+
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-price")');
+    });
+
+    it("inserts functions with the caret inside the parens (after them for zero-arg)", async () => {
+      const onChange = renderEditor();
+      typeText("roun");
+      await waitForPopup();
+      await settleInteractionDelay();
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith("round()");
+      expect(editorView().state.selection.main.head).toBe("round(".length);
+
+      typeText("1.5");
+      // Move past the closing paren, then complete a zero-arg function.
+      act(() => {
+        const view = editorView();
+        view.dispatch({ selection: { anchor: view.state.doc.length } });
+      });
+      typeText(" + toda");
+      await waitForPopup();
+      await settleInteractionDelay();
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith("round(1.5) + today()");
+      // Zero-argument function: caret lands AFTER the parens.
+      expect(editorView().state.selection.main.head).toBe(
+        "round(1.5) + today()".length
+      );
+    });
+
+    it("accepts with Tab too", async () => {
+      const onChange = renderEditor();
+      typeText("upp");
+      await waitForPopup();
+      await settleInteractionDelay();
+      fireEvent.keyDown(cmContent(), { key: "Tab" });
+      expect(onChange).toHaveBeenLastCalledWith("upper()");
+    });
+
+    it("ranks type-fitting candidates first in an argument position", async () => {
+      // Inside round( — a number argument — the number-typed Amount property
+      // must outrank the alphabetically-earlier text-typed Alpha.
+      renderEditor(vi.fn(), [
+        { id: "f-alpha", name: "Alpha", type: "text" },
+        { id: "f-amount", name: "Amount", type: "number" },
+      ]);
+      typeText("round(a");
+
+      const open = await waitForPopup();
+      const labels = optionLabels(open);
+      expect(labels.indexOf("Amount")).toBeLessThan(labels.indexOf("Alpha"));
+    });
+
+    it("Escape closes the popup without bubbling while open, and bubbles when closed", async () => {
+      const onOuterKeyDown = vi.fn();
+      document.addEventListener("keydown", onOuterKeyDown);
+      try {
+        renderEditor();
+        typeText("pri");
+        await waitForPopup();
+
+        // First Escape: consumed by the popup — the enclosing menu (the
+        // document listener stands in for it) must not see it.
+        fireEvent.keyDown(cmContent(), { key: "Escape" });
+        expect(onOuterKeyDown).not.toHaveBeenCalled();
+        await waitFor(() => {
+          expect(popup()).toBeNull();
+        });
+
+        // Second Escape: no popup — bubbles so the menu closes.
+        fireEvent.keyDown(cmContent(), { key: "Escape" });
+        expect(onOuterKeyDown).toHaveBeenCalledTimes(1);
+      } finally {
+        document.removeEventListener("keydown", onOuterKeyDown);
+      }
+    });
+
+    it("offers no completions inside string literals", async () => {
+      renderEditor();
+      typeText('"pri');
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 250);
+          })
+      );
+      expect(popup()).toBeNull();
+    });
+  });
 });

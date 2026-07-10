@@ -305,9 +305,11 @@ participate in the view machinery like stored columns:
   typed catalog, [`catalog.ts`](../../src/lib/formula/catalog.ts)) that inserts at the
   caret, plus an explicit Save; broken expressions show a warning badge on the column
   header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
-  diagnostics warn but save (cells degrade per row, never crash). On fine pointers the
-  input is a lazy-loaded CodeMirror 6 editor with tokenizer-driven syntax highlighting
-  and atomic, schema-labeled property chips over the canonical `prop("<id>")` text
+  diagnostics warn but save (cells degrade per row, never crash); error positions
+  index the DISPLAY text the user sees, not the canonical draft. On fine pointers the
+  input is a lazy-loaded CodeMirror 6 editor with tokenizer-driven syntax highlighting,
+  atomic schema-labeled property chips over the canonical `prop("<id>")` text, and a
+  fused type-aware autocomplete (properties + functions + keywords in one ranked list)
   ([formula-language — Editor panel](./formula-language.md#editor-panel)); coarse
   pointers keep a plain textarea.
 - **Id-canonical references** — stored expressions reference fields by id

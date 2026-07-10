@@ -33,6 +33,11 @@ const FIRST_ROW_VALUES = { "f-price": 10, "f-qty": 4 };
 
 const PARSE_ERROR_RE = /Unexpected end of expression/;
 
+// Status-row position expectations (display coordinates, not canonical).
+const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
+const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
+const PARSE_ERROR_AT_8_RE = /Unexpected end of expression.*\(at character 8\)/;
+
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
 function flushFrames(): Promise<void> {
   return new Promise((resolve) => {
@@ -191,6 +196,21 @@ describe("FormulaEditorPanel", () => {
     expect(screen.getByText("Preview: 40")).toBeDefined();
   });
 
+  it("reports status positions in DISPLAY coordinates on the textarea path", async () => {
+    renderPanel();
+    await flushFrames();
+
+    // Display: thisPage.Price + abs("oops") — the draft behind it is the
+    // canonical prop("f-price") + abs("oops"), where `"oops"` sits at
+    // canonical offset 22 but DISPLAY offset 21. The status row must index
+    // the text the user sees: character 22, not the canonical 23.
+    const textarea = screen.getByLabelText("Formula expression");
+    fireEvent.change(textarea, {
+      target: { value: 'thisPage.Price + abs("oops")' },
+    });
+    expect(screen.getByText(ABS_DIAG_AT_22_RE)).toBeDefined();
+  });
+
   it("keeps the textarea display stable across the humanize∘canonicalize loop", async () => {
     const onSave = renderPanel();
     await flushFrames();
@@ -308,6 +328,28 @@ describe("FormulaEditorPanel", () => {
       expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
         "Cost"
       );
+    });
+
+    it("reports status positions in chip-label coordinates", async () => {
+      // Canonical draft: prop("f-price") + abs("oops") — the chip renders as
+      // the 5-char label "Price", so what the user sees is
+      // `Price + abs("oops")` with `"oops"` at offset 12 → character 13
+      // (canonical numbering would claim 23).
+      renderPanel(vi.fn(), 'prop("f-price") + abs("oops")');
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+      });
+      expect(screen.getByText(ABS_DIAG_AT_13_RE)).toBeDefined();
+    });
+
+    it("maps parse-error positions through chip labels too", async () => {
+      // prop("f-price") + → visible as `Price + `; the dangling-operator
+      // parse error points at display offset 7 → character 8.
+      renderPanel(vi.fn(), 'prop("f-price") +');
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+      });
+      expect(screen.getByText(PARSE_ERROR_AT_8_RE)).toBeDefined();
     });
 
     it("degrades to the fallback when the editor fails to mount", () => {
