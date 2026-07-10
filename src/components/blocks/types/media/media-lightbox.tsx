@@ -1,6 +1,6 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { IconX } from "@tabler/icons-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m } from "motion/react";
 import { useRef } from "react";
 import { MediaVideoPlayer } from "@/components/blocks/types/media/media-video-player.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -18,6 +18,14 @@ export const mediaMorphTransition = {
   stiffness: 380,
   damping: 34,
 } as const;
+
+/**
+ * Chrome (close button) enters only after the morph has visually settled —
+ * the spring above covers most of its travel by ~250ms — and leaves
+ * instantly on close so nothing floats over the return morph.
+ */
+const chromeEnterTransition = { delay: 0.25, duration: 0.15 } as const;
+const chromeExitTransition = { delay: 0, duration: 0.1 } as const;
 
 const mediaClassName =
   "max-h-[calc(100vh-4rem)] max-w-full rounded-md object-contain";
@@ -64,7 +72,7 @@ export function MediaLightbox({
             <>
               <BaseDialog.Backdrop
                 render={
-                  <motion.div
+                  <m.div
                     animate={{ opacity: 1 }}
                     className="fixed inset-0 isolate z-50 bg-black/20"
                     exit={{ opacity: 0 }}
@@ -76,7 +84,7 @@ export function MediaLightbox({
                 <DialogTitle className="sr-only">{alt}</DialogTitle>
                 <div className="relative w-fit max-w-full">
                   {kind === "video" ? (
-                    <motion.div
+                    <m.div
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       initial={{ opacity: 0, scale: 0.97 }}
@@ -86,9 +94,9 @@ export function MediaLightbox({
                         className={mediaClassName}
                         src={displayUrl}
                       />
-                    </motion.div>
+                    </m.div>
                   ) : (
-                    <motion.img
+                    <m.img
                       alt={alt}
                       className={mediaClassName}
                       height={naturalSize?.height}
@@ -98,11 +106,12 @@ export function MediaLightbox({
                       width={naturalSize?.width}
                     />
                   )}
-                  <motion.div
+                  <m.div
                     animate={{ opacity: 1 }}
                     className="absolute top-2 right-2"
-                    exit={{ opacity: 0 }}
+                    exit={{ opacity: 0, transition: chromeExitTransition }}
                     initial={{ opacity: 0 }}
+                    transition={chromeEnterTransition}
                   >
                     <DialogClose
                       render={
@@ -116,7 +125,7 @@ export function MediaLightbox({
                       <IconX />
                       <span className="sr-only">Close</span>
                     </DialogClose>
-                  </motion.div>
+                  </m.div>
                 </div>
               </BaseDialog.Popup>
             </>

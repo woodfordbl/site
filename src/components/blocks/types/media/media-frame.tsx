@@ -1,4 +1,4 @@
-import { MotionConfig, motion } from "motion/react";
+import { m } from "motion/react";
 import { useId, useRef, useState } from "react";
 
 import { MediaHoverToolbar } from "@/components/blocks/types/media/media-hover-toolbar.tsx";
@@ -6,6 +6,7 @@ import {
   MediaLightbox,
   mediaMorphTransition,
 } from "@/components/blocks/types/media/media-lightbox.tsx";
+import { MediaMotionProvider } from "@/components/blocks/types/media/media-motion.tsx";
 import { MediaVideoPlayer } from "@/components/blocks/types/media/media-video-player.tsx";
 import { useMediaResize } from "@/components/blocks/types/media/use-media-resize.ts";
 import { ResizeHandle } from "@/components/ui/resize-handle.tsx";
@@ -67,7 +68,7 @@ export function MediaFrame({
   };
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MediaMotionProvider>
       <figure className={cn("w-full", className)}>
         <div
           className="group/media relative mx-auto"
@@ -91,7 +92,7 @@ export function MediaFrame({
                 src={displayUrl}
               />
             ) : (
-              <motion.img
+              <m.img
                 alt={alt}
                 className={mediaElementClassName}
                 height={480}
@@ -164,6 +165,6 @@ export function MediaFrame({
           open={lightboxOpen}
         />
       </figure>
-    </MotionConfig>
+    </MediaMotionProvider>
   );
 }
