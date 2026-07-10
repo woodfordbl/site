@@ -486,12 +486,19 @@ other page settings (header image, width, text scale) are not inherited yet.
 The editor's header edits **row defaults** (`database.rowDefaults`, sparse; op
 `setDatabaseRowDefault`): a default name (primary field) plus per-field default values
 that `insertDatabaseRow` seeds new rows with (explicit caller writes win;
-`removeDatabaseField` strips its default). The editor also offers a sidebar
-**Preview as row** picker (live-rendered under the same sidebar shell — `PageWorkspace`
-skips its own chrome provider when one is already mounted) and a `{{`-triggered
-property-token autocomplete
+`removeDatabaseField` strips its default). Default editing reuses the grid's NATIVE
+cell editors via their `commitValueOverride` escape (`database-cell-editor.tsx`), and
+date fields add the created-today sentinel `@today` — "On row creation" — resolved per
+insert by [`row-defaults.ts`](../../src/lib/databases/row-defaults.ts). The editor also
+offers a sidebar **Preview as row** picker (live-rendered under the same sidebar shell —
+`PageWorkspace` skips its own chrome provider when one is already mounted) and a
+`{{`-triggered property-token autocomplete
 ([`row-template-token-autocomplete.tsx`](../../src/components/database/row-page/row-template-token-autocomplete.tsx),
-route-mounted, not threaded through the slash-menu plumbing).
+route-mounted, not threaded through the slash-menu plumbing). The whole row-page family
+(virtual page, preview, template editor) shares an optional Linear-style **properties
+rail** ([`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx)):
+a resizable right panel holding the properties instead of the in-page section, toggled
+per user (localStorage), always in-page on narrow viewports.
 
 **Copy-on-write:** the first body click instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids
