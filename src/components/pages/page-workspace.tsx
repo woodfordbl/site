@@ -55,6 +55,12 @@ import { cn } from "@/lib/utils.ts";
 
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
+  /**
+   * Wraps the canvas scroll region below the header bar — e.g. the
+   * row-template editor's properties rail splits it into content + side
+   * panel while the header and footer actions keep their normal placement.
+   */
+  contentWrapper?: (content: ReactNode) => ReactNode;
   /** Overrides the default page sidebar (e.g. the template editor's chrome). */
   sidebar?: ReactNode;
   /**
@@ -150,6 +156,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 
   const body = (
     <PageWorkspaceBody
+      contentWrapper={props.contentWrapper}
       initialBlocks={initialBlocks}
       page={page}
       pageHasLocalDraft={pageHasLocalDraft}
@@ -174,6 +181,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 }
 
 function PageWorkspaceBody({
+  contentWrapper,
   initialBlocks,
   page,
   pageHasLocalDraft,
@@ -181,6 +189,7 @@ function PageWorkspaceBody({
   titleSeed,
   titleSlot,
 }: {
+  contentWrapper?: (content: ReactNode) => ReactNode;
   initialBlocks: Page["blocks"];
   page: Page | LocalPage;
   pageHasLocalDraft: boolean;
@@ -322,7 +331,9 @@ function PageWorkspaceBody({
                     scroll region (as headerSlot). */}
                   {isNarrowViewport || hasCover ? null : header}
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden">
-                    {canvasContent}
+                    {contentWrapper
+                      ? contentWrapper(canvasContent)
+                      : canvasContent}
                   </div>
                 </>
               )}

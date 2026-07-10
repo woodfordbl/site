@@ -52,49 +52,40 @@ export function RowTemplatePreviewBody({
     [template?.blocks, database.fields, row.values]
   );
 
-  const mainPanel = (
+  // The scroll region below the full-width "Previewing as" bar — the part
+  // the properties rail splits when expanded.
+  const content = (
     <div
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
-      data-page-main-panel=""
+      {...pageContentTypographyProps({
+        font: resolvePageFont(template?.font),
+        textScale: undefined,
+      })}
+      className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
     >
-      <div className="flex h-10 shrink-0 items-center gap-2 border-sidebar-border border-b bg-muted/40 px-3 text-muted-foreground text-sm">
-        <IconEye aria-hidden className="size-4 shrink-0" />
-        <span className="min-w-0 truncate">
-          Previewing as <span className="text-foreground">{displayTitle}</span>
-        </span>
-      </div>
-      <div
-        {...pageContentTypographyProps({
-          font: resolvePageFont(template?.font),
-          textScale: undefined,
-        })}
-        className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-      >
-        <CanvasBlocksReadOnly
-          blocks={templateBlocks}
-          isNarrowViewport={isNarrowViewport}
-          mode="view"
-          pageId={`db-template-preview:${row.id}`}
-          titleSlot={
-            <RowPageTitleSection
-              database={database}
-              displayTitle={displayTitle}
-              icon={template?.icon}
-              propertiesExtra={
-                rail.available ? (
-                  <RowPropertiesRailExpandButton
-                    onExpand={() => {
-                      rail.setExpanded(true);
-                    }}
-                  />
-                ) : undefined
-              }
-              row={row}
-              showProperties={!rail.expanded}
-            />
-          }
-        />
-      </div>
+      <CanvasBlocksReadOnly
+        blocks={templateBlocks}
+        isNarrowViewport={isNarrowViewport}
+        mode="view"
+        pageId={`db-template-preview:${row.id}`}
+        titleSlot={
+          <RowPageTitleSection
+            database={database}
+            displayTitle={displayTitle}
+            icon={template?.icon}
+            propertiesExtra={
+              rail.available ? (
+                <RowPropertiesRailExpandButton
+                  onExpand={() => {
+                    rail.setExpanded(true);
+                  }}
+                />
+              ) : undefined
+            }
+            row={row}
+            showProperties={!rail.expanded}
+          />
+        }
+      />
     </div>
   );
 
@@ -102,18 +93,30 @@ export function RowTemplatePreviewBody({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:h-auto md:h-full">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none">
         {showSidebarRail ? <PageSidebarRail /> : null}
-        {rail.expanded ? (
-          <RowPropertiesRailLayout
-            onCollapse={() => {
-              rail.setExpanded(false);
-            }}
-            panel={<RowPropertiesPanel database={database} row={row} />}
-          >
-            {mainPanel}
-          </RowPropertiesRailLayout>
-        ) : (
-          mainPanel
-        )}
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
+          data-page-main-panel=""
+        >
+          <div className="flex h-10 shrink-0 items-center gap-2 border-sidebar-border border-b bg-muted/40 px-3 text-muted-foreground text-sm">
+            <IconEye aria-hidden className="size-4 shrink-0" />
+            <span className="min-w-0 truncate">
+              Previewing as{" "}
+              <span className="text-foreground">{displayTitle}</span>
+            </span>
+          </div>
+          {rail.expanded ? (
+            <RowPropertiesRailLayout
+              onCollapse={() => {
+                rail.setExpanded(false);
+              }}
+              panel={<RowPropertiesPanel database={database} row={row} />}
+            >
+              {content}
+            </RowPropertiesRailLayout>
+          ) : (
+            content
+          )}
+        </div>
       </div>
     </div>
   );

@@ -135,6 +135,20 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
 
   const workspace = (
     <PageWorkspace
+      contentWrapper={
+        rail.expanded
+          ? (content) => (
+              <RowPropertiesRailLayout
+                onCollapse={() => {
+                  rail.setExpanded(false);
+                }}
+                panel={<RowTemplateDefaultsList database={database} />}
+              >
+                {content}
+              </RowPropertiesRailLayout>
+            )
+          : undefined
+      }
       kind="user"
       page={templatePage}
       pageHasLocalDraft={true}
@@ -163,26 +177,11 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
   return (
     <SiteShell>
       <PageSidebarChromeProvider sidebar={sidebar}>
-        {(() => {
-          if (previewRow) {
-            return (
-              <RowTemplatePreviewBody database={database} row={previewRow} />
-            );
-          }
-          if (rail.expanded) {
-            return (
-              <RowPropertiesRailLayout
-                onCollapse={() => {
-                  rail.setExpanded(false);
-                }}
-                panel={<RowTemplateDefaultsList database={database} />}
-              >
-                {workspace}
-              </RowPropertiesRailLayout>
-            );
-          }
-          return workspace;
-        })()}
+        {previewRow ? (
+          <RowTemplatePreviewBody database={database} row={previewRow} />
+        ) : (
+          workspace
+        )}
       </PageSidebarChromeProvider>
       {previewRow ? null : <RowTemplateTokenAutocomplete database={database} />}
     </SiteShell>

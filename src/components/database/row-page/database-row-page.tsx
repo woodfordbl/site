@@ -414,48 +414,44 @@ function RowPageBody({
     return null;
   }
 
-  const mainPanel = (
+  // The scroll region below the full-width header — the part the properties
+  // rail splits when expanded.
+  const content = (
+    // biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path.
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button.
     <div
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
-      data-page-main-panel=""
+      {...pageContentTypographyProps({
+        font: resolvePageFont(template?.font),
+        textScale: undefined,
+      })}
+      className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
+      onClick={handleBodyClick}
     >
-      <RowPageHeader database={database} rowTitle={displayTitle} />
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path. */}
-      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button. */}
-      <div
-        {...pageContentTypographyProps({
-          font: resolvePageFont(template?.font),
-          textScale: undefined,
-        })}
-        className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-        onClick={handleBodyClick}
-      >
-        <CanvasBlocksReadOnly
-          blocks={templateBlocks}
-          isNarrowViewport={isNarrowViewport}
-          mode="view"
-          pageId={`db-row:${row.id}`}
-          titleSlot={
-            <RowPageTitleSection
-              database={database}
-              displayTitle={displayTitle}
-              icon={template?.icon}
-              propertiesExtra={
-                rail.available ? (
-                  <RowPropertiesRailExpandButton
-                    onExpand={() => {
-                      rail.setExpanded(true);
-                    }}
-                  />
-                ) : undefined
-              }
-              row={row}
-              showProperties={!rail.expanded}
-            />
-          }
-        />
-      </div>
+      <CanvasBlocksReadOnly
+        blocks={templateBlocks}
+        isNarrowViewport={isNarrowViewport}
+        mode="view"
+        pageId={`db-row:${row.id}`}
+        titleSlot={
+          <RowPageTitleSection
+            database={database}
+            displayTitle={displayTitle}
+            icon={template?.icon}
+            propertiesExtra={
+              rail.available ? (
+                <RowPropertiesRailExpandButton
+                  onExpand={() => {
+                    rail.setExpanded(true);
+                  }}
+                />
+              ) : undefined
+            }
+            row={row}
+            showProperties={!rail.expanded}
+          />
+        }
+      />
     </div>
   );
 
@@ -463,18 +459,24 @@ function RowPageBody({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:h-auto md:h-full">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none">
         {showSidebarRail ? <PageSidebarRail /> : null}
-        {rail.expanded ? (
-          <RowPropertiesRailLayout
-            onCollapse={() => {
-              rail.setExpanded(false);
-            }}
-            panel={<RowPropertiesPanel database={database} row={row} />}
-          >
-            {mainPanel}
-          </RowPropertiesRailLayout>
-        ) : (
-          mainPanel
-        )}
+        <div
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
+          data-page-main-panel=""
+        >
+          <RowPageHeader database={database} rowTitle={displayTitle} />
+          {rail.expanded ? (
+            <RowPropertiesRailLayout
+              onCollapse={() => {
+                rail.setExpanded(false);
+              }}
+              panel={<RowPropertiesPanel database={database} row={row} />}
+            >
+              {content}
+            </RowPropertiesRailLayout>
+          ) : (
+            content
+          )}
+        </div>
       </div>
     </div>
   );
