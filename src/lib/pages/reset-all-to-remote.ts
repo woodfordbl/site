@@ -7,6 +7,7 @@ import { clearPageSnapshots } from "@/db/snapshots/page-snapshot-store.ts";
 import { clearAllPageEditHistories } from "@/lib/canvas/page-edit-history.ts";
 import { writeDirtyPageIdsToDocument } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { writePageListLocalPreviewToDocument } from "@/lib/pages/page-list-local-preview-cookie.ts";
+import { writeTemplatePageId } from "@/lib/pages/template-page-cookie.ts";
 
 /** Clears all local page metadata, block shards, and SSR hint cookies. */
 export async function resetAllToRemote(): Promise<void> {
@@ -22,5 +23,6 @@ export async function resetAllToRemote(): Promise<void> {
   clearAllPageEditHistories();
   writeDirtyPageIdsToDocument(new Set());
   writePageListLocalPreviewToDocument([]);
+  writeTemplatePageId(null);
   await sweepOrphanAssets();
 }
