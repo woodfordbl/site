@@ -19,6 +19,11 @@ import {
 
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
+import {
+  RowPropertiesRailExpandButton,
+  RowPropertiesRailLayout,
+  useRowPropertiesRail,
+} from "@/components/database/row-page/row-properties-rail.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
@@ -356,6 +361,7 @@ function RowPageBody({
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
   const navigate = useNavigate();
   const { pages } = useMergedPageListItems();
+  const rail = useRowPropertiesRail();
 
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
 
@@ -408,42 +414,67 @@ function RowPageBody({
     return null;
   }
 
+  const mainPanel = (
+    <div
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
+      data-page-main-panel=""
+    >
+      <RowPageHeader database={database} rowTitle={displayTitle} />
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path. */}
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only. */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button. */}
+      <div
+        {...pageContentTypographyProps({
+          font: resolvePageFont(template?.font),
+          textScale: undefined,
+        })}
+        className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
+        onClick={handleBodyClick}
+      >
+        <CanvasBlocksReadOnly
+          blocks={templateBlocks}
+          isNarrowViewport={isNarrowViewport}
+          mode="view"
+          pageId={`db-row:${row.id}`}
+          titleSlot={
+            <RowPageTitleSection
+              database={database}
+              displayTitle={displayTitle}
+              icon={template?.icon}
+              propertiesExtra={
+                rail.available ? (
+                  <RowPropertiesRailExpandButton
+                    onExpand={() => {
+                      rail.setExpanded(true);
+                    }}
+                  />
+                ) : undefined
+              }
+              row={row}
+              showProperties={!rail.expanded}
+            />
+          }
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:h-auto md:h-full">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none">
         {showSidebarRail ? <PageSidebarRail /> : null}
-        <div
-          className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
-          data-page-main-panel=""
-        >
-          <RowPageHeader database={database} rowTitle={displayTitle} />
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path. */}
-          {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only. */}
-          {/* biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button. */}
-          <div
-            {...pageContentTypographyProps({
-              font: resolvePageFont(template?.font),
-              textScale: undefined,
-            })}
-            className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-            onClick={handleBodyClick}
+        {rail.expanded ? (
+          <RowPropertiesRailLayout
+            onCollapse={() => {
+              rail.setExpanded(false);
+            }}
+            panel={<RowPropertiesPanel database={database} row={row} />}
           >
-            <CanvasBlocksReadOnly
-              blocks={templateBlocks}
-              isNarrowViewport={isNarrowViewport}
-              mode="view"
-              pageId={`db-row:${row.id}`}
-              titleSlot={
-                <RowPageTitleSection
-                  database={database}
-                  displayTitle={displayTitle}
-                  icon={template?.icon}
-                  row={row}
-                />
-              }
-            />
-          </div>
-        </div>
+            {mainPanel}
+          </RowPropertiesRailLayout>
+        ) : (
+          mainPanel
+        )}
       </div>
     </div>
   );
@@ -461,13 +492,19 @@ export function RowPageTitleSection({
   database,
   displayTitle,
   icon,
+  propertiesExtra,
   row,
+  showProperties = true,
 }: {
   database: LocalDatabase;
   displayTitle: string;
   /** Template-inherited page icon; falls back to the default document glyph. */
   icon?: string;
+  /** Trailing affordance in the properties block (rail expand button). */
+  propertiesExtra?: ReactNode;
   row: LocalDatabaseRow;
+  /** False while the properties rail owns the panel (title only). */
+  showProperties?: boolean;
 }): ReactNode {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: propagation guard only — interactions live on the controls inside.
@@ -501,9 +538,17 @@ export function RowPageTitleSection({
           {displayTitle}
         </h1>
       </div>
-      <div className="mt-6 mb-4 border-border border-b pb-3">
-        <RowPropertiesPanel database={database} row={row} />
-      </div>
+      {showProperties ? (
+        <div
+          className="relative mt-6 mb-4 border-border border-b pb-3"
+          data-reveal-group=""
+        >
+          {propertiesExtra ? (
+            <div className="absolute top-0 right-0 z-10">{propertiesExtra}</div>
+          ) : null}
+          <RowPropertiesPanel database={database} row={row} />
+        </div>
+      ) : null}
     </div>
   );
 }

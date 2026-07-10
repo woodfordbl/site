@@ -80,14 +80,49 @@ function RowTemplatePropertyRow({
   );
 }
 
+/** The non-primary fields' default-value rows — title-slot block or rail panel. */
+export function RowTemplateDefaultsList({
+  database,
+}: {
+  database: LocalDatabase;
+}): ReactNode {
+  const panelFields = useMemo(
+    () =>
+      database.fields.filter((field) => field.id !== database.primaryFieldId),
+    [database.fields, database.primaryFieldId]
+  );
+
+  if (panelFields.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {panelFields.map((field) => (
+        <RowTemplatePropertyRow
+          database={database}
+          field={field}
+          key={field.id}
+        />
+      ))}
+    </div>
+  );
+}
+
 export interface RowTemplateTitleSectionProps {
   database: LocalDatabase;
+  /** Trailing affordance in the properties block (rail expand button). */
+  propertiesExtra?: ReactNode;
+  /** False while the properties rail owns the defaults (title only). */
+  showProperties?: boolean;
   templatePage: LocalPage;
 }
 
 /** Icon + default-name title + default-value rows for the editor's title slot. */
 export function RowTemplateTitleSection({
   database,
+  propertiesExtra,
+  showProperties = true,
   templatePage,
 }: RowTemplateTitleSectionProps): ReactNode {
   const { pages } = useMergedPageListItems();
@@ -95,10 +130,8 @@ export function RowTemplateTitleSection({
   const primaryField = database.fields.find(
     (field) => field.id === database.primaryFieldId
   );
-  const panelFields = useMemo(
-    () =>
-      database.fields.filter((field) => field.id !== database.primaryFieldId),
-    [database.fields, database.primaryFieldId]
+  const hasPanelFields = database.fields.some(
+    (field) => field.id !== database.primaryFieldId
   );
 
   const defaultName = database.rowDefaults?.[database.primaryFieldId];
@@ -148,15 +181,15 @@ export function RowTemplateTitleSection({
           type="text"
         />
       </div>
-      {panelFields.length > 0 ? (
-        <div className="mt-6 mb-4 flex flex-col gap-0.5 border-border border-b pb-3">
-          {panelFields.map((field) => (
-            <RowTemplatePropertyRow
-              database={database}
-              field={field}
-              key={field.id}
-            />
-          ))}
+      {showProperties && hasPanelFields ? (
+        <div
+          className="relative mt-6 mb-4 border-border border-b pb-3"
+          data-reveal-group=""
+        >
+          {propertiesExtra ? (
+            <div className="absolute top-0 right-0 z-10">{propertiesExtra}</div>
+          ) : null}
+          <RowTemplateDefaultsList database={database} />
         </div>
       ) : null}
     </div>

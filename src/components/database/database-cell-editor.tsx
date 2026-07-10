@@ -54,6 +54,14 @@ function initialDraft(
 }
 
 interface DatabaseCellInlineEditorProps {
+  /**
+   * Override where commits land — e.g. the row-template editor's DEFAULT
+   * values, which have no row. When set, `rowId` is never written to and
+   * `databaseId` must address the schema for select option creation.
+   */
+  commitValueOverride?: (value: DatabaseCellValue | null) => void;
+  /** Schema owner for option creation when `commitValueOverride` is set. */
+  databaseId?: string;
   field: DatabaseField;
   /** Move edit focus after a commit (Tab/Shift+Tab/Enter). */
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
@@ -84,6 +92,8 @@ const POPOVER_OVERFLOW_THRESHOLD_PX = 240;
  * the cell is too narrow (`POPOVER_OVERFLOW_THRESHOLD_PX`) to type in.
  */
 export function DatabaseCellInlineEditor({
+  commitValueOverride,
+  databaseId,
   field,
   onNavigate,
   onStopEdit,
@@ -97,6 +107,8 @@ export function DatabaseCellInlineEditor({
     case "multiSelect":
       return (
         <SelectCellPopoverEditor
+          commitValueOverride={commitValueOverride}
+          databaseId={databaseId}
           field={field}
           onStopEdit={onStopEdit}
           rowId={rowId}
@@ -106,6 +118,7 @@ export function DatabaseCellInlineEditor({
     case "date":
       return (
         <DateCellPopoverEditor
+          commitValueOverride={commitValueOverride}
           field={field}
           onStopEdit={onStopEdit}
           rowId={rowId}
@@ -118,6 +131,7 @@ export function DatabaseCellInlineEditor({
       if (field.type === "number" || width >= POPOVER_OVERFLOW_THRESHOLD_PX) {
         return (
           <TextCellInlineEditor
+            commitValueOverride={commitValueOverride}
             field={field}
             onNavigate={onNavigate}
             onStopEdit={onStopEdit}
@@ -129,6 +143,7 @@ export function DatabaseCellInlineEditor({
       }
       return (
         <TextCellPopoverEditor
+          commitValueOverride={commitValueOverride}
           field={field}
           onNavigate={onNavigate}
           onStopEdit={onStopEdit}
@@ -149,6 +164,7 @@ export function DatabaseCellInlineEditor({
  * `TextCellPopoverEditor` instead so the editor escapes the cell's clip.
  */
 function TextCellInlineEditor({
+  commitValueOverride,
   field,
   onNavigate,
   onStopEdit,
@@ -161,16 +177,20 @@ function TextCellInlineEditor({
   // Set once Enter/Tab/Escape handled the exit so the trailing blur is a no-op.
   const finishedRef = useRef(false);
   const isNumber = field.type === "number";
+  const write =
+    commitValueOverride ??
+    ((next: DatabaseCellValue | null) =>
+      updateDatabaseCell(rowId, field.id, next));
 
   const commit = () => {
     if (draft === initial) {
       return;
     }
     if (isNumber) {
-      updateDatabaseCell(rowId, field.id, parseNumberCellInput(draft));
+      write(parseNumberCellInput(draft));
       return;
     }
-    updateDatabaseCell(rowId, field.id, draft === "" ? null : draft);
+    write(draft === "" ? null : draft);
   };
 
   const finish = (move?: CellEditMove) => {
@@ -248,6 +268,7 @@ function autosizeTextarea(el: HTMLTextAreaElement): void {
  * these are single-line database strings, so newlines are never inserted.
  */
 function TextCellPopoverEditor({
+  commitValueOverride,
   field,
   onNavigate,
   onStopEdit,
@@ -279,7 +300,12 @@ function TextCellPopoverEditor({
     if (draft === initial) {
       return;
     }
-    updateDatabaseCell(rowId, field.id, draft === "" ? null : draft);
+    const next = draft === "" ? null : draft;
+    if (commitValueOverride) {
+      commitValueOverride(next);
+      return;
+    }
+    updateDatabaseCell(rowId, field.id, next);
   };
 
   const finish = (move?: CellEditMove) => {
@@ -422,6 +448,8 @@ function CellEditorPopover({
 }
 
 interface SelectCellPopoverEditorProps {
+  commitValueOverride?: (value: DatabaseCellValue | null) => void;
+  databaseId?: string;
   field: Extract<DatabaseField, { type: "select" | "multiSelect" }>;
   onStopEdit: () => void;
   rowId: string;
@@ -435,6 +463,8 @@ interface SelectCellPopoverEditorProps {
  * queries offer a "Create" row appending an option to the field schema.
  */
 function SelectCellPopoverEditor({
+  commitValueOverride,
+  databaseId: databaseIdProp,
   field,
   onStopEdit,
   rowId,
@@ -450,12 +480,17 @@ function SelectCellPopoverEditor({
     return typeof coerced === "string" && coerced !== "" ? [coerced] : [];
   }, [coerced, multiple]);
 
+  const write =
+    commitValueOverride ??
+    ((next: DatabaseCellValue | null) =>
+      updateDatabaseCell(rowId, field.id, next));
+
   const commitIds = (ids: string[]) => {
     if (multiple) {
-      updateDatabaseCell(rowId, field.id, ids.length > 0 ? ids : null);
+      write(ids.length > 0 ? ids : null);
       return;
     }
-    updateDatabaseCell(rowId, field.id, ids[0] ?? null);
+    write(ids[0] ?? null);
   };
 
   const handleToggle = (optionId: string) => {
@@ -473,8 +508,10 @@ function SelectCellPopoverEditor({
 
   const handleCreate = (name: string) => {
     // The row is guaranteed present while its cell is editing; point-read its
-    // databaseId to address the schema update.
-    const databaseId = localDatabaseRowsCollection.get(rowId)?.databaseId;
+    // databaseId to address the schema update. Rowless surfaces (row-default
+    // editing) pass the database directly.
+    const databaseId =
+      databaseIdProp ?? localDatabaseRowsCollection.get(rowId)?.databaseId;
     if (!databaseId) {
       return;
     }
@@ -507,6 +544,7 @@ function SelectCellPopoverEditor({
 }
 
 interface DateCellPopoverEditorProps {
+  commitValueOverride?: (value: DatabaseCellValue | null) => void;
   field: DatabaseField;
   onStopEdit: () => void;
   rowId: string;
@@ -518,6 +556,7 @@ interface DateCellPopoverEditorProps {
  * date part, with a Clear action emptying the cell.
  */
 function DateCellPopoverEditor({
+  commitValueOverride,
   field,
   onStopEdit,
   rowId,
@@ -528,6 +567,10 @@ function DateCellPopoverEditor({
     typeof coerced === "string"
       ? (isoDateToLocalDate(toIsoDatePart(coerced)) ?? undefined)
       : undefined;
+  const write =
+    commitValueOverride ??
+    ((next: DatabaseCellValue | null) =>
+      updateDatabaseCell(rowId, field.id, next));
 
   return (
     <CellEditorPopover className="w-auto" onStopEdit={onStopEdit}>
@@ -536,11 +579,7 @@ function DateCellPopoverEditor({
         defaultMonth={selected}
         mode="single"
         onSelect={(day) => {
-          updateDatabaseCell(
-            rowId,
-            field.id,
-            day ? format(day, "yyyy-MM-dd") : null
-          );
+          write(day ? format(day, "yyyy-MM-dd") : null);
           onStopEdit();
         }}
         selected={selected}
@@ -548,7 +587,7 @@ function DateCellPopoverEditor({
       <Button
         className="justify-center"
         onClick={() => {
-          updateDatabaseCell(rowId, field.id, null);
+          write(null);
           onStopEdit();
         }}
         size="sm"
@@ -561,6 +600,8 @@ function DateCellPopoverEditor({
 }
 
 interface DatabaseCheckboxCellEditorProps {
+  /** Override where the toggle lands (see `DatabaseCellInlineEditorProps`). */
+  commitValueOverride?: (value: DatabaseCellValue | null) => void;
   /** Read-only render (synced fields) — the checkbox shows but never writes. */
   disabled?: boolean;
   field: DatabaseField;
@@ -574,6 +615,7 @@ interface DatabaseCheckboxCellEditorProps {
  * gridcell): a bare 16px checkbox is untappable on coarse pointers.
  */
 export function DatabaseCheckboxCellEditor({
+  commitValueOverride,
   disabled = false,
   field,
   rowId,
@@ -587,6 +629,10 @@ export function DatabaseCheckboxCellEditor({
       className="static after:absolute after:inset-0"
       disabled={disabled}
       onCheckedChange={(next) => {
+        if (commitValueOverride) {
+          commitValueOverride(next === true);
+          return;
+        }
         updateDatabaseCell(rowId, field.id, next === true);
       }}
     />

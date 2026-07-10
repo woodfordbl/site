@@ -7,6 +7,7 @@ import {
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import { resolveRowDefaultValues } from "@/lib/databases/row-defaults.ts";
 import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
 import type {
   DatabaseCellValue,
@@ -186,12 +187,14 @@ export function insertDatabaseRow(
   const plan = planRowOrderAt(siblings, targetIndex);
 
   const timestamp = nowIso();
+  const database = localDatabasesCollection.get(databaseId);
   const row: LocalDatabaseRow = {
     id: crypto.randomUUID(),
     databaseId,
     // New rows start from the template's defaults (authored in the row-
-    // template editor); callers that set cells afterwards simply overwrite.
-    values: { ...localDatabasesCollection.get(databaseId)?.rowDefaults },
+    // template editor; date sentinels resolve to the creation date); callers
+    // that set cells afterwards simply overwrite.
+    values: database ? resolveRowDefaultValues(database) : {},
     order: plan.order,
     createdAt: timestamp,
     updatedAt: timestamp,

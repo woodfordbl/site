@@ -6,8 +6,16 @@ import {
   DatabaseTemplateEditorSidebar,
   PREVIEW_ROW_LIMIT,
 } from "@/components/database/row-page/database-template-editor-sidebar.tsx";
+import {
+  RowPropertiesRailExpandButton,
+  RowPropertiesRailLayout,
+  useRowPropertiesRail,
+} from "@/components/database/row-page/row-properties-rail.tsx";
 import { RowTemplatePreviewBody } from "@/components/database/row-page/row-template-preview.tsx";
-import { RowTemplateTitleSection } from "@/components/database/row-page/row-template-title-section.tsx";
+import {
+  RowTemplateDefaultsList,
+  RowTemplateTitleSection,
+} from "@/components/database/row-page/row-template-title-section.tsx";
 import { RowTemplateTokenAutocomplete } from "@/components/database/row-page/row-template-token-autocomplete.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
@@ -83,6 +91,7 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
     [databaseId]
   );
   const previewRows = useMemo(() => pickPreviewRows(rows), [rows]);
+  const rail = useRowPropertiesRail();
 
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
   // A deleted/out-of-sample row silently falls back to editing.
@@ -124,33 +133,56 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
     />
   );
 
+  const workspace = (
+    <PageWorkspace
+      kind="user"
+      page={templatePage}
+      pageHasLocalDraft={true}
+      titleSlot={
+        <RowTemplateTitleSection
+          database={database}
+          propertiesExtra={
+            rail.available ? (
+              <RowPropertiesRailExpandButton
+                onExpand={() => {
+                  rail.setExpanded(true);
+                }}
+              />
+            ) : undefined
+          }
+          showProperties={!rail.expanded}
+          templatePage={templatePage}
+        />
+      }
+    />
+  );
+
   // ONE sidebar shell across both modes — swapping edit ↔ preview replaces
   // only the main panel, so the sidebar keeps its pin/width state
   // (`PageWorkspace` detects the existing provider and doesn't nest its own).
   return (
     <SiteShell>
       <PageSidebarChromeProvider sidebar={sidebar}>
-        {previewRow ? (
-          <RowTemplatePreviewBody
-            database={database}
-            onExit={() => {
-              setPreviewRowId(null);
-            }}
-            row={previewRow}
-          />
-        ) : (
-          <PageWorkspace
-            kind="user"
-            page={templatePage}
-            pageHasLocalDraft={true}
-            titleSlot={
-              <RowTemplateTitleSection
-                database={database}
-                templatePage={templatePage}
-              />
-            }
-          />
-        )}
+        {(() => {
+          if (previewRow) {
+            return (
+              <RowTemplatePreviewBody database={database} row={previewRow} />
+            );
+          }
+          if (rail.expanded) {
+            return (
+              <RowPropertiesRailLayout
+                onCollapse={() => {
+                  rail.setExpanded(false);
+                }}
+                panel={<RowTemplateDefaultsList database={database} />}
+              >
+                {workspace}
+              </RowPropertiesRailLayout>
+            );
+          }
+          return workspace;
+        })()}
       </PageSidebarChromeProvider>
       {previewRow ? null : <RowTemplateTokenAutocomplete database={database} />}
     </SiteShell>
