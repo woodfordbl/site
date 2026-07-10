@@ -441,5 +441,34 @@ describe("database sync ops", () => {
       expect(byId["f-notes"]?.icon).toBeUndefined();
       expect(mocks.commit).toHaveBeenCalledTimes(1);
     });
+
+    it("syncs currencyCode onto synced number fields when the def changes it", async () => {
+      const database = makeDatabase();
+      // f-stars is a synced number field; simulate a prior display currency.
+      const starsField = database.fields[1];
+      if (starsField.type === "number") {
+        starsField.currencyCode = "USD";
+      }
+      const drafts = captureDatabaseDrafts(database);
+
+      const added = ops.reconcileSyncedFields(database, [
+        { name: "Name", sourceKey: "name", type: "text" },
+        {
+          name: "Stars",
+          sourceKey: "stars",
+          type: "number",
+          currencyCode: "EUR",
+        },
+      ]);
+      await flushAsync();
+
+      expect(added).toBe(0);
+      const byId = Object.fromEntries(
+        (drafts[0]?.fields ?? []).map((field) => [field.id, field])
+      );
+      const stars = byId["f-stars"];
+      expect(stars?.type === "number" && stars.currencyCode).toBe("EUR");
+      expect(mocks.commit).toHaveBeenCalledTimes(1);
+    });
   });
 });

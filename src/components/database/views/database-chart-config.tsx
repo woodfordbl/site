@@ -342,7 +342,13 @@ function TimeAxisOptions({
   fields: readonly DatabaseField[];
   write: WriteChartPatch;
 }): ReactNode {
-  const timeFieldCandidates = fields.filter((field) => field.type === "number");
+  // Only fields that actually record history over time (local capture +
+  // connector backfill) can plot a time series — offering a plain number field
+  // would draw the wrong data (the backfill is the captured field's, e.g.
+  // price) under that field's formatter.
+  const timeFieldCandidates = fields.filter(
+    (field) => field.type === "number" && field.captureHistory === true
+  );
   const firstTimeFieldId = timeFieldCandidates[0]?.id;
   const currentWindowMs = chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS;
   const currentWindowId = presetForWindow(currentWindowMs).id;

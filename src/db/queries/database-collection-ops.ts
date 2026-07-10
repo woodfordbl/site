@@ -4,6 +4,7 @@ import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
+import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
 import type {
@@ -959,4 +960,8 @@ export function deleteDatabase(databaseId: string): void {
     }
   });
   commitDatabaseTransaction(tx);
+
+  // Best-effort: drop the database's captured field history (IndexedDB) so it
+  // doesn't leak after the table is gone. Derived data — failures are non-fatal.
+  clearDatabaseFieldHistory(databaseId).catch(reportPersistenceError);
 }

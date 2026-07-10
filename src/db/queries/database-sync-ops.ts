@@ -457,6 +457,35 @@ function computeIconBackfills(
 }
 
 /**
+ * Existing synced number fields (by id) whose `currencyCode` the connector def
+ * now sets differently — e.g. the source's display currency was changed. The
+ * connector, not the user, owns this, so it's overwritten (not fill-empty) to
+ * keep the Price column's symbol in sync with the setting.
+ */
+function computeCurrencyUpdates(
+  database: LocalDatabase,
+  connectorFieldDefs: ConnectorFieldDef[]
+): { currencyCode: string; fieldId: string }[] {
+  const currencyBySourceKey = new Map<string, string>();
+  for (const def of connectorFieldDefs) {
+    if (def.currencyCode) {
+      currencyBySourceKey.set(def.sourceKey, def.currencyCode);
+    }
+  }
+  const updates: { currencyCode: string; fieldId: string }[] = [];
+  for (const field of database.fields) {
+    if (field.sourceKey === undefined || field.type !== "number") {
+      continue;
+    }
+    const currencyCode = currencyBySourceKey.get(field.sourceKey);
+    if (currencyCode && field.currencyCode !== currencyCode) {
+      updates.push({ currencyCode, fieldId: field.id });
+    }
+  }
+  return updates;
+}
+
+/**
  * Reconcile a synced database's schema against the connector's current field
  * defs. Never removes or retypes an existing field (users may have renamed,
  * re-iconed, or reordered synced fields, and local fields are sacrosanct):
@@ -465,6 +494,9 @@ function computeIconBackfills(
  * - Backfills a field-type icon onto existing synced fields that have **no**
  *   icon set, so tables created before a connector defined icons pick them up.
  *   Fields the user already re-iconed keep their glyph.
+ * - Syncs the `currencyCode` of synced number fields to the connector def
+ *   (connector-owned), so changing the source's display currency reformats the
+ *   Price column on the next pass.
  * - Columns removed upstream keep their field and simply stop updating.
  *
  * Matching is by `sourceKey`, never by name. Returns the number of fields added.
@@ -484,12 +516,20 @@ export function reconcileSyncedFields(
     .filter((def) => !existingSourceKeys.has(def.sourceKey))
     .map((def) => connectorFieldToDatabaseField(def));
   const iconBackfills = computeIconBackfills(database, connectorFieldDefs);
-  if (added.length === 0 && iconBackfills.length === 0) {
+  const currencyUpdates = computeCurrencyUpdates(database, connectorFieldDefs);
+  if (
+    added.length === 0 &&
+    iconBackfills.length === 0 &&
+    currencyUpdates.length === 0
+  ) {
     return 0;
   }
 
   const iconByFieldId = new Map(
     iconBackfills.map((backfill) => [backfill.fieldId, backfill.icon])
+  );
+  const currencyByFieldId = new Map(
+    currencyUpdates.map((update) => [update.fieldId, update.currencyCode])
   );
   const timestamp = nowIso();
   const tx = createDatabaseTransaction();
@@ -499,6 +539,10 @@ export function reconcileSyncedFields(
         const icon = iconByFieldId.get(field.id);
         if (icon) {
           field.icon = icon;
+        }
+        const currencyCode = currencyByFieldId.get(field.id);
+        if (currencyCode && field.type === "number") {
+          field.currencyCode = currencyCode;
         }
       }
       if (added.length > 0) {

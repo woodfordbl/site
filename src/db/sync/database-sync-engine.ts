@@ -20,7 +20,10 @@ import {
 } from "@/db/sync/sync-schedule.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
-import type { ConnectorRow } from "@/lib/connectors/types.ts";
+import type {
+  ConnectorDefinition,
+  ConnectorRow,
+} from "@/lib/connectors/types.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
@@ -69,6 +72,8 @@ interface ScheduleEntry {
   halted: boolean;
   intervalMs: number;
   lastAttemptAt?: number;
+  /** Fingerprint of the connector's `list` config values (the symbol set). */
+  listFingerprint: string;
   /** Connector floor (`pollPolicy.minMs`) — the watched cadence. */
   minIntervalMs: number;
   /** Epoch ms the pending timer aims at; drives overdue checks on refocus. */
@@ -76,9 +81,10 @@ interface ScheduleEntry {
   /** Timer fired while the document was hidden; run on next `visible`. */
   pendingWhileHidden: boolean;
   /**
-   * Set when the source changed (e.g. symbols edited): the next snapshot
+   * Set when the symbol set changed (a `list` config edit): the next snapshot
    * deletes rows for dropped symbols immediately, skipping the tombstone grace.
-   * Cleared once that pass consumes it.
+   * Other source edits (currency, refreshMs) never set it, so a partial
+   * provider response can't delete live rows. Cleared once a pass consumes it.
    */
   pruneOnNextSnapshot: boolean;
   running: boolean;
@@ -317,6 +323,30 @@ function streamConfigSignature(database: LocalDatabase): string {
   return database.source?.kind === "connector"
     ? JSON.stringify(database.source.config ?? {})
     : "";
+}
+
+/**
+ * Fingerprint of just the connector's `list` config values (the symbol set) —
+ * the only edits that change which rows a snapshot should contain. Used to gate
+ * immediate pruning: editing symbols prunes dropped rows now, but editing a
+ * non-row config (display currency) or `refreshMs` must keep the tombstone
+ * grace so a partial provider response never deletes live rows.
+ */
+function configListFingerprint(
+  database: LocalDatabase,
+  connector: ConnectorDefinition
+): string {
+  if (database.source?.kind !== "connector") {
+    return "";
+  }
+  const config = database.source.config ?? {};
+  const listValues: Record<string, unknown> = {};
+  for (const field of connector.configFields ?? []) {
+    if (field.kind === "list") {
+      listValues[field.key] = config[field.key];
+    }
+  }
+  return JSON.stringify(listValues);
 }
 
 const streams = new Map<string, StreamHandle>();
@@ -751,6 +781,7 @@ function ensureSchedule(database: LocalDatabase): void {
     connector.pollPolicy
   );
   const sourceFingerprint = JSON.stringify(database.source);
+  const listFingerprint = configListFingerprint(database, connector);
   const existing = entries.get(database.id);
   if (existing) {
     // Config/interval edits take effect on the next pass; an in-flight or
@@ -758,15 +789,18 @@ function ensureSchedule(database: LocalDatabase): void {
     existing.intervalMs = intervalMs;
     existing.minIntervalMs = connector.pollPolicy.minMs;
     const sourceChanged = existing.sourceFingerprint !== sourceFingerprint;
+    const listChanged = existing.listFingerprint !== listFingerprint;
     existing.sourceFingerprint = sourceFingerprint;
-    // A source edit (e.g. symbols added/removed) refetches now and prunes rows
-    // for dropped symbols on that snapshot, instead of waiting for the next
-    // scheduled pass and the tombstone grace. Other database edits (rename,
-    // view tweaks) don't change the fingerprint, so they don't restart polling
-    // — and a halted loop (non-transient config/auth failure) resumes only on a
-    // genuine source change, never on an identical retry.
+    existing.listFingerprint = listFingerprint;
+    // A source edit refetches now (e.g. a currency change refetches in the new
+    // quote currency), instead of waiting for the next scheduled pass. Other
+    // database edits (rename, view tweaks) don't change the fingerprint, so
+    // they don't restart polling — and a halted loop (non-transient config/auth
+    // failure) resumes only on a genuine source change, never on an identical
+    // retry. Only a symbol-set edit (`listChanged`) prunes immediately; other
+    // edits keep the tombstone grace so a partial response can't delete rows.
     if (sourceChanged && !existing.running) {
-      existing.pruneOnNextSnapshot = true;
+      existing.pruneOnNextSnapshot = listChanged;
       if (existing.halted) {
         existing.halted = false;
         existing.consecutiveFailures = 0;
@@ -780,6 +814,7 @@ function ensureSchedule(database: LocalDatabase): void {
     consecutiveFailures: 0,
     halted: false,
     intervalMs,
+    listFingerprint,
     minIntervalMs: connector.pollPolicy.minMs,
     pendingWhileHidden: false,
     pruneOnNextSnapshot: false,
