@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultRowTemplateBlocks,
   instantiateTemplateBlocks,
+  rowPropertyToken,
 } from "@/lib/databases/row-template.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
@@ -167,5 +168,38 @@ describe("defaultRowTemplateBlocks", () => {
     const [first] = defaultRowTemplateBlocks();
     const [second] = defaultRowTemplateBlocks();
     expect(first.id).toBe(second.id);
+  });
+});
+
+describe("rowPropertyToken", () => {
+  it("uses the dot form for identifier-safe names", () => {
+    expect(rowPropertyToken("Status")).toBe("{{ thisPage.Status }}");
+    expect(rowPropertyToken("  Due_date ")).toBe("{{ thisPage.Due_date }}");
+  });
+
+  it("uses the quoted bracket form for names with spaces or symbols", () => {
+    expect(rowPropertyToken("Start date")).toBe('{{ thisPage["Start date"] }}');
+    expect(rowPropertyToken("Cost ($)")).toBe('{{ thisPage["Cost ($)"] }}');
+  });
+
+  it("escapes quotes and backslashes in bracketed names", () => {
+    expect(rowPropertyToken('Say "hi"')).toBe('{{ thisPage["Say \\"hi\\""] }}');
+  });
+
+  it("round-trips through instantiation", () => {
+    const spacedFields: DatabaseField[] = [
+      { id: "f-due", name: "Start date", type: "text" },
+    ];
+    const template: Block[] = [
+      {
+        id: "b-1",
+        type: "text",
+        props: { text: `Begins ${rowPropertyToken("Start date")}` },
+      },
+    ];
+    const [block] = instantiateTemplateBlocks(template, spacedFields, {
+      "f-due": "soon",
+    });
+    expect((block.props as { text: string }).text).toBe("Begins soon");
   });
 });
