@@ -561,6 +561,83 @@ describe("database collection ops", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
+  it("duplicateDatabaseRows clones values after the source and strips pageId", async () => {
+    const source = {
+      ...makeRow("row-a", {
+        order: 1000,
+        values: { "f-title": "Alpha", "f-num": 3 },
+      }),
+      pageId: "page-linked",
+    };
+    mocks.rowState = [source, makeRow("row-b", { order: 2000 })];
+    mocks.rowGet.mockImplementation((id: string) =>
+      id === "row-a" ? source : undefined
+    );
+    mocks.rowInsert.mockImplementation((row: LocalDatabaseRow) => {
+      mocks.rowState = [...(mocks.rowState as LocalDatabaseRow[]), row];
+    });
+
+    const created = ops.duplicateDatabaseRows(["row-a"]);
+    await flushAsync();
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.id).not.toBe("row-a");
+    expect(created[0]?.values).toEqual({ "f-title": "Alpha", "f-num": 3 });
+    expect(created[0]?.order).toBe(1500);
+    expect(created[0]?.pageId).toBeUndefined();
+    expect(created[0]?.externalId).toBeUndefined();
+    expect(mocks.rowInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplicateDatabaseRows skips synced rows and missing ids", async () => {
+    const local = makeRow("row-local", {
+      order: 1000,
+      values: { "f-title": "L" },
+    });
+    const synced = {
+      ...makeRow("row-synced", { order: 2000 }),
+      externalId: "ext-1",
+    };
+    mocks.rowState = [local, synced];
+    mocks.rowGet.mockImplementation((id: string) => {
+      if (id === "row-local") {
+        return local;
+      }
+      if (id === "row-synced") {
+        return synced;
+      }
+      return;
+    });
+    mocks.rowInsert.mockImplementation((row: LocalDatabaseRow) => {
+      mocks.rowState = [...(mocks.rowState as LocalDatabaseRow[]), row];
+    });
+
+    const created = ops.duplicateDatabaseRows([
+      "row-synced",
+      "row-gone",
+      "row-local",
+    ]);
+    await flushAsync();
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.values).toEqual({ "f-title": "L" });
+    expect(mocks.rowInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("duplicateDatabaseRows with only synced/missing ids never opens a transaction", async () => {
+    mocks.rowGet.mockReturnValue({
+      ...makeRow("row-synced"),
+      externalId: "ext-1",
+    });
+
+    const created = ops.duplicateDatabaseRows(["row-synced", "row-gone"]);
+    await flushAsync();
+
+    expect(created).toEqual([]);
+    expect(mocks.rowInsert).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("updateDatabaseSource patches refreshMs on a connector database", async () => {
     const database: LocalDatabase = {
       ...makeDatabase(),
