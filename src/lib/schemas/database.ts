@@ -291,6 +291,8 @@ export const databaseTableViewConfigSchema = z.object({
   rowSelectDisplay: z.enum(["always", "hover", "number"]).optional(),
   /** Collapsed group keys (groupBy value keys) for this view. */
   collapsedGroupKeys: z.array(z.string()).optional(),
+  /** Group buckets hidden from this grouped view (groupBy value keys). */
+  hiddenGroupKeys: z.array(z.string()).optional(),
   /** Board (kanban) settings — used when `view.type` is `board`. */
   board: z
     .object({

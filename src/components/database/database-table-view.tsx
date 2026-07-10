@@ -17,6 +17,7 @@ import { DatabaseBoardView } from "@/components/database/views/database-board-vi
 import { DatabaseChartView } from "@/components/database/views/database-chart-view.tsx";
 import { DatabaseListView } from "@/components/database/views/database-list-view.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { buildChartData } from "@/lib/databases/chart-data.ts";
@@ -177,6 +178,82 @@ function useDisplayClock(
   }, [ticking]);
 
   return now;
+}
+
+interface HiddenRowsNoticeProps {
+  /** Total (unfiltered) row count for the database. */
+  allRowCount: number;
+  databaseId: string;
+  /** Whether the filter chip bar already shows (hides the reveal action). */
+  filterBarVisible: boolean;
+  /** Post-hidden-filter group buckets (`null` for ungrouped views). */
+  groups: DatabaseRowGroup[] | null;
+  mode: "view" | "edit";
+  onShowFilterBar: () => void;
+  /** Filtered + sorted rows for the active view. */
+  rows: readonly LocalDatabaseRow[];
+  view: DatabaseView;
+}
+
+/**
+ * Linear-style bottom notice when view options hide rows (edit mode,
+ * table/list views): a muted count plus direct actions — reveal the filter
+ * chip bar, or clear `hiddenGroupKeys`.
+ */
+function HiddenRowsNotice({
+  allRowCount,
+  databaseId,
+  filterBarVisible,
+  groups,
+  mode,
+  onShowFilterBar,
+  rows,
+  view,
+}: HiddenRowsNoticeProps): ReactNode {
+  if (mode !== "edit" || !(view.type === "table" || view.type === "list")) {
+    return null;
+  }
+  const hiddenByFilter = allRowCount - rows.length;
+  const hiddenGroupRowCount =
+    groups === null
+      ? 0
+      : rows.length -
+        groups.reduce((count, group) => count + group.rows.length, 0);
+  const total = hiddenByFilter + hiddenGroupRowCount;
+  if (total === 0) {
+    return null;
+  }
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-muted-foreground/70 text-xs">
+      <span>
+        {total === 1 ? "1 row" : `${total} rows`} hidden by view options
+      </span>
+      {hiddenByFilter > 0 && !filterBarVisible ? (
+        <Button
+          className="h-5 px-1.5 text-muted-foreground text-xs"
+          onClick={onShowFilterBar}
+          size="xs"
+          variant="ghost"
+        >
+          Show filters
+        </Button>
+      ) : null}
+      {hiddenGroupRowCount > 0 ? (
+        <Button
+          className="h-5 px-1.5 text-muted-foreground text-xs"
+          onClick={() => {
+            updateDatabaseView(databaseId, view.id, {
+              config: { ...view.config, hiddenGroupKeys: undefined },
+            });
+          }}
+          size="xs"
+          variant="ghost"
+        >
+          Show hidden groups
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 /** Inline filter/sort chip bar visibility (title icons toggle the whole bar). */
@@ -370,12 +447,19 @@ export function DatabaseTableView({
 
   // Row buckets for grouped views, built AFTER filter + sort so buckets
   // preserve the view's row order; `null` keeps the grid ungrouped (also the
-  // fallback for stale/formula group-by fields).
+  // fallback for stale/formula group-by fields). User-hidden buckets
+  // (`config.hiddenGroupKeys`, written by the group header context menu)
+  // drop out here — recovery lives in that menu and the Group submenu.
   const groups = useMemo<DatabaseRowGroup[] | null>(() => {
     if (!(database && view && resolveGroupByField(database.fields, view))) {
       return null;
     }
-    return groupRowsForView(rows, database.fields, view);
+    const buckets = groupRowsForView(rows, database.fields, view);
+    const hiddenKeys = view.config.hiddenGroupKeys;
+    if (!hiddenKeys || hiddenKeys.length === 0) {
+      return buckets;
+    }
+    return buckets.filter((bucket) => !hiddenKeys.includes(bucket.key));
   }, [database, rows, view]);
 
   const pinnedFields = useMemo(
@@ -484,6 +568,18 @@ export function DatabaseTableView({
         isSyncedDatabase={isSyncedDatabase}
         mode={mode}
         pinnedFields={pinnedFields}
+        rows={rows}
+        view={view}
+      />
+      <HiddenRowsNotice
+        allRowCount={allRows.length}
+        databaseId={databaseId}
+        filterBarVisible={filterBarVisible}
+        groups={groups}
+        mode={mode}
+        onShowFilterBar={() => {
+          setFilterBarVisible(true);
+        }}
         rows={rows}
         view={view}
       />

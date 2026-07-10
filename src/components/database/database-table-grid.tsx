@@ -66,6 +66,7 @@ import {
   usesRowSelectGutter,
   withPinnedRowIndex,
 } from "@/components/database/database-grid-helpers.ts";
+import { DatabaseGroupMenu } from "@/components/database/database-group-menu.tsx";
 import { DatabaseRowMenu } from "@/components/database/database-row-menu.tsx";
 import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
 import { useDatabaseColumnResize } from "@/components/database/use-database-column-resize.ts";
@@ -372,8 +373,13 @@ export function DatabaseTableGrid({
     if (last && last.left !== null) {
       return last.left + last.width;
     }
-    return gridColumns.length > 0 ? rowSelectLeadingWidth : null;
-  }, [gridColumns, rowSelectLeadingWidth]);
+    if (gridColumns.length === 0) {
+      return null;
+    }
+    // Gutter modes: the select lane is a transparent overlay, so scrolled
+    // content stays visible to the scrollport's left edge — fade there.
+    return rowSelectGutter ? 0 : rowSelectLeadingWidth;
+  }, [gridColumns, rowSelectGutter, rowSelectLeadingWidth]);
 
   // Pinned-edge fade: a rAF-throttled scroll listener writes the fade
   // opacity (0 at scrollLeft 0, ramping over PINNED_FADE_RAMP_PX, and only
@@ -395,6 +401,11 @@ export function DatabaseTableGrid({
         ? Math.min(element.scrollLeft / PINNED_FADE_RAMP_PX, 1)
         : 0;
       shadow.style.opacity = String(fade);
+      // Gutter select-lane reveal state: while horizontally scrolled the
+      // transparent lane hides its controls (content shows through to the
+      // page's left boundary) until the boundary strip is hovered — the
+      // `in-data-[hscrolled]` variants on the lane cells key off this.
+      element.toggleAttribute("data-hscrolled", element.scrollLeft > 0);
     };
     const handleScroll = () => {
       if (frame === 0) {
@@ -461,6 +472,40 @@ export function DatabaseTableGrid({
     },
     [databaseId, view.config, view.id]
   );
+
+  // Group header context menu actions (edit mode): collapse state batches,
+  // and per-group hiding via `hiddenGroupKeys` (filtered out upstream in
+  // `DatabaseTableView`; the menu and the Group submenu both restore).
+  const hiddenGroupCount = view.config.hiddenGroupKeys?.length ?? 0;
+  const handleCollapseAllGroups = useCallback(() => {
+    updateDatabaseView(databaseId, view.id, {
+      config: {
+        ...view.config,
+        collapsedGroupKeys: (groups ?? []).map((group) => group.key),
+      },
+    });
+  }, [databaseId, groups, view.config, view.id]);
+  const handleExpandAllGroups = useCallback(() => {
+    updateDatabaseView(databaseId, view.id, {
+      config: { ...view.config, collapsedGroupKeys: undefined },
+    });
+  }, [databaseId, view.config, view.id]);
+  const handleHideGroup = useCallback(
+    (groupKey: string) => {
+      updateDatabaseView(databaseId, view.id, {
+        config: {
+          ...view.config,
+          hiddenGroupKeys: [...(view.config.hiddenGroupKeys ?? []), groupKey],
+        },
+      });
+    },
+    [databaseId, view.config, view.id]
+  );
+  const handleShowHiddenGroups = useCallback(() => {
+    updateDatabaseView(databaseId, view.id, {
+      config: { ...view.config, hiddenGroupKeys: undefined },
+    });
+  }, [databaseId, view.config, view.id]);
 
   // Keep the editing row mounted even when scrolled past the overscan
   // window: the inline text editor holds its draft in local state and
@@ -829,13 +874,19 @@ export function DatabaseTableGrid({
                         <GridGroupHeaderRow
                           collapsed={collapsedKeySet.has(item.group.key)}
                           group={item.group}
+                          hiddenGroupCount={hiddenGroupCount}
                           key={`group:${item.group.key}`}
                           measureRow={virtualizer.measureElement}
                           onAddRow={handleAddRowToGroup}
+                          onCollapseAll={handleCollapseAllGroups}
+                          onExpandAll={handleExpandAllGroups}
+                          onHideGroup={handleHideGroup}
+                          onShowHiddenGroups={handleShowHiddenGroups}
                           onToggle={handleToggleGroup}
                           rowIndex={virtualRow.index}
                           rowSelectGutter={rowSelectGutter}
                           showAddRow={mode === "edit" && !isSyncedDatabase}
+                          showMenu={mode === "edit"}
                           top={virtualRow.start}
                         />
                       );
@@ -913,6 +964,15 @@ export function DatabaseTableGrid({
   );
 }
 
+/**
+ * Gutter select-lane cells are transparent overlays: horizontally scrolled
+ * content stays visible to the page's left boundary, and while scrolled the
+ * lane's controls hide until the boundary strip is hovered (the scrollport
+ * carries `data-hscrolled`). Non-gutter mode keeps the opaque in-table lane.
+ */
+const GUTTER_LANE_SCROLL_CLASS =
+  "transition-opacity in-data-[hscrolled]:opacity-0 in-data-[hscrolled]:hover:opacity-100";
+
 function GridSelectionHeaderCell({
   allSelected,
   onCheckedChange,
@@ -927,12 +987,17 @@ function GridSelectionHeaderCell({
   showControl: boolean;
   someSelected: boolean;
 }): ReactNode {
+  const gutter = usesRowSelectGutter(rowSelectDisplay);
   return (
     // biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note.
     // biome-ignore lint/a11y/useFocusableInteractive: the checkbox inside is the focusable element.
     <div
       aria-colindex={1}
-      className="sticky left-0 z-10 flex h-9 shrink-0 items-center justify-center bg-background"
+      className={cn(
+        "sticky left-0 z-10 flex h-9 shrink-0 items-center justify-center",
+        gutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background",
+        gutter && showControl && "in-data-[hscrolled]:opacity-100"
+      )}
       // Own reveal group — do not put one on the grid root or every column
       // resize divider would light up on any table hover.
       data-reveal-group=""
@@ -1103,9 +1168,15 @@ function GridHeaderCell({
 interface GridGroupHeaderRowProps {
   collapsed: boolean;
   group: DatabaseRowGroup;
+  /** Buckets hidden via `hiddenGroupKeys` — threaded to the context menu. */
+  hiddenGroupCount: number;
   /** `virtualizer.measureElement` — headers report their fixed 36px height. */
   measureRow: (node: HTMLDivElement | null) => void;
   onAddRow: (group: DatabaseRowGroup) => void;
+  onCollapseAll: () => void;
+  onExpandAll: () => void;
+  onHideGroup: (groupKey: string) => void;
+  onShowHiddenGroups: () => void;
   onToggle: (groupKey: string) => void;
   /** Zero-based flattened item index (drives measurement + ARIA row index). */
   rowIndex: number;
@@ -1113,6 +1184,8 @@ interface GridGroupHeaderRowProps {
   rowSelectGutter: boolean;
   /** Edit mode on a non-synced database — synced rows come from the source. */
   showAddRow: boolean;
+  /** Edit mode — the right-click display menu writes view config. */
+  showMenu: boolean;
   top: number;
 }
 
@@ -1122,29 +1195,41 @@ interface GridGroupHeaderRowProps {
  * whole row toggles collapse via an invisible full-row button (the chevron
  * rotates when expanded); a colored select option adds a status dot before
  * the label; the muted count and the hover-revealed per-group "+" (adds a
- * row pre-seeded with the group's value) trail it. Memoized separately from
+ * row pre-seeded with the group's value) trail it. In gutter row-select
+ * modes the band's background starts at the data columns (the select lane
+ * bleeds into the canvas gutter and must stay unpainted). Edit mode wraps
+ * the row in the group display context menu. Memoized separately from
  * `GridRow` so scrolling stays cheap.
  */
 const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
   collapsed,
   group,
+  hiddenGroupCount,
   measureRow,
   onAddRow,
+  onCollapseAll,
+  onExpandAll,
+  onHideGroup,
+  onShowHiddenGroups,
   onToggle,
   rowIndex,
   rowSelectGutter,
   showAddRow,
+  showMenu,
   top,
 }: GridGroupHeaderRowProps) {
   const colorDef = group.color ? BLOCK_COLOR_DEFS[group.color] : undefined;
-  return (
+  const row = (
     // biome-ignore lint/a11y/useSemanticElements: virtualized div grid — see the grid container note.
     // biome-ignore lint/a11y/useFocusableInteractive: the full-row toggle button inside is the focusable element.
     <div
       aria-rowindex={rowIndex + 2}
       className={cn(
-        "absolute top-0 left-0 flex w-full bg-muted/30",
-        !rowSelectGutter && "border-border border-b-[0.5px]"
+        "absolute top-0 left-0 flex w-full",
+        // Gutter modes: background and rule live on the data-cell area so
+        // the select lane stays unpainted (canvas-gutter look) and the band
+        // lines up with the table's left edge.
+        !rowSelectGutter && "border-border border-b-[0.5px] bg-muted/30"
       )}
       data-index={rowIndex}
       data-reveal-group=""
@@ -1168,7 +1253,7 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
         aria-colindex={1}
         className={cn(
           "relative flex min-w-0 flex-1",
-          rowSelectGutter && "border-border border-b-[0.5px]"
+          rowSelectGutter && "border-border border-b-[0.5px] bg-muted/30"
         )}
         role="gridcell"
       >
@@ -1219,6 +1304,24 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
         </div>
       </div>
     </div>
+  );
+
+  if (!showMenu) {
+    return row;
+  }
+  return (
+    <DatabaseGroupMenu
+      collapsed={collapsed}
+      group={group}
+      hiddenGroupCount={hiddenGroupCount}
+      onCollapseAll={onCollapseAll}
+      onExpandAll={onExpandAll}
+      onHideGroup={onHideGroup}
+      onShowHiddenGroups={onShowHiddenGroups}
+      onToggle={onToggle}
+    >
+      {row}
+    </DatabaseGroupMenu>
   );
 });
 
@@ -1338,7 +1441,13 @@ const GridRow = memo(function GridRowInner({
       aria-colindex={1}
       className={cn(
         "sticky left-0 z-10 flex shrink-0 items-center justify-center",
-        isSelected ? "bg-muted/40" : "bg-background"
+        isSelected && "bg-muted/40",
+        rowSelectGutter
+          ? GUTTER_LANE_SCROLL_CLASS
+          : !isSelected && "bg-background",
+        rowSelectGutter &&
+          showSelectControl &&
+          "in-data-[hscrolled]:opacity-100"
       )}
       role="gridcell"
       style={{ width: SELECTION_COLUMN_WIDTH_PX }}

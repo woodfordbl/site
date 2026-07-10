@@ -403,6 +403,15 @@ interface GroupSubmenuProps {
 function GroupSubmenu({ database, view }: GroupSubmenuProps) {
   const activeFieldId = view.groupBy?.fieldId;
   const groupableFields = database.fields.filter(isGroupableField);
+  // Groups hidden via the group header context menu — recoverable here even
+  // when every group is hidden (no header left to right-click).
+  const hiddenGroupCount = view.config.hiddenGroupKeys?.length ?? 0;
+
+  const showHiddenGroups = () => {
+    updateDatabaseView(database.id, view.id, {
+      config: { ...view.config, hiddenGroupKeys: undefined },
+    });
+  };
 
   const writeGroupBy = (fieldId: string | null) => {
     if (fieldId === activeFieldId || (fieldId === null && !activeFieldId)) {
@@ -448,6 +457,16 @@ function GroupSubmenu({ database, view }: GroupSubmenuProps) {
             </DropdownMenuItem>
           );
         })}
+        {hiddenGroupCount > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={showHiddenGroups}>
+              <IconEye />
+              Show {hiddenGroupCount} hidden{" "}
+              {hiddenGroupCount === 1 ? "group" : "groups"}
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
