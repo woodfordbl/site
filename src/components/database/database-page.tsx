@@ -200,7 +200,12 @@ function DatabasePageBody({
           data-page-main-panel=""
         >
           <DatabasePageHeader database={database} />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-4 md:p-6">
+          {/*
+            Left padding matches the table's select-lane bleed (`-ml-12` /
+            `SELECTION_COLUMN_WIDTH_PX`) so hover/number checkboxes sit in the
+            gutter without being clipped by the panel's `overflow-hidden`.
+          */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-4 pl-12 md:p-6 md:pl-12">
             <DatabaseTableView databaseId={database.id} mode="edit" />
           </div>
         </div>

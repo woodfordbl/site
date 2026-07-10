@@ -15,11 +15,16 @@ import {
   MIN_COLUMN_WIDTH_PX,
   minColumnWidthPx,
   nextEditTarget,
+  nextSelectedRowIds,
   parseNumberCellInput,
   planColumnReorder,
   resolveColumnDropSpot,
   resolveColumnWidthPx,
+  resolveRowSelectDisplay,
+  rowSelectLeadingWidthPx,
+  SELECTION_COLUMN_WIDTH_PX,
   urlCellHref,
+  usesRowSelectGutter,
   withPinnedRowIndex,
 } from "@/components/database/database-grid-helpers.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
@@ -504,5 +509,71 @@ describe("withPinnedRowIndex", () => {
   it("never duplicates window edges", () => {
     expect(withPinnedRowIndex([0, 1, 2], 0)).toEqual([0, 1, 2]);
     expect(withPinnedRowIndex([0, 1, 2], 2)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("nextSelectedRowIds", () => {
+  const visible = ["a", "b", "c", "d"];
+
+  it("adds and removes a single id without shift", () => {
+    expect(
+      nextSelectedRowIds([], {
+        anchorRowId: null,
+        checked: true,
+        rowId: "b",
+        shiftKey: false,
+        visibleRowIds: visible,
+      })
+    ).toEqual(["b"]);
+    expect(
+      nextSelectedRowIds(["b", "c"], {
+        anchorRowId: "b",
+        checked: false,
+        rowId: "b",
+        shiftKey: false,
+        visibleRowIds: visible,
+      })
+    ).toEqual(["c"]);
+  });
+
+  it("unions the inclusive range on shift-click", () => {
+    expect(
+      nextSelectedRowIds(["a"], {
+        anchorRowId: "a",
+        checked: true,
+        rowId: "c",
+        shiftKey: true,
+        visibleRowIds: visible,
+      })
+    ).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("resolveRowSelectDisplay", () => {
+  it("defaults to hover when unset", () => {
+    expect(resolveRowSelectDisplay({})).toBe("hover");
+  });
+
+  it("reads explicit modes", () => {
+    expect(resolveRowSelectDisplay({ rowSelectDisplay: "always" })).toBe(
+      "always"
+    );
+    expect(resolveRowSelectDisplay({ rowSelectDisplay: "number" })).toBe(
+      "number"
+    );
+  });
+});
+
+describe("usesRowSelectGutter", () => {
+  it("is false only for always", () => {
+    expect(usesRowSelectGutter("always")).toBe(false);
+    expect(usesRowSelectGutter("hover")).toBe(true);
+    expect(usesRowSelectGutter("number")).toBe(true);
+  });
+});
+
+describe("rowSelectLeadingWidthPx", () => {
+  it("always reserves the select lane (gutter modes bleed left instead)", () => {
+    expect(rowSelectLeadingWidthPx()).toBe(SELECTION_COLUMN_WIDTH_PX);
   });
 });
