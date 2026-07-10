@@ -11,6 +11,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
+import type { ComponentProps } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -61,6 +62,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
 } from "@/components/ui/sidebar.tsx";
+import type { TooltipContent } from "@/components/ui/tooltip.tsx";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
@@ -90,6 +92,20 @@ interface PageListItemProps {
   onToggleExpand: (pageId: string) => void;
   pages: PageSummary[];
   row: PageRow;
+}
+
+function resolvePageListRowTooltip(
+  depth: number,
+  slug: string,
+  title: string
+): string | ComponentProps<typeof TooltipContent> | undefined {
+  if (depth !== 0) {
+    return;
+  }
+  if (slug === "home") {
+    return { children: title, sequence: "go-home" };
+  }
+  return title;
 }
 
 const PAGE_LIST_DRAG_HOLD_MS = 50;
@@ -270,7 +286,7 @@ function PageListRowLink({
         data-page-list-row-content=""
         isActive={active}
         render={menuButtonRender}
-        tooltip={depth === 0 ? title : undefined}
+        tooltip={resolvePageListRowTooltip(depth, row.page.slug, title)}
       >
         {menuButtonChildren}
       </SidebarMenuButton>

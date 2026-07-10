@@ -43,6 +43,7 @@ export function PageSidebarSettingsAction() {
             to="/settings/$section"
           />
         }
+        tooltip={{ children: "Settings", sequence: "go-settings" }}
       >
         <IconSettings aria-hidden className="size-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">Settings</span>
