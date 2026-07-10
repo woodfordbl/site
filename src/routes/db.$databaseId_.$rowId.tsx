@@ -12,7 +12,7 @@ import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
  * redirect, not-found) happens client-side in `DatabaseRowPage`. Noindex:
  * like `/p/$`, these URLs are meaningless outside this browser.
  */
-export const Route = createFileRoute("/db/$databaseId/$rowId")({
+export const Route = createFileRoute("/db/$databaseId_/$rowId")({
   loader: () => ({ kind: "pending" as const }),
   head: () => ({ meta: buildNoIndexMeta() }),
   component: DatabaseRowPageRoute,

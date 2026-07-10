@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   databaseGet: vi.fn(),
   databaseInsert: vi.fn(),
   databaseUpdate: vi.fn(),
+  deleteRowTemplate: vi.fn(),
   mutate: vi.fn(),
   reportPersistenceError: vi.fn(),
   rowDelete: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock("@tanstack/react-db", () => ({
 
 vi.mock("@/db/persistence-errors.ts", () => ({
   reportPersistenceError: mocks.reportPersistenceError,
+}));
+
+vi.mock("@/lib/databases/row-template-store.ts", () => ({
+  deleteRowTemplate: mocks.deleteRowTemplate,
 }));
 
 vi.mock("@/db/collections/local-collections.ts", () => ({
@@ -713,6 +718,7 @@ describe("database collection ops", () => {
     expect(mocks.rowDelete).toHaveBeenCalledWith("row-1");
     expect(mocks.rowDelete).toHaveBeenCalledWith("row-2");
     expect(mocks.commit).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteRowTemplate).toHaveBeenCalledWith(databaseId);
   });
 
   it("setDatabaseRowPageId links the page id and bumps updatedAt", async () => {

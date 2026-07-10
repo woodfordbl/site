@@ -7,6 +7,7 @@ import {
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -1039,4 +1040,9 @@ export function deleteDatabase(databaseId: string): void {
   // Best-effort: drop the database's captured field history (IndexedDB) so it
   // doesn't leak after the table is gone. Derived data — failures are non-fatal.
   clearDatabaseFieldHistory(databaseId).catch(reportPersistenceError);
+
+  // The row template (sentinel page + block shard) belongs to the database;
+  // remove it so it doesn't orphan. A future duplicate-database op must clone
+  // it the same way (see row-template-store.ts).
+  deleteRowTemplate(databaseId);
 }

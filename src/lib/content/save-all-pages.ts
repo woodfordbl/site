@@ -9,6 +9,7 @@ import { exportPageDocument } from "@/lib/content/page-export.ts";
 import { preparePageDocumentForAuthorSave } from "@/lib/content/prepare-page-document-for-author-save.ts";
 import { saveMediaAssets } from "@/lib/content/save-media-assets.ts";
 import { savePage } from "@/lib/content/save-page.ts";
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
@@ -54,7 +55,12 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
  */
 export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
   const pages = localPagesCollection.toArray.filter(
-    (page) => !(isLocallyDeletedPage(page) || isTemplatePageId(page.id))
+    (page) =>
+      !(
+        isLocallyDeletedPage(page) ||
+        isTemplatePageId(page.id) ||
+        isDatabaseTemplatePageId(page.id)
+      )
   );
 
   const failed: SaveAllPagesResult["failed"] = [];
