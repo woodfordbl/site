@@ -417,9 +417,16 @@ function GroupSubmenu({ database, view }: GroupSubmenuProps) {
     if (fieldId === activeFieldId || (fieldId === null && !activeFieldId)) {
       return;
     }
+    // Collapse AND hidden state reset together — both store bucket keys of
+    // the previous field, which can collide with the new field's buckets
+    // (`""` empty, checkbox `true`/`false`, plain text/number values).
     updateDatabaseView(database.id, view.id, {
       groupBy: fieldId === null ? undefined : { fieldId },
-      config: { ...view.config, collapsedGroupKeys: undefined },
+      config: {
+        ...view.config,
+        collapsedGroupKeys: undefined,
+        hiddenGroupKeys: undefined,
+      },
     });
   };
 
