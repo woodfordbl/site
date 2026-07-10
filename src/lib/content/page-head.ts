@@ -151,13 +151,29 @@ export function buildPageLinks(page: Page): PageLinkTag[] {
 
 /**
  * Meta for private, local-only routes (`/p/…`, `/settings`, …): keep crawlers
- * out, but still name the tab/preview when a section title is given.
+ * out, but still name the tab AND the social preview when a section title is
+ * given — otherwise the root's site-wide og:/twitter: defaults would leak a
+ * mismatched site-name preview under a section-named tab.
  */
 export function buildNoIndexMeta(sectionTitle?: string): PageMetaTag[] {
   const robots: PageMetaTag = { name: "robots", content: "noindex" };
-  return sectionTitle
-    ? [{ title: `${sectionTitle} · ${SITE_NAME}` }, robots]
-    : [robots];
+  if (!sectionTitle) {
+    return [robots];
+  }
+  const title = `${sectionTitle} · ${SITE_NAME}`;
+  const ogImage = `${SITE_ORIGIN}/api/og?${new URLSearchParams({
+    title: sectionTitle,
+  }).toString()}`;
+  return [
+    { title },
+    { property: "og:title", content: title },
+    { property: "og:image", content: ogImage },
+    { property: "og:image:alt", content: title },
+    { name: "twitter:title", content: title },
+    { name: "twitter:image", content: ogImage },
+    { name: "twitter:image:alt", content: title },
+    robots,
+  ];
 }
 
 /** Meta for global not-found handling. */
