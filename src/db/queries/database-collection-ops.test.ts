@@ -274,6 +274,44 @@ describe("database collection ops", () => {
     expect(mocks.rowUpdate).not.toHaveBeenCalled();
   });
 
+  it("insertDatabaseRow seeds new rows from the database's rowDefaults", async () => {
+    mocks.databaseGet.mockReturnValue({
+      ...makeDatabase(),
+      rowDefaults: { "f-title": "New task", "f-extra": 5 },
+    });
+    mocks.rowState = [];
+
+    const inserted = ops.insertDatabaseRow(databaseId);
+    await flushAsync();
+
+    expect(inserted.values).toEqual({ "f-title": "New task", "f-extra": 5 });
+  });
+
+  it("setDatabaseRowDefault merges a new default into the existing map", async () => {
+    const database = { ...makeDatabase(), rowDefaults: { "f-extra": 5 } };
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowDefault(databaseId, "f-title", "New task");
+    await flushAsync();
+
+    expect(drafts[0]?.rowDefaults).toEqual({
+      "f-extra": 5,
+      "f-title": "New task",
+    });
+  });
+
+  it("setDatabaseRowDefault drops the map entirely when the last key clears", async () => {
+    const database = { ...makeDatabase(), rowDefaults: { "f-extra": 5 } };
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowDefault(databaseId, "f-extra", null);
+    await flushAsync();
+
+    expect(drafts[0]?.rowDefaults).toBeUndefined();
+  });
+
   it("insertDatabaseRow after a row takes the midpoint to its successor", async () => {
     mocks.rowState = [
       makeRow("row-a", { order: 1000 }),

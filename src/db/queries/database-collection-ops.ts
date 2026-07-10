@@ -221,7 +221,9 @@ export function insertDatabaseRow(
   const row: LocalDatabaseRow = {
     id: crypto.randomUUID(),
     databaseId,
-    values: {},
+    // New rows start from the template's defaults (authored in the row-
+    // template editor); callers that set cells afterwards simply overwrite.
+    values: { ...localDatabasesCollection.get(databaseId)?.rowDefaults },
     order: plan.order,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -774,6 +776,10 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
         // the `.default({})`); normalize before stripping references.
         stripFieldFromView({ ...view, config: view.config ?? {} }, fieldId)
       );
+      if (draft.rowDefaults && fieldId in draft.rowDefaults) {
+        const { [fieldId]: _dropped, ...rest } = draft.rowDefaults;
+        draft.rowDefaults = Object.keys(rest).length > 0 ? rest : undefined;
+      }
       draft.updatedAt = timestamp;
     });
 
@@ -893,6 +899,38 @@ export function renameDatabase(databaseId: string, name: string): void {
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.name = name;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Set (or clear, with `null`/`undefined`) one field's default value for new
+ * rows (`database.rowDefaults`), bumping `updatedAt`. Cleared keys are
+ * removed so the record stays sparse; an emptied map drops entirely.
+ */
+export function setDatabaseRowDefault(
+  databaseId: string,
+  fieldId: string,
+  value: DatabaseCellValue | null | undefined
+): void {
+  if (!localDatabasesCollection.get(databaseId)) {
+    return;
+  }
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      const next = { ...draft.rowDefaults };
+      if (value === null || value === undefined || value === "") {
+        delete next[fieldId];
+      } else {
+        next[fieldId] = value;
+      }
+      draft.rowDefaults = Object.keys(next).length > 0 ? next : undefined;
       draft.updatedAt = timestamp;
     });
   });

@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/pages/page-header.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
   PageSidebarChromeProvider,
+  useOptionalPageSidebarChrome,
   usePageSidebarChrome,
 } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
@@ -113,6 +114,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
   const navigate = useNavigate();
   const activePageRef = useActivePageRef();
   const localPage = useLocalPageById(page.id);
+  const existingChrome = useOptionalPageSidebarChrome();
   useSyncPageUrl(page.id);
 
   const serverPage = props.kind === "server" ? props.page : null;
@@ -149,16 +151,27 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 
   const initialBlocks = serverPage?.blocks ?? [];
 
+  const body = (
+    <PageWorkspaceBody
+      initialBlocks={initialBlocks}
+      page={page}
+      pageHasLocalDraft={pageHasLocalDraft}
+      serverPage={serverPage}
+      titleSeed={titleSeed}
+      titleSlot={props.titleSlot}
+    />
+  );
+
+  // A caller that already owns a sidebar shell (e.g. the row-template editor
+  // swapping between edit and preview) keeps it mounted; nesting a second
+  // provider would remount the sidebar — and drop its pin state — per swap.
+  if (existingChrome) {
+    return body;
+  }
+
   return (
     <PageSidebarChromeProvider sidebar={props.sidebar ?? <PageSidebar />}>
-      <PageWorkspaceBody
-        initialBlocks={initialBlocks}
-        page={page}
-        pageHasLocalDraft={pageHasLocalDraft}
-        serverPage={serverPage}
-        titleSeed={titleSeed}
-        titleSlot={props.titleSlot}
-      />
+      {body}
     </PageSidebarChromeProvider>
   );
 }

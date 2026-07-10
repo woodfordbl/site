@@ -483,6 +483,15 @@ pages live), materialization via the synchronous `readRowTemplateSnapshot`. Row 
 inherit the template page's **icon**, and its **font** only when explicitly set;
 other page settings (header image, width, text scale) are not inherited yet.
 `deleteDatabase` deletes the template; a future duplicate-database op must clone it.
+The editor's header edits **row defaults** (`database.rowDefaults`, sparse; op
+`setDatabaseRowDefault`): a default name (primary field) plus per-field default values
+that `insertDatabaseRow` seeds new rows with (explicit caller writes win;
+`removeDatabaseField` strips its default). The editor also offers a sidebar
+**Preview as row** picker (live-rendered under the same sidebar shell — `PageWorkspace`
+skips its own chrome provider when one is already mounted) and a `{{`-triggered
+property-token autocomplete
+([`row-template-token-autocomplete.tsx`](../../src/components/database/row-page/row-template-token-autocomplete.tsx),
+route-mounted, not threaded through the slash-menu plumbing).
 
 **Copy-on-write:** the first body click instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids
