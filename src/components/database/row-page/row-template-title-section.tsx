@@ -3,14 +3,15 @@ import { type ReactNode, useMemo } from "react";
 import { toast } from "sonner";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import { RowDefaultValueEditor } from "@/components/database/row-page/row-default-value-editor.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { setDatabaseRowDefault } from "@/db/queries/database-collection-ops.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
-import { FIELD_TYPE_DEFS } from "@/lib/databases/field-defs.ts";
 import { rowPropertyToken } from "@/lib/databases/row-template.ts";
 import {
   pageTitleEditorLayoutClassName,
@@ -23,23 +24,12 @@ import type { LocalPage } from "@/lib/schemas/local-page.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
- * The row-template editor's pinned header, mirroring the anatomy of the real
- * row page so the template previews itself: an icon picker (row pages inherit
- * the template icon), a LOCKED title showing the primary-field token (title =
- * primary cell, nothing to author), and a properties list styled like the
- * real row page's panel — field icon + name, muted type in the value slot,
- * and a hover-revealed copy-token icon. Fields aren't editable here — rows
- * own their values.
+ * The row-template editor's pinned header, styled like a real row page: an
+ * icon picker (row pages inherit the template icon), an editable DEFAULT
+ * name (what "New row" titles rows; placeholder = the primary field's name),
+ * and one row per non-primary field editing that field's default value
+ * (`database.rowDefaults`), with a hover-revealed copy-token icon.
  */
-
-/** The inline `{{ Field }}`-styled chip used for the locked title. */
-function TokenChip({ children }: { children: ReactNode }) {
-  return (
-    <span className="inline-flex max-w-full items-center truncate rounded-md border border-primary/25 bg-primary/10 px-2 font-mono text-primary">
-      {children}
-    </span>
-  );
-}
 
 function copyToken(fieldName: string): void {
   const token = rowPropertyToken(fieldName);
@@ -49,23 +39,27 @@ function copyToken(fieldName: string): void {
     .catch(() => toast("Couldn't copy the token"));
 }
 
-function RowTemplatePropertyRow({ field }: { field: DatabaseField }) {
+function RowTemplatePropertyRow({
+  database,
+  field,
+}: {
+  database: LocalDatabase;
+  field: DatabaseField;
+}) {
   const FieldIcon = resolveFieldIcon(field);
   const token = rowPropertyToken(field.name);
 
   return (
     <div
-      className="flex min-h-8 items-center gap-2 text-sm"
+      className="flex min-h-8 items-center justify-between gap-2 text-sm"
       data-reveal-group=""
     >
-      <div className="flex w-36 shrink-0 items-center gap-1.5 text-muted-foreground sm:w-44">
+      <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
         <FieldIcon className="size-4 shrink-0 stroke-[1.5px]" />
         <span className="truncate">{field.name}</span>
       </div>
-      <div className="flex min-h-8 min-w-0 flex-1 items-center gap-2 overflow-hidden">
-        <span className="truncate text-muted-foreground">
-          {FIELD_TYPE_DEFS[field.type].label}
-        </span>
+      <div className="flex min-w-0 items-center gap-1">
+        <RowDefaultValueEditor database={database} field={field} />
         {field.type === "formula" ? null : (
           <Button
             aria-label={`Copy ${token}`}
@@ -91,7 +85,7 @@ export interface RowTemplateTitleSectionProps {
   templatePage: LocalPage;
 }
 
-/** Locked title + properties reference for the template editor's title slot. */
+/** Icon + default-name title + default-value rows for the editor's title slot. */
 export function RowTemplateTitleSection({
   database,
   templatePage,
@@ -106,6 +100,8 @@ export function RowTemplateTitleSection({
       database.fields.filter((field) => field.id !== database.primaryFieldId),
     [database.fields, database.primaryFieldId]
   );
+
+  const defaultName = database.rowDefaults?.[database.primaryFieldId];
 
   return (
     <div>
@@ -122,21 +118,44 @@ export function RowTemplateTitleSection({
             triggerClassName={pageTitleIconButtonClassName}
           />
         </div>
-        <h1
+        <input
+          aria-label="Default row name"
           className={cn(
-            "flex w-full min-w-0 items-baseline",
+            "w-full min-w-0 bg-transparent outline-none placeholder:text-muted-foreground/50",
             headingSurfaceClassName,
             headingTypographyClassNames[1]
           )}
-          title="Row title — always the primary field"
-        >
-          <TokenChip>{primaryField?.name ?? "Name"}</TokenChip>
-        </h1>
+          defaultValue={typeof defaultName === "string" ? defaultName : ""}
+          key={`${database.id}:${typeof defaultName === "string" ? defaultName : ""}`}
+          onBlur={(event) => {
+            setDatabaseRowDefault(
+              database.id,
+              database.primaryFieldId,
+              event.target.value.trim() || null
+            );
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              setDatabaseRowDefault(
+                database.id,
+                database.primaryFieldId,
+                event.currentTarget.value.trim() || null
+              );
+              event.currentTarget.blur();
+            }
+          }}
+          placeholder={primaryField?.name ?? "Name"}
+          type="text"
+        />
       </div>
       {panelFields.length > 0 ? (
         <div className="mt-6 mb-4 flex flex-col gap-0.5 border-border border-b pb-3">
           {panelFields.map((field) => (
-            <RowTemplatePropertyRow field={field} key={field.id} />
+            <RowTemplatePropertyRow
+              database={database}
+              field={field}
+              key={field.id}
+            />
           ))}
         </div>
       ) : null}

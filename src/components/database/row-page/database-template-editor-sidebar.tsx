@@ -70,20 +70,10 @@ export function DatabaseTemplateEditorSidebar({
           </SidebarMenu>
           <SidebarGroupContent>
             <div className="flex flex-col gap-1 px-2 py-1.5 text-sidebar-foreground/60 text-sm">
+              <p>Rows in {database.name} start from this template.</p>
               <p>
-                You're editing the row template for{" "}
-                <span className="text-sidebar-foreground/80">
-                  {database.name}
-                </span>
-                .
-              </p>
-              <p>Every row's page renders from it.</p>
-              <p>
-                Reference the row's values with{" "}
-                <code className="font-mono text-xs">
-                  {"{{ thisPage.Field }}"}
-                </code>{" "}
-                tokens.
+                Type <code className="font-mono text-xs">{"{{"}</code> to insert
+                a property.
               </p>
             </div>
           </SidebarGroupContent>

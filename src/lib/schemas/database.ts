@@ -398,6 +398,12 @@ export const localDatabaseSchema = z.object({
   primaryFieldId: z.string(),
   /** Row origin; absent means a local (user-authored) database. */
   source: databaseSourceSchema.optional(),
+  /**
+   * Default cell values applied to rows created via "New row", authored in
+   * the row-template editor's properties header. Sparse — clearing a default
+   * removes its key; explicit caller values always win over defaults.
+   */
+  rowDefaults: z.record(z.string(), databaseCellValueSchema).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   createdAt: z.string(),

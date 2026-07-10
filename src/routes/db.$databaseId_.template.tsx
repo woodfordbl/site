@@ -124,10 +124,13 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
     />
   );
 
-  if (previewRow) {
-    return (
-      <SiteShell>
-        <PageSidebarChromeProvider sidebar={sidebar}>
+  // ONE sidebar shell across both modes — swapping edit ↔ preview replaces
+  // only the main panel, so the sidebar keeps its pin/width state
+  // (`PageWorkspace` detects the existing provider and doesn't nest its own).
+  return (
+    <SiteShell>
+      <PageSidebarChromeProvider sidebar={sidebar}>
+        {previewRow ? (
           <RowTemplatePreviewBody
             database={database}
             onExit={() => {
@@ -135,26 +138,21 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
             }}
             row={previewRow}
           />
-        </PageSidebarChromeProvider>
-      </SiteShell>
-    );
-  }
-
-  return (
-    <SiteShell>
-      <PageWorkspace
-        kind="user"
-        page={templatePage}
-        pageHasLocalDraft={true}
-        sidebar={sidebar}
-        titleSlot={
-          <RowTemplateTitleSection
-            database={database}
-            templatePage={templatePage}
+        ) : (
+          <PageWorkspace
+            kind="user"
+            page={templatePage}
+            pageHasLocalDraft={true}
+            titleSlot={
+              <RowTemplateTitleSection
+                database={database}
+                templatePage={templatePage}
+              />
+            }
           />
-        }
-      />
-      <RowTemplateTokenAutocomplete database={database} />
+        )}
+      </PageSidebarChromeProvider>
+      {previewRow ? null : <RowTemplateTokenAutocomplete database={database} />}
     </SiteShell>
   );
 }
