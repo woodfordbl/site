@@ -20,6 +20,7 @@
 ## After save
 
 - Delete the local page metadata and block shard for that `pageId` so server JSON is canonical again, and clear its `site-local-dirty` cookie entry (`markPageClean`)
+- Clear the page's version-history snapshots and its server-baseline content key ([`page-baseline-store.ts`](../../src/db/snapshots/page-baseline-store.ts))
 - Run [`sweepOrphanAssets`](../../src/db/assets/asset-gc.ts) to reclaim IndexedDB blobs no longer referenced by any local `media` block (a sweep also runs on idle at boot — see [local-first-persistence](./local-first-persistence.md#local-media-assets-indexeddb-not-tanstack-collections))
 - Reset author draft dirty state
 - Normal blank canvas rows are exported with the page blocks, matching the editor's persisted row model

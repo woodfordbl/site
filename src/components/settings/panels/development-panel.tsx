@@ -42,7 +42,11 @@ export function DevelopmentPanel({
 
   return (
     <SettingsPanelShell
-      description="Save local edits to source files, refresh from the site, or reset local changes."
+      description={
+        isDev
+          ? "Save local edits to source files, refresh from the site, or reset local changes."
+          : "Refresh from the site or reset local changes."
+      }
       section={section}
     >
       {saveStatus ? (

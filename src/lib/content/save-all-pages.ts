@@ -3,6 +3,7 @@ import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { deleteAllBlocksForPage } from "@/db/queries/block-collection-ops.ts";
 import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
+import { clearPageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import { clearPageSnapshots } from "@/db/snapshots/page-snapshot-store.ts";
 import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import { exportPageDocument } from "@/lib/content/page-export.ts";
@@ -43,6 +44,7 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
   localPagesCollection.delete(localPage.id);
   deleteAllBlocksForPage(readBlockShardForPage(localPage.id));
   clearPageSnapshots(localPage.id).catch(() => undefined);
+  clearPageBaseline(localPage.id).catch(() => undefined);
   markPageClean(localPage.id);
 }
 

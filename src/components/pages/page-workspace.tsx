@@ -19,8 +19,10 @@ import {
   usePageSidebarChrome,
 } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
+import { PageStaleBanner } from "@/components/pages/page-stale-banner.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import { PageVersionPreview } from "@/components/pages/page-version-preview.tsx";
+import { ServerVersionPreview } from "@/components/pages/server-version-preview.tsx";
 import { VersionPreviewProvider } from "@/components/pages/version-preview-context.tsx";
 import { SiteSettingsTrigger } from "@/components/settings/site-settings-trigger.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
@@ -199,6 +201,21 @@ function PageWorkspaceBody({
     setPreviewDescriptor(null);
   }, [bumpCanvasNonce]);
 
+  // When true, the page is taken over by a read-only render of the current
+  // shipped (site) version — the stale-conflict counterpart to the snapshot
+  // preview above.
+  const [serverPreviewOpen, setServerPreviewOpen] = useState(false);
+  const openServerPreview = useCallback(() => {
+    setServerPreviewOpen(true);
+  }, []);
+  const exitServerPreview = useCallback(() => {
+    setServerPreviewOpen(false);
+  }, []);
+  const handleServerPreviewReset = useCallback(() => {
+    setServerPreviewOpen(false);
+    bumpCanvasNonce();
+  }, [bumpCanvasNonce]);
+
   const header = (
     <PageHeader
       onAfterReset={bumpCanvasNonce}
@@ -292,12 +309,27 @@ function PageWorkspaceBody({
                   onRestored={handleRestored}
                   pageId={page.id}
                 />
-              ) : (
+              ) : null}
+              {!previewDescriptor && serverPreviewOpen && serverPage ? (
+                <ServerVersionPreview
+                  onExit={exitServerPreview}
+                  onReset={handleServerPreviewReset}
+                  serverPage={serverPage}
+                />
+              ) : null}
+              {previewDescriptor || (serverPreviewOpen && serverPage) ? null : (
                 <>
                   {/* Desktop with no cover: header is a fixed bar above the scroll
                     region. Mobile, or desktop with a cover: it lives inside the
                     scroll region (as headerSlot). */}
                   {isNarrowViewport || hasCover ? null : header}
+                  {serverPage ? (
+                    <PageStaleBanner
+                      onAfterReset={bumpCanvasNonce}
+                      onPreview={openServerPreview}
+                      serverPage={serverPage}
+                    />
+                  ) : null}
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden">
                     {canvasContent}
                   </div>

@@ -396,7 +396,14 @@ in-shell empty state with a home link.
 | Per-host child row | [`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx) | One synthetic row per `database` block on a page (under that page in the tree) |
 | Workspace **Databases** section | [`databases-list.tsx`](../../src/components/pages/databases-list.tsx) | Collapsible section below **Pages** in [`page-sidebar.tsx`](../../src/components/pages/page-sidebar.tsx); every database alphabetically; gated by `useHasDatabases` |
 
-Both are client-only (local collections paint nothing during SSR). Each row is a shared
+Both are client-only (local collections paint nothing during SSR) and read the
+collections through SSR-safe `useSyncExternalStore` snapshot hooks
+([`use-local-databases.ts`](../../src/hooks/use-local-databases.ts) plus the
+incremental database-block snapshot in `page-list-database-rows.tsx`) — **never
+`useLiveQuery`**: these components render on every SSR'd page, and `useLiveQuery`
+subscribes without a server snapshot, which makes React abort the entire server
+render ("Missing getServerSnapshot") and silently revert the whole site to a
+client-rendered empty shell (no crawler-visible content). Each row is a shared
 [`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx): click opens
 the standalone page; right-click and the row ⋯ menu offer Rename, Change icon, and
 Delete (with confirmation). No drag or chevron — the database entity is the navigation

@@ -14,6 +14,7 @@ import {
   upsertPageBlock,
 } from "@/db/queries/block-collection-ops.ts";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
+import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import {
   buildBlockTree,
   type CanvasRow,
@@ -239,12 +240,16 @@ export function usePageCanvas(
         createdAt: timestamp,
         updatedAt: timestamp,
       });
+      // The seeded shard holds post-edit blocks; the conflict baseline is the
+      // pristine server content this overlay diverged from.
+      capturePageBaseline(pageId, serverPage.blocks, serverBaselineHash);
     },
     [
       localPage,
       pageId,
       serverBaselineHash,
       serverMetadataBaseline,
+      serverPage.blocks,
       serverPage.icon,
       serverPage.parentId,
       serverPage.slug,

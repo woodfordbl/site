@@ -1,5 +1,6 @@
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
+import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
@@ -69,6 +70,11 @@ function applyScopeOrderUpdate(
     updatedAt: now,
   });
   seedPageBlocks(update.pageId, pageSeed.blocks);
+  capturePageBaseline(
+    update.pageId,
+    pageSeed.blocks,
+    pageSeed.serverBaselineHash
+  );
   markPageDirty(update.pageId);
 }
 

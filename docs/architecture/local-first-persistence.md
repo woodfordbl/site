@@ -13,6 +13,7 @@
 | Local database rows | `localDatabaseRowsCollection` (`site-local-db-rows:<databaseId>` shards; quarantine `site-local-db-rows-quarantine`) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
 | Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
+| Server baseline content | Same IndexedDB store, reserved `${pageId}:baseline` key ([`page-baseline-store.ts`](../../src/db/snapshots/page-baseline-store.ts)) | No |
 | Database sync bookkeeping | IndexedDB `site-db-sync-meta` / `meta` ([`sync-meta-store.ts`](../../src/db/sync/sync-meta-store.ts): etag, last sync/error, tombstone counts) | No |
 | Connector tokens | `site-connector-tokens` (localStorage, client-only — [`token-store.ts`](../../src/lib/connectors/token-store.ts)) | No |
 
@@ -182,7 +183,23 @@ Settings **Backup** ([`BackupPanel`](../../src/components/settings/panels/backup
 
 ## Server baseline hash
 
-When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale ([`computePageStaleState`](../../src/lib/pages/resolve-page-state.ts), used for per-open detection). The global settings pull is content-only (`contentHash` vs `serverBaselineHash`); resolving a stale page is a full [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) that drops the local overlay (metadata + blocks) so the next read restores the shipped baseline.
+When a seeded local page exists and either `hashPageBlocks(server.blocks) !== serverBaselineHash` or shipped metadata hash differs from `serverMetadataBaseline`, the page is stale ([`computePageStaleState`](../../src/lib/pages/resolve-page-state.ts), used for per-open detection). The global settings pull is content-only (`contentHash` vs `serverBaselineHash`).
+
+## Server baseline content (conflict base)
+
+The hash only proves divergence; [`page-baseline-store.ts`](../../src/db/snapshots/page-baseline-store.ts) keeps the actual server blocks the overlay was seeded from (IndexedDB, reserved `${pageId}:baseline` key in the snapshot store) so conflict resolution — and a future three-way block merge — has real base content. `capturePageBaseline` is fired (best-effort, never blocking an edit) at every shipped-page lazy-seed site: [`persistPageMetadata`](../../src/lib/pages/persist-page-metadata.ts), [`persistPageSettings`](../../src/lib/pages/persist-page-settings.ts), [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), the reposition parent-seed in [`use-page-dispatch.ts`](../../src/hooks/use-page-dispatch.ts), and the canvas `ensurePageMeta` in [`use-page-canvas.ts`](../../src/db/queries/use-page-canvas.ts) (which captures `serverPage.blocks`, not the post-edit seeded shard). It is cleared with the overlay (**Reset page**, **Reset all**, author **Save all**) and reclaimed for missing overlays by the boot purge ([`snapshot-purge.ts`](../../src/db/snapshots/snapshot-purge.ts)).
+
+## Conflict resolution (stale overridden pages)
+
+An open stale page shows a banner strip ([`PageStaleBanner`](../../src/components/pages/page-stale-banner.tsx), mounted by [`page-workspace.tsx`](../../src/components/pages/page-workspace.tsx)) — "This page changed on the site since you edited it" — with three resolutions:
+
+| Action | Helper | Effect |
+|--------|--------|--------|
+| Keep my edits | [`keepLocalPageVersion`](../../src/lib/pages/keep-local-page-version.ts) | Fast-forwards `serverBaselineHash` / `serverMetadataBaseline` (+ stored baseline blocks) to the current shipped content — acknowledges the update, keeps the overlay, clears the stale flag |
+| Preview site version | [`ServerVersionPreview`](../../src/components/pages/server-version-preview.tsx) | Read-only takeover of the workspace rendering the shipped blocks (same pattern as the version-history preview), with Keep / Use actions in its header |
+| Use site version | [`resetPageToRemote`](../../src/lib/pages/reset-page-to-remote.ts) (confirm dialog) | Drops the local overlay so the next read restores the shipped baseline |
+
+The banner reads the overlay through a live-collection `useSyncExternalStore` subscription (not `useLocalPageById`): the SSR preview cookie fabricates baseline hashes (false stale positives) and the bootstrap memo would keep a resolved conflict on screen until reload. It is also client-gated, so SSR and the hydration frame render nothing. The metadata-hash field subset in `keepLocalPageVersion` must mirror `computePageStaleState` exactly or the fast-forward won't clear the flag.
 
 ## Author dev mode
 

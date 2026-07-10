@@ -3,6 +3,10 @@ import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readBlockShardPageIds } from "@/db/collections/page-sharded-block-storage.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { deleteAllBlocksForPage } from "@/db/queries/block-collection-ops.ts";
+import {
+  clearPageBaseline,
+  listBaselinePageIds,
+} from "@/db/snapshots/page-baseline-store.ts";
 import { clearPageSnapshots } from "@/db/snapshots/page-snapshot-store.ts";
 import { clearAllPageEditHistories } from "@/lib/canvas/page-edit-history.ts";
 import { writeDirtyPageIdsToDocument } from "@/lib/local-draft/dirty-pages-cookie.ts";
@@ -22,5 +26,13 @@ export async function resetAllToRemote(): Promise<void> {
   clearAllPageEditHistories();
   writeDirtyPageIdsToDocument(new Set());
   writePageListLocalPreviewToDocument([]);
+  try {
+    const baselinePageIds = await listBaselinePageIds();
+    await Promise.all(
+      baselinePageIds.map((pageId) => clearPageBaseline(pageId))
+    );
+  } catch {
+    // Best-effort — orphan baselines are also reclaimed by the boot purge.
+  }
   await sweepOrphanAssets();
 }

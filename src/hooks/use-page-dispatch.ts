@@ -7,6 +7,7 @@ import {
   deleteAllBlocksForPage,
   seedPageBlocks,
 } from "@/db/queries/block-collection-ops.ts";
+import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import { clearPageSnapshots } from "@/db/snapshots/page-snapshot-store.ts";
 import { useLocalPages } from "@/hooks/use-local-pages.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
@@ -337,6 +338,11 @@ function seedParentPageForReposition(
     updatedAt: now,
   });
   seedPageBlocks(parentId, effect.parentSeed.blocks);
+  capturePageBaseline(
+    parentId,
+    effect.parentSeed.blocks,
+    effect.parentSeed.serverBaselineHash
+  );
 }
 
 function applyPageRepositionEffect(
