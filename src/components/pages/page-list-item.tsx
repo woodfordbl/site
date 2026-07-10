@@ -348,11 +348,7 @@ function PageListChildren({
           row={childRow}
         />
       ))}
-      <PageListDatabaseRows
-        depth={depth + 1}
-        hostPageId={row.page.id}
-        pages={pages}
-      />
+      <PageListDatabaseRows depth={depth + 1} hostPageId={row.page.id} />
     </SidebarMenuSub>
   );
 }

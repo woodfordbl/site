@@ -1,45 +1,35 @@
-import { IconDatabase } from "@tabler/icons-react";
 import { eq, useLiveQuery } from "@tanstack/react-db";
-import { useNavigate } from "@tanstack/react-router";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
-import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
-import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar.tsx";
+  DatabaseSidebarRow,
+  type DatabaseSidebarRowEntry,
+} from "@/components/pages/database-sidebar-row.tsx";
 import {
   localBlocksCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
-import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
-import { resolvePageNavTarget } from "@/lib/pages/resolve-page-nav-target.ts";
 
 /**
  * Sidebar presence for databases: a page hosting a `database` block gets a
  * child row per hosted database (icon + name) under it in the page tree.
  * Materialized row pages are hidden from the sidebar (`databaseRowSource`),
- * so this entry is the database's navigation surface. v1 navigates to the
- * HOST page (scroll-to-block arrives later). Synthetic rows only — nothing
- * is inserted into the page collections; no context menu, drag, or chevron.
+ * so this entry is the database's navigation surface. Click opens the
+ * standalone database page at `/db/$databaseId` (same as the workspace
+ * Databases section). Synthetic rows only — nothing is inserted into the
+ * page collections; no drag or chevron. Right-click and the row ⋯ menu
+ * mirror the workspace **Databases** section via {@link DatabaseSidebarRow}.
  *
  * Client-only data: the scan reads the local block/database collections, so
  * SSR paints no database rows and they appear after hydration (`useIsClient`
  * keeps the hydration render identical to SSR).
  */
-export interface HostedDatabaseSidebarEntry {
-  icon?: string;
-  id: string;
-  name: string;
-}
 
-type HostedDatabasesByPage = ReadonlyMap<string, HostedDatabaseSidebarEntry[]>;
+type HostedDatabasesByPage = ReadonlyMap<string, DatabaseSidebarRowEntry[]>;
 
 const EMPTY_MAP: HostedDatabasesByPage = new Map();
-const NO_ENTRIES: HostedDatabaseSidebarEntry[] = [];
+const NO_ENTRIES: DatabaseSidebarRowEntry[] = [];
 
 const HostedDatabasesContext = createContext<HostedDatabasesByPage>(EMPTY_MAP);
 
@@ -77,7 +67,7 @@ export function HostedDatabasesProvider({
     const databasesById = new Map(
       databases.map((database) => [database.id, database])
     );
-    const map = new Map<string, HostedDatabaseSidebarEntry[]>();
+    const map = new Map<string, DatabaseSidebarRowEntry[]>();
     const seen = new Set<string>();
 
     for (const block of databaseBlocks) {
@@ -121,57 +111,17 @@ export function HostedDatabasesProvider({
 }
 
 /** Databases hosted on one page (empty outside a provider / before hydration). */
-export function useHostedDatabases(
-  pageId: string
-): HostedDatabaseSidebarEntry[] {
+export function useHostedDatabases(pageId: string): DatabaseSidebarRowEntry[] {
   return useContext(HostedDatabasesContext).get(pageId) ?? NO_ENTRIES;
-}
-
-function PageListDatabaseRow({
-  database,
-  depth,
-  hostPageId,
-  pages,
-}: {
-  database: HostedDatabaseSidebarEntry;
-  depth: number;
-  hostPageId: string;
-  pages: PageSummary[];
-}): ReactNode {
-  const navigate = useNavigate();
-
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        className={pageListRowPaddingLeft(depth)}
-        onClick={() => {
-          navigate(resolvePageNavTarget(hostPageId, pages));
-        }}
-      >
-        <span className={iconSlotClassName("icon-xs", "relative size-4")}>
-          {database.icon ? (
-            <PageIconDisplay icon={database.icon} />
-          ) : (
-            <IconDatabase className="size-4 stroke-[1.5px]" />
-          )}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-left">
-          {database.name}
-        </span>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
 }
 
 /** All hosted-database rows for one host page, rendered after its child pages. */
 export function PageListDatabaseRows({
   depth,
   hostPageId,
-  pages,
 }: {
   depth: number;
   hostPageId: string;
-  pages: PageSummary[];
 }): ReactNode {
   const entries = useHostedDatabases(hostPageId);
 
@@ -180,12 +130,6 @@ export function PageListDatabaseRows({
   }
 
   return entries.map((database) => (
-    <PageListDatabaseRow
-      database={database}
-      depth={depth}
-      hostPageId={hostPageId}
-      key={database.id}
-      pages={pages}
-    />
+    <DatabaseSidebarRow database={database} depth={depth} key={database.id} />
   ));
 }
