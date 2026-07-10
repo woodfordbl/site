@@ -1,13 +1,18 @@
 import { IconMathFunction, IconSearch } from "@tabler/icons-react";
 import {
+  Component,
   type KeyboardEvent,
+  lazy,
   type ReactNode,
+  // biome-ignore lint/correctness/noUnresolvedImports: React 19 exports Suspense; Biome types lag
+  Suspense,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import type { FormulaCodeEditorHandle } from "@/components/database/formula-code-editor.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { TokenChip } from "@/components/ui/chip.tsx";
 import {
@@ -36,7 +41,7 @@ import {
 } from "@/lib/formula/check.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
-import { parseFormula } from "@/lib/formula/parse.ts";
+import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalizeExpression,
   humanizeExpression,
@@ -63,7 +68,48 @@ import { cn } from "@/lib/utils.ts";
  * canonical text to the caller's `onSave` unconditionally (so the menu can
  * close); the caller compares against the stored expression and skips the
  * write for unchanged drafts.
+ *
+ * On fine pointers the expression input is the lazy-loaded CodeMirror 6
+ * editor (formula-code-editor.tsx) — syntax highlighting, soft wrap,
+ * Mod+Enter saves — with the plain textarea as the Suspense fallback while
+ * the CM6 chunk loads. Coarse pointers keep the textarea entirely (mobile
+ * gets its own treatment in a later phase). Caret insertion from the
+ * reference list goes through the editor's imperative handle when mounted,
+ * else through the textarea's selection range.
  */
+
+/**
+ * Warms lazily so ~85 KB gz of CM6 stays out of the main bundle and is paid
+ * only when a formula editor actually opens (same code-split pattern as
+ * `preload-page-icon-picker.ts`).
+ */
+const FormulaCodeEditor = lazy(() =>
+  import("@/components/database/formula-code-editor.tsx").then((module) => ({
+    default: module.FormulaCodeEditor,
+  }))
+);
+
+/**
+ * Degrades a failed code-editor mount to the plain textarea instead of
+ * letting the error escape to the route CatchBoundary (which blanks the
+ * whole page). The realistic trigger is a chunk-fetch failure — a stale
+ * client requesting a rotated-out hash after a deploy, or offline.
+ */
+// biome-ignore lint/style/useReactFunctionComponents: error boundaries require a class — React has no hook equivalent
+export class FormulaCodeEditorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
 
 /**
  * Keep typing inside menu-embedded inputs from triggering the menu's
@@ -126,6 +172,40 @@ function ReferenceRow({
   );
 }
 
+/**
+ * Left half of the status row: the first parse error, else the first checker
+ * diagnostic (both with a 1-based character position), else "✓ Valid".
+ * `null` for a blank draft.
+ */
+function statusLine(
+  parsed: ParseFormulaResult | null,
+  checked: FormulaCheckResult | null
+): ReactNode {
+  if (parsed === null) {
+    return null;
+  }
+  if (!parsed.ok) {
+    return (
+      <span className="min-w-0 truncate text-destructive text-xs">
+        {parsed.error.message} (at character {parsed.error.position + 1})
+      </span>
+    );
+  }
+  const firstDiagnostic = checked?.diagnostics[0];
+  if (firstDiagnostic !== undefined) {
+    return (
+      <span className="min-w-0 truncate text-destructive text-xs">
+        {firstDiagnostic.message} (at character {firstDiagnostic.start + 1})
+      </span>
+    );
+  }
+  return (
+    <span className="min-w-0 truncate text-muted-foreground text-xs">
+      ✓ Valid
+    </span>
+  );
+}
+
 /** Muted section heading inside the reference list. */
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
@@ -161,10 +241,15 @@ export function FormulaEditorPanel({
   );
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<ReferenceDetail | null>(null);
+  const coarsePointer = useIsCoarsePrimaryPointer();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const codeEditorRef = useRef<FormulaCodeEditorHandle>(null);
 
   // Mounted only while the (sub)menu is open — steal focus from the popup
-  // after Base UI's initial focus pass (same rAF pattern as the rename input).
+  // after Base UI's initial focus pass (same rAF pattern as the rename
+  // input). Targets the textarea when it's rendered (coarse pointers, or the
+  // Suspense fallback while the CM6 chunk loads); the code editor handles
+  // its own autofocus once mounted.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       textareaRef.current?.focus();
@@ -175,11 +260,18 @@ export function FormulaEditorPanel({
   }, []);
 
   /**
-   * Splice `text` into the draft at the textarea's caret (replacing any
-   * selection — its selectionStart/End survive blur), then restore focus with
-   * the caret `caretOffset` characters into the inserted text.
+   * Splice `text` into the draft at the caret (replacing any selection),
+   * then restore focus with the caret `caretOffset` characters into the
+   * inserted text. Goes through the CM6 handle when the code editor is
+   * mounted; otherwise through the textarea's selection range (which
+   * survives blur).
    */
   const insertAtCaret = (text: string, caretOffset: number) => {
+    const editor = codeEditorRef.current;
+    if (editor !== null) {
+      editor.insertText(text, caretOffset);
+      return;
+    }
     const element = textareaRef.current;
     const start = element?.selectionStart ?? draft.length;
     const end = element?.selectionEnd ?? draft.length;
@@ -196,6 +288,16 @@ export function FormulaEditorPanel({
 
   const trimmed = draft.trim();
   const parsed = trimmed === "" ? null : parseFormula(draft);
+
+  // Save is blocked only by parse errors; shared by the Save button and the
+  // code editor's Mod+Enter (which fires regardless, so it must self-gate).
+  const saveDisabled = parsed !== null && !parsed.ok;
+  const save = () => {
+    if (saveDisabled) {
+      return;
+    }
+    onSave(canonicalizeExpression(draft, fields).text);
+  };
 
   // Static check of the parsed draft against the schema — formula fields
   // typed via the same topological pass the overlay uses.
@@ -267,32 +369,10 @@ export function FormulaEditorPanel({
     functionEntries.length === 0 &&
     operatorEntries.length === 0;
 
-  const firstDiagnostic = checked?.diagnostics[0];
-  let status: ReactNode = null;
-  if (parsed !== null && !parsed.ok) {
-    status = (
-      <span className="min-w-0 truncate text-destructive text-xs">
-        {parsed.error.message} (at character {parsed.error.position + 1})
-      </span>
-    );
-  } else if (firstDiagnostic !== undefined) {
-    status = (
-      <span className="min-w-0 truncate text-destructive text-xs">
-        {firstDiagnostic.message} (at character {firstDiagnostic.start + 1})
-      </span>
-    );
-  } else if (parsed !== null) {
-    status = (
-      <span className="min-w-0 truncate text-muted-foreground text-xs">
-        ✓ Valid
-      </span>
-    );
-  }
-
   const statusRow =
     parsed === null ? null : (
       <div className="flex items-center justify-between gap-2 px-0.5">
-        {status}
+        {statusLine(parsed, checked)}
         {checked === null ? null : (
           <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
             Type:
@@ -304,24 +384,47 @@ export function FormulaEditorPanel({
       </div>
     );
 
+  // The plain-textarea input: the whole editor on coarse pointers (mobile
+  // gets its own treatment in a later phase), and the Suspense fallback
+  // while the CM6 chunk loads on fine pointers.
+  const expressionTextarea = (
+    <Textarea
+      aria-label="Formula expression"
+      autoComplete="off"
+      className="max-h-32 min-h-16 font-mono text-xs md:text-xs"
+      onChange={(event) => {
+        setDraft(event.target.value);
+      }}
+      onKeyDown={stopMenuKeys}
+      placeholder="thisPage.Price * 1.1"
+      ref={textareaRef}
+      spellCheck={false}
+      value={draft}
+    />
+  );
+
   return (
     <div className="flex w-full flex-col gap-1.5 p-1">
       <span className="px-0.5 font-medium text-muted-foreground text-xs">
         Formula
       </span>
-      <Textarea
-        aria-label="Formula expression"
-        autoComplete="off"
-        className="max-h-32 min-h-16 font-mono text-xs md:text-xs"
-        onChange={(event) => {
-          setDraft(event.target.value);
-        }}
-        onKeyDown={stopMenuKeys}
-        placeholder="thisPage.Price * 1.1"
-        ref={textareaRef}
-        spellCheck={false}
-        value={draft}
-      />
+      {coarsePointer ? (
+        expressionTextarea
+      ) : (
+        <FormulaCodeEditorBoundary fallback={expressionTextarea}>
+          <Suspense fallback={expressionTextarea}>
+            <FormulaCodeEditor
+              ariaLabel="Formula expression"
+              autoFocus
+              editorRef={codeEditorRef}
+              onChange={setDraft}
+              onSubmit={save}
+              placeholder="thisPage.Price * 1.1"
+              value={draft}
+            />
+          </Suspense>
+        </FormulaCodeEditorBoundary>
+      )}
       {statusRow}
       {preview === null ? null : (
         <span className="truncate px-0.5 text-muted-foreground text-xs">
@@ -448,10 +551,8 @@ export function FormulaEditorPanel({
       </div>
       <Button
         className="self-end"
-        disabled={parsed !== null && !parsed.ok}
-        onClick={() => {
-          onSave(canonicalizeExpression(draft, fields).text);
-        }}
+        disabled={saveDisabled}
+        onClick={save}
         size="xs"
         variant="outline"
       >

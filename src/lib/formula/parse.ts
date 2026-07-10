@@ -30,15 +30,21 @@ export type ParseFormulaResult =
   | { ok: true; ast: FormulaNode }
   | { ok: false; error: FormulaSourceError };
 
-/** Scope roots accepted before `.property` / `["property"]` (lowercased). */
-const SCOPE_ROOTS = new Set(["thispage", "thisrow"]);
+/**
+ * Scope roots accepted before `.property` / `["property"]` (lowercased).
+ * Exported so the editor highlighter classifies references off the same list.
+ */
+export const FORMULA_SCOPE_ROOTS: ReadonlySet<string> = new Set([
+  "thispage",
+  "thisrow",
+]);
 
 /**
  * The canonical reference form `prop("<fieldId>")` (lowercased). Syntax, not
  * a catalog function — it parses straight to a property node, so it never
- * appears in the function catalog or the UI.
+ * appears in the function catalog or the UI. Exported for the highlighter.
  */
-const PROP_ROOT = "prop";
+export const FORMULA_PROP_ROOT = "prop";
 
 /**
  * Words that read as literals or operators and therefore can't name a lambda
@@ -458,10 +464,10 @@ class Parser {
         end: token.end,
       };
     }
-    if (SCOPE_ROOTS.has(lower)) {
+    if (FORMULA_SCOPE_ROOTS.has(lower)) {
       return this.parsePropertyAccess(token.value, token.position);
     }
-    if (lower === PROP_ROOT) {
+    if (lower === FORMULA_PROP_ROOT) {
       return this.parsePropReference(token.position);
     }
     if (this.matchPunct("(") !== null) {

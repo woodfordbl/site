@@ -1,14 +1,26 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
+import {
+  FormulaCodeEditorBoundary,
+  FormulaEditorPanel,
+} from "@/components/database/formula-editor-panel.tsx";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
-// The panel only reads the coarse-pointer hint for row sizing; stub it so the
-// test needs no DeviceLayoutProvider/matchMedia scaffolding.
+// Coarse pointers keep the plain textarea (the CM6 code editor is the fine-
+// pointer path), so most cases run with `coarse: true` to exercise the
+// textarea surface without CM6/jsdom scaffolding; the code-editor block
+// flips it to false. Stubbed so no DeviceLayoutProvider/matchMedia is needed.
+const pointer = vi.hoisted(() => ({ coarse: true }));
 vi.mock("@/hooks/device-layout.ts", () => ({
-  useIsCoarsePrimaryPointer: () => false,
+  useIsCoarsePrimaryPointer: () => pointer.coarse,
 }));
 
 const FIELDS: DatabaseField[] = [
@@ -29,6 +41,7 @@ function flushFrames(): Promise<void> {
 }
 
 beforeEach(() => {
+  pointer.coarse = true;
   vi.stubGlobal(
     "requestAnimationFrame",
     (cb: FrameRequestCallback) =>
@@ -175,5 +188,88 @@ describe("FormulaEditorPanel", () => {
     expect(textarea.value).toBe('thisPage.Price * thisPage["Unit Count"]');
     // Name resolution keeps the live preview working on the display text.
     expect(screen.getByText("Preview: 40")).toBeDefined();
+  });
+
+  describe("code editor (fine pointers)", () => {
+    beforeEach(() => {
+      pointer.coarse = false;
+      // jsdom has no layout; CM6 measures text via Range geometry. Empty
+      // rects are enough for mount + dispatch.
+      Range.prototype.getClientRects = () =>
+        ({
+          length: 0,
+          item: () => null,
+          [Symbol.iterator]: [][Symbol.iterator],
+        }) as unknown as DOMRectList;
+      Range.prototype.getBoundingClientRect = () =>
+        ({
+          bottom: 0,
+          height: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect;
+    });
+
+    it("mounts CM6 lazily, inserts through its caret API, and saves canonical text", async () => {
+      const onSave = renderPanel();
+
+      // The textarea renders as the Suspense fallback until the lazy CM6
+      // chunk resolves and replaces it.
+      expect(screen.getByLabelText("Formula expression").tagName).toBe(
+        "TEXTAREA"
+      );
+      await waitFor(() => {
+        expect(document.querySelector(".cm-content")).not.toBeNull();
+      });
+      expect(document.querySelector("textarea")).toBeNull();
+
+      // Reference-list insertion goes through the editor handle: function
+      // first (caret lands inside the parens), then a property at the caret.
+      fireEvent.click(screen.getByText("average"));
+      fireEvent.click(screen.getByText("Price"));
+      await waitFor(() => {
+        expect(screen.getByText("Preview: 10")).toBeDefined();
+      });
+
+      // Mod+Enter saves (same gate as the button)…
+      const content = document.querySelector(".cm-content") as HTMLElement;
+      fireEvent.keyDown(content, { key: "Enter", ctrlKey: true });
+      expect(onSave).toHaveBeenCalledWith('average(prop("f-price"))');
+
+      // …and so does the Save button, canonicalizing the humanized draft.
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSave).toHaveBeenCalledTimes(2);
+      expect(onSave).toHaveBeenLastCalledWith('average(prop("f-price"))');
+    });
+
+    it("degrades to the fallback when the editor fails to mount", () => {
+      // Stands in for a chunk-fetch failure (stale deploy hash, offline).
+      function ExplodingEditor(): ReactNode {
+        throw new Error("Failed to fetch dynamically imported module");
+      }
+      // React logs caught boundary errors; keep the test output clean.
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      try {
+        render(
+          <FormulaCodeEditorBoundary
+            fallback={<textarea aria-label="Formula expression" />}
+          >
+            <ExplodingEditor />
+          </FormulaCodeEditorBoundary>
+        );
+        expect(screen.getByLabelText("Formula expression").tagName).toBe(
+          "TEXTAREA"
+        );
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
   });
 });

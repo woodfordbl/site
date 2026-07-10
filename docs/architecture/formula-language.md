@@ -177,6 +177,22 @@ errors — checker diagnostics warn but save, since the overlay degrades per-cel
 The searchable Properties / Functions / Operators reference inserts at the caret,
 docs sourced from the catalog.
 
+On fine pointers the expression input is
+[`formula-code-editor.tsx`](../../src/components/database/formula-code-editor.tsx),
+a CodeMirror 6 editor **lazy-loaded** at the panel boundary (`React.lazy`, plain
+textarea as the Suspense fallback) so CM6 stays out of the main bundle; coarse
+pointers keep the textarea until the mobile editor phase. Soft-wrapped, autogrowing,
+no line numbers; Mod+Enter saves; every key except Escape stops propagating so the
+enclosing menu's typeahead never steals keystrokes. Caret insertion from the
+reference list goes through the editor's imperative `editorRef` handle. Syntax
+highlighting is **not** a second grammar:
+[`highlight.ts`](../../src/lib/formula/highlight.ts) (pure, React-free) classifies
+spans by running the real tokenizer plus the parser's own lookahead rules (scope
+roots, `prop("…")`, call syntax, word operators; comments recovered from inter-token
+gaps), so editor colors can't drift from what the parser accepts, and
+unparseable-mid-keystroke drafts still highlight. Chips, fused autocomplete, the
+info card, and diagnostics-in-editor are later stages (proposal §6).
+
 ## Templates
 
 [`template.ts`](../../src/lib/formula/template.ts) powers `{{ thisPage.X }}` tokens in

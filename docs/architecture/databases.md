@@ -298,14 +298,17 @@ participate in the view machinery like stored columns:
   is hidden and refreshing on visibility return.
 - **Editing** — the column menu's Edit property submenu becomes a formula **builder**
   ([`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx),
-  width-fluid for the desktop submenu and the touch menu drawer alike): monospace
-  expression textarea with live parse/check feedback (positioned error / "✓ Valid"
+  width-fluid for the desktop submenu and the touch menu drawer alike): a monospace
+  expression input with live parse/check feedback (positioned error / "✓ Valid"
   plus a result-type badge from the static checker) and a live first-row preview, over
   a searchable Properties / Functions / Operators reference (docs sourced from the
   typed catalog, [`catalog.ts`](../../src/lib/formula/catalog.ts)) that inserts at the
   caret, plus an explicit Save; broken expressions show a warning badge on the column
   header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
-  diagnostics warn but save (cells degrade per row, never crash).
+  diagnostics warn but save (cells degrade per row, never crash). On fine pointers the
+  input is a lazy-loaded CodeMirror 6 editor with tokenizer-driven syntax highlighting
+  ([formula-language — Editor panel](./formula-language.md#editor-panel)); coarse
+  pointers keep a plain textarea.
 - **Id-canonical references** — stored expressions reference fields by id
   (`prop("<fieldId>")`), humanized to `thisPage.Name` in the builder and
   re-canonicalized on Save, so field renames never break formulas; a startup migration
