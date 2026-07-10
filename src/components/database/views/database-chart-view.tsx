@@ -19,12 +19,17 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  ChartLegendSlot,
+  chartXAxisLabel,
+  chartYAxisLabel,
+  X_AXIS_TITLE_HEIGHT_PX,
+  Y_AXIS_TITLE_WIDTH_PX,
+} from "@/components/database/views/database-chart-parts.tsx";
 import { DatabaseTimeSeriesChart } from "@/components/database/views/database-time-series-chart.tsx";
 import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   useChartDither,
@@ -59,8 +64,9 @@ import { cn } from "@/lib/utils.ts";
  * Chart saved view: renders `view.config.chart` (mark/axes/series/palette)
  * over the entry-computed row pipeline on the site chart system —
  * `ChartContainer` + `--chart-1..5` tokens, workspace palette + dither aware.
- * Edit mode mounts the hover-revealed config gear (`DatabaseChartConfig`);
- * view mode keeps the chart interactive (tooltips) with config hidden.
+ * Configuration lives in the database ⋯ settings menu's "Chart options"
+ * submenu (`ChartOptionsItems`); the chart surface itself stays control-free
+ * in both modes (tooltips remain interactive).
  */
 
 /** Props contract for saved-view renderers mounted by `database-table-view.tsx`. */
@@ -139,51 +145,6 @@ function makeTooltipFormatter(
   };
 }
 
-interface ChartLegendSlotProps {
-  chart: ChartViewConfig;
-  /** Config lookup key name on datum objects (pie); cartesian legends omit it. */
-  nameKey?: string;
-  seriesCount: number;
-}
-
-/**
- * Legend per config: shown when `showLegend` is set, defaulting to on only
- * for multi-series charts (a single series is named by its context — no
- * legend box). Position maps top/bottom/right onto Recharts alignment.
- */
-function ChartLegendSlot({
-  chart,
-  nameKey,
-  seriesCount,
-}: ChartLegendSlotProps): ReactNode {
-  const show = chart.showLegend ?? seriesCount > 1;
-  if (!show) {
-    return null;
-  }
-  const position = chart.legendPosition ?? "bottom";
-  if (position === "right") {
-    return (
-      <ChartLegend
-        align="right"
-        content={
-          <ChartLegendContent
-            className="flex-col items-start gap-2 pt-0 pl-4"
-            nameKey={nameKey}
-          />
-        }
-        layout="vertical"
-        verticalAlign="middle"
-      />
-    );
-  }
-  return (
-    <ChartLegend
-      content={<ChartLegendContent nameKey={nameKey} />}
-      verticalAlign={position}
-    />
-  );
-}
-
 interface CartesianChartProps {
   aggregate: DatabaseChartYAggregate;
   chart: ChartViewConfig;
@@ -236,10 +197,14 @@ function CartesianChart({
   const grid = showGrid ? (
     <CartesianGrid vertical={chart.gridVertical === true} />
   ) : null;
+  const xAxisLabel = chartXAxisLabel(chart.xAxisTitle);
+  const yAxisLabel = chartYAxisLabel(chart.yAxisTitle);
   const xAxis = (
     <XAxis
       axisLine={false}
       dataKey="category"
+      height={xAxisLabel ? X_AXIS_TITLE_HEIGHT_PX : undefined}
+      label={xAxisLabel}
       minTickGap={16}
       tickLine={false}
       tickMargin={8}
@@ -249,10 +214,11 @@ function CartesianChart({
     <YAxis
       allowDecimals={aggregate !== "count"}
       axisLine={false}
+      label={yAxisLabel}
       tickCount={chart.gridCount}
       tickFormatter={formatValue}
       tickLine={false}
-      width={48}
+      width={yAxisLabel ? Y_AXIS_TITLE_WIDTH_PX : 48}
     />
   );
   const tooltip = (
@@ -470,16 +436,14 @@ export function DatabaseChartView({
   // Time-axis charts take a separate async-loaded path (history + backfill).
   if (chart.xMode === "time") {
     return (
-      <div className="relative">
-        <DatabaseTimeSeriesChart
-          chart={chart}
-          database={database}
-          fields={fields}
-          mode={mode}
-          rows={rows}
-          view={view}
-        />
-      </div>
+      <DatabaseTimeSeriesChart
+        chart={chart}
+        database={database}
+        fields={fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
     );
   }
 
@@ -532,7 +496,5 @@ export function DatabaseChartView({
     );
   }
 
-  // Chart config now lives in the database ⋯ settings menu's "Chart" submenu
-  // (see `ChartOptionsItems`) — no floating gear on the chart itself.
-  return <div className="relative">{body}</div>;
+  return body;
 }

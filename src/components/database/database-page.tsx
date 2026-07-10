@@ -206,7 +206,11 @@ function DatabasePageBody({
             gutter without being clipped by the panel's `overflow-hidden`.
           */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-4 pl-12 md:p-6 md:pl-12">
-            <DatabaseTableView databaseId={database.id} mode="edit" />
+            <DatabaseTableView
+              databaseId={database.id}
+              fillHeight
+              mode="edit"
+            />
           </div>
         </div>
       </div>

@@ -42,10 +42,18 @@ import type {
   DatabaseView,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
 
 /** Props contract for the database surface rendered by `database` blocks. */
 export interface DatabaseTableViewProps {
   databaseId: string;
+  /**
+   * Full-page hosts (`/db/$databaseId`): the table view flexes to the host's
+   * remaining height — rows scroll between the sticky header and the add-row
+   * strip pinned at the bottom of the screen. Embedded blocks keep their
+   * natural height (600px scroll cap).
+   */
+  fillHeight?: boolean;
   /**
    * Block-level "hide title" flag. Edit mode keeps the toolbar row (settings
    * ⋯ and mobile filter/sort buttons) without the name; view mode drops the
@@ -198,6 +206,7 @@ interface DatabaseViewBodyProps {
   columns: DatabaseField[];
   database: NonNullable<ReturnType<typeof useDatabase>>;
   databaseId: string;
+  fillHeight: boolean;
   groups: DatabaseRowGroup[] | null;
   isSyncedDatabase: boolean;
   mode: "view" | "edit";
@@ -212,6 +221,7 @@ function DatabaseViewBody({
   columns,
   database,
   databaseId,
+  fillHeight,
   groups,
   isSyncedDatabase,
   mode,
@@ -256,6 +266,7 @@ function DatabaseViewBody({
     <DatabaseTableGrid
       columns={columns}
       databaseId={databaseId}
+      fillHeight={fillHeight}
       groups={groups}
       isSyncedDatabase={isSyncedDatabase}
       // Remount clears session row-selection when the database or active
@@ -280,6 +291,7 @@ function DatabaseViewBody({
  */
 export function DatabaseTableView({
   databaseId,
+  fillHeight = false,
   hideTitle = false,
   mode,
   onDeleteDatabase,
@@ -413,7 +425,12 @@ export function DatabaseTableView({
     resolveInlineFilterBarState(view, mode, filterBarVisible);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2">
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-col gap-2",
+        fillHeight && "min-h-0 flex-1"
+      )}
+    >
       {showTitleRow ? (
         <DatabaseTitle
           activeView={view}
@@ -462,6 +479,7 @@ export function DatabaseTableView({
         columns={columns}
         database={database}
         databaseId={databaseId}
+        fillHeight={fillHeight}
         groups={groups}
         isSyncedDatabase={isSyncedDatabase}
         mode={mode}

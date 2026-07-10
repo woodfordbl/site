@@ -255,6 +255,18 @@ export const databaseViewTypeSchema = z.enum([
 
 export type DatabaseViewType = z.infer<typeof databaseViewTypeSchema>;
 
+/**
+ * Chart Y aggregates, in menu order — the single source for the `yAggregate`
+ * schema enum and the settings menu's option list (`CHART_Y_AGGREGATES`).
+ */
+export const DATABASE_CHART_Y_AGGREGATES = [
+  "count",
+  "sum",
+  "average",
+  "min",
+  "max",
+] as const;
+
 /** Per-view table configuration — all keyed by stable field id. */
 export const databaseTableViewConfigSchema = z.object({
   /** Column display order; fields absent from the list append after, in schema order. */
@@ -328,8 +340,12 @@ export const databaseTableViewConfigSchema = z.object({
       /** X axis / category field. */
       xFieldId: z.string().optional(),
       /** Y aggregate: count of rows, or an aggregate over a number field. */
-      yAggregate: z.enum(["count", "sum", "average", "min", "max"]).optional(),
+      yAggregate: z.enum(DATABASE_CHART_Y_AGGREGATES).optional(),
       yFieldId: z.string().optional(),
+      /** Optional X axis title rendered under the axis (cartesian marks). */
+      xAxisTitle: z.string().optional(),
+      /** Optional Y axis title rendered along the axis (cartesian marks). */
+      yAxisTitle: z.string().optional(),
       /** Optional series split (one line/bar-stack segment per value). */
       seriesFieldId: z.string().optional(),
       showLegend: z.boolean().optional(),

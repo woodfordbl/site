@@ -11,10 +11,15 @@ import {
 
 import { chartConfigPatch } from "@/components/database/views/database-chart-config-helpers.ts";
 import {
+  ChartLegendSlot,
+  chartXAxisLabel,
+  chartYAxisLabel,
+  X_AXIS_TITLE_HEIGHT_PX,
+  Y_AXIS_TITLE_WIDTH_PX,
+} from "@/components/database/views/database-chart-parts.tsx";
+import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   useChartGradientDither,
@@ -216,6 +221,8 @@ export function DatabaseTimeSeriesChart({
 
   const dither = useChartGradientDither(chartConfig);
   const timeFormatter = makeTimeFormatter(windowMs);
+  const xAxisLabel = chartXAxisLabel(chart.xAxisTitle);
+  const yAxisLabel = chartYAxisLabel(chart.yAxisTitle);
   const formatValue = (value: number) => {
     if (percent) {
       return formatPercentChange(value);
@@ -282,6 +289,8 @@ export function DatabaseTimeSeriesChart({
         axisLine={false}
         dataKey="t"
         domain={data ? [data.from, data.to] : ["dataMin", "dataMax"]}
+        height={xAxisLabel ? X_AXIS_TITLE_HEIGHT_PX : undefined}
+        label={xAxisLabel}
         minTickGap={32}
         scale="time"
         tickFormatter={timeFormatter}
@@ -292,10 +301,11 @@ export function DatabaseTimeSeriesChart({
       <YAxis
         axisLine={false}
         domain={["auto", "auto"]}
+        label={yAxisLabel}
         tickCount={chart.gridCount}
         tickFormatter={formatValue}
         tickLine={false}
-        width="auto"
+        width={yAxisLabel ? Y_AXIS_TITLE_WIDTH_PX : "auto"}
       />
       <ChartTooltip
         content={
@@ -330,9 +340,7 @@ export function DatabaseTimeSeriesChart({
           />
         }
       />
-      {seriesEntries.length > 1 ? (
-        <ChartLegend content={<ChartLegendContent />} />
-      ) : null}
+      <ChartLegendSlot chart={chart} seriesCount={seriesEntries.length} />
     </>
   );
 

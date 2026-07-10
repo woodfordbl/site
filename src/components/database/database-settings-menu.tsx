@@ -30,6 +30,7 @@ import {
 } from "react";
 
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
+import { DatabasePropertyEditItems } from "@/components/database/database-column-menu.tsx";
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
@@ -188,6 +189,7 @@ function DatabaseRenameInput({
 }
 
 interface PropertyRowProps {
+  databaseId: string;
   /** Drop-line below the last row while a row is dragged past the end. */
   dropAfter: boolean;
   /** Drop-line above this row while another row is dragged over its top slot. */
@@ -198,6 +200,8 @@ interface PropertyRowProps {
   isPrimary: boolean;
   isVisible: boolean;
   onDelete: () => void;
+  /** Closes the whole settings menu (rename Enter, formula editor Save). */
+  onRequestClose: () => void;
   onToggleVisible: () => void;
   /** Pointer handlers for the left grip; drives {@link useListReorder}. */
   reorderHandleProps: ListReorderHandleProps;
@@ -205,18 +209,21 @@ interface PropertyRowProps {
 
 /**
  * One field row in the Properties list: a left grip that drag-reorders the
- * schema, the field icon + name, a "Title" badge beside the primary field's
- * name, and — for non-primary fields — hide/show and delete controls on the
- * right. The primary field can never be hidden or deleted. Tapping the name
- * opens nothing this wave — field editing lives in the column menu.
+ * schema, then the field name as a per-field edit submenu trigger (rename,
+ * per-type config, change type — the same editing core as the column
+ * menu), a "Title" badge beside the primary field's name, and — for
+ * non-primary fields — hide/show and delete controls on the right. The
+ * primary field can never be hidden or deleted.
  */
 function PropertyRow({
+  databaseId,
   dropBefore,
   dropAfter,
   field,
   isDragging,
   isPrimary,
   isVisible,
+  onRequestClose,
   reorderHandleProps,
   onDelete,
   onToggleVisible,
@@ -243,15 +250,27 @@ function PropertyRow({
       >
         <IconGripVertical className="size-4 stroke-[1.5px]" />
       </button>
-      <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="min-w-0 truncate">{field.name}</span>
-        {isPrimary ? (
-          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-            Title
-          </span>
-        ) : null}
-      </div>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          aria-label={`Edit ${field.name}`}
+          className="min-h-7 pointer-coarse:min-h-10 min-w-0 flex-1 gap-1.5 px-1"
+        >
+          <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+          <span className="min-w-0 truncate">{field.name}</span>
+          {isPrimary ? (
+            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              Title
+            </span>
+          ) : null}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-64 min-w-64">
+          <DatabasePropertyEditItems
+            databaseId={databaseId}
+            field={field}
+            onRequestClose={onRequestClose}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
       {isPrimary ? null : (
         <>
           <Button
@@ -291,16 +310,23 @@ function PropertyDropLine({ position }: { position: "top" | "bottom" }) {
 
 interface PropertiesSubmenuProps {
   database: LocalDatabase;
+  /** Closes the whole settings menu (threaded into each row's edit submenu). */
+  onRequestClose: () => void;
   /** The active view — field visibility is a per-view setting. */
   view: DatabaseView;
 }
 
 /**
- * Properties submenu: one row per field in schema order with a drag grip,
- * hide/show, and delete. Visibility writes `visibleFieldIds` on the ACTIVE
- * view; reorder rewrites the schema (all views).
+ * Properties submenu: one row per field in schema order with a drag grip, a
+ * per-field edit submenu (rename / per-type config / change type), hide/show,
+ * and delete. Visibility writes `visibleFieldIds` on the ACTIVE view; reorder
+ * and field edits rewrite the schema (all views).
  */
-function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
+function PropertiesSubmenu({
+  database,
+  onRequestClose,
+  view,
+}: PropertiesSubmenuProps) {
   const isVisible = (fieldId: string): boolean =>
     !view.visibleFieldIds || view.visibleFieldIds.includes(fieldId);
 
@@ -334,6 +360,7 @@ function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
         <div ref={containerRef}>
           {database.fields.map((field, index) => (
             <PropertyRow
+              databaseId={database.id}
               dropAfter={
                 isReordering &&
                 index === lastIndex &&
@@ -348,6 +375,7 @@ function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
               onDelete={() => {
                 removeDatabaseField(database.id, field.id);
               }}
+              onRequestClose={onRequestClose}
               onToggleVisible={() => {
                 toggleVisible(field.id);
               }}
@@ -1380,7 +1408,15 @@ export function DatabaseSettingsMenu({
           }}
         />
         <DropdownMenuSeparator />
-        {view ? <PropertiesSubmenu database={database} view={view} /> : null}
+        {view ? (
+          <PropertiesSubmenu
+            database={database}
+            onRequestClose={() => {
+              handleOpenChange(false);
+            }}
+            view={view}
+          />
+        ) : null}
         <ViewsSubmenu database={database} onViewIdChange={onViewIdChange} />
         {/* Grouping drives the table/list render; board columns and chart axes
             have their own per-type options below, so Group is table/list-only

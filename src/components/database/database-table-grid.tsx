@@ -132,10 +132,51 @@ const WRAPPED_CELL_CONTENT_CLASS =
  */
 const EMPTY_PINNED_FIELDS: readonly DatabaseField[] = [];
 
+/**
+ * Classes for the grid's outer layout shells. Embedded hosts cap the
+ * scrollport at {@link GRID_MAX_HEIGHT_CLASS}; `fillHeight` hosts (the
+ * standalone database page) become a shrinkable flex column instead, so the
+ * scrollport takes the remaining page height and the add-row strip pins
+ * below it. Mobile keeps the embedded cap even there — the document scrolls
+ * on narrow viewports, so there is no bounded height to fill.
+ */
+function resolveGridLayoutClasses(
+  fillHeight: boolean,
+  rowSelectGutter: boolean
+): { dropZone: string; scrollArea: string; scrollWrap: string } {
+  return {
+    dropZone: cn(
+      "w-full min-w-0 rounded-lg",
+      // Gutter modes bleed the select lane into the canvas padding;
+      // keep overflow visible so `-ml-12` is not clipped.
+      rowSelectGutter ? "overflow-visible" : "overflow-hidden",
+      fillHeight && "flex min-h-0 flex-1 flex-col"
+    ),
+    scrollWrap: cn(
+      "relative",
+      rowSelectGutter && "-ml-12",
+      fillHeight && "flex min-h-0 flex-col"
+    ),
+    scrollArea: cn(
+      "w-full overflow-hidden rounded-lg",
+      GRID_MAX_HEIGHT_CLASS,
+      fillHeight && "min-h-0 md:max-h-none"
+    ),
+  };
+}
+
 interface DatabaseTableGridProps {
   /** Visible fields in display order (`resolveColumnOrder`). */
   columns: readonly DatabaseField[];
   databaseId: string;
+  /**
+   * Full-page hosts (the `/db/$databaseId` route): the scrollport flexes to
+   * the host's remaining height instead of the embedded 600px cap, so the
+   * add-row strip pins to the bottom of the screen once rows overflow.
+   * Mobile keeps the cap — the document scrolls there, so there is no
+   * bounded height to fill.
+   */
+  fillHeight?: boolean;
   /**
    * Row buckets when the view has a resolvable `groupBy` (built by
    * `groupRowsForView` over the same filtered + sorted `rows`); `null`
@@ -166,6 +207,7 @@ interface DatabaseTableGridProps {
 export function DatabaseTableGrid({
   columns,
   databaseId,
+  fillHeight = false,
   groups = null,
   isSyncedDatabase = false,
   mode,
@@ -210,6 +252,7 @@ export function DatabaseTableGrid({
   const rowSelectDisplay = resolveRowSelectDisplay(view.config);
   const rowSelectGutter = usesRowSelectGutter(rowSelectDisplay);
   const rowSelectLeadingWidth = rowSelectLeadingWidthPx();
+  const layoutClasses = resolveGridLayoutClasses(fillHeight, rowSelectGutter);
 
   const pinnedTotalWidth = useMemo(
     () =>
@@ -674,24 +717,14 @@ export function DatabaseTableGrid({
       gridRef={gridRef}
       view={view}
     >
-      <DatabaseColumnDropZone
-        className={cn(
-          "w-full min-w-0 rounded-lg",
-          // Gutter modes bleed the select lane into the canvas padding;
-          // keep overflow visible so `-ml-12` is not clipped.
-          rowSelectGutter ? "overflow-visible" : "overflow-hidden"
-        )}
-      >
+      <DatabaseColumnDropZone className={layoutClasses.dropZone}>
         {/* Positioning parent for the pinned-edge shadow: exactly the
             scrollport (header through calculate row), not the add-row strip
             below it. Gutter modes pull the scrollport left by the select
             lane width so the first data column stays flush with filters. */}
-        <div className={cn("relative", rowSelectGutter && "-ml-12")}>
+        <div className={layoutClasses.scrollWrap}>
           <ScrollArea
-            className={cn(
-              "w-full overflow-hidden rounded-lg",
-              GRID_MAX_HEIGHT_CLASS
-            )}
+            className={layoutClasses.scrollArea}
             fadeEdges
             viewportRef={scrollRef}
           >
