@@ -1,6 +1,7 @@
 "use client";
 
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import {
@@ -10,22 +11,41 @@ import {
 } from "@/components/settings/settings-item-card.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
+import { useIsClient } from "@/hooks/use-is-client.ts";
 import { TEMPLATE_PAGE_ID } from "@/lib/pages/template-page.ts";
 import {
   createEmptyTemplate,
   deleteTemplate,
+  templateExists,
 } from "@/lib/pages/template-store.ts";
 
 export function TemplatePanel() {
   const navigate = useNavigate();
+  const isClient = useIsClient();
   const { clearTemplatePage, setTemplatePageId, templatePageId } =
     useTemplatePage();
   const section = getSettingsSection("template");
 
-  // The template is a standalone snapshot, not a navigable page. Presence is
-  // tracked by the SSR cookie hint so a not-yet-hydrated list can't flicker
-  // "Create" and spawn a second template.
-  const hasTemplate = templatePageId !== null;
+  const hasTemplateSnapshot = isClient
+    ? templateExists()
+    : templatePageId !== null;
+
+  useEffect(() => {
+    if (!isClient) {
+      return;
+    }
+
+    if (templateExists()) {
+      if (templatePageId !== TEMPLATE_PAGE_ID) {
+        setTemplatePageId(TEMPLATE_PAGE_ID);
+      }
+      return;
+    }
+
+    if (templatePageId !== null) {
+      clearTemplatePage();
+    }
+  }, [clearTemplatePage, isClient, setTemplatePageId, templatePageId]);
 
   const createTemplate = () => {
     createEmptyTemplate();
@@ -34,6 +54,11 @@ export function TemplatePanel() {
   };
 
   const editTemplate = () => {
+    if (!templateExists()) {
+      clearTemplatePage();
+      return;
+    }
+
     navigate({ to: "/template" });
   };
 
@@ -50,7 +75,7 @@ export function TemplatePanel() {
       <SettingsItemCard>
         <SettingsItemField
           action={
-            hasTemplate ? (
+            hasTemplateSnapshot ? (
               <div className="flex items-center gap-2">
                 <SettingsItemButton onClick={removeTemplate} variant="ghost">
                   Remove
@@ -66,7 +91,7 @@ export function TemplatePanel() {
             )
           }
           description={
-            hasTemplate
+            hasTemplateSnapshot
               ? "New pages copy this template's content and settings. Edit it to change the default."
               : "Create a template. Its content and settings become the starting point for every new page."
           }
