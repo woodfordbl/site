@@ -1,9 +1,9 @@
 import { z } from "zod";
 import {
   binanceFetchHistory,
-  binanceFetchRows,
   binanceSubscribe,
 } from "@/lib/connectors/binance-stream.ts";
+import { coingeckoCryptoFetchRows } from "@/lib/connectors/coingecko-markets.ts";
 import {
   finnhubAuth,
   finnhubFetchRows,
@@ -21,30 +21,31 @@ import {
 } from "@/lib/connectors/types.ts";
 
 /**
- * Unified "Live" connector: one synced source that streams real-time
- * price / % change / updated for either crypto pairs or stock tickers,
- * choosing the provider under the hood from a `type` selector — Binance's
- * keyless WebSocket for `crypto`, Finnhub (shared proxy or BYO token) for
- * `stocks`. Both types produce the identical field schema (`symbol`, `price`,
- * `change`, `updatedAt`), so switching provider never drifts columns; the
- * provider-specific transport lives in `binance-stream.ts` / `finnhub-quotes.ts`.
+ * Unified "Live" connector: one synced source for either crypto or stocks,
+ * chosen via a `type` selector and driven by simple base tickers (BTC, ETH /
+ * AAPL, MSFT). The provider is picked under the hood:
  *
- * A `currency` selector sets the Price column's display currency (default
- * USD). It is display-only — Binance pairs are quoted in their baked-in quote
- * asset and Finnhub returns each instrument's native currency, so a non-USD
- * choice only reformats the symbol; it never converts the value.
+ * - **crypto** — CoinGecko seeds price + market cap in the chosen `currency`
+ *   (true conversion), and Binance overlays live price ticks on top, keyed by
+ *   the same base ticker. So the currency selector is *functional* here.
+ * - **stocks** — Finnhub (shared proxy or BYO token) streams live quotes;
+ *   currency is display-only (US tickers are quoted in USD natively).
+ *
+ * The asset type is fixed at creation (schema-locked): the two types carry
+ * different columns (crypto adds Name / Market cap), so switching would drift
+ * the schema. Transport lives in `coingecko-markets.ts` / `binance-stream.ts` /
+ * `finnhub-quotes.ts`.
  */
 
-const SECOND_MS = 1000;
-const FIFTEEN_SECONDS_MS = 15 * SECOND_MS;
-const MINUTE_MS = 60 * SECOND_MS;
+const MINUTE_MS = 60_000;
+const TWO_MINUTES_MS = 2 * MINUTE_MS;
 
 const liveConfigSchema = z.object({
   /** Which provider/asset class backs this source. Fixed at creation. */
   type: z.enum(["crypto", "stocks"]),
-  /** Trading pairs (crypto, e.g. "BTCUSDT") or tickers (stocks, e.g. "AAPL"). */
+  /** Base tickers — crypto ("BTC", "ETH") or stocks ("AAPL", "MSFT"). */
   symbols: z.array(z.string().min(1)).min(1),
-  /** ISO 4217 display currency for the Price column. Display-only. */
+  /** ISO 4217 quote/display currency. Functional for crypto, display for stocks. */
   currency: z.string().default("USD"),
 });
 
@@ -52,13 +53,13 @@ type LiveConfig = z.infer<typeof liveConfigSchema>;
 
 /** Display-currency choices offered by the config selector. */
 const CURRENCY_OPTIONS = [
-  { value: "USD", label: "USD — US Dollar" },
-  { value: "EUR", label: "EUR — Euro" },
-  { value: "GBP", label: "GBP — British Pound" },
-  { value: "JPY", label: "JPY — Japanese Yen" },
-  { value: "AUD", label: "AUD — Australian Dollar" },
-  { value: "CAD", label: "CAD — Canadian Dollar" },
-  { value: "CHF", label: "CHF — Swiss Franc" },
+  { value: "USD", label: "USD (US Dollar)" },
+  { value: "EUR", label: "EUR (Euro)" },
+  { value: "GBP", label: "GBP (British Pound)" },
+  { value: "JPY", label: "JPY (Japanese Yen)" },
+  { value: "AUD", label: "AUD (Australian Dollar)" },
+  { value: "CAD", label: "CAD (Canadian Dollar)" },
+  { value: "CHF", label: "CHF (Swiss Franc)" },
 ];
 
 function parseConfig(config: Record<string, unknown>): LiveConfig {
@@ -72,8 +73,37 @@ function parseConfig(config: Record<string, unknown>): LiveConfig {
   return parsed.data;
 }
 
-/** Both asset types share this schema; only `currency` varies the price cell. */
-function liveFields(config: LiveConfig): ConnectorFieldDef[] {
+/** Crypto columns: CoinGecko-backed, with Name + Market cap. */
+function cryptoFields(config: LiveConfig): ConnectorFieldDef[] {
+  return [
+    { sourceKey: "symbol", name: "Symbol", type: "text" },
+    { sourceKey: "name", name: "Name", type: "text" },
+    {
+      sourceKey: "price",
+      name: "Price",
+      type: "number",
+      numberFormat: "currency",
+      currencyCode: config.currency,
+      captureHistory: true,
+    },
+    {
+      sourceKey: "change",
+      name: "24h change",
+      type: "number",
+      numberFormat: "percent",
+    },
+    {
+      sourceKey: "marketCap",
+      name: "Market cap",
+      type: "number",
+      numberFormat: "integer",
+    },
+    { sourceKey: "updatedAt", name: "Updated", type: "date" },
+  ];
+}
+
+/** Stock columns: Finnhub-backed price + daily change. */
+function stockFields(config: LiveConfig): ConnectorFieldDef[] {
   return [
     { sourceKey: "symbol", name: "Symbol", type: "text" },
     {
@@ -101,7 +131,7 @@ async function fetchRows(
   ctx: ConnectorFetchContext
 ): Promise<ConnectorFetchResult> {
   return parseConfig(ctx.config).type === "crypto"
-    ? binanceFetchRows(ctx)
+    ? coingeckoCryptoFetchRows(ctx)
     : finnhubFetchRows(ctx);
 }
 
@@ -115,9 +145,9 @@ function subscribe(
 }
 
 /**
- * Historical backfill: Binance klines for `crypto`; none for `stocks`
- * (Finnhub has no free candle backfill — stock charts draw from live local
- * capture only, same as before the merge).
+ * Historical backfill: Binance klines for `crypto` (composed from the currency's
+ * quote asset); none for `stocks` (Finnhub has no free candle backfill — stock
+ * charts draw from live local capture only).
  */
 // biome-ignore lint/suspicious/useAwait: delegates to a provider promise
 async function fetchHistory(
@@ -134,7 +164,7 @@ export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
   id: "live-markets",
   title: "Live",
   description:
-    "Real-time price and change for crypto pairs or stock tickers, streamed over WebSocket.",
+    "Real-time price, change, and market cap for crypto or stock tickers.",
   icon: "tabler:IconActivityHeartbeat",
   configSchema: liveConfigSchema,
   configFields: [
@@ -152,7 +182,7 @@ export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
     {
       key: "symbols",
       label: "Symbols",
-      placeholder: "BTCUSDT, ETHUSDT",
+      placeholder: "BTC, ETH",
       kind: "list",
     },
     {
@@ -165,11 +195,15 @@ export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
   ],
   auth: finnhubAuth,
   fields(config) {
-    return liveFields(config);
+    return config.type === "crypto"
+      ? cryptoFields(config)
+      : stockFields(config);
   },
   primarySourceKey: "symbol",
   fetchRows,
   fetchHistory,
   stream: { subscribe },
-  pollPolicy: { minMs: FIFTEEN_SECONDS_MS, defaultMs: MINUTE_MS },
+  // CoinGecko's free tier wants a slower cadence than Binance; the stricter
+  // floor governs both types (streaming covers watched tabs anyway).
+  pollPolicy: { minMs: MINUTE_MS, defaultMs: TWO_MINUTES_MS },
 };

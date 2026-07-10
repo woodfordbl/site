@@ -3,7 +3,6 @@ import { HTTP_STATUS_TOO_MANY_REQUESTS } from "@/lib/connectors/http.ts";
 import {
   ConnectorError,
   type ConnectorFetchContext,
-  type ConnectorFetchResult,
   type ConnectorHistoryPoint,
   type ConnectorHistoryRequest,
   type ConnectorRow,
@@ -12,13 +11,14 @@ import {
 } from "@/lib/connectors/types.ts";
 
 /**
- * Binance crypto transport: the keyless price/24h-change plumbing behind the
- * unified "Live" connector's `crypto` type (see `live-markets.ts`). One row
- * per configured trading pair (e.g. BTCUSDT). `binanceFetchRows` seeds current
- * price/24h-change from the REST `/ticker/24hr` endpoint (open CORS, no auth);
- * `binanceSubscribe` opens the combined `@ticker` WebSocket and pushes a keyed
- * upsert per trade frame; `binanceFetchHistory` backfills klines. No key, no
- * proxy — the browser connects directly.
+ * Binance live-tick transport: the keyless price streaming/backfill plumbing
+ * behind the unified "Live" connector's `crypto` type (see `live-markets.ts`).
+ * CoinGecko seeds the rows (price + market cap in the chosen currency); Binance
+ * overlays live price updates. Config symbols are BASE tickers (e.g. "BTC") —
+ * the trading pair is composed from the display `currency` (USD→USDT, EUR→EUR,
+ * …). Rows are keyed by the base ticker so ticks land on the CoinGecko row.
+ * `binanceSubscribe` opens the combined `@ticker` WebSocket; `binanceFetchHistory`
+ * backfills klines. No key, no proxy — the browser connects directly.
  *
  * Uses the `*.binance.vision` market-data domains rather than the primary
  * `api.binance.com` / `stream.binance.com` hosts: the `.vision` mirrors are
@@ -27,21 +27,24 @@ import {
  */
 
 const binanceConfigSchema = z.object({
-  /** Trading pairs, e.g. "BTCUSDT", "ETHUSDT" (quote asset included). */
+  /** Base tickers, e.g. "BTC", "ETH"; the quote asset comes from `currency`. */
   symbols: z.array(z.string().min(1)).min(1),
+  /** ISO 4217 display currency; maps to a Binance quote asset. */
+  currency: z.string().default("USD"),
 });
 
 type BinanceConfig = z.infer<typeof binanceConfigSchema>;
 
-/** Subset of a REST `/ticker/24hr` entry mapped into cells. */
-const binanceTickerSchema = z.object({
-  symbol: z.string(),
-  lastPrice: z.string(),
-  priceChangePercent: z.string(),
-  closeTime: z.number(),
-});
-
-const binanceTickerListSchema = z.array(binanceTickerSchema);
+/**
+ * Display currency → Binance quote asset. Binance's "USD" market is USDT.
+ * Currencies without a listed quote asset are absent — those stream nothing
+ * (CoinGecko polling still updates the rows).
+ */
+const CURRENCY_TO_BINANCE_QUOTE: Record<string, string | undefined> = {
+  USD: "USDT",
+  EUR: "EUR",
+  GBP: "GBP",
+};
 
 /** One combined-stream frame: `{ stream, data }` with a 24hrTicker payload. */
 const binanceStreamFrameSchema = z.object({
@@ -68,17 +71,31 @@ function parseConfig(config: Record<string, unknown>): BinanceConfig {
   return parsed.data;
 }
 
-/** Uppercased pairs for REST/externalId; lowercased for stream names. */
+/** Uppercased, de-duped base tickers. */
 function normalizeSymbols(symbols: string[]): string[] {
-  return symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean);
+  return [
+    ...new Set(
+      symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)
+    ),
+  ];
+}
+
+/** The Binance quote asset for a display currency, if one is listed. */
+function quoteAssetFor(currency: string): string | undefined {
+  return CURRENCY_TO_BINANCE_QUOTE[currency.trim().toUpperCase()];
 }
 
 function isoDateFromMs(ms: number): string {
   return new Date(ms).toISOString().slice(0, ISO_DATE_PART_LENGTH);
 }
 
-function tickerToRow(
-  symbol: string,
+/**
+ * Partial tick row keyed by the base ticker (`externalId`). Only price /
+ * change / updatedAt are written; `applyStreamTick` merges, so the CoinGecko
+ * seed's name and market cap are preserved.
+ */
+function tickToRow(
+  base: string,
   lastPrice: string,
   percent: string,
   eventMs: number
@@ -86,9 +103,9 @@ function tickerToRow(
   const price = Number(lastPrice);
   const change = Number(percent);
   return {
-    externalId: symbol,
+    externalId: base,
     values: {
-      symbol,
+      symbol: base,
       price: Number.isFinite(price) ? price : null,
       change: Number.isFinite(change) ? change / PERCENT_TO_FRACTION : null,
       updatedAt: isoDateFromMs(eventMs),
@@ -96,61 +113,34 @@ function tickerToRow(
   };
 }
 
-async function fetchRows(
-  ctx: ConnectorFetchContext
-): Promise<ConnectorFetchResult> {
-  const symbols = normalizeSymbols(parseConfig(ctx.config).symbols);
-  const params = new URLSearchParams({ symbols: JSON.stringify(symbols) });
-  const url = `https://data-api.binance.vision/api/v3/ticker/24hr?${params.toString()}`;
-  let response: Response;
-  try {
-    response = await ctx.fetchFn(url);
-  } catch (cause) {
-    throw new ConnectorError("Binance request failed", {
-      kind: "network",
-      cause,
-    });
-  }
-  if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
-    throw new ConnectorError("Binance rate limit exceeded", {
-      kind: "rateLimit",
-    });
-  }
-  if (!response.ok) {
-    throw new ConnectorError(`Binance request failed (${response.status})`, {
-      kind: "network",
-    });
-  }
-  const payload = binanceTickerListSchema.safeParse(await response.json());
-  if (!payload.success) {
-    throw new ConnectorError("Unexpected Binance response shape", {
-      kind: "network",
-      cause: payload.error,
-    });
-  }
-  const rows = payload.data.map((ticker) =>
-    tickerToRow(
-      ticker.symbol,
-      ticker.lastPrice,
-      ticker.priceChangePercent,
-      ticker.closeTime
-    )
-  );
-  return { kind: "rows", rows };
-}
-
 /**
- * Open the combined `@ticker` stream for the configured pairs. Each frame is a
- * single-row keyed upsert. A drop surfaces via `onError`; the engine owns
- * reconnect. The returned unsubscribe closes the socket without re-erroring.
+ * Open the combined `@ticker` stream for the configured tickers, composing each
+ * pair from the display currency's quote asset. Ticks are keyed back to the
+ * base ticker so they overlay the CoinGecko rows. When the currency has no
+ * Binance quote asset, there is nothing to stream and a no-op teardown is
+ * returned (CoinGecko polling still refreshes the rows). A drop surfaces via
+ * `onError`; the engine owns reconnect.
  */
 function subscribe(
   ctx: ConnectorFetchContext,
   handlers: ConnectorStreamHandlers
 ): () => void {
-  const symbols = normalizeSymbols(parseConfig(ctx.config).symbols);
-  const streams = symbols
-    .map((symbol) => `${symbol.toLowerCase()}@ticker`)
+  const { symbols, currency } = parseConfig(ctx.config);
+  const quote = quoteAssetFor(currency);
+  const bases = normalizeSymbols(symbols);
+  if (!quote || bases.length === 0) {
+    return () => {
+      // Nothing streamed — poll-only for this currency.
+    };
+  }
+
+  // Map the composed pair back to its base ticker for keying rows.
+  const pairToBase = new Map<string, string>();
+  for (const base of bases) {
+    pairToBase.set(`${base}${quote}`, base);
+  }
+  const streams = [...pairToBase.keys()]
+    .map((pair) => `${pair.toLowerCase()}@ticker`)
     .join("/");
   const url = `wss://data-stream.binance.vision/stream?streams=${streams}`;
 
@@ -169,7 +159,10 @@ function subscribe(
       return;
     }
     const { s, c, P, E } = frame.data.data;
-    handlers.onRows([tickerToRow(s, c, P, E)]);
+    const base = pairToBase.get(s.toUpperCase());
+    if (base) {
+      handlers.onRows([tickToRow(base, c, P, E)]);
+    }
   });
 
   socket.addEventListener("error", () => {
@@ -212,15 +205,21 @@ const KLINE_OPEN_TIME_INDEX = 0;
 const KLINE_CLOSE_INDEX = 4;
 
 /**
- * Historical backfill via Binance klines (keyless, direct). Returns close
- * price per candle at its open time, ascending. Keyless and open-CORS on the
- * `.vision` market-data host, so the browser fetches it directly.
+ * Historical backfill via Binance klines (keyless, direct). `request.externalId`
+ * is the base ticker; the pair is composed from the config currency's quote
+ * asset. Returns close price per candle at its open time, ascending. When the
+ * currency has no Binance quote asset, returns no points (chart draws from live
+ * local capture only).
  */
 async function fetchHistory(
   ctx: ConnectorFetchContext,
   request: ConnectorHistoryRequest
 ): Promise<ConnectorHistoryPoint[]> {
-  const symbol = request.externalId.trim().toUpperCase();
+  const quote = quoteAssetFor(parseConfig(ctx.config).currency);
+  if (!quote) {
+    return [];
+  }
+  const symbol = `${request.externalId.trim().toUpperCase()}${quote}`;
   const params = new URLSearchParams({
     symbol,
     interval: BINANCE_INTERVAL[request.resolution],
@@ -268,8 +267,4 @@ async function fetchHistory(
   return points;
 }
 
-export {
-  fetchHistory as binanceFetchHistory,
-  fetchRows as binanceFetchRows,
-  subscribe as binanceSubscribe,
-};
+export { fetchHistory as binanceFetchHistory, subscribe as binanceSubscribe };

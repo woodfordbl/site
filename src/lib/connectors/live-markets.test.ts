@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { liveMarketsConnector } from "@/lib/connectors/live-markets.ts";
 import { ConnectorError } from "@/lib/connectors/types.ts";
 
-const binanceTickerFixture = [
+const coingeckoFixture = [
   {
-    symbol: "BTCUSDT",
-    lastPrice: "67000.5",
-    priceChangePercent: "2.5",
-    closeTime: Date.parse("2026-07-03T18:20:15.000Z"),
+    id: "bitcoin",
+    symbol: "btc",
+    name: "Bitcoin",
+    current_price: 55_034,
+    market_cap: 1_103_037_933_465,
+    price_change_percentage_24h: 2.5,
+    last_updated: "2026-07-03T18:20:15.000Z",
   },
 ];
 
@@ -54,25 +57,32 @@ describe("liveMarketsConnector config + fields", () => {
   it("defaults the display currency to USD", () => {
     const parsed = liveMarketsConnector.configSchema.parse({
       type: "crypto",
-      symbols: ["BTCUSDT"],
+      symbols: ["BTC"],
     });
     expect(parsed.currency).toBe("USD");
   });
 
-  it("produces the same field schema for both types, keyed by `change`", () => {
+  it("gives crypto Name + Market cap columns; stocks a leaner set", () => {
     const cryptoKeys = liveMarketsConnector
-      .fields({ type: "crypto", symbols: ["BTCUSDT"], currency: "USD" })
+      .fields({ type: "crypto", symbols: ["BTC"], currency: "USD" })
       .map((field) => field.sourceKey);
     const stockKeys = liveMarketsConnector
       .fields({ type: "stocks", symbols: ["AAPL"], currency: "USD" })
       .map((field) => field.sourceKey);
-    expect(cryptoKeys).toEqual(["symbol", "price", "change", "updatedAt"]);
-    expect(stockKeys).toEqual(cryptoKeys);
+    expect(cryptoKeys).toEqual([
+      "symbol",
+      "name",
+      "price",
+      "change",
+      "marketCap",
+      "updatedAt",
+    ]);
+    expect(stockKeys).toEqual(["symbol", "price", "change", "updatedAt"]);
   });
 
   it("stamps the config currency onto the price field", () => {
     const price = liveMarketsConnector
-      .fields({ type: "crypto", symbols: ["BTCUSDT"], currency: "EUR" })
+      .fields({ type: "crypto", symbols: ["BTC"], currency: "EUR" })
       .find((field) => field.sourceKey === "price");
     expect(price?.numberFormat).toBe("currency");
     expect(price?.currencyCode).toBe("EUR");
@@ -80,24 +90,27 @@ describe("liveMarketsConnector config + fields", () => {
 });
 
 describe("liveMarketsConnector.fetchRows delegation", () => {
-  it("routes the crypto type to Binance's market-data host", async () => {
+  it("seeds the crypto type from CoinGecko in the chosen currency", async () => {
     const { calls, fetchFn } = createFetchStub(
-      new Response(JSON.stringify(binanceTickerFixture), { status: 200 })
+      new Response(JSON.stringify(coingeckoFixture), { status: 200 })
     );
     const result = await liveMarketsConnector.fetchRows({
-      config: { type: "crypto", symbols: ["BTCUSDT"], currency: "USD" },
+      config: { type: "crypto", symbols: ["BTC"], currency: "EUR" },
       fetchFn,
     });
-    expect(calls[0]).toContain("data-api.binance.vision");
+    expect(calls[0]).toContain("api.coingecko.com");
+    expect(calls[0]).toContain("vs_currency=eur");
     expect(result).toEqual({
       kind: "rows",
       rows: [
         {
-          externalId: "BTCUSDT",
+          externalId: "BTC",
           values: {
-            symbol: "BTCUSDT",
-            price: 67_000.5,
+            symbol: "BTC",
+            name: "Bitcoin",
+            price: 55_034,
             change: 0.025,
+            marketCap: 1_103_037_933_465,
             updatedAt: "2026-07-03",
           },
         },
@@ -147,24 +160,25 @@ describe("liveMarketsConnector.fetchRows delegation", () => {
 
 describe("liveMarketsConnector.fetchHistory delegation", () => {
   const request = {
-    externalId: "BTCUSDT",
+    externalId: "BTC",
     from: 1_750_000_000_000,
     to: 1_750_000_120_000,
     resolution: "1m" as const,
   };
 
-  it("backfills crypto from Binance klines", async () => {
+  it("backfills crypto from Binance klines on the currency's pair", async () => {
     const { calls, fetchFn } = createFetchStub(
       new Response(JSON.stringify(binanceKlinesFixture), { status: 200 })
     );
     const points = await liveMarketsConnector.fetchHistory?.(
       {
-        config: { type: "crypto", symbols: ["BTCUSDT"], currency: "USD" },
+        config: { type: "crypto", symbols: ["BTC"], currency: "USD" },
         fetchFn,
       },
       request
     );
     expect(calls[0]).toContain("/klines");
+    expect(calls[0]).toContain("symbol=BTCUSDT");
     expect(points).toEqual([
       { t: 1_750_000_000_000, v: 67_000.5 },
       { t: 1_750_000_060_000, v: 67_010.25 },
