@@ -103,12 +103,18 @@ describe("coingeckoCryptoFetchRows", () => {
     });
   });
 
-  it("de-dupes when a ticker resolves to multiple coins (keeps the first)", async () => {
+  it("de-dupes a ticker to the highest-market-cap coin regardless of order", async () => {
     const { fetchFn } = createFetchStub(
       new Response(
         JSON.stringify([
+          // A low-cap impostor listed FIRST must not win the "BTC" ticker.
+          {
+            ...marketsFixture[0],
+            id: "bitcoin-impostor",
+            name: "Not Bitcoin",
+            market_cap: 1000,
+          },
           marketsFixture[0],
-          { ...marketsFixture[0], id: "bitcoin-imposter", name: "Not Bitcoin" },
         ]),
         { status: 200 }
       )
@@ -117,22 +123,19 @@ describe("coingeckoCryptoFetchRows", () => {
       config: { symbols: ["BTC"], currency: "USD" },
       fetchFn,
     });
-    expect(result).toEqual({
-      kind: "rows",
-      rows: [
-        {
-          externalId: "BTC",
-          values: {
-            symbol: "BTC",
-            name: "Bitcoin",
-            price: 55_034,
-            change: 0.025,
-            marketCap: 1_103_037_933_465,
-            updatedAt: "2026-07-03T18:20:15.123Z",
-          },
+    expect(result.kind === "rows" && result.rows).toEqual([
+      {
+        externalId: "BTC",
+        values: {
+          symbol: "BTC",
+          name: "Bitcoin",
+          price: 55_034,
+          change: 0.025,
+          marketCap: 1_103_037_933_465,
+          updatedAt: "2026-07-03T18:20:15.123Z",
         },
-      ],
-    });
+      },
+    ]);
   });
 
   it("stores fractions that render with percent format semantics", () => {

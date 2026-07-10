@@ -83,17 +83,26 @@ function toConnectorRow(
   };
 }
 
-/** Keep the highest-market-cap coin when a ticker resolves to several. */
+/** Market cap for ranking duplicate-ticker rows; missing sorts lowest. */
+function marketCapOf(row: ConnectorRow): number {
+  const value = row.values.marketCap;
+  return typeof value === "number" ? value : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * Keep the highest-market-cap coin when a ticker resolves to several — CoinGecko
+ * usually returns market-cap-desc, but don't rely on order; pick the largest so
+ * "BTC" never resolves to a low-cap impostor. First-seen order is preserved.
+ */
 function dedupeByExternalId(rows: ConnectorRow[]): ConnectorRow[] {
-  const seen = new Set<string>();
-  const unique: ConnectorRow[] = [];
+  const byId = new Map<string, ConnectorRow>();
   for (const row of rows) {
-    if (!seen.has(row.externalId)) {
-      seen.add(row.externalId);
-      unique.push(row);
+    const existing = byId.get(row.externalId);
+    if (!existing || marketCapOf(row) > marketCapOf(existing)) {
+      byId.set(row.externalId, row);
     }
   }
-  return unique;
+  return [...byId.values()];
 }
 
 /** Seed rows for the crypto type: price + market cap in the chosen currency. */
