@@ -115,9 +115,6 @@ const GRID_MAX_HEIGHT_CLASS = "max-h-[600px]";
  */
 const ADD_FIELD_CELL_WIDTH_PX = 28;
 
-/** Scroll distance over which the pinned-edge fade ramps from 0 to 1. */
-const PINNED_FADE_RAMP_PX = 24;
-
 /**
  * Wrapped cells clamp to two lines inside the auto-height row (the
  * virtualizer measures real row heights via `measureElement`); unclamped
@@ -267,7 +264,6 @@ export function DatabaseTableGrid({
 }: DatabaseTableGridProps): ReactNode {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const pinnedShadowRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState<CellEditTarget | null>(null);
   const [selectedRowIds, setSelectedRowIds] = useState<readonly string[]>([]);
   const lastToggledRowIdRef = useRef<string | null>(null);
@@ -423,48 +419,19 @@ export function DatabaseTableGrid({
   // that parks the content back at the block's left edge at rest.
   const paddedGridWidth = gridWidth + extraBleed;
 
-  // Pinned-edge boundary in scrollport coordinates: the last frozen column's
-  // right edge (pinned cells stick at these exact offsets, so the boundary is
-  // viewport-stable regardless of scrollLeft). Tracks live divider drags via
-  // `gridColumns` widths. The leading selection column is always frozen, so
-  // its right edge is the minimum boundary even with no field pins.
-  const pinnedEdgeLeft = useMemo(() => {
-    const last = gridColumns.find((column) => column.isLastPinned);
-    if (last && last.left !== null) {
-      return last.left + last.width;
-    }
-    if (gridColumns.length === 0) {
-      return null;
-    }
-    // Gutter modes: the select lane is a transparent overlay, so scrolled
-    // content stays visible to the scrollport's left edge — fade there.
-    return rowSelectGutter ? 0 : rowSelectLeadingWidth;
-  }, [gridColumns, rowSelectGutter, rowSelectLeadingWidth]);
-
-  // Pinned-edge fade: a rAF-throttled scroll listener writes the fade
-  // opacity (0 at scrollLeft 0, ramping over PINNED_FADE_RAMP_PX, and only
-  // while real horizontal overflow exists) onto the single full-height
-  // `.database-grid-pinned-shadow` overlay — one gradient spanning header,
-  // rows, and calculate row, so it cannot break at row borders the way a
-  // per-cell box-shadow did.
+  // Gutter select-lane reveal state: while horizontally scrolled the
+  // transparent lane hides its controls (content shows through to the
+  // page's left boundary) until the boundary strip is hovered — the
+  // `in-data-[hscrolled]` variants on the lane cells key off this. A
+  // rAF-throttled scroll listener keeps the attribute current.
   useEffect(() => {
     const element = scrollRef.current;
-    const shadow = pinnedShadowRef.current;
-    if (!(element && shadow && pinnedEdgeLeft !== null)) {
+    if (!element) {
       return;
     }
     let frame = 0;
     const update = () => {
       frame = 0;
-      const overflowing = paddedGridWidth > element.clientWidth;
-      const fade = overflowing
-        ? Math.min(element.scrollLeft / PINNED_FADE_RAMP_PX, 1)
-        : 0;
-      shadow.style.opacity = String(fade);
-      // Gutter select-lane reveal state: while horizontally scrolled the
-      // transparent lane hides its controls (content shows through to the
-      // page's left boundary) until the boundary strip is hovered — the
-      // `in-data-[hscrolled]` variants on the lane cells key off this.
       element.toggleAttribute("data-hscrolled", element.scrollLeft > 0);
     };
     const handleScroll = () => {
@@ -480,7 +447,7 @@ export function DatabaseTableGrid({
         cancelAnimationFrame(frame);
       }
     };
-  }, [paddedGridWidth, pinnedEdgeLeft]);
+  }, []);
 
   const handleAddField = useCallback(() => {
     const field = createDatabaseField("text", "Text");
@@ -823,11 +790,11 @@ export function DatabaseTableGrid({
       view={view}
     >
       <DatabaseColumnDropZone className={layoutClasses.dropZone}>
-        {/* Positioning parent for the pinned-edge shadow: exactly the
-            scrollport (header through calculate row), not the add-row strip
-            below it. Gutter modes pull the scrollport left by the measured
-            bleed (select lane + page/column margin); the grid pads content
-            back so the first data column stays flush with filters at rest. */}
+        {/* Scrollport shell (header through calculate row), excluding the
+            add-row strip below it. Gutter modes pull the scrollport left by
+            the measured bleed (select lane + page/column margin); the grid
+            pads content back so the first data column stays flush with
+            filters at rest. */}
         <div
           className={layoutClasses.scrollWrap}
           ref={scrollWrapRef}
@@ -835,7 +802,6 @@ export function DatabaseTableGrid({
         >
           <ScrollArea
             className={layoutClasses.scrollArea}
-            fadeEdges
             viewportRef={scrollRef}
           >
             {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
@@ -1018,14 +984,6 @@ export function DatabaseTableGrid({
             </div>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
-          {pinnedEdgeLeft === null ? null : (
-            <div
-              aria-hidden
-              className="database-grid-pinned-shadow pointer-events-none absolute inset-y-0 z-30"
-              ref={pinnedShadowRef}
-              style={{ left: pinnedEdgeLeft }}
-            />
-          )}
         </div>
         {mode === "edit" && !isSyncedDatabase ? (
           <DatabaseAddRow
