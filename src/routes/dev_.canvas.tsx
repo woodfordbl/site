@@ -21,7 +21,7 @@ export const Route = createFileRoute("/dev_/canvas")({
       throw notFound();
     }
   },
-  head: () => ({ meta: buildNoIndexMeta() }),
+  head: () => ({ meta: buildNoIndexMeta("Dev") }),
   component: CanvasFixtureRoute,
 });
 

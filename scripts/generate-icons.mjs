@@ -1,121 +1,172 @@
-import { dirname, join } from "node:path";
+/**
+ * Regenerate the favicon/app-icon set in public/ from one source of truth.
+ *
+ *   node scripts/generate-icons.mjs
+ *
+ * - Outlines "BW" from the static Geist Bold woff (opentype.js), so the SVG
+ *   and every PNG render identically with zero font dependencies.
+ * - Renders PNGs with sharp.
+ * - Writes a PNG-frame ICO by hand (16/32/48 — supported by every modern
+ *   browser).
+ *
+ * Palette: terracotta #e54723 field (--primary, dark theme, gamut-mapped to
+ * sRGB), cream #fff7f2 mark. Outputs: favicon.svg, favicon.ico,
+ * apple-touch-icon.png (180, full-bleed square — iOS applies its own mask),
+ * icon-192/512.png (rounded), icon-512-maskable.png (mark in the 80% safe
+ * zone).
+ *
+ * Non-production environments get their own tab favicons (favicon-dev.*,
+ * favicon-preview.*) with distinct field colors from the block palette, so
+ * local/staging/production tabs are distinguishable at a glance. __root.tsx
+ * picks the set from VITE_DEPLOY_ENV. Only the svg+ico pair varies per env —
+ * the PWA/touch icons stay production terracotta.
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+// The bare "opentype.js" specifier trips Biome's resolver (the package name
+// looks like a file path), so import its dist module directly.
+import { parse as parseFont } from "opentype.js/dist/opentype.mjs";
 import sharp from "sharp";
 
-/**
- * Generates the favicon / PWA icon set from a "BW" monogram, matching the site
- * theme (near-black background, off-white mark). Outputs are static — run once
- * with `pnpm gen:icons` and commit the results; no need to regenerate per build.
- */
+const require = createRequire(import.meta.url);
+const FONT = require.resolve(
+  "@fontsource/geist-sans/files/geist-sans-latin-700-normal.woff"
+);
+const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const publicDir = join(root, "public");
+const FIELD = "#e54723";
+const MARK = "#fff7f2";
+const SIZE = 512;
+const RADIUS = 113;
+const FONT_SIZE = 205;
+const LETTER_SPACING = -0.03; // em (opentype.js letterSpacing unit)
 
-const BACKGROUND = "#0a0a0a";
-const FOREGROUND = "#fafafa";
+// Tab favicon field per environment. Dev is block-blue, preview block-purple
+// (see --block-text-* in styles.css) — cool hues against production's warm
+// terracotta, readable at 16px.
+const ENVIRONMENTS = [
+  { suffix: "", field: FIELD }, // production
+  { suffix: "-preview", field: "#8059bb" }, // Vercel preview / staging
+  { suffix: "-dev", field: "#3772bb" }, // local dev
+];
 
-/** A square monogram SVG. `fullBleed` skips the rounded corners (for masks). */
-function monogramSvg({ size, fontScale = 0.42, fullBleed = false }) {
-  const radius = Math.round(size * 0.22);
-  const fontSize = Math.round(size * fontScale);
-  const shape = fullBleed
-    ? `<rect width="${size}" height="${size}" fill="${BACKGROUND}"/>`
-    : `<rect width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="${BACKGROUND}"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  ${shape}
-  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-weight="700" font-size="${fontSize}" letter-spacing="${-size * 0.012}" fill="${FOREGROUND}">BW</text>
-</svg>`;
+const fontBuffer = readFileSync(FONT);
+const font = parseFont(
+  fontBuffer.buffer.slice(
+    fontBuffer.byteOffset,
+    fontBuffer.byteOffset + fontBuffer.byteLength
+  )
+);
+
+function monogramPath(fontSize, box) {
+  const glyphs = font.stringToGlyphs("BW");
+  const scale = fontSize / font.unitsPerEm;
+  // Total advance width including spacing between (not after) letters.
+  let width = 0;
+  for (const [i, glyph] of glyphs.entries()) {
+    width += glyph.advanceWidth * scale;
+    if (i < glyphs.length - 1) {
+      width += LETTER_SPACING * fontSize;
+    }
+  }
+  const x = (box - width) / 2;
+  // Vertically center on cap height for optical balance (no descenders in BW).
+  const capHeight =
+    (font.tables.os2?.sCapHeight ?? font.ascender * 0.72) * scale;
+  const y = box / 2 + capHeight / 2;
+  const p = font.getPath("BW", x, y, fontSize, {
+    letterSpacing: LETTER_SPACING,
+  });
+  return p.toPathData(2);
 }
 
-async function writePng(svg, size, file) {
-  await sharp(Buffer.from(svg))
-    .resize(size, size)
-    .png()
-    .toFile(join(publicDir, file));
-  console.log(`gen-icons: wrote ${file} (${size}×${size})`);
+const d = monogramPath(FONT_SIZE, SIZE);
+
+// Rounded source (favicon.svg, tab icons, PWA "any" icons).
+function roundedSvgFor(field) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+  <rect width="${SIZE}" height="${SIZE}" rx="${RADIUS}" ry="${RADIUS}" fill="${field}"/>
+  <path fill="${MARK}" d="${d}"/>
+</svg>
+`;
 }
 
-/** Render the monogram to a PNG buffer at the given pixel size. */
-function renderPngBuffer(size) {
-  return sharp(Buffer.from(monogramSvg({ size })))
+const roundedSvg = roundedSvgFor(FIELD);
+
+// Full-bleed square (apple-touch-icon — iOS applies its own mask).
+const squareSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+  <rect width="${SIZE}" height="${SIZE}" fill="${FIELD}"/>
+  <path fill="${MARK}" d="${d}"/>
+</svg>
+`;
+
+// Maskable: full-bleed field, mark shrunk into the 80% safe zone.
+const safeD = monogramPath(FONT_SIZE * 0.8, SIZE);
+const maskableSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+  <rect width="${SIZE}" height="${SIZE}" fill="${FIELD}"/>
+  <path fill="${MARK}" d="${safeD}"/>
+</svg>
+`;
+
+function png(svg, size) {
+  return sharp(Buffer.from(svg), { density: (72 * size) / SIZE })
     .resize(size, size)
     .png()
     .toBuffer();
 }
 
-/**
- * Pack PNG buffers into a single `.ico`. Modern browsers (and the address-bar /
- * bookmark UIs that prefer `favicon.ico` over the SVG) read PNG-encoded icon
- * entries directly, so no BMP conversion is needed.
- */
-function encodeIco(images) {
-  const HEADER_SIZE = 6;
-  const ENTRY_SIZE = 16;
-  const header = Buffer.alloc(HEADER_SIZE);
+function writeIco(frames) {
+  const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0); // reserved
   header.writeUInt16LE(1, 2); // type: icon
-  header.writeUInt16LE(images.length, 4); // image count
-
-  const entries = [];
-  let offset = HEADER_SIZE + ENTRY_SIZE * images.length;
-  for (const { size, data } of images) {
-    const entry = Buffer.alloc(ENTRY_SIZE);
-    entry.writeUInt8(size >= 256 ? 0 : size, 0); // width (0 ⇒ 256)
-    entry.writeUInt8(size >= 256 ? 0 : size, 1); // height (0 ⇒ 256)
-    entry.writeUInt8(0, 2); // palette size (0 ⇒ no palette)
-    entry.writeUInt8(0, 3); // reserved
-    entry.writeUInt16LE(1, 4); // color planes
-    entry.writeUInt16LE(32, 6); // bits per pixel
-    entry.writeUInt32LE(data.length, 8); // image byte length
-    entry.writeUInt32LE(offset, 12); // image byte offset
-    entries.push(entry);
-    offset += data.length;
+  header.writeUInt16LE(frames.length, 4);
+  const dirs = [];
+  let offset = 6 + 16 * frames.length;
+  for (const frame of frames) {
+    const dir = Buffer.alloc(16);
+    dir.writeUInt8(frame.size === 256 ? 0 : frame.size, 0); // width
+    dir.writeUInt8(frame.size === 256 ? 0 : frame.size, 1); // height
+    dir.writeUInt16LE(1, 4); // planes
+    dir.writeUInt16LE(32, 6); // bpp
+    dir.writeUInt32LE(frame.data.length, 8);
+    dir.writeUInt32LE(offset, 12);
+    offset += frame.data.length;
+    dirs.push(dir);
   }
-
-  return Buffer.concat([
-    header,
-    ...entries,
-    ...images.map((image) => image.data),
-  ]);
+  return Buffer.concat([header, ...dirs, ...frames.map((f) => f.data)]);
 }
 
-async function writeFavicon() {
-  const sizes = [16, 32, 48];
-  const images = await Promise.all(
-    sizes.map(async (size) => ({ size, data: await renderPngBuffer(size) }))
+writeFileSync(
+  path.join(PUBLIC_DIR, "icon-512.png"),
+  await png(roundedSvg, 512)
+);
+writeFileSync(
+  path.join(PUBLIC_DIR, "icon-192.png"),
+  await png(roundedSvg, 192)
+);
+writeFileSync(
+  path.join(PUBLIC_DIR, "icon-512-maskable.png"),
+  await png(maskableSvg, 512)
+);
+writeFileSync(
+  path.join(PUBLIC_DIR, "apple-touch-icon.png"),
+  await png(squareSvg, 180)
+);
+
+// Per-environment tab favicons (svg + ico).
+for (const env of ENVIRONMENTS) {
+  const svg = roundedSvgFor(env.field);
+  writeFileSync(path.join(PUBLIC_DIR, `favicon${env.suffix}.svg`), svg);
+  const icoFrames = [];
+  for (const size of [16, 32, 48]) {
+    icoFrames.push({ size, data: await png(svg, size) });
+  }
+  writeFileSync(
+    path.join(PUBLIC_DIR, `favicon${env.suffix}.ico`),
+    writeIco(icoFrames)
   );
-  const { writeFile } = await import("node:fs/promises");
-  await writeFile(join(publicDir, "favicon.ico"), encodeIco(images));
-  console.log(`gen-icons: wrote favicon.ico (${sizes.join(", ")})`);
 }
 
-// Crisp scalable favicon for modern browsers.
-const faviconSvg = monogramSvg({ size: 512 });
-await sharp(Buffer.from(faviconSvg)); // validate it renders before writing
-await import("node:fs/promises").then(({ writeFile }) =>
-  writeFile(join(publicDir, "favicon.svg"), `${faviconSvg}\n`)
-);
-console.log("gen-icons: wrote favicon.svg");
-
-// Multi-resolution favicon.ico for legacy/address-bar contexts that ignore SVG.
-await writeFavicon();
-
-// iOS home-screen icon: full-bleed (iOS applies its own rounded mask).
-await writePng(
-  monogramSvg({ size: 180, fullBleed: true }),
-  180,
-  "apple-touch-icon.png"
-);
-
-// PWA manifest icons (rounded, "any" purpose).
-await writePng(monogramSvg({ size: 192 }), 192, "icon-192.png");
-await writePng(monogramSvg({ size: 512 }), 512, "icon-512.png");
-
-// Maskable icon: full-bleed background, mark kept inside the safe zone.
-await writePng(
-  monogramSvg({ size: 512, fullBleed: true, fontScale: 0.3 }),
-  512,
-  "icon-512-maskable.png"
-);
-
-console.log("gen-icons: done");
+console.log("Icon set written to public/.");

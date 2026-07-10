@@ -15,7 +15,7 @@ import { readTemplateLocalPage } from "@/lib/pages/template-store.ts";
 
 export const Route = createFileRoute("/template")({
   loader: () => ({ kind: "pending" as const }),
-  head: () => ({ meta: buildNoIndexMeta() }),
+  head: () => ({ meta: buildNoIndexMeta("Template") }),
   component: TemplateEditorRoute,
 });
 
