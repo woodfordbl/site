@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { DatabaseTemplateEditorSidebar } from "@/components/database/row-page/database-template-editor-sidebar.tsx";
+import { RowTemplateTitleSection } from "@/components/database/row-page/row-template-title-section.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
@@ -82,6 +83,12 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
         page={templatePage}
         pageHasLocalDraft={true}
         sidebar={<DatabaseTemplateEditorSidebar database={database} />}
+        titleSlot={
+          <RowTemplateTitleSection
+            database={database}
+            templatePage={templatePage}
+          />
+        }
       />
     </SiteShell>
   );

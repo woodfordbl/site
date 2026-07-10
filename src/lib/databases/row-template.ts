@@ -26,6 +26,23 @@ import type {
  *   when row values change.
  */
 
+/** Field names safe for the dot form (`thisPage.Name`) of a property token. */
+const IDENTIFIER_SAFE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Canonical `{{ … }}` token referencing a field by name: the dot form for
+ * identifier-safe names, the quoted bracket form (`thisPage["Start date"]`)
+ * otherwise. Shared by the editor's copy-token affordance and (future) token
+ * autocomplete so inserted tokens always parse.
+ */
+export function rowPropertyToken(fieldName: string): string {
+  const name = fieldName.trim();
+  if (IDENTIFIER_SAFE_NAME.test(name)) {
+    return `{{ thisPage.${name} }}`;
+  }
+  return `{{ thisPage["${name.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"] }}`;
+}
+
 /**
  * Fixed id for the default template's single block — the default template is
  * rebuilt per call, and a stable id keeps virtual re-renders from remounting
