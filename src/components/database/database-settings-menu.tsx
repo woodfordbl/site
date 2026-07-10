@@ -15,7 +15,9 @@ import {
   IconLayoutKanban,
   IconLayoutList,
   IconListDetails,
+  IconPencil,
   IconRefresh,
+  IconRestore,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
@@ -96,7 +98,10 @@ import type {
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
-import { readRowTemplateSnapshot } from "@/lib/databases/row-template-store.ts";
+import {
+  deleteRowTemplate,
+  readRowTemplateSnapshot,
+} from "@/lib/databases/row-template-store.ts";
 import type {
   DatabaseField,
   DatabaseSource,
@@ -1231,36 +1236,70 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
 }
 
 /**
- * Row pages entry point: opens the row-template editor
- * (`/db/$databaseId/template` — the route creates the template on first
- * visit) and shows whether row pages render from the built-in default or the
- * database's custom template (with its block count). The count reads the
- * template store synchronously on render, which stays fresh because the menu
- * content mounts on open.
+ * Row pages submenu: template status plus the two actions — **Edit template**
+ * opens the row-template editor (`/db/$databaseId/template`, which creates
+ * the template on first visit), **Reset to default** deletes it (two-click
+ * confirm, matching Delete database; rows are never touched). The status
+ * reads the template store synchronously on render, which stays fresh
+ * because the menu content mounts on open.
  */
-function RowPagesItem({ database }: { database: LocalDatabase }) {
+function RowPagesSubmenu({ database }: { database: LocalDatabase }) {
   const navigate = useNavigate();
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const template = readRowTemplateSnapshot(database.id);
   const blockCount = template?.blocks.length ?? 0;
-  const status = template
-    ? `Custom template · ${blockCount} ${blockCount === 1 ? "block" : "blocks"}`
-    : "Default template";
+
+  const handleResetClick = () => {
+    if (!confirmingReset) {
+      setConfirmingReset(true);
+      return;
+    }
+    deleteRowTemplate(database.id);
+    setConfirmingReset(false);
+  };
 
   return (
-    <DropdownMenuItem
-      onClick={() => {
-        navigate({
-          params: { databaseId: database.id },
-          to: "/db/$databaseId/template",
-        });
-      }}
-    >
-      <IconFileText />
-      Row pages
-      <span className="ml-auto min-w-0 truncate text-muted-foreground text-xs">
-        {status}
-      </span>
-    </DropdownMenuItem>
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconFileText />
+        Row pages
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <div className="space-y-1.5 px-2 py-2">
+          <InfoRow
+            label="Template"
+            value={template ? "Custom" : "Default · blank page"}
+          />
+          {template ? (
+            <InfoRow
+              label="Blocks"
+              value={`${blockCount} ${blockCount === 1 ? "block" : "blocks"}`}
+            />
+          ) : null}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            navigate({
+              params: { databaseId: database.id },
+              to: "/db/$databaseId/template",
+            });
+          }}
+        >
+          <IconPencil />
+          Edit template
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          closeOnClick={false}
+          disabled={!template}
+          onClick={handleResetClick}
+          variant="destructive"
+        >
+          <IconRestore />
+          {confirmingReset ? "Confirm reset…" : "Reset to default"}
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -1527,7 +1566,7 @@ export function DatabaseSettingsMenu({
         ) : null}
         <DropdownMenuSeparator />
         <SourceSubmenu database={database} rowCount={rowCount} />
-        <RowPagesItem database={database} />
+        <RowPagesSubmenu database={database} />
         <DropdownMenuSeparator />
         <DropdownMenuItem
           closeOnClick={false}
