@@ -8,6 +8,7 @@ import {
 } from "@/components/database/row-page/database-template-editor-sidebar.tsx";
 import { RowTemplatePreviewBody } from "@/components/database/row-page/row-template-preview.tsx";
 import { RowTemplateTitleSection } from "@/components/database/row-page/row-template-title-section.tsx";
+import { RowTemplateTokenAutocomplete } from "@/components/database/row-page/row-template-token-autocomplete.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -153,6 +154,7 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
           />
         }
       />
+      <RowTemplateTokenAutocomplete database={database} />
     </SiteShell>
   );
 }
