@@ -98,6 +98,7 @@ import type {
   DatabaseField,
   DatabaseSource,
   DatabaseView,
+  JsonValue,
   LocalDatabase,
 } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -728,7 +729,7 @@ const CONNECTOR_SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
 const SYMBOL_INPUT_SEPARATOR = /[\n,]/;
 
 interface SymbolListEditorProps {
-  config: Record<string, unknown>;
+  config: Record<string, JsonValue>;
   configKey: string;
   databaseId: string;
   label: string;
@@ -855,7 +856,7 @@ function SymbolListEditor({
 }
 
 interface ConnectorTextConfigRowProps {
-  config: Record<string, unknown>;
+  config: Record<string, JsonValue>;
   configKey: string;
   databaseId: string;
   label: string;
@@ -913,7 +914,7 @@ function ConnectorTextConfigRow({
 }
 
 interface ConnectorSelectConfigRowProps {
-  config: Record<string, unknown>;
+  config: Record<string, JsonValue>;
   configKey: string;
   databaseId: string;
   label: string;
@@ -968,7 +969,7 @@ function ConnectorSelectConfigRow({
 }
 
 interface ConnectorConfigEditorProps {
-  config: Record<string, unknown>;
+  config: Record<string, JsonValue>;
   databaseId: string;
   field: ConnectorConfigField;
 }

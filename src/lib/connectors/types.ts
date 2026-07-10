@@ -4,6 +4,7 @@ import type {
   DatabaseFieldType,
   DatabaseNumberFormat,
   DatabaseSelectOption,
+  JsonValue,
 } from "@/lib/schemas/database.ts";
 
 /**
@@ -212,7 +213,7 @@ export interface ConnectorPollPolicy {
  * (`Record<string, ConnectorDefinition>`) assignable.
  */
 export interface ConnectorDefinition<
-  TConfig extends Record<string, unknown> = Record<string, unknown>,
+  TConfig extends Record<string, JsonValue> = Record<string, JsonValue>,
 > {
   /** Optional BYO-token auth; absent = keyless connector. */
   auth?: ConnectorAuthSpec;

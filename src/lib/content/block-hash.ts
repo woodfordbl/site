@@ -21,10 +21,15 @@ function hashString(input: string): string {
   return Math.abs(hash).toString(16).padStart(8, "0");
 }
 
+/** Stable content hash of any JSON-serializable value (key-order independent). */
+export function hashStableValue(value: unknown): string {
+  return hashString(stableStringify(value));
+}
+
 export function hashBlock(block: Block): string {
-  return hashString(stableStringify(block));
+  return hashStableValue(block);
 }
 
 export function hashPageBlocks(blocks: Block[]): string {
-  return hashString(stableStringify(blocks));
+  return hashStableValue(blocks);
 }

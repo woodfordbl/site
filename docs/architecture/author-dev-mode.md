@@ -4,7 +4,7 @@
 
 1. Run `pnpm dev`
 2. Edit any page in the canvas (title, blocks, or both)
-3. **Save all** in site settings **Development** → writes every locally-edited page to `content/pages/{slug-path}.json` (nested paths supported) using the live title, slug, `parentId`, and optional `icon` from `localPagesCollection`. Asset-backed **media** blocks export blobs to `public/media/` first and rewrite props to site-relative URLs.
+3. **Save all** in site settings **Development** → writes every locally-edited page to `content/pages/{slug-path}.json` (nested paths supported) using the live title, slug, `parentId`, and optional `icon` from `localPagesCollection`. Asset-backed **media** blocks export blobs to `public/media/` first and rewrite props to site-relative URLs. Local databases export to `content/databases/{id}.json` (connector-synced rows excluded, unchanged databases skipped; the local copy is kept and its `serverBaselineHash` stamped — [databases — Shipped content](./databases.md#shipped-content)).
 4. `git commit` + push → Vercel deploy
 
 ## Save all

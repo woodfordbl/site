@@ -5,6 +5,7 @@ import "@/db/sync/database-sync-engine.ts";
 import { PrefetchPageCanvasEditorEffect } from "@/components/canvas/prefetch-page-canvas-editor-effect.tsx";
 import { MigrateUserPageRoutesEffect } from "@/components/pages/migrate-user-page-routes-effect.tsx";
 import { OrphanLocalPagesEffect } from "@/components/pages/orphan-local-pages-effect.tsx";
+import { SeedShippedDatabasesEffect } from "@/components/pages/seed-shipped-databases-effect.tsx";
 import { SyncPageListLocalPreviewEffect } from "@/components/pages/sync-page-list-local-preview-effect.tsx";
 import { SyncPagesCatalogRevisionEffect } from "@/components/pages/sync-pages-catalog-revision-effect.tsx";
 import { WarmPageIconPickerCacheEffect } from "@/components/pages/warm-page-icon-picker-cache-effect.tsx";
@@ -31,6 +32,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       <SyncPagesCatalogRevisionEffect />
       <SyncPageListLocalPreviewEffect />
       <OrphanLocalPagesEffect />
+      <SeedShippedDatabasesEffect />
       <WarmPageIconPickerCacheEffect />
       <WarmShippedPagesCacheEffect />
       <PrefetchPageCanvasEditorEffect />
