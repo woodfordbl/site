@@ -25,6 +25,10 @@ Start here for canvas, pages, and data-layer behavior.
 - [Page commands](./reference/page-commands.md)
 - [Structural actions](./reference/structural-actions.md)
 
+## Proposals
+
+- [Markdown-native content format](./proposals/markdown-native-content.md) — exploration: store pages/databases as markdown with frontmatter + index files
+
 ## Contributing
 
 - [Updating docs](./contributing/updating-docs.md) — architecture/reference markdown, `docs:check`, hooks
