@@ -58,11 +58,13 @@ import { cn } from "@/lib/utils.ts";
 /**
  * Shared formula BUILDER panel (Notion-style): expression textarea with live
  * parse/check status (first checker diagnostic, or "✓ Valid" plus the
- * result-type badge) and a first-row preview on top, then a searchable
- * reference of Properties / Functions / Operators that insert at the caret,
- * with a fixed-height detail strip documenting the focused entry.
- * Width-fluid so it works both in the desktop column-menu submenu (~360px)
- * and full-width in the mobile menu drawer.
+ * result-type badge) and a live preview against a pickable row (first row by
+ * default; a compact row selector appears when the caller supplies more —
+ * see `previewRows`) on top, then a searchable reference of Properties /
+ * Functions / Operators that insert at the caret, with a fixed-height detail
+ * strip documenting the focused entry. Width-fluid so it works both in the
+ * desktop column-menu submenu (~360px) and full-width in the mobile menu
+ * drawer.
  *
  * The `draft` state is the CANONICAL expression (`prop("<id>")` — exactly
  * what gets stored), so parse/check/preview/save all operate on it directly.
@@ -80,9 +82,10 @@ import { cn } from "@/lib/utils.ts";
  * drafts.
  *
  * On fine pointers the expression input is the lazy-loaded CodeMirror 6
- * editor (formula-code-editor.tsx) — chips, syntax highlighting, soft wrap,
- * Mod+Enter saves — with the plain textarea as the Suspense fallback while
- * the CM6 chunk loads. Coarse pointers keep the textarea entirely (mobile
+ * editor (formula-code-editor.tsx) — chips, syntax highlighting, diagnostic
+ * squiggles (fed the panel's memoized check context via `checkContext`),
+ * the argument info card, soft wrap, Mod+Enter saves — with the plain
+ * textarea as the Suspense fallback while the CM6 chunk loads. Coarse pointers keep the textarea entirely (mobile
  * gets its own treatment in a later phase). Caret insertion from the
  * reference list goes through the editor's imperative handle when mounted
  * (properties insert the canonical `prop("<id>")` text, which renders as a
@@ -128,7 +131,9 @@ export class FormulaCodeEditorBoundary extends Component<
  * typeahead/arrow navigation; Escape still propagates so it closes the menu.
  */
 function stopMenuKeys(
-  event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
+  event: KeyboardEvent<
+    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  >
 ): void {
   if (event.key !== "Escape") {
     event.stopPropagation();
@@ -232,6 +237,56 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+/** One row offered to the preview picker. */
+export interface FormulaPreviewRow {
+  id: string;
+  /** Compact display label: the row's primary-field text, or "Row N". */
+  label: string;
+  values: Record<string, DatabaseCellValue>;
+}
+
+/**
+ * The live-preview line: the evaluated result plus, when more than one row
+ * is on offer, a compact native select to pick which row it evaluates
+ * against (one muted control, no popup chrome).
+ */
+function FormulaPreviewLine({
+  onPickRow,
+  pickedRow,
+  preview,
+  rows,
+}: {
+  onPickRow: (rowId: string) => void;
+  pickedRow: FormulaPreviewRow;
+  preview: string;
+  rows: readonly FormulaPreviewRow[];
+}) {
+  return (
+    <div className="flex items-center gap-2 px-0.5">
+      <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+        Preview: {preview === "" ? "(empty)" : preview}
+      </span>
+      {rows.length > 1 ? (
+        <select
+          aria-label="Preview row"
+          className="h-5 max-w-32 shrink-0 rounded-md border border-border bg-transparent px-1 text-muted-foreground text-xs outline-none transition-colors hover:text-foreground focus-visible:border-ring"
+          onChange={(event) => {
+            onPickRow(event.target.value);
+          }}
+          onKeyDown={stopMenuKeys}
+          value={pickedRow.id}
+        >
+          {rows.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  );
+}
+
 export interface FormulaEditorPanelProps {
   /** Stored (canonical) expression the draft starts from. */
   expression: string;
@@ -240,24 +295,30 @@ export interface FormulaEditorPanelProps {
    * and the whole list feeds the preview scope.
    */
   fields: readonly DatabaseField[];
-  /** First row's cell values for the live preview; `null` when the table is empty. */
-  firstRowValues: Record<string, DatabaseCellValue> | null;
   /** Called with the CANONICAL text on Save (even when unchanged — the caller decides). */
   onSave: (expression: string) => void;
+  /**
+   * Rows the live preview can evaluate against (callers cap at ~20, manual
+   * order). The first row is the default; more than one row adds the picker.
+   * Empty when the table is empty — no preview renders.
+   */
+  previewRows: readonly FormulaPreviewRow[];
 }
 
 /** The formula builder panel (see module docs). */
 export function FormulaEditorPanel({
   expression,
   fields,
-  firstRowValues,
   onSave,
+  previewRows,
 }: FormulaEditorPanelProps): ReactNode {
   // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
   // natively; the textarea path humanizes for display below.
   const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<ReferenceDetail | null>(null);
+  /** Picked preview row; `null` (or a since-deleted id) falls back to first. */
+  const [previewRowId, setPreviewRowId] = useState<string | null>(null);
   const coarsePointer = useIsCoarsePrimaryPointer();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const codeEditorRef = useRef<FormulaCodeEditorHandle>(null);
@@ -353,20 +414,28 @@ export function FormulaEditorPanel({
     [parsed, checkContext]
   );
 
-  // Live preview against the FIRST row: evaluate the parsed draft through
+  // The picked preview row, defaulting to the first (and healing a stale
+  // pick — the picked row can be deleted while the panel is open).
+  const previewRow =
+    previewRows.find((row) => row.id === previewRowId) ??
+    previewRows[0] ??
+    null;
+
+  // Live preview against the picked row: evaluate the parsed draft through
   // the same scope the real overlay uses — other formula fields resolve to
   // their computed values; errors render honestly ("⚠ …").
+  const previewValues = previewRow?.values ?? null;
   const preview = useMemo(() => {
-    if (!parsed?.ok || firstRowValues === null) {
+    if (!parsed?.ok || previewValues === null) {
       return null;
     }
     const now = () => new Date();
-    const resolved = computeFormulaRowValues(fields, firstRowValues, { now });
-    const scope = createFormulaRowScope(fields, firstRowValues, resolved, {
+    const resolved = computeFormulaRowValues(fields, previewValues, { now });
+    const scope = createFormulaRowScope(fields, previewValues, resolved, {
       now,
     });
     return formulaValueToDisplay(evaluateFormula(parsed.ast, scope));
-  }, [parsed, fields, firstRowValues]);
+  }, [parsed, fields, previewValues]);
 
   // Canonical-offset → visible-offset mapping for status positions: each
   // `prop("<id>")` span before an offset renders shorter than its canonical
@@ -482,6 +551,7 @@ export function FormulaEditorPanel({
             <FormulaCodeEditor
               ariaLabel="Formula expression"
               autoFocus
+              checkContext={checkContext}
               editorRef={codeEditorRef}
               fields={fields}
               onChange={setDraft}
@@ -493,10 +563,13 @@ export function FormulaEditorPanel({
         </FormulaCodeEditorBoundary>
       )}
       {statusRow}
-      {preview === null ? null : (
-        <span className="truncate px-0.5 text-muted-foreground text-xs">
-          Preview: {preview === "" ? "(empty)" : preview}
-        </span>
+      {preview === null || previewRow === null ? null : (
+        <FormulaPreviewLine
+          onPickRow={setPreviewRowId}
+          pickedRow={previewRow}
+          preview={preview}
+          rows={previewRows}
+        />
       )}
       <InputGroup className="h-8">
         <InputGroupAddon align="inline-start">

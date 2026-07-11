@@ -219,17 +219,51 @@ describe("formulaEnclosingCallAt", () => {
   });
 
   it("finds the innermost unclosed call and its argument index", () => {
-    expect(at("round(")).toEqual({ argIndex: 0, name: "round" });
-    expect(at("round(1.234, ")).toEqual({ argIndex: 1, name: "round" });
-    expect(at("if(x, round(")).toEqual({ argIndex: 0, name: "round" });
+    expect(at("round(")).toEqual({
+      argIndex: 0,
+      method: false,
+      name: "round",
+      position: 0,
+    });
+    expect(at("round(1.234, ")).toEqual({
+      argIndex: 1,
+      method: false,
+      name: "round",
+      position: 0,
+    });
+    expect(at("if(x, round(")).toEqual({
+      argIndex: 0,
+      method: false,
+      name: "round",
+      position: 6,
+    });
   });
 
   it("steps back out of closed calls", () => {
-    expect(at("if(round(1), ")).toEqual({ argIndex: 1, name: "if" });
+    expect(at("if(round(1), ")).toEqual({
+      argIndex: 1,
+      method: false,
+      name: "if",
+      position: 0,
+    });
   });
 
   it("looks through grouping parens to the governing call", () => {
-    expect(at("round((1 + ")).toEqual({ argIndex: 0, name: "round" });
+    expect(at("round((1 + ")).toEqual({
+      argIndex: 0,
+      method: false,
+      name: "round",
+      position: 0,
+    });
+  });
+
+  it("marks dot-chained calls as method sites (receiver occupies param 0)", () => {
+    expect(at('"a,b".split(')).toEqual({
+      argIndex: 0,
+      method: true,
+      name: "split",
+      position: 6,
+    });
   });
 
   it("treats list brackets as a boundary (elements aren't the argument)", () => {
@@ -239,13 +273,20 @@ describe("formulaEnclosingCallAt", () => {
   it("does not count commas of nested closed contexts", () => {
     expect(at('dateDiff(parseDate("a"), ')).toEqual({
       argIndex: 1,
+      method: false,
       name: "dateDiff",
+      position: 0,
     });
   });
 
   it("scans the lexable prefix of unlexable input (open string mid-typing)", () => {
     // The position is inside a string — the completion source suppresses
     // completions there separately; the call scan still sees `round(`.
-    expect(at('round("open')).toEqual({ argIndex: 0, name: "round" });
+    expect(at('round("open')).toEqual({
+      argIndex: 0,
+      method: false,
+      name: "round",
+      position: 0,
+    });
   });
 });

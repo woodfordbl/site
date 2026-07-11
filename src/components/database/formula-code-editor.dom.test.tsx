@@ -14,12 +14,17 @@ import {
   FormulaCodeEditor,
   type FormulaCodeEditorHandle,
 } from "@/components/database/formula-code-editor.tsx";
+import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 const FIELDS: DatabaseField[] = [
   { id: "f-price", name: "Price", type: "number" },
   { id: "f-qty", name: "Unit Count", type: "number" },
+  { id: "f-note", name: "Note", type: "text" },
 ];
+
+// The panel memoizes this once per schema; the editor takes it as a prop.
+const CHECK_CONTEXT = formulaCheckContext(FIELDS);
 
 /**
  * jsdom has no layout: CodeMirror measures text through
@@ -65,11 +70,35 @@ function cmContent(): HTMLElement {
   return content;
 }
 
+function editorView(): EditorView {
+  const editor = document.querySelector(".cm-editor");
+  const view =
+    editor instanceof HTMLElement ? EditorView.findFromDOM(editor) : null;
+  if (view === null) {
+    throw new Error("editor view not mounted");
+  }
+  return view;
+}
+
+/** Simulate typing: splice at the caret as an `input.type` user event. */
+function typeText(text: string): void {
+  act(() => {
+    const view = editorView();
+    const { from, to } = view.state.selection.main;
+    view.dispatch({
+      changes: { from, insert: text, to },
+      selection: { anchor: from + text.length },
+      userEvent: "input.type",
+    });
+  });
+}
+
 describe("FormulaCodeEditor", () => {
   it("renders the controlled value with tokenizer-driven highlighting", () => {
     render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        checkContext={CHECK_CONTEXT}
         fields={FIELDS}
         onChange={vi.fn()}
         value={"thisPage.Price + round(1.5) // note"}
@@ -96,6 +125,7 @@ describe("FormulaCodeEditor", () => {
     const { rerender } = render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        checkContext={CHECK_CONTEXT}
         fields={FIELDS}
         onChange={onChange}
         value="1 + 2"
@@ -106,6 +136,7 @@ describe("FormulaCodeEditor", () => {
     rerender(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        checkContext={CHECK_CONTEXT}
         fields={FIELDS}
         onChange={onChange}
         value="3 * 4"
@@ -121,6 +152,7 @@ describe("FormulaCodeEditor", () => {
     render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        checkContext={CHECK_CONTEXT}
         editorRef={editorRef}
         fields={FIELDS}
         onChange={onChange}
@@ -145,6 +177,7 @@ describe("FormulaCodeEditor", () => {
     render(
       <FormulaCodeEditor
         ariaLabel="Formula expression"
+        checkContext={CHECK_CONTEXT}
         fields={FIELDS}
         onChange={vi.fn()}
         onSubmit={onSubmit}
@@ -165,6 +198,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           fields={FIELDS}
           onChange={vi.fn()}
           value=""
@@ -194,6 +228,7 @@ describe("FormulaCodeEditor", () => {
       const { rerender } = render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           fields={FIELDS}
           onChange={vi.fn()}
           value={'prop("f-price") * 2'}
@@ -211,6 +246,7 @@ describe("FormulaCodeEditor", () => {
       rerender(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           fields={[{ id: "f-price", name: "Cost", type: "number" }]}
           onChange={vi.fn()}
           value={'prop("f-price") * 2'}
@@ -223,6 +259,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           fields={FIELDS}
           onChange={vi.fn()}
           value={'prop("f-ghost") + 1'}
@@ -240,6 +277,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           fields={FIELDS}
           onChange={onChange}
           value={'1 + prop("f-price")'}
@@ -270,6 +308,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           editorRef={editorRef}
           fields={FIELDS}
           onChange={onChange}
@@ -298,6 +337,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           editorRef={editorRef}
           fields={FIELDS}
           onChange={onChange}
@@ -343,29 +383,6 @@ describe("FormulaCodeEditor", () => {
   });
 
   describe("fused autocomplete", () => {
-    function editorView(): EditorView {
-      const editor = document.querySelector(".cm-editor");
-      const view =
-        editor instanceof HTMLElement ? EditorView.findFromDOM(editor) : null;
-      if (view === null) {
-        throw new Error("editor view not mounted");
-      }
-      return view;
-    }
-
-    /** Simulate typing: splice at the caret as an `input.type` user event. */
-    function typeText(text: string): void {
-      act(() => {
-        const view = editorView();
-        const { from, to } = view.state.selection.main;
-        view.dispatch({
-          changes: { from, insert: text, to },
-          selection: { anchor: from + text.length },
-          userEvent: "input.type",
-        });
-      });
-    }
-
     function popup(): HTMLElement | null {
       const element = document.querySelector(".cm-tooltip-autocomplete");
       return element instanceof HTMLElement ? element : null;
@@ -406,6 +423,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
           fields={fields}
           onChange={onChange}
           value=""
@@ -545,6 +563,183 @@ describe("FormulaCodeEditor", () => {
           })
       );
       expect(popup()).toBeNull();
+    });
+
+    it("offers and/or/not once (keyword row only, no duplicate function form)", async () => {
+      renderEditor();
+      typeText("an");
+
+      const open = await waitForPopup();
+      const andRows = [...open.querySelectorAll("li")].filter(
+        (row) => row.querySelector(".cm-completionLabel")?.textContent === "and"
+      );
+      expect(andRows).toHaveLength(1);
+      // The surviving row is the keyword form — no signature detail.
+      expect(andRows[0]?.querySelector(".cm-completionDetail")).toBeNull();
+    });
+  });
+
+  describe("diagnostics (squiggles)", () => {
+    function renderEditor(value = "") {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={value}
+        />
+      );
+    }
+
+    function squiggle(): HTMLElement | null {
+      const element = document.querySelector(".cm-formula-diagnostic");
+      return element instanceof HTMLElement ? element : null;
+    }
+
+    it("underlines a checker diagnostic after the debounce and clears it on fix", async () => {
+      renderEditor();
+      typeText('abs("oops")');
+
+      // The debounced check lands ~150ms later; the squiggle covers exactly
+      // the diagnosed argument span.
+      await waitFor(() => {
+        expect(squiggle()).not.toBeNull();
+      });
+      expect(squiggle()?.textContent).toBe('"oops"');
+
+      // Fixing the type error clears the underline on the next pass.
+      act(() => {
+        const view = editorView();
+        view.dispatch({
+          changes: { from: 0, insert: "abs(1)", to: view.state.doc.length },
+        });
+      });
+      await waitFor(() => {
+        expect(squiggle()).toBeNull();
+      });
+    });
+
+    it("underlines parse errors at the failure point", async () => {
+      renderEditor();
+      typeText("1 ++ 2");
+
+      await waitFor(() => {
+        expect(squiggle()).not.toBeNull();
+      });
+      expect(squiggle()?.textContent).toBe("+");
+    });
+
+    it("rings the whole chip when a diagnostic falls inside its span", async () => {
+      // Note is text; abs() wants a number — the diagnostic span is the
+      // canonical prop("f-note") text, which renders as one atomic chip. The
+      // ring class lives on the widget itself (a wrapping mark would not
+      // render around an atomic widget in real browsers).
+      renderEditor('abs(prop("f-note"))');
+
+      await waitFor(() => {
+        expect(
+          document.querySelector(".cm-formula-chip.cm-formula-chip-diagnosed")
+        ).not.toBeNull();
+      });
+
+      // Fixing the argument drops the ring on the next pass.
+      act(() => {
+        const view = editorView();
+        view.dispatch({
+          changes: {
+            from: 0,
+            insert: 'lower(prop("f-note"))',
+            to: view.state.doc.length,
+          },
+        });
+      });
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip-diagnosed")).toBeNull();
+      });
+      expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+    });
+  });
+
+  describe("argument info card", () => {
+    function renderEditor() {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value=""
+        />
+      );
+    }
+
+    function card(): HTMLElement | null {
+      const element = document.querySelector(".cm-formula-infocard");
+      return element instanceof HTMLElement ? element : null;
+    }
+
+    function activeParam(): string | undefined {
+      return card()?.querySelector(".cm-formula-infocard-active")?.textContent;
+    }
+
+    it("shows the signature with the current argument emphasized", async () => {
+      renderEditor();
+      typeText("round(");
+
+      await waitFor(() => {
+        expect(card()).not.toBeNull();
+      });
+      expect(card()?.textContent).toContain("round(value, digits?)");
+      expect(activeParam()).toBe("value");
+
+      // Advancing past the comma moves the emphasis to the next parameter.
+      typeText("1.5, ");
+      await waitFor(() => {
+        expect(activeParam()).toBe("digits?");
+      });
+    });
+
+    it("offsets the argument index for dot-chained method calls", async () => {
+      renderEditor();
+      // The receiver occupies param 0 (`split(text, separator)`), so the
+      // first typed argument is the separator.
+      typeText('"a,b".split(');
+
+      await waitFor(() => {
+        expect(activeParam()).toBe("separator");
+      });
+    });
+
+    it("hides while the completion popup is open and returns on close", async () => {
+      renderEditor();
+      typeText("round(pri");
+
+      await waitFor(() => {
+        expect(
+          document.querySelector(".cm-tooltip-autocomplete")
+        ).not.toBeNull();
+      });
+      expect(card()).toBeNull();
+
+      // Escape closes only the popup; the info card comes back.
+      fireEvent.keyDown(cmContent(), { key: "Escape" });
+      await waitFor(() => {
+        expect(card()).not.toBeNull();
+      });
+      expect(activeParam()).toBe("value");
+    });
+
+    it("shows no card at the top level", async () => {
+      renderEditor();
+      typeText("1 + 2");
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 50);
+          })
+      );
+      expect(card()).toBeNull();
     });
   });
 });

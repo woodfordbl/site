@@ -22,6 +22,8 @@ import {
   EditorView,
   keymap,
   placeholder as placeholderOf,
+  showTooltip,
+  type Tooltip,
   tooltips,
   ViewPlugin,
   type ViewUpdate,
@@ -37,8 +39,11 @@ import {
   formulaFunctionForName,
   formulaFunctionSignature,
   formulaParamAt,
+  formulaParamLabel,
 } from "@/lib/formula/catalog.ts";
 import {
+  checkFormula,
+  type FormulaCheckContext,
   formulaPropertyValueType,
   formulaTypeBadge,
   formulaTypeFits,
@@ -49,7 +54,7 @@ import {
   formulaPropIdSpans,
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
-import { FORMULA_SCOPE_ROOTS } from "@/lib/formula/parse.ts";
+import { FORMULA_SCOPE_ROOTS, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalPropertyReference,
   canonicalPropertyRewrites,
@@ -100,6 +105,23 @@ import { cn } from "@/lib/utils.ts";
  * expected type the catalog knows ({@link expectedArgumentType}), candidates
  * whose result type fits rank first.
  *
+ * DIAGNOSTICS (proposal §6): parse errors and checker diagnostics render as
+ * destructive wavy underlines, debounced like the canonicalizer
+ * ({@link diagnosticsScheduler}); a span falling inside an atomic chip rings
+ * the WHOLE chip (via the widget itself — see {@link FormulaDiagnostics})
+ * rather than underlining a fragment of hidden canonical text. The check
+ * runs against the panel's memoized
+ * {@link FormulaCheckContext} (a state field, like {@link chipFields}) — it
+ * is never recomputed per keystroke here.
+ *
+ * ARGUMENT INFO CARD (proposal §6.2): while the caret sits inside a function
+ * call's argument list, a small tooltip anchored at the callee shows the
+ * signature with the CURRENT parameter emphasized plus the one-line
+ * description ({@link functionInfoCard}); dot-chained method calls offset
+ * the parameter index by one (the receiver occupies param 0). Hidden while
+ * the completion popup is open. Hovering a squiggle shows no tooltip yet
+ * (the status row carries the first message) — future polish.
+ *
  * Menu integration is built in: every key except Escape stops propagating
  * (the panel lives inside a Base UI menu popup whose typeahead would
  * otherwise steal keystrokes), Escape closes the completion popup WITHOUT
@@ -124,6 +146,13 @@ export interface FormulaCodeEditorProps {
   ariaLabel: string;
   /** Steal focus after mount (post-rAF, past Base UI's initial focus pass). */
   autoFocus?: boolean;
+  /**
+   * Schema context the debounced diagnostics check drafts against. Pass a
+   * MEMOIZED value (the panel already memoizes `formulaCheckContext(fields)`)
+   * — it is deliberately a prop, not derived here, so the editor never
+   * recomputes it per keystroke.
+   */
+  checkContext: FormulaCheckContext;
   /** Receives the imperative handle; `null` while unmounted. */
   editorRef?: RefObject<FormulaCodeEditorHandle | null>;
   /**
@@ -202,6 +231,28 @@ const chipFields = StateField.define<readonly DatabaseField[]>({
   },
 });
 
+/** Set by the React side whenever the `checkContext` prop changes. */
+const setCheckContext = StateEffect.define<FormulaCheckContext>();
+
+const EMPTY_CHECK_CONTEXT: FormulaCheckContext = { properties: [] };
+
+/**
+ * The panel's memoized check context inside editor state (same pattern as
+ * {@link chipFields}): the diagnostics pass reads it per check instead of
+ * rebuilding `formulaCheckContext(fields)` per keystroke.
+ */
+const checkContextState = StateField.define<FormulaCheckContext>({
+  create: () => EMPTY_CHECK_CONTEXT,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setCheckContext)) {
+        return effect.value;
+      }
+    }
+    return value;
+  },
+});
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Tabler node data → a real SVG element (no React in the widget DOM). */
@@ -252,11 +303,13 @@ function chipIcon(field: DatabaseField): Element {
  * don't disturb the line height.
  */
 class PropertyChipWidget extends WidgetType {
+  private readonly diagnosed: boolean;
   private readonly field: DatabaseField | null;
   private readonly rawId: string;
 
-  constructor(field: DatabaseField | null, rawId: string) {
+  constructor(field: DatabaseField | null, rawId: string, diagnosed: boolean) {
     super();
+    this.diagnosed = diagnosed;
     this.field = field;
     this.rawId = rawId;
   }
@@ -264,6 +317,7 @@ class PropertyChipWidget extends WidgetType {
   eq(other: PropertyChipWidget): boolean {
     return (
       other.rawId === this.rawId &&
+      other.diagnosed === this.diagnosed &&
       other.field?.name === this.field?.name &&
       other.field?.type === this.field?.type &&
       other.field?.icon === this.field?.icon
@@ -275,7 +329,8 @@ class PropertyChipWidget extends WidgetType {
     chip.className = cn(
       tokenChipVariants({ tone: this.field === null ? "destructive" : "blue" }),
       "cm-formula-chip select-none py-0 align-baseline",
-      this.field === null && "line-through"
+      this.field === null && "line-through",
+      this.diagnosed && "cm-formula-chip-diagnosed"
     );
     if (this.field === null) {
       chip.title = "Unknown property";
@@ -301,6 +356,7 @@ function buildChipDecorations(state: EditorState): DecorationSet {
   const fieldsById = new Map(
     state.field(chipFields).map((field) => [field.id, field])
   );
+  const diagnosedStarts = state.field(diagnosticsField).diagnosedChipStarts;
   const builder = new RangeSetBuilder<Decoration>();
   for (const span of formulaPropIdSpans(state.doc.toString())) {
     builder.add(
@@ -309,7 +365,8 @@ function buildChipDecorations(state: EditorState): DecorationSet {
       Decoration.replace({
         widget: new PropertyChipWidget(
           fieldsById.get(span.id) ?? null,
-          span.id
+          span.id,
+          diagnosedStarts.has(span.start)
         ),
       })
     );
@@ -320,7 +377,9 @@ function buildChipDecorations(state: EditorState): DecorationSet {
 /**
  * Chip rendering + atomicity: `Decoration.replace` widgets over every
  * canonical property span, provided as `atomicRanges` so cursor motion,
- * deletion, and selection treat each chip as a single unit.
+ * deletion, and selection treat each chip as a single unit. Rebuilds on
+ * diagnostics passes too — a diagnosed chip renders its own destructive
+ * ring (see {@link FormulaDiagnostics}).
  */
 const propertyChips = ViewPlugin.fromClass(
   class {
@@ -333,7 +392,10 @@ const propertyChips = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const fieldsChanged =
         update.startState.field(chipFields) !== update.state.field(chipFields);
-      if (update.docChanged || fieldsChanged) {
+      const diagnosticsChanged =
+        update.startState.field(diagnosticsField).diagnosedChipStarts !==
+        update.state.field(diagnosticsField).diagnosedChipStarts;
+      if (update.docChanged || fieldsChanged || diagnosticsChanged) {
         this.decorations = buildChipDecorations(update.state);
       }
     }
@@ -425,6 +487,296 @@ const typedReferenceCanonicalizer = ViewPlugin.fromClass(
   }
 );
 
+// --- diagnostics (squiggles) ---------------------------------------------------
+
+/**
+ * Debounce before re-checking the doc for squiggles — same cadence as the
+ * typed-reference canonicalizer, so feedback settles as the user pauses
+ * rather than flashing between keystrokes.
+ */
+const DIAGNOSTIC_DEBOUNCE_MS = 150;
+
+const diagnosticMark = Decoration.mark({ class: "cm-formula-diagnostic" });
+
+/** One squiggle extent; `start` inclusive, `end` exclusive. */
+interface DiagnosticSpan {
+  end: number;
+  start: number;
+}
+
+/** Identifier/number run for sizing a parse-error underline. */
+const TOKEN_TAIL_RE = /^[A-Za-z0-9_]+/;
+
+/**
+ * A parse error carries only a position: underline from there to the end of
+ * the word it lands on, or one character — clamped inside the doc, so an
+ * at-end-of-input error still underlines the last character.
+ */
+function parseErrorSpan(
+  source: string,
+  position: number
+): DiagnosticSpan | null {
+  if (source.length === 0) {
+    return null;
+  }
+  const start = Math.min(position, source.length - 1);
+  const tail = TOKEN_TAIL_RE.exec(source.slice(start));
+  const end = Math.min(start + (tail?.[0].length ?? 1), source.length);
+  return { end, start };
+}
+
+/** Squiggle extents for `source`: the parse error, else checker diagnostics. */
+function rawDiagnosticSpans(
+  source: string,
+  context: FormulaCheckContext
+): DiagnosticSpan[] {
+  if (source.trim() === "") {
+    return [];
+  }
+  const parsed = parseFormula(source);
+  if (!parsed.ok) {
+    const span = parseErrorSpan(source, parsed.error.position);
+    return span === null ? [] : [span];
+  }
+  return checkFormula(parsed.ast, context).diagnostics.map(
+    ({ end, start }) => ({ end, start })
+  );
+}
+
+/**
+ * A span that touches an atomic chip widens to cover the WHOLE chip — a
+ * squiggle under three characters of hidden canonical text would render as a
+ * fragment under the replacing widget. Overlapping results merge (they carry
+ * one shared mark class) so the builder receives sorted, disjoint ranges.
+ */
+function clampSpansToChips(
+  source: string,
+  spans: readonly DiagnosticSpan[]
+): DiagnosticSpan[] {
+  const chips = formulaPropIdSpans(source);
+  const widened = spans
+    .map((span) => {
+      let { end, start } = span;
+      for (const chip of chips) {
+        if (start < chip.end && end > chip.start) {
+          start = Math.min(start, chip.start);
+          end = Math.max(end, chip.end);
+        }
+      }
+      return { end, start };
+    })
+    .sort((a, b) => a.start - b.start);
+  const merged: DiagnosticSpan[] = [];
+  for (const span of widened) {
+    const last = merged.at(-1);
+    if (last !== undefined && span.start <= last.end) {
+      last.end = Math.max(last.end, span.end);
+    } else {
+      merged.push({ ...span });
+    }
+  }
+  return merged;
+}
+
+/**
+ * Diagnostics carried in editor state: the wavy underline marks, plus the
+ * start offsets of chip spans a diagnostic touches. Chips get their
+ * destructive ring from the WIDGET (via {@link PropertyChipWidget}) rather
+ * than the mark — a mark that exactly covers an atomic replace widget opens
+ * after it in CM's content order and renders nothing in real browsers.
+ */
+interface FormulaDiagnostics {
+  decorations: DecorationSet;
+  diagnosedChipStarts: ReadonlySet<number>;
+}
+
+const NO_DIAGNOSTICS: FormulaDiagnostics = {
+  decorations: Decoration.none,
+  diagnosedChipStarts: new Set(),
+};
+
+function buildDiagnostics(state: EditorState): FormulaDiagnostics {
+  const source = state.doc.toString();
+  const raw = rawDiagnosticSpans(source, state.field(checkContextState));
+  const diagnosedChipStarts = new Set<number>();
+  for (const chip of formulaPropIdSpans(source)) {
+    if (raw.some((span) => span.start < chip.end && span.end > chip.start)) {
+      diagnosedChipStarts.add(chip.start);
+    }
+  }
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const span of clampSpansToChips(source, raw)) {
+    if (span.start < span.end) {
+      builder.add(span.start, span.end, diagnosticMark);
+    }
+  }
+  return { decorations: builder.finish(), diagnosedChipStarts };
+}
+
+/** Replaced wholesale by {@link diagnosticsScheduler} after each debounce. */
+const setDiagnostics = StateEffect.define<FormulaDiagnostics>();
+
+/**
+ * Diagnostics live in a state field (not the scheduling plugin) so they MAP
+ * through edits between checks — a stale underline drifts with the text
+ * instead of pointing at the wrong characters until the next pass.
+ */
+const diagnosticsField = StateField.define<FormulaDiagnostics>({
+  create: () => NO_DIAGNOSTICS,
+  update(value, transaction) {
+    let next = value;
+    if (transaction.docChanged) {
+      const mapped = new Set<number>();
+      for (const start of value.diagnosedChipStarts) {
+        mapped.add(transaction.changes.mapPos(start, 1));
+      }
+      next = {
+        decorations: value.decorations.map(transaction.changes),
+        diagnosedChipStarts: mapped,
+      };
+    }
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiagnostics)) {
+        next = effect.value;
+      }
+    }
+    return next;
+  },
+  provide: (field) =>
+    EditorView.decorations.from(field, (value) => value.decorations),
+});
+
+/**
+ * Debounced parse+check driving {@link diagnosticsField}: reschedules on doc
+ * changes and check-context swaps (a schema edit can change what's valid),
+ * and runs once at startup so an existing broken expression squiggles on
+ * open. The dispatched effect doesn't reschedule (no doc/context change), so
+ * the cycle terminates.
+ */
+const diagnosticsScheduler = ViewPlugin.fromClass(
+  class {
+    private timer: number | null = null;
+    private readonly view: EditorView;
+
+    constructor(view: EditorView) {
+      this.view = view;
+      this.schedule();
+    }
+
+    update(update: ViewUpdate) {
+      const contextChanged =
+        update.startState.field(checkContextState) !==
+        update.state.field(checkContextState);
+      if (update.docChanged || contextChanged) {
+        this.schedule();
+      }
+    }
+
+    destroy() {
+      if (this.timer !== null) {
+        clearTimeout(this.timer);
+      }
+    }
+
+    private schedule() {
+      if (this.timer !== null) {
+        clearTimeout(this.timer);
+      }
+      this.timer = window.setTimeout(() => {
+        this.timer = null;
+        this.view.dispatch({
+          effects: setDiagnostics.of(buildDiagnostics(this.view.state)),
+        });
+      }, DIAGNOSTIC_DEBOUNCE_MS);
+    }
+  }
+);
+
+// --- argument info card --------------------------------------------------------
+
+/**
+ * The info card's DOM (no React inside CM): the signature with the parameter
+ * at `activeIndex` emphasized, then the one-line description. A variadic
+ * tail stays highlighted for every argument it governs; an index past a
+ * non-variadic signature highlights nothing (the arity error is the status
+ * row's job).
+ */
+function infoCardDom(
+  entry: FormulaFunctionEntry,
+  activeIndex: number
+): HTMLElement {
+  const highlighted =
+    formulaParamAt(entry, activeIndex) === undefined
+      ? -1
+      : Math.min(activeIndex, entry.params.length - 1);
+  const card = document.createElement("div");
+  card.className = "cm-formula-infocard";
+  const signature = document.createElement("div");
+  signature.className = "cm-formula-infocard-signature";
+  signature.append(`${entry.name}(`);
+  entry.params.forEach((param, index) => {
+    if (index > 0) {
+      signature.append(", ");
+    }
+    const label = document.createElement("span");
+    if (index === highlighted) {
+      label.className = "cm-formula-infocard-active";
+    }
+    label.textContent = formulaParamLabel(param);
+    signature.append(label);
+  });
+  signature.append(")");
+  const description = document.createElement("div");
+  description.className = "cm-formula-infocard-description";
+  description.textContent = entry.description;
+  card.append(signature, description);
+  return card;
+}
+
+/**
+ * The tooltip spec while the caret sits inside a known call's argument list:
+ * anchored at the CALLEE's start (origin-anchored per proposal §6), above
+ * the line. Dot-chained method calls offset the parameter index by one —
+ * the receiver occupies param 0. `null` (hidden) while the completion popup
+ * is open/pending (the two would stack), for unknown callees, and at the
+ * top level.
+ */
+function functionInfoTooltip(state: EditorState): Tooltip | null {
+  if (completionStatus(state) !== null) {
+    return null;
+  }
+  const range = state.selection.main;
+  if (!range.empty) {
+    return null;
+  }
+  const call = formulaEnclosingCallAt(state.doc.toString(), range.head);
+  if (call === null) {
+    return null;
+  }
+  const entry = formulaFunctionForName(call.name);
+  if (entry === undefined) {
+    return null;
+  }
+  const argIndex = call.argIndex + (call.method ? 1 : 0);
+  return {
+    above: true,
+    create: () => ({ dom: infoCardDom(entry, argIndex) }),
+    pos: call.position,
+  };
+}
+
+/**
+ * Origin-anchored argument info card (proposal §6). Recomputed per
+ * transaction — the inputs (caret, doc, completion status) all change
+ * through transactions, and the scan is one linear tokenize like the
+ * highlighter's.
+ */
+const functionInfoCard = StateField.define<Tooltip | null>({
+  create: functionInfoTooltip,
+  update: (_value, transaction) => functionInfoTooltip(transaction.state),
+  provide: (field) => showTooltip.from(field),
+});
+
 // --- fused autocomplete ------------------------------------------------------
 
 /** Identifier being typed at the caret (completion trigger + filter range). */
@@ -477,8 +829,10 @@ function fieldValueTypes(
 /**
  * The declared type of the argument position at `position`, when the
  * innermost unclosed call resolves to a catalog signature — the "fused"
- * ranking signal. `null` when unknowable or unhelpful (unknown/typevar
- * params accept everything; lambda params never match a value candidate).
+ * ranking signal. Dot-chained method calls offset the parameter index by
+ * one (the receiver occupies param 0). `null` when unknowable or unhelpful
+ * (unknown/typevar params accept everything; lambda params never match a
+ * value candidate).
  */
 function expectedArgumentType(
   source: string,
@@ -489,8 +843,9 @@ function expectedArgumentType(
     return null;
   }
   const entry = formulaFunctionForName(call.name);
+  const argIndex = call.argIndex + (call.method ? 1 : 0);
   const param =
-    entry === undefined ? undefined : formulaParamAt(entry, call.argIndex);
+    entry === undefined ? undefined : formulaParamAt(entry, argIndex);
   if (param === undefined) {
     return null;
   }
@@ -623,6 +978,17 @@ function functionCompletion(
  */
 const KEYWORD_LABELS = ["and", "or", "not", "true", "false"] as const;
 
+/**
+ * Catalog functions whose keyword row already covers them: `and`/`or`/`not`
+ * read as operators, so offering `and(…)` beside the `and` keyword is a
+ * duplicate. The panel's reference list still documents the function forms.
+ */
+const KEYWORD_FUNCTION_NAMES: ReadonlySet<string> = new Set([
+  "and",
+  "or",
+  "not",
+]);
+
 function keywordCompletions(expected: FormulaType | null): Completion[] {
   return KEYWORD_LABELS.map((label) => ({
     boost: KEYWORD_BASE_BOOST + typeMatchBoost(BOOLEAN_TYPE, expected),
@@ -674,7 +1040,9 @@ function formulaCompletionSource(
   );
   if (!propertyOnly) {
     for (const entry of FORMULA_FUNCTION_CATALOG) {
-      options.push(functionCompletion(entry, expected));
+      if (!KEYWORD_FUNCTION_NAMES.has(entry.name)) {
+        options.push(functionCompletion(entry, expected));
+      }
     }
     options.push(...keywordCompletions(expected));
   }
@@ -786,6 +1154,38 @@ const formulaEditorTheme = EditorView.theme({
     maxWidth: "16rem",
     padding: "6px 8px",
   },
+  // Squiggles: destructive wavy underline; a diagnosed atomic chip gets a
+  // destructive ring instead (an underline under a bg-filled chip is mud).
+  ".cm-formula-diagnostic": {
+    textDecoration: "underline wavy var(--color-destructive)",
+    textDecorationSkipInk: "none",
+  },
+  ".cm-formula-chip-diagnosed": {
+    boxShadow: "inset 0 0 0 1px var(--color-destructive)",
+  },
+  // Argument info card (origin-anchored tooltip; wrapper look comes from the
+  // shared .cm-tooltip popover rules above).
+  ".cm-formula-infocard": {
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "var(--font-sans)",
+    fontSize: "0.75rem",
+    gap: "2px",
+    maxWidth: "18rem",
+    padding: "6px 8px",
+  },
+  ".cm-formula-infocard-signature": {
+    color: "var(--color-foreground)",
+    fontFamily: "var(--font-mono)",
+  },
+  ".cm-formula-infocard-active": {
+    fontWeight: "600",
+    textDecoration: "underline",
+    textUnderlineOffset: "2px",
+  },
+  ".cm-formula-infocard-description": {
+    color: "var(--color-muted-foreground)",
+  },
   ".cm-formula-comment": {
     color: "var(--color-muted-foreground)",
     fontStyle: "italic",
@@ -809,6 +1209,7 @@ interface EditorCallbacks {
 export function FormulaCodeEditor({
   ariaLabel,
   autoFocus = false,
+  checkContext,
   editorRef,
   fields,
   onChange,
@@ -827,6 +1228,8 @@ export function FormulaCodeEditor({
   const valueRef = useRef(value);
   /** Latest schema, read at (re)create time to seed the chip state field. */
   const fieldsRef = useRef(fields);
+  /** Latest check context, read at (re)create time to seed its state field. */
+  const checkContextRef = useRef(checkContext);
 
   useEffect(() => {
     callbacksRef.current = { onChange, onSubmit };
@@ -837,6 +1240,12 @@ export function FormulaCodeEditor({
     fieldsRef.current = fields;
     viewRef.current?.dispatch({ effects: setChipFields.of(fields) });
   }, [fields]);
+
+  // Push check-context changes in so squiggles track the live schema.
+  useEffect(() => {
+    checkContextRef.current = checkContext;
+    viewRef.current?.dispatch({ effects: setCheckContext.of(checkContext) });
+  }, [checkContext]);
 
   // Create the view. ariaLabel/placeholder are mount-time settings (constant
   // in practice); changing one recreates the view rather than going stale.
@@ -905,8 +1314,12 @@ export function FormulaCodeEditor({
           }),
           formulaHighlighter,
           chipFields.init(() => fieldsRef.current),
+          checkContextState.init(() => checkContextRef.current),
           propertyChips,
           typedReferenceCanonicalizer,
+          diagnosticsField,
+          diagnosticsScheduler,
+          functionInfoCard,
           formulaEditorTheme,
         ],
       }),

@@ -1,3 +1,6 @@
+import type { FormulaPreviewRow } from "@/components/database/formula-editor-panel.tsx";
+import { cellToPlainText } from "@/lib/databases/cell-values.ts";
+import { compareManualOrder } from "@/lib/databases/row-sort.ts";
 import type {
   DatabaseAggregateFn,
   DatabaseDateFormat,
@@ -5,6 +8,7 @@ import type {
   DatabaseFieldType,
   DatabaseNumberFormat,
   DatabaseSelectOption,
+  LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 
@@ -382,4 +386,32 @@ export function showsEditPropertySubmenu(
     return hasDisplayOnlyPropertyEditor(field);
   }
   return hasPropertyEditorMenu(field);
+}
+
+/** Rows offered to the formula panel's preview picker (keeps it compact). */
+export const FORMULA_PREVIEW_ROW_LIMIT = 20;
+
+/**
+ * The first rows (manual/table order, capped) as formula preview-picker
+ * entries, labeled by their primary-field text with a "Row N" fallback for
+ * blank titles.
+ */
+export function formulaPreviewRows(
+  rows: readonly LocalDatabaseRow[],
+  primaryField: DatabaseField | undefined
+): FormulaPreviewRow[] {
+  return [...rows]
+    .sort(compareManualOrder)
+    .slice(0, FORMULA_PREVIEW_ROW_LIMIT)
+    .map((row, index) => {
+      const title =
+        primaryField === undefined
+          ? ""
+          : cellToPlainText(primaryField, row.values[primaryField.id]).trim();
+      return {
+        id: row.id,
+        label: title === "" ? `Row ${index + 1}` : title,
+        values: row.values,
+      };
+    });
 }

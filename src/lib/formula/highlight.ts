@@ -307,8 +307,16 @@ export function formulaDisplayOffset(
 export interface FormulaCallSite {
   /** 0-based index of the argument the position falls in. */
   argIndex: number;
+  /**
+   * The call is dot-chained method syntax (`expr.fn(…)`), where the receiver
+   * parses as the first argument (`FormulaCallNode.method`) — so the catalog
+   * parameter governing `argIndex` is `formulaParamAt(entry, argIndex + 1)`.
+   */
+  method: boolean;
   /** The callee identifier as written. */
   name: string;
+  /** 0-based source index of the callee identifier's first character. */
+  position: number;
 }
 
 type CallFrame =
@@ -320,12 +328,21 @@ type CallFrame =
 function pushCallFrame(
   stack: CallFrame[],
   value: FormulaPunct,
-  previous: FormulaToken | undefined
+  callee: FormulaToken | undefined,
+  beforeCallee: FormulaToken | undefined
 ): void {
   if (value === "(") {
     stack.push(
-      previous?.type === "identifier"
-        ? { kind: "call", site: { argIndex: 0, name: previous.value } }
+      callee?.type === "identifier"
+        ? {
+            kind: "call",
+            site: {
+              argIndex: 0,
+              method: isPunct(beforeCallee, "."),
+              name: callee.value,
+              position: callee.position,
+            },
+          }
         : { kind: "group" }
     );
   } else if (value === "[") {
@@ -348,8 +365,10 @@ function pushCallFrame(
  * where completion actually fires; unlexable input scans its lexable prefix
  * (same policy as {@link formulaPropIdSpans}). Grouping parens are
  * transparent (the enclosing call still governs the type); a list literal is
- * a hard boundary (its elements aren't the call's argument). `null` at the
- * top level or when no call is open.
+ * a hard boundary (its elements aren't the call's argument). A `.` before
+ * the callee marks the site as a method call (the receiver occupies the
+ * signature's first parameter). `null` at the top level or when no call is
+ * open.
  */
 export function formulaEnclosingCallAt(
   source: string,
@@ -357,13 +376,15 @@ export function formulaEnclosingCallAt(
 ): FormulaCallSite | null {
   const stack: CallFrame[] = [];
   let previous: FormulaToken | undefined;
+  let beforePrevious: FormulaToken | undefined;
   for (const token of lexablePrefixTokens(source)) {
     if (token.type === "eof" || token.position >= position) {
       break;
     }
     if (token.type === "punct") {
-      pushCallFrame(stack, token.value, previous);
+      pushCallFrame(stack, token.value, previous, beforePrevious);
     }
+    beforePrevious = previous;
     previous = token;
   }
   for (let index = stack.length - 1; index >= 0; index -= 1) {

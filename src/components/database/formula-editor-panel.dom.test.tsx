@@ -31,6 +31,10 @@ const FIELDS: DatabaseField[] = [
 
 const FIRST_ROW_VALUES = { "f-price": 10, "f-qty": 4 };
 
+const PREVIEW_ROWS = [
+  { id: "row-1", label: "First row", values: FIRST_ROW_VALUES },
+];
+
 const PARSE_ERROR_RE = /Unexpected end of expression/;
 
 // Status-row position expectations (display coordinates, not canonical).
@@ -67,8 +71,8 @@ function renderPanel(onSave = vi.fn(), expression = "") {
     <FormulaEditorPanel
       expression={expression}
       fields={FIELDS}
-      firstRowValues={FIRST_ROW_VALUES}
       onSave={onSave}
+      previewRows={PREVIEW_ROWS}
     />
   );
   return onSave;
@@ -304,8 +308,8 @@ describe("FormulaEditorPanel", () => {
         <FormulaEditorPanel
           expression={expression}
           fields={fields}
-          firstRowValues={FIRST_ROW_VALUES}
           onSave={vi.fn()}
+          previewRows={PREVIEW_ROWS}
         />
       );
       const { rerender } = render(panelWith(FIELDS));

@@ -1658,17 +1658,23 @@ export const VOLATILE_FORMULA_FUNCTION_NAMES: ReadonlySet<string> = new Set(
 );
 
 /**
+ * Display label for one signature parameter: optional params suffix `?`, a
+ * variadic tail renders as `…`. Shared by {@link formulaFunctionSignature}
+ * and the editor's argument info card so the two can't drift.
+ */
+export function formulaParamLabel(param: FormulaParamSpec): string {
+  if (param.variadic) {
+    return "…";
+  }
+  return param.optional ? `${param.name}?` : param.name;
+}
+
+/**
  * Human signature for a catalog entry, derived from its typed params —
  * `round(value, digits?)`, `min(values, …)`, `if(condition, then, else?)`.
- * Optional params suffix `?`; a variadic tail renders as `…`.
  */
 export function formulaFunctionSignature(entry: FormulaFunctionEntry): string {
-  const parts = entry.params.map((param) => {
-    if (param.variadic) {
-      return "…";
-    }
-    return param.optional ? `${param.name}?` : param.name;
-  });
+  const parts = entry.params.map(formulaParamLabel);
   return `${entry.name}(${parts.join(", ")})`;
 }
 

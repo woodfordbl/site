@@ -41,6 +41,7 @@ import {
   dateFormatPatch,
   expressionPatch,
   fieldTypeChangePatch,
+  formulaPreviewRows,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
   logicalColumnOrder,
@@ -112,7 +113,6 @@ import {
 } from "@/lib/databases/field-defs.ts";
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
-import { compareManualOrder } from "@/lib/databases/row-sort.ts";
 import { canonicalizeExpression } from "@/lib/formula/ref-rewrite.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
@@ -423,13 +423,14 @@ interface FormulaExpressionEditorProps {
 
 /**
  * Formula builder inside the Edit property submenu: threads the live schema
- * and the FIRST row's values (manual/table order) into the shared
- * `FormulaEditorPanel` so it can render the Properties section and the live
- * preview. Mounted only while the submenu is open, so the live queries here
- * cost nothing for non-formula columns. The panel emits field-id canonical
- * text; Save writes it only when it differs from the stored expression's
- * canonical form (evaluation is read-time — the overlay recomputes on
- * write).
+ * and the first rows (manual/table order, capped at
+ * `FORMULA_PREVIEW_ROW_LIMIT`, labeled by primary-field text) into the
+ * shared `FormulaEditorPanel` so it can render the Properties section and
+ * the live preview with its row picker. Mounted only while the submenu is
+ * open, so the live queries here cost nothing for non-formula columns. The
+ * panel emits field-id canonical text; Save writes it only when it differs
+ * from the stored expression's canonical form (evaluation is read-time —
+ * the overlay recomputes on write).
  */
 function FormulaExpressionEditor({
   databaseId,
@@ -439,16 +440,20 @@ function FormulaExpressionEditor({
   const database = useDatabase(databaseId);
   const rows = useDatabaseRows(databaseId);
   const fields = database?.fields ?? [];
-  const firstRow = useMemo(
-    () => (rows.length > 0 ? [...rows].sort(compareManualOrder)[0] : null),
-    [rows]
+  const primaryFieldId = database?.primaryFieldId;
+  const previewRows = useMemo(
+    () =>
+      formulaPreviewRows(
+        rows,
+        database?.fields.find((candidate) => candidate.id === primaryFieldId)
+      ),
+    [rows, database?.fields, primaryFieldId]
   );
 
   return (
     <FormulaEditorPanel
       expression={field.expression}
       fields={fields}
-      firstRowValues={firstRow?.values ?? null}
       onSave={(expression) => {
         if (
           expression !== canonicalizeExpression(field.expression, fields).text
@@ -461,6 +466,7 @@ function FormulaExpressionEditor({
         }
         onSaved();
       }}
+      previewRows={previewRows}
     />
   );
 }
