@@ -36,6 +36,7 @@ import {
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { findDatabaseHostPageId } from "@/lib/databases/resolve-database-host-page.ts";
+import { useShippedDatabasesSettled } from "@/lib/databases/shipped-databases-settled.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
@@ -62,11 +63,14 @@ export function DatabasePage({ databaseId }: DatabasePageProps): ReactNode {
         .where(({ database }) => eq(database.id, databaseId)),
     [databaseId]
   );
+  const shippedSettled = useShippedDatabasesSettled();
   const database = databases[0];
 
   // Neutral shell while the local collection hydrates — same "no content
-  // flash" contract as the `/db/$databaseId/$rowId` row route.
-  if (!isReady) {
+  // flash" contract as the `/db/$databaseId/$rowId` row route. A missing
+  // database also waits for the shipped-content seeder: a deep link to a
+  // shipped database's page must not flash "not found" during the boot fetch.
+  if (!(isReady && (database || shippedSettled))) {
     return <SiteShell>{null}</SiteShell>;
   }
 

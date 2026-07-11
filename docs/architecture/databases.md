@@ -35,6 +35,12 @@ The rows collection carries a **BTree index on `databaseId`** (created in
 [`local-collections.ts`](../../src/db/collections/local-collections.ts)); `createIndex`
 requires an explicit `indexType` — omitting it throws at module init.
 
+Shipped-content bookkeeping: a seeded database carries `serverBaselineHash` on its
+definition row (the shipped document's content hash — pages' baseline pattern), and
+deleted shipped databases are remembered in the `site-shipped-db-tombstones`
+localStorage key ([`shipped-database-tombstones.ts`](../../src/lib/databases/shipped-database-tombstones.ts))
+so the seeder never resurrects them. See [Shipped content](#shipped-content).
+
 ## Mutations and reads
 
 All writes are single explicit-commit transactions
@@ -338,11 +344,44 @@ the next write (`updateDatabaseView`/`removeDatabaseField` JSON-flatten via `toP
 before rebuilding `views`; regression-tested with proxied drafts in
 [`database-collection-ops.test.ts`](../../src/db/queries/database-collection-ops.test.ts)).
 
+## Shipped content
+
+Databases ship as repo JSON — `content/databases/{databaseId}.json`
+([`database-document.ts`](../../src/lib/schemas/database-document.ts): definition minus
+local timestamps/baseline, rows minus `databaseId`/`pageId`/`externalId`/timestamps) —
+written by the dev **Save all** flow ([`exportDatabaseDocument`](../../src/lib/content/database-export.ts),
+[`saveDatabase`](../../src/lib/content/save-database.ts); connector-synced rows are
+excluded, and databases whose content hash already matches their baseline are skipped).
+Unlike pages, save-all keeps the local copy (every database surface reads the local
+collections) and just stamps `serverBaselineHash`.
+
+Because reads are local-only, shipped databases **seed eagerly at boot**:
+[`SeedShippedDatabasesEffect`](../../src/components/pages/seed-shipped-databases-effect.tsx)
+awaits both collections' `preload()`, fetches [`loadShippedDatabases`](../../src/lib/content/load-databases.ts)
+(bundled via the same `import.meta.glob` pattern as pages —
+[`database-store.server.ts`](../../src/lib/content/database-store.server.ts)), and runs
+[`seedShippedDatabases`](../../src/lib/databases/seed-shipped-databases.ts). Per database
+([`resolveShippedDatabaseAction`](../../src/lib/databases/resolve-shipped-database-action.ts)):
+no local copy → insert; unedited copy (current export hash still equals
+`serverBaselineHash`) + changed shipped content → replace
+([`replaceShippedDatabase`](../../src/db/queries/database-collection-ops.ts), one
+transaction, bypasses the delete-op tombstone); edited copy → local wins (no database
+merge yet); tombstoned → never resurrected. A shipped **connector** database seeds its
+definition (`source` config) and the sync engine adopts it and populates rows
+client-side. The settled signal
+([`shipped-databases-settled.ts`](../../src/lib/databases/shipped-databases-settled.ts))
+tells database blocks and `/db` deep links when the seed pass finished, so a first
+visit never flashes "not found" / "deleted" for a database that is about to appear.
+
 ## Block integration
 
 `database` is a **leaf** block (`inline-custom` strategy, media/embed capabilities). The
 edit wrapper only forwards structural keys when the event target is the wrapper itself —
-keystrokes inside grid cells must never delete the block. An unlinked block shows the
+keystrokes inside grid cells must never delete the block. A linked block mounts
+`DatabaseTableView` behind [`useDatabaseBlockReady`](../../src/components/blocks/types/database/database-block-gate.tsx)
+(a "Loading database…" placeholder until client + shipped-seed settled): the table's
+`useLiveQuery` reads have no server snapshot, so mounting it during SSR would abort the
+whole page render — and shipped pages DO server-render database blocks now. An unlinked block shows the
 shared placeholder trigger opening the creation popover (New / Linked / Synced —
 see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirroring the
 media/embed pickers. Deleting a database block does **not**
@@ -396,7 +435,14 @@ in-shell empty state with a home link.
 | Per-host child row | [`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx) | One synthetic row per `database` block on a page (under that page in the tree) |
 | Workspace **Databases** section | [`databases-list.tsx`](../../src/components/pages/databases-list.tsx) | Collapsible section below **Pages** in [`page-sidebar.tsx`](../../src/components/pages/page-sidebar.tsx); every database alphabetically; gated by `useHasDatabases` |
 
-Both are client-only (local collections paint nothing during SSR). Each row is a shared
+Both are client-only (local collections paint nothing during SSR) and read the
+collections through SSR-safe `useSyncExternalStore` snapshot hooks
+([`use-local-databases.ts`](../../src/hooks/use-local-databases.ts) plus the
+incremental database-block snapshot in `page-list-database-rows.tsx`) — **never
+`useLiveQuery`**: these components render on every SSR'd page, and `useLiveQuery`
+subscribes without a server snapshot, which makes React abort the entire server
+render ("Missing getServerSnapshot") and silently revert the whole site to a
+client-rendered empty shell (no crawler-visible content). Each row is a shared
 [`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx): click opens
 the standalone page; right-click and the row ⋯ menu offer Rename, Change icon, and
 Delete (with confirmation). No drag or chevron — the database entity is the navigation

@@ -5,6 +5,7 @@ import type {
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import type {
   DatabaseField,
+  JsonValue,
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
@@ -53,7 +54,7 @@ export function connectorFieldToDatabaseField(
  */
 export function buildSyncedDatabaseSeed(
   connector: ConnectorDefinition,
-  parsedConfig: Record<string, unknown>,
+  parsedConfig: Record<string, JsonValue>,
   name?: string
 ): { database: LocalDatabase; rows: LocalDatabaseRow[] } {
   const now = new Date().toISOString();

@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import { assertAuthorSaveAllowed } from "@/lib/content/author-save-guard.ts";
+
 const mediaAssetSchema = z.object({
   assetId: z.string(),
   base64: z.string(),
@@ -14,12 +16,6 @@ const mediaAssetSchema = z.object({
 const saveMediaAssetsInputSchema = z.object({
   assets: z.array(mediaAssetSchema),
 });
-
-function assertAuthorSaveAllowed() {
-  if (!import.meta.env.DEV) {
-    throw new Error("Author save is only available in development");
-  }
-}
 
 export const saveMediaAssets = createServerFn({ method: "POST" })
   .validator((data: unknown) => saveMediaAssetsInputSchema.parse(data))

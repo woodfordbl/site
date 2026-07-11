@@ -7,6 +7,7 @@ import {
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -159,6 +160,37 @@ export function createDatabaseWithDefaults(seed: DatabaseSeed): void {
   const tx = createDatabaseTransaction();
 
   tx.mutate(() => {
+    localDatabasesCollection.insert(seed.database);
+    for (const row of seed.rows) {
+      localDatabaseRowsCollection.insert(row);
+    }
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Shipped-content deploy update: swap an UNEDITED seeded database for the new
+ * shipped version in one transaction (definition + full row set). Never call
+ * this for user-edited copies — the seeder's action resolver guards that.
+ * Bypasses `deleteDatabase` deliberately: this is not a user deletion, so no
+ * shipped tombstone is recorded and field history is kept.
+ */
+export function replaceShippedDatabase(seed: DatabaseSeed): void {
+  const existing = localDatabasesCollection.get(seed.database.id);
+  const staleRowIds = localDatabaseRowsCollection.toArray
+    .filter((row) => row.databaseId === seed.database.id)
+    .map((row) => row.id);
+
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    if (existing) {
+      localDatabasesCollection.delete(seed.database.id);
+    }
+    for (const rowId of staleRowIds) {
+      localDatabaseRowsCollection.delete(rowId);
+    }
     localDatabasesCollection.insert(seed.database);
     for (const row of seed.rows) {
       localDatabaseRowsCollection.insert(row);
@@ -958,8 +990,10 @@ export function updateDatabaseSource(
       // `toPlain` drops keys whose value is undefined, so the explicit
       // "clear the refresh override" case rebuilds the source without the
       // key via rest-destructuring (the linter bans `delete`).
+      // The draft's deep-writable mapping degrades the recursive JsonValue
+      // config to `unknown`; the runtime shape is the validated source.
       const merged: ConnectorDatabaseSource = {
-        ...toPlain(draft.source),
+        ...(toPlain(draft.source) as ConnectorDatabaseSource),
         ...toPlain(patch),
         kind: "connector",
       };
@@ -1023,6 +1057,12 @@ export function deleteDatabase(databaseId: string): void {
 
   if (!database && rowIds.length === 0) {
     return;
+  }
+
+  // A seeded shipped database must stay deleted — without a tombstone the
+  // shipped-content seeder would resurrect it at the next boot.
+  if (database?.serverBaselineHash != null) {
+    recordShippedDatabaseTombstone(databaseId);
   }
 
   const tx = createDatabaseTransaction();

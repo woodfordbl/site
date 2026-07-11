@@ -85,4 +85,29 @@ describe("thinSnapshotDescriptors", () => {
       .map((d) => Math.floor(Date.parse(d.timestamp) / HOUR_MS));
     expect(new Set(hourBuckets).size).toBe(hourBuckets.length);
   });
+
+  it("keeps a pinned checkpoint that shares its window with a newer capture", () => {
+    // Pre-merge escape hatch followed seconds later by the post-merge capture:
+    // both land in the same 10-minute window, and the pinned one must survive.
+    const pinned = { ...makeDescriptor(NOW - 30_000, 0), pinned: true };
+    const postMerge = makeDescriptor(NOW - 10_000, 1);
+
+    const { keep, drop } = thinSnapshotDescriptors([pinned, postMerge], NOW);
+
+    expect(keep).toEqual([pinned, postMerge]);
+    expect(drop).toEqual([]);
+  });
+
+  it("still drops pinned checkpoints through the hard cap", () => {
+    const descriptors = denseHistory(1).map((descriptor) => ({
+      ...descriptor,
+      pinned: true,
+    }));
+
+    const { keep } = thinSnapshotDescriptors(descriptors, NOW);
+
+    expect(keep.length).toBeLessThanOrEqual(MAX_SNAPSHOTS_PER_PAGE);
+    // Recency bias holds: the newest checkpoint always survives.
+    expect(keep.at(-1)?.id).toBe(descriptors.at(-1)?.id);
+  });
 });

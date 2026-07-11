@@ -1,6 +1,10 @@
 import { IconDatabase } from "@tabler/icons-react";
 import { useCallback, useRef, useState } from "react";
 
+import {
+  DatabaseBlockLoading,
+  useDatabaseBlockReady,
+} from "@/components/blocks/types/database/database-block-gate.tsx";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { DatabaseCreatePanel } from "@/components/database/database-create-panel.tsx";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
@@ -41,6 +45,9 @@ export function DatabaseEdit({
   const [pickerOpen, setPickerOpen] = useState(false);
   const hasDatabase = props.databaseId !== "";
   const canvas = useCanvasEditorContext();
+  // Gate mounting the table view: SSR safety (useLiveQuery has no server
+  // snapshot) + the shipped-database seed window on first visit.
+  const tableReady = useDatabaseBlockReady();
 
   // Deleting the database (or opening a block whose database was deleted
   // elsewhere) removes this hosting block rather than leaving a "not found"
@@ -133,16 +140,20 @@ export function DatabaseEdit({
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
       tabIndex={0}
     >
-      <DatabaseTableView
-        databaseId={props.databaseId}
-        hideTitle={props.hideTitle}
-        mode="edit"
-        onDeleteDatabase={removeSelf}
-        onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
-        onRemoveBlock={removeSelf}
-        onViewIdChange={(viewId) => onChange({ ...props, viewId })}
-        viewId={props.viewId}
-      />
+      {tableReady ? (
+        <DatabaseTableView
+          databaseId={props.databaseId}
+          hideTitle={props.hideTitle}
+          mode="edit"
+          onDeleteDatabase={removeSelf}
+          onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+          onRemoveBlock={removeSelf}
+          onViewIdChange={(viewId) => onChange({ ...props, viewId })}
+          viewId={props.viewId}
+        />
+      ) : (
+        <DatabaseBlockLoading />
+      )}
     </div>
   );
 }

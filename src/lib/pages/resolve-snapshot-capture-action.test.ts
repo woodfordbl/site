@@ -89,4 +89,30 @@ describe("resolveSnapshotCaptureAction", () => {
     );
     expect(action.kind).toBe("skip");
   });
+
+  it("creates instead of coalescing over a pinned same-bucket checkpoint", () => {
+    // A pre-merge escape hatch must survive the debounced post-merge capture
+    // that lands in the same 10-minute bucket.
+    const existing = descriptor({ pinned: true });
+    const action = resolveSnapshotCaptureAction(
+      indexOf([existing]),
+      candidate({ contentHash: "cccc" }),
+      "new-id"
+    );
+    expect(action.kind).toBe("create");
+    if (action.kind === "create") {
+      expect(action.descriptor.id).toBe("new-id");
+      expect(action.descriptor.pinned).toBeUndefined();
+    }
+  });
+
+  it("still skips an unchanged capture over a pinned checkpoint", () => {
+    const existing = descriptor({ pinned: true });
+    const action = resolveSnapshotCaptureAction(
+      indexOf([existing]),
+      candidate({ contentHash: "aaaa", metadataHash: "bbbb" }),
+      "new-id"
+    );
+    expect(action.kind).toBe("skip");
+  });
 });
