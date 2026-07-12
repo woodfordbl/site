@@ -95,7 +95,7 @@
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
   --selection: var(--muted);
-  --selection-primary: oklch(0.9 0.1 34);
+  --selection-primary: var(--muted-foreground);
   --selection-foreground: var(--foreground);
   --chart-1: oklch(0.5963 0.2191 263.82);
   --chart-2: oklch(0.8489 0.1353 76.8);
@@ -154,7 +154,7 @@
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
   --selection: oklch(0.35 0.014 85);
-  --selection-primary: oklch(0.55 0.16 34);
+  --selection-primary: var(--muted-foreground);
   --selection-foreground: var(--foreground);
   --chart-1: oklch(0.65 0.2 263.82);
   --chart-2: oklch(0.82 0.14 76.8);
@@ -432,8 +432,8 @@
       opacity: 1;
     }
 
-    /* Touch has no hover to surface the page-row expand chevron (.swap-reveal),
-       so rest on it instead of the icon (.swap-conceal): the chevron is the only
+    /* Touch has no hover to surface the page-row expand caret (.swap-reveal),
+       so rest on it instead of the icon (.swap-conceal): the caret is the only
        way to expand/collapse a row, so it must stay visible. Pointer events for
        the trigger are enabled with the `hover-none:` variant in page-list-item. */
     :where(.swap-reveal) {

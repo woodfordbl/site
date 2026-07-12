@@ -4,7 +4,7 @@ import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx
 import { RowPageTitleSection } from "@/components/database/row-page/database-row-page.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
-  RowPropertiesPlacementMenu,
+  RowPropertiesOptionsMenu,
   RowPropertiesRailLayout,
   useRowPropertiesRail,
 } from "@/components/database/row-page/row-properties-rail.tsx";
@@ -71,7 +71,7 @@ export function RowTemplatePreviewBody({
             displayTitle={displayTitle}
             icon={template?.icon}
             propertiesExtra={
-              <RowPropertiesPlacementMenu
+              <RowPropertiesOptionsMenu
                 className="hover-reveal"
                 database={database}
               />
@@ -101,6 +101,7 @@ export function RowTemplatePreviewBody({
           </div>
           {rail.panelMode ? (
             <RowPropertiesRailLayout
+              database={database}
               panel={<RowPropertiesPanel database={database} row={row} />}
             >
               {canvasRegion}

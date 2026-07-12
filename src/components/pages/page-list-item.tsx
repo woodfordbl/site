@@ -1,5 +1,5 @@
 import {
-  IconChevronRight,
+  IconCaretRightFilled,
   IconCopy,
   IconCopyOff,
   IconLayoutGrid,
@@ -254,9 +254,9 @@ function PageListRowLink({
               event.stopPropagation();
             }}
           >
-            <IconChevronRight
+            <IconCaretRightFilled
               className={cn(
-                "size-3.5 transition-transform duration-100 ease-out",
+                "size-3 shrink-0 text-muted-foreground transition-transform duration-100 ease-out",
                 isExpanded && "rotate-90"
               )}
             />

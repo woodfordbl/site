@@ -328,6 +328,22 @@ describe("database collection ops", () => {
     expect(drafts[1]?.rowPropertiesPlacement).toBeUndefined();
   });
 
+  it("setDatabaseRowPropertiesVisibleFieldIds stores and clears the list", async () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowPropertiesVisibleFieldIds(databaseId, ["f-extra"]);
+    await flushAsync();
+
+    expect(drafts[0]?.rowPropertiesVisibleFieldIds).toEqual(["f-extra"]);
+
+    ops.setDatabaseRowPropertiesVisibleFieldIds(databaseId, undefined);
+    await flushAsync();
+
+    expect(drafts[1]?.rowPropertiesVisibleFieldIds).toBeUndefined();
+  });
+
   it("insertDatabaseRow after a row takes the midpoint to its successor", async () => {
     mocks.rowState = [
       makeRow("row-a", { order: 1000 }),
@@ -426,7 +442,10 @@ describe("database collection ops", () => {
   });
 
   it("removeDatabaseField strips the field from rows and every view reference", async () => {
-    const database = makeDatabase();
+    const database = {
+      ...makeDatabase(),
+      rowPropertiesVisibleFieldIds: ["f-title", "f-extra"],
+    };
     mocks.databaseGet.mockReturnValue(database);
     mocks.rowState = [
       makeRow("row-1", { values: { "f-extra": 7, "f-title": "keep" } }),
@@ -444,6 +463,7 @@ describe("database collection ops", () => {
 
     const draft = databaseDrafts[0];
     expect(draft?.fields.map((field) => field.id)).toEqual(["f-title"]);
+    expect(draft?.rowPropertiesVisibleFieldIds).toEqual(["f-title"]);
 
     const view = draft?.views[0];
     expect(view?.visibleFieldIds).toEqual(["f-title"]);

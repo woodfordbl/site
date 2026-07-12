@@ -7,7 +7,7 @@ import {
   PREVIEW_ROW_LIMIT,
 } from "@/components/database/row-page/database-template-editor-sidebar.tsx";
 import {
-  RowPropertiesPlacementMenu,
+  RowPropertiesOptionsMenu,
   RowPropertiesRailLayout,
   useRowPropertiesRail,
 } from "@/components/database/row-page/row-properties-rail.tsx";
@@ -139,6 +139,7 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
         rail.panelMode
           ? (canvasRegion) => (
               <RowPropertiesRailLayout
+                database={database}
                 panel={<RowTemplateDefaultsList database={database} />}
               >
                 {canvasRegion}
@@ -153,7 +154,7 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
         <RowTemplateTitleSection
           database={database}
           propertiesExtra={
-            <RowPropertiesPlacementMenu
+            <RowPropertiesOptionsMenu
               className="hover-reveal"
               database={database}
             />

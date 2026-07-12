@@ -784,6 +784,12 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
         const { [fieldId]: _dropped, ...rest } = draft.rowDefaults;
         draft.rowDefaults = Object.keys(rest).length > 0 ? rest : undefined;
       }
+      if (draft.rowPropertiesVisibleFieldIds) {
+        const next = draft.rowPropertiesVisibleFieldIds.filter(
+          (id) => id !== fieldId
+        );
+        draft.rowPropertiesVisibleFieldIds = next.length > 0 ? next : undefined;
+      }
       draft.updatedAt = timestamp;
     });
 
@@ -961,6 +967,33 @@ export function setDatabaseRowPropertiesPlacement(
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.rowPropertiesPlacement =
         placement === "panel" ? undefined : placement;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Set which fields appear on row-page properties panels. Independent of
+ * per-view table `visibleFieldIds`. Pass `undefined` (or omit an explicit
+ * list that still covers every non-primary field) to clear and show all;
+ * an empty array hides every non-primary field. Bumps `updatedAt`.
+ */
+export function setDatabaseRowPropertiesVisibleFieldIds(
+  databaseId: string,
+  visibleFieldIds: readonly string[] | undefined
+): void {
+  if (!localDatabasesCollection.get(databaseId)) {
+    return;
+  }
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.rowPropertiesVisibleFieldIds =
+        visibleFieldIds === undefined ? undefined : [...visibleFieldIds];
       draft.updatedAt = timestamp;
     });
   });

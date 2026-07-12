@@ -20,7 +20,7 @@ import {
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
-  RowPropertiesPlacementMenu,
+  RowPropertiesOptionsMenu,
   RowPropertiesRailLayout,
   useRowPropertiesRail,
 } from "@/components/database/row-page/row-properties-rail.tsx";
@@ -34,7 +34,7 @@ import {
   usePageSidebarChrome,
 } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
-import { Button } from "@/components/ui/button.tsx";
+import { Button, buttonVariants } from "@/components/ui/button.tsx";
 import {
   Empty,
   EmptyContent,
@@ -277,7 +277,7 @@ function RowPageHeader({
           </span>
         ))}
         <Link
-          className="flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/60"
+          className={buttonVariants({ variant: "ghost" })}
           params={{ databaseId: database.id }}
           to="/db/$databaseId"
         >
@@ -439,7 +439,7 @@ function RowPageBody({
             displayTitle={displayTitle}
             icon={template?.icon}
             propertiesExtra={
-              <RowPropertiesPlacementMenu
+              <RowPropertiesOptionsMenu
                 className="hover-reveal"
                 database={database}
               />
@@ -463,6 +463,7 @@ function RowPageBody({
           <RowPageHeader database={database} rowTitle={displayTitle} />
           {rail.panelMode ? (
             <RowPropertiesRailLayout
+              database={database}
               panel={<RowPropertiesPanel database={database} row={row} />}
             >
               {canvasRegion}
@@ -497,7 +498,7 @@ export function RowPageTitleSection({
   displayTitle: string;
   /** Template-inherited page icon; falls back to the default document glyph. */
   icon?: string;
-  /** Trailing affordance in the properties block (placement menu). */
+  /** Trailing affordance in the properties block (options ⋯ menu). */
   propertiesExtra?: ReactNode;
   row: LocalDatabaseRow;
   /** False while the properties rail owns the panel (title only). */

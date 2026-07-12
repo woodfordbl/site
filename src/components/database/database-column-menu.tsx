@@ -9,8 +9,6 @@ import {
   IconFileText,
   IconLayoutGrid,
   IconMinus,
-  IconPhoto,
-  IconPhotoOff,
   IconPinned,
   IconPinnedOff,
   IconPlus,
@@ -216,15 +214,20 @@ interface ColumnRenameInputProps {
    */
   onCommit?: () => void;
   onDraftNameChange: (name: string) => void;
+  /** Opens the field icon picker (page-breadcrumb pattern: icon button beside the name). */
+  onIconClick: () => void;
+  onIconIntent?: () => void;
   onSubmit: () => void;
 }
 
-/** Autofocused rename input at the top of the menu, with the field's icon. */
+/** Autofocused rename row: icon button + name input (same layout as page crumb editors). */
 function ColumnRenameInput({
   draftName,
   field,
   onCommit,
   onDraftNameChange,
+  onIconClick,
+  onIconIntent,
   onSubmit,
 }: ColumnRenameInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -244,13 +247,19 @@ function ColumnRenameInput({
   const FieldIcon = resolveFieldIcon(field);
 
   return (
-    <div className="p-1 pb-2">
-      <InputGroup className="h-8 pointer-coarse:h-10">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <FieldIcon className="stroke-[1.5px]" />
-          </InputGroupText>
-        </InputGroupAddon>
+    <div className="flex items-center gap-1.5 p-1 pb-2">
+      <Button
+        aria-label={`Change icon for ${field.name}`}
+        className="shrink-0 text-muted-foreground"
+        onClick={onIconClick}
+        onPointerEnter={onIconIntent}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <FieldIcon className="size-4 stroke-[1.5px]" />
+      </Button>
+      <InputGroup className="h-8 pointer-coarse:h-10 min-w-0 flex-1">
         <InputGroupInput
           aria-label="Property name"
           autoComplete="off"
@@ -873,6 +882,12 @@ function CalculateSubmenu({
 }
 
 export interface DatabaseColumnMenuProps {
+  /**
+   * Which actions to show. `"all"` (default) is the table header menu;
+   * `"schema"` keeps rename / type / icon / duplicate / delete only — used
+   * by the row-page properties panel where sort/freeze/wrap/insert don't apply.
+   */
+  actions?: "all" | "schema";
   /** Header cell visual, rendered inside the trigger button. */
   children: ReactNode;
   databaseId: string;
@@ -892,6 +907,7 @@ export interface DatabaseColumnMenuProps {
 
 /** Column header dropdown menu — one per header cell in edit mode. */
 export function DatabaseColumnMenu({
+  actions = "all",
   children,
   databaseId,
   displayFieldIds,
@@ -901,6 +917,7 @@ export function DatabaseColumnMenu({
   triggerClassName,
   view,
 }: DatabaseColumnMenuProps): ReactNode {
+  const showViewActions = actions === "all";
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(field.name);
   // The picker opens anchored to the header cell after the menu closes —
@@ -1047,6 +1064,13 @@ export function DatabaseColumnMenu({
             draftName={draftName}
             field={field}
             onDraftNameChange={setDraftName}
+            onIconClick={() => {
+              handleOpenChange(false);
+              setIconPickerOpen(true);
+            }}
+            onIconIntent={() => {
+              ensurePageIconPickerReady(queryClient);
+            }}
             onSubmit={() => {
               commitRename();
               setOpen(false);
@@ -1074,141 +1098,123 @@ export function DatabaseColumnMenu({
           {synced ? null : (
             <ChangeTypeSubmenu databaseId={databaseId} field={field} />
           )}
-          <DropdownMenuItem
-            onClick={() => {
-              setIconPickerOpen(true);
-            }}
-            onPointerEnter={() => {
-              // Warm picker chunks + catalogs on intent (AGENTS.md pickers).
-              ensurePageIconPickerReady(queryClient);
-            }}
-          >
-            <IconPhoto />
-            Change icon
-          </DropdownMenuItem>
-          {field.icon ? (
-            <DropdownMenuItem
-              onClick={() => {
-                writeIcon(undefined);
-              }}
-            >
-              <IconPhotoOff />
-              Remove icon
-            </DropdownMenuItem>
+          {showViewActions ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  applySort("asc");
+                }}
+              >
+                <IconSortAscending />
+                Sort ascending
+                <ItemCheck
+                  checked={sortEntry?.direction === "asc"}
+                  priority={fieldSortPriority}
+                />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  applySort("desc");
+                }}
+              >
+                <IconSortDescending />
+                Sort descending
+                <ItemCheck
+                  checked={sortEntry?.direction === "desc"}
+                  priority={fieldSortPriority}
+                />
+              </DropdownMenuItem>
+              {isGroupableField(field) ? (
+                <DropdownMenuItem onClick={toggleGroupBy}>
+                  <IconLayoutGrid />
+                  Group by
+                  <ItemCheck checked={isGroupedByField} />
+                </DropdownMenuItem>
+              ) : null}
+              <CalculateSubmenu
+                activeFn={config.calculations?.[field.id]}
+                field={field}
+                onSelect={(fn) => {
+                  patchConfig({
+                    calculations: calculationsWithSelection(
+                      config.calculations,
+                      field.id,
+                      fn
+                    ),
+                  });
+                }}
+              />
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  patchConfig({
+                    pinnedFieldIds: frozenHere ? undefined : freezePrefix,
+                  });
+                }}
+              >
+                {frozenHere ? <IconPinnedOff /> : <IconPinned />}
+                {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isPrimary}
+                onClick={() => {
+                  updateDatabaseView(databaseId, viewId, {
+                    visibleFieldIds: visibleFieldIdsAfterHide(
+                      view.visibleFieldIds,
+                      displayFieldIds,
+                      field.id
+                    ),
+                  });
+                }}
+              >
+                <IconEyeOff />
+                Hide property
+              </DropdownMenuItem>
+              <DropdownMenuSwitchItem
+                checked={config.wrapFieldIds?.includes(field.id) ?? false}
+                onCheckedChange={() => {
+                  patchConfig({
+                    wrapFieldIds: toggledWrapFieldIds(
+                      config.wrapFieldIds,
+                      field.id
+                    ),
+                  });
+                }}
+              >
+                <IconTextWrap />
+                Wrap content
+              </DropdownMenuSwitchItem>
+              {isPrimary ? (
+                <DropdownMenuSwitchItem
+                  checked={config.showPageIcons !== false}
+                  onCheckedChange={(next) => {
+                    patchConfig({ showPageIcons: next });
+                  }}
+                >
+                  <IconFileText />
+                  Show page icon
+                </DropdownMenuSwitchItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  insertField("left");
+                }}
+              >
+                <IconColumnInsertLeft />
+                Insert left
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  insertField("right");
+                }}
+              >
+                <IconColumnInsertRight />
+                Insert right
+              </DropdownMenuItem>
+            </>
           ) : null}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              applySort("asc");
-            }}
-          >
-            <IconSortAscending />
-            Sort ascending
-            <ItemCheck
-              checked={sortEntry?.direction === "asc"}
-              priority={fieldSortPriority}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              applySort("desc");
-            }}
-          >
-            <IconSortDescending />
-            Sort descending
-            <ItemCheck
-              checked={sortEntry?.direction === "desc"}
-              priority={fieldSortPriority}
-            />
-          </DropdownMenuItem>
-          {isGroupableField(field) ? (
-            <DropdownMenuItem onClick={toggleGroupBy}>
-              <IconLayoutGrid />
-              Group by
-              <ItemCheck checked={isGroupedByField} />
-            </DropdownMenuItem>
-          ) : null}
-          <CalculateSubmenu
-            activeFn={config.calculations?.[field.id]}
-            field={field}
-            onSelect={(fn) => {
-              patchConfig({
-                calculations: calculationsWithSelection(
-                  config.calculations,
-                  field.id,
-                  fn
-                ),
-              });
-            }}
-          />
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              patchConfig({
-                pinnedFieldIds: frozenHere ? undefined : freezePrefix,
-              });
-            }}
-          >
-            {frozenHere ? <IconPinnedOff /> : <IconPinned />}
-            {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={isPrimary}
-            onClick={() => {
-              updateDatabaseView(databaseId, viewId, {
-                visibleFieldIds: visibleFieldIdsAfterHide(
-                  view.visibleFieldIds,
-                  displayFieldIds,
-                  field.id
-                ),
-              });
-            }}
-          >
-            <IconEyeOff />
-            Hide property
-          </DropdownMenuItem>
-          <DropdownMenuSwitchItem
-            checked={config.wrapFieldIds?.includes(field.id) ?? false}
-            onCheckedChange={() => {
-              patchConfig({
-                wrapFieldIds: toggledWrapFieldIds(
-                  config.wrapFieldIds,
-                  field.id
-                ),
-              });
-            }}
-          >
-            <IconTextWrap />
-            Wrap content
-          </DropdownMenuSwitchItem>
-          {isPrimary ? (
-            <DropdownMenuSwitchItem
-              checked={config.showPageIcons !== false}
-              onCheckedChange={(next) => {
-                patchConfig({ showPageIcons: next });
-              }}
-            >
-              <IconFileText />
-              Show page icon
-            </DropdownMenuSwitchItem>
-          ) : null}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              insertField("left");
-            }}
-          >
-            <IconColumnInsertLeft />
-            Insert left
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              insertField("right");
-            }}
-          >
-            <IconColumnInsertRight />
-            Insert right
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {

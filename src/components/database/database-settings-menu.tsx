@@ -109,7 +109,6 @@ import type {
   JsonValue,
   LocalDatabase,
 } from "@/lib/schemas/database.ts";
-import { cn } from "@/lib/utils.ts";
 
 /**
  * Database ⋯ settings menu in the title row (edit mode only), following the

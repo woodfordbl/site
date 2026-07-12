@@ -453,6 +453,12 @@ export const localDatabaseSchema = z.object({
    * row-page family (rows, preview, template editor) shares it.
    */
   rowPropertiesPlacement: z.enum(["panel", "top"]).optional(),
+  /**
+   * Which fields appear in the row-page properties panel. Independent of
+   * per-view `visibleFieldIds`. Absent = all non-primary fields; the primary
+   * field is always the page title and never listed here.
+   */
+  rowPropertiesVisibleFieldIds: z.array(z.string()).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   /**
