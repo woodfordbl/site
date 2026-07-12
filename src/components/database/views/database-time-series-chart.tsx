@@ -176,6 +176,37 @@ function makeTimeSeriesTooltipFormatter(
   };
 }
 
+/**
+ * Config-aware legend for the time-series chart (mirrors the categorical one).
+ * Previously hardcoded to "shown for >1 series, bottom", so the legend toggle
+ * and position controls did nothing on time charts.
+ */
+function renderTimeSeriesLegend(
+  chart: ChartViewConfig,
+  seriesCount: number
+): ReactNode {
+  const show = chart.showLegend ?? seriesCount > 1;
+  if (!show) {
+    return null;
+  }
+  const position = chart.legendPosition ?? "bottom";
+  if (position === "right") {
+    return (
+      <ChartLegend
+        align="right"
+        content={
+          <ChartLegendContent className="flex-col items-start gap-2 pt-0 pl-4" />
+        }
+        layout="vertical"
+        verticalAlign="middle"
+      />
+    );
+  }
+  return (
+    <ChartLegend content={<ChartLegendContent />} verticalAlign={position} />
+  );
+}
+
 /** Tooltip header: the hovered point's timestamp, formatted. */
 function timeSeriesLabelFormatter(
   _label: unknown,
@@ -473,9 +504,7 @@ export function DatabaseTimeSeriesChart({
           }
         />
       )}
-      {seriesEntries.length > 1 ? (
-        <ChartLegend content={<ChartLegendContent />} />
-      ) : null}
+      {renderTimeSeriesLegend(chart, seriesEntries.length)}
     </>
   );
 
