@@ -411,7 +411,12 @@ export function useChartGradientDither(
   config: ChartConfig,
   options?: ChartGradientDitherOptions
 ) {
-  const { matrix = 8, pixelSize = 3, peak, gamma } = options ?? {};
+  // Defaults tuned to the dither-kit look: chunky cells and a gentle fade that
+  // keeps the fill dense across the whole area (dense near the line, only lightly
+  // thinning to the baseline) rather than vanishing where the curve sits low.
+  // `gamma = 0` (gradient toggle off) still yields a flat fill — nullish
+  // coalescing preserves it.
+  const { matrix = 8, pixelSize = 4, peak = 0.95, gamma = 0.55 } = options ?? {};
   const { chartDitherEnabled } = useSiteAppearance();
   const enabled = options?.enabled ?? chartDitherEnabled;
   const ref = React.useRef<HTMLDivElement | null>(null);
