@@ -209,6 +209,12 @@ function stopMenuKeys(
 interface ColumnRenameInputProps {
   draftName: string;
   field: DatabaseField;
+  /**
+   * Blur commit for hosts without a menu-close commit path (the settings
+   * menu's per-property submenu). The column menu itself commits on menu
+   * close instead and omits this.
+   */
+  onCommit?: () => void;
   onDraftNameChange: (name: string) => void;
   onSubmit: () => void;
 }
@@ -217,6 +223,7 @@ interface ColumnRenameInputProps {
 function ColumnRenameInput({
   draftName,
   field,
+  onCommit,
   onDraftNameChange,
   onSubmit,
 }: ColumnRenameInputProps) {
@@ -247,6 +254,7 @@ function ColumnRenameInput({
         <InputGroupInput
           aria-label="Property name"
           autoComplete="off"
+          onBlur={onCommit}
           onChange={(event) => {
             onDraftNameChange(event.target.value);
           }}
@@ -744,6 +752,83 @@ function ChangeTypeSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
   );
 }
 
+/** "Synced" pill beside the type label for connector-written fields. */
+function SyncedFieldBadge() {
+  return (
+    <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-normal text-[11px] text-muted-foreground">
+      <IconCloudDown aria-hidden className="size-3 stroke-[1.5px]" />
+      Synced
+    </span>
+  );
+}
+
+export interface DatabasePropertyEditItemsProps {
+  databaseId: string;
+  field: DatabaseField;
+  /** Closes the hosting menu (rename Enter, formula editor Save). */
+  onRequestClose: () => void;
+}
+
+/**
+ * Field-editing core for menus other than the column header menu (the
+ * settings menu's Properties list): rename-in-place with the field icon, the
+ * field-type label, per-type Edit property config, and Change type. Follows
+ * the column menu's synced-field rules — display config only, no type
+ * changes. Rename commits on blur and Enter (there is no menu-close hook
+ * here, unlike the column menu).
+ */
+export function DatabasePropertyEditItems({
+  databaseId,
+  field,
+  onRequestClose,
+}: DatabasePropertyEditItemsProps): ReactNode {
+  const [draftName, setDraftName] = useState(field.name);
+  const synced = isSyncedField(field);
+  const hasPropertyConfig = showsEditPropertySubmenu(field, synced);
+
+  const commitRename = () => {
+    const trimmed = draftName.trim();
+    if (trimmed !== "" && trimmed !== field.name) {
+      updateDatabaseField(databaseId, field.id, { name: trimmed });
+    }
+  };
+
+  return (
+    <>
+      <ColumnRenameInput
+        draftName={draftName}
+        field={field}
+        onCommit={commitRename}
+        onDraftNameChange={setDraftName}
+        onSubmit={() => {
+          commitRename();
+          onRequestClose();
+        }}
+      />
+      <DropdownMenuGroup>
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <span className="min-w-0 truncate">
+            {FIELD_TYPE_DEFS[field.type].label}
+          </span>
+          {synced ? <SyncedFieldBadge /> : null}
+        </DropdownMenuLabel>
+      </DropdownMenuGroup>
+      {hasPropertyConfig || !synced ? <DropdownMenuSeparator /> : null}
+      {hasPropertyConfig ? (
+        <EditPropertySubmenu
+          databaseId={databaseId}
+          displayOnly={synced}
+          field={field}
+          onRequestClose={onRequestClose}
+        />
+      ) : null}
+      {synced ? null : (
+        <ChangeTypeSubmenu databaseId={databaseId} field={field} />
+      )}
+    </>
+  );
+}
+
 interface CalculateSubmenuProps {
   activeFn: DatabaseAggregateFn | undefined;
   field: DatabaseField;
@@ -888,11 +973,17 @@ export function DatabaseColumnMenu({
 
   const isGroupedByField = view.groupBy?.fieldId === field.id;
   const toggleGroupBy = () => {
-    // Grouping by a new field (or clearing) always resets the collapse
-    // state — collapsed keys belong to the previous field's buckets.
+    // Grouping by a new field (or clearing) always resets the collapse AND
+    // hidden state — both store bucket keys of the previous field, which can
+    // collide with the new field's buckets (`""` empty, checkbox
+    // `true`/`false`, plain text/number values).
     updateDatabaseView(databaseId, viewId, {
       groupBy: isGroupedByField ? undefined : { fieldId: field.id },
-      config: { ...config, collapsedGroupKeys: undefined },
+      config: {
+        ...config,
+        collapsedGroupKeys: undefined,
+        hiddenGroupKeys: undefined,
+      },
     });
   };
 
@@ -966,15 +1057,7 @@ export function DatabaseColumnMenu({
               <span className="min-w-0 truncate">
                 {FIELD_TYPE_DEFS[field.type].label}
               </span>
-              {synced ? (
-                <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-normal text-[11px] text-muted-foreground">
-                  <IconCloudDown
-                    aria-hidden
-                    className="size-3 stroke-[1.5px]"
-                  />
-                  Synced
-                </span>
-              ) : null}
+              {synced ? <SyncedFieldBadge /> : null}
             </DropdownMenuLabel>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />

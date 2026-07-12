@@ -150,15 +150,15 @@ describe("sanitizeDatabaseGridClone", () => {
     rowgroup.appendChild(body);
     grid.appendChild(rowgroup);
 
-    const shadow = document.createElement("div");
-    shadow.className = "database-grid-pinned-shadow";
-    grid.appendChild(shadow);
+    const reveal = document.createElement("div");
+    reveal.className = "hover-reveal";
+    grid.appendChild(reveal);
 
     document.body.appendChild(grid);
 
     const card = sanitizeDatabaseGridClone(grid);
     expect(card.hasAttribute("data-database-drag-preview")).toBe(true);
-    expect(card.querySelector(".database-grid-pinned-shadow")).toBeNull();
+    expect(card.querySelector(".hover-reveal")).toBeNull();
 
     const headerClone = card.querySelector('[role="row"].sticky, [role="row"]');
     expect(headerClone?.classList.contains("sticky")).toBe(false);
