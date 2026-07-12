@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LocalDatabase } from "@/lib/schemas/database.ts";
+import type { JsonValue, LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
  * Engine-level regression tests. Each test imports a FRESH engine module
@@ -75,7 +75,7 @@ function setVisibility(next: DocumentVisibilityState): void {
 
 function makeDatabase(
   id: string,
-  config: Record<string, unknown>
+  config: Record<string, JsonValue>
 ): LocalDatabase {
   return {
     id,

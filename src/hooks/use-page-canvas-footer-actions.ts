@@ -74,11 +74,18 @@ export function usePageCanvasFooterActions({
     setSaveStatus("Saving all pages…");
     try {
       const result = await saveAllLocalPages();
-      const noun = result.saved === 1 ? "page" : "pages";
+      const pageNoun = result.saved === 1 ? "page" : "pages";
+      const databasePart =
+        result.savedDatabases > 0
+          ? ` and ${result.savedDatabases} ${
+              result.savedDatabases === 1 ? "database" : "databases"
+            }`
+          : "";
+      const failures = result.failed.length + result.failedDatabases.length;
       setSaveStatus(
-        result.failed.length > 0
-          ? `Saved ${result.saved} ${noun}, ${result.failed.length} failed. Commit and deploy.`
-          : `Saved ${result.saved} ${noun} to content/pages. Commit and deploy.`
+        failures > 0
+          ? `Saved ${result.saved} ${pageNoun}${databasePart}, ${failures} failed. Commit and deploy.`
+          : `Saved ${result.saved} ${pageNoun}${databasePart} to content. Commit and deploy.`
       );
       onAfterReset?.();
     } catch (error) {

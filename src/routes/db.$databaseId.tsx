@@ -14,7 +14,7 @@ import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
  */
 export const Route = createFileRoute("/db/$databaseId")({
   loader: () => ({ kind: "pending" as const }),
-  head: () => ({ meta: buildNoIndexMeta() }),
+  head: () => ({ meta: buildNoIndexMeta("Database") }),
   component: DatabasePageRoute,
 });
 

@@ -18,6 +18,7 @@ import {
   TEMPLATE_PAGE_TITLE,
 } from "@/lib/pages/template-page.ts";
 import type { Block } from "@/lib/schemas/block.ts";
+import type { LocalPage } from "@/lib/schemas/local-page.ts";
 import {
   isLocallyDeletedPage,
   localPageSchema,
@@ -36,12 +37,37 @@ export interface TemplateSnapshot {
   textScale?: "small" | "default" | "large";
 }
 
-function readTemplateRecord() {
+function isActiveTemplateRecord(page: LocalPage): boolean {
+  return page.id === TEMPLATE_PAGE_ID && !isLocallyDeletedPage(page);
+}
+
+function readTemplateRecordFromCollection(): LocalPage | null {
   return (
-    localPagesCollection.toArray.find(
-      (page) => page.id === TEMPLATE_PAGE_ID && !isLocallyDeletedPage(page)
+    localPagesCollection.toArray.find((page) => isActiveTemplateRecord(page)) ??
+    null
+  );
+}
+
+/** Reads the template page row from the live collection or localStorage bootstrap. */
+function readTemplateRecord(): LocalPage | null {
+  const fromCollection = readTemplateRecordFromCollection();
+  if (fromCollection) {
+    return fromCollection;
+  }
+
+  // Before TanStack DB hydrates from localStorage, `toArray` can be empty even
+  // though the template snapshot already exists — settings "Edit template" and
+  // `/template` must not treat that as "no template".
+  return (
+    readLocalStorageCollection(LOCAL_PAGES_STORAGE_KEY, localPageSchema).find(
+      (page) => isActiveTemplateRecord(page)
     ) ?? null
   );
+}
+
+/** Returns the template's local page record when a snapshot exists. */
+export function readTemplateLocalPage(): LocalPage | null {
+  return readTemplateRecord();
 }
 
 /** True when a template snapshot record exists locally. */

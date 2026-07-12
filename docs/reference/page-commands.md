@@ -36,6 +36,8 @@ Parent rows show a chevron on the row (`CollapsibleTrigger`) that rotates when o
 | `seed` | Lazy-seed blocks for the moved page when no local doc exists |
 | `parentSeed` | Lazy-seed parent page before appending `pageLink` |
 
+Every lazy-seed apply (moved page, scope siblings, and `parentSeed`) also fires `capturePageBaseline` with the seed's server blocks — the conflict base for stale-page resolution ([local-first-persistence — Server baseline content](../architecture/local-first-persistence.md#server-baseline-content-conflict-base)).
+
 [`PageListContent`](../../src/components/pages/page-list.tsx) resolves drop targets through [`DndSurface`](../../src/components/dnd/dnd-surface.tsx) (batched `dragover` on the sidebar `<nav>` via `useDropZone`), converts with [`dropTargetToRepositionCommand`](../../src/lib/pages/resolve-page-list-drop-target.ts), then awaits optional `seed` / `parentSeed` from [`loadPage`](../../src/lib/content/load-page.ts) when the moved page or nest parent has no local document yet.
 
 Reducer path: [`pageReducer`](../../src/hooks/use-page-dispatch.ts) emits a [`page.reposition` `PageEffect`](../../src/lib/canvas/effects.ts) after [`planPageReposition`](../../src/lib/pages/reposition-page.ts) (via [`assertCanReposition`](../../src/lib/pages/reposition-page.ts)); planning errors return `{ effects: [] }` (invalid or no-op drops). Apply steps:

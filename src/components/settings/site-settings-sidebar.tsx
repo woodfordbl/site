@@ -110,6 +110,14 @@ export function SiteSettingsSidebar({
                             to="/settings/$section"
                           />
                         }
+                        tooltip={
+                          section.id === "shortcuts"
+                            ? {
+                                children: section.label,
+                                sequence: "go-shortcuts",
+                              }
+                            : undefined
+                        }
                       >
                         {SECTION_ICONS[section.icon]}
                         <span>{section.label}</span>

@@ -15,7 +15,7 @@ import {
 
 export const Route = createFileRoute("/p/$")({
   loader: () => ({ kind: "pending" as const }),
-  head: () => ({ meta: buildNoIndexMeta() }),
+  head: () => ({ meta: buildNoIndexMeta("Preview") }),
   component: UserPageBySlugRoute,
 });
 

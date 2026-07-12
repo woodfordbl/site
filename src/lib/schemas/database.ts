@@ -394,12 +394,37 @@ export type DatabaseView = z.infer<typeof databaseViewSchema>;
  * engine; `config` is validated by the connector's own zod schema at use
  * sites. Synced databases are plain tables — rows never require pages.
  */
+/**
+ * Arbitrary JSON value. Connector configs use this instead of `z.unknown()`
+ * so documents containing a `source` stay type-level serializable — TanStack
+ * server fns reject `unknown` in return types even when the runtime value is
+ * plain JSON (shipped database documents travel through `loadShippedDatabases`).
+ */
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ])
+);
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export const databaseSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("local") }),
   z.object({
     kind: z.literal("connector"),
     connectorId: z.string(),
-    config: z.record(z.string(), z.unknown()),
+    config: z.record(z.string(), jsonValueSchema),
     /** Poll interval override in ms; connectors clamp to their own minimum. */
     refreshMs: z.number().positive().optional(),
   }),
@@ -427,6 +452,13 @@ export const localDatabaseSchema = z.object({
   rowTemplate: z.array(blockSchema).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
+  /**
+   * `hashStableValue` of the shipped database document this local copy was
+   * seeded from (pages' `serverBaselineHash` pattern). Absent on user-created
+   * databases; the shipped-content seeder uses it to distinguish "unedited —
+   * safe to replace on deploy" from "locally edited — keep".
+   */
+  serverBaselineHash: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
