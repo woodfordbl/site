@@ -21,6 +21,7 @@ import {
 
 import { DatabaseTimeSeriesChart } from "@/components/database/views/database-time-series-chart.tsx";
 import {
+  CHART_MINOR_GRID_CLASS,
   type ChartConfig,
   ChartContainer,
   ChartLegend,
@@ -272,11 +273,15 @@ function CartesianChart({
     formatChartYValue(aggregate, yField, value);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
   const stacked = chart.stacked === true;
-  const showGrid = chart.showGrid !== false;
+  // Grid split per axis: major = horizontal (value axis), minor = vertical
+  // (category axis), toggled independently. Minor lines render fainter/dashed.
+  const majorGrid = chart.showGrid !== false;
+  const minorGrid = chart.gridVertical === true;
 
-  const grid = showGrid ? (
-    <CartesianGrid vertical={chart.gridVertical === true} />
-  ) : null;
+  const grid =
+    majorGrid || minorGrid ? (
+      <CartesianGrid horizontal={majorGrid} vertical={minorGrid} />
+    ) : null;
   const xAxis = (
     <XAxis
       axisLine={false}
@@ -393,7 +398,8 @@ function CartesianChart({
         CHART_HEIGHT_CLASS,
         dither.fillCrispClassName,
         pixelated && dither.curveCrispClassName,
-        glow.strokeClassName
+        glow.strokeClassName,
+        minorGrid && CHART_MINOR_GRID_CLASS
       )}
       config={chartConfig}
       palette={palette}

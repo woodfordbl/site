@@ -11,6 +11,7 @@ import {
 
 import { chartConfigPatch } from "@/components/database/views/database-chart-config-helpers.ts";
 import {
+  CHART_MINOR_GRID_CLASS,
   type ChartConfig,
   ChartContainer,
   ChartLegend,
@@ -324,11 +325,16 @@ export function DatabaseTimeSeriesChart({
     };
   });
 
+  // Grid split per axis: major = horizontal (value axis), minor = vertical
+  // (time axis), toggled independently. Minor lines render fainter/dashed.
+  const majorGrid = chart.showGrid !== false;
+  const minorGrid = chart.gridVertical === true;
+
   const axes = (
     <>
-      {chart.showGrid === false ? null : (
-        <CartesianGrid vertical={chart.gridVertical === true} />
-      )}
+      {majorGrid || minorGrid ? (
+        <CartesianGrid horizontal={majorGrid} vertical={minorGrid} />
+      ) : null}
       <XAxis
         allowDataOverflow
         axisLine={false}
@@ -450,7 +456,8 @@ export function DatabaseTimeSeriesChart({
           CHART_HEIGHT_CLASS,
           dither.fillCrispClassName,
           pixelated && dither.curveCrispClassName,
-          glow.strokeClassName
+          glow.strokeClassName,
+          minorGrid && CHART_MINOR_GRID_CLASS
         )}
         config={chartConfig}
         palette={palette}

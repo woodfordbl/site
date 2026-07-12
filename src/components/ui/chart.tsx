@@ -30,6 +30,14 @@ const CHART_FILL_CRISP_CLASS =
 const CHART_CURVE_CRISP_CLASS =
   "[&_.recharts-curve]:[shape-rendering:crispEdges]";
 
+/**
+ * Fainter, dashed styling for the minor (vertical / category-axis) gridlines, so
+ * they recede behind the major (horizontal / value-axis) lines. `!` overrides
+ * the base grid color rule on `<ChartContainer>`. Add when the minor grid is on.
+ */
+export const CHART_MINOR_GRID_CLASS =
+  "[&_.recharts-cartesian-grid-vertical_line]:![stroke-dasharray:2_4] [&_.recharts-cartesian-grid-vertical_line]:!stroke-border/30";
+
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
 

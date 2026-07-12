@@ -103,7 +103,7 @@ function RadioSubmenu({
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <span className="shrink-0">{label}</span>
-        <span className="ml-auto min-w-0 truncate pl-3 text-muted-foreground text-xs">
+        <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
           {currentLabel}
         </span>
       </DropdownMenuSubTrigger>
@@ -202,6 +202,77 @@ function MarkPicker({
   );
 }
 
+/** Trigger summary for the grid submenu from the two axis toggles. */
+function gridSummary(horizontal: boolean, vertical: boolean): string {
+  if (horizontal && vertical) {
+    return "Both";
+  }
+  if (horizontal) {
+    return "Horizontal";
+  }
+  if (vertical) {
+    return "Vertical";
+  }
+  return "Off";
+}
+
+/**
+ * Grid-lines submenu: independent major (horizontal / value axis) and minor
+ * (vertical / category axis) toggles, plus the major line count. Minor lines
+ * render fainter and dashed in the chart itself.
+ */
+function GridSubmenu({
+  chart,
+  write,
+}: {
+  chart: ChartViewConfig;
+  write: WriteChartPatch;
+}): ReactNode {
+  const horizontal = chart.showGrid !== false;
+  const vertical = chart.gridVertical === true;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className="shrink-0">Grid lines</span>
+        <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
+          {gridSummary(horizontal, vertical)}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuSwitchItem
+          checked={horizontal}
+          onCheckedChange={(next) => {
+            write({ showGrid: next });
+          }}
+        >
+          Horizontal (major)
+        </DropdownMenuSwitchItem>
+        <DropdownMenuSwitchItem
+          checked={vertical}
+          onCheckedChange={(next) => {
+            write({ gridVertical: next });
+          }}
+        >
+          Vertical (minor)
+        </DropdownMenuSwitchItem>
+        {horizontal ? (
+          <RadioSubmenu
+            currentLabel={chart.gridCount ? String(chart.gridCount) : "Auto"}
+            label="Line count"
+            onValueChange={(value) => {
+              write({
+                gridCount: value === "auto" ? undefined : Number(value),
+              });
+            }}
+            options={GRID_COUNT_OPTIONS}
+            value={chart.gridCount ? String(chart.gridCount) : "auto"}
+          />
+        ) : null}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
 /** Legend switch + position, stacked (bar/area), and grid (cartesian) rows. */
 function ChartToggleItems({
   chart,
@@ -272,39 +343,7 @@ function ChartToggleItems({
           Gradient fill
         </DropdownMenuSwitchItem>
       ) : null}
-      {mark === "pie" ? null : (
-        <DropdownMenuSwitchItem
-          checked={chart.showGrid !== false}
-          onCheckedChange={(next) => {
-            write({ showGrid: next });
-          }}
-        >
-          Grid lines
-        </DropdownMenuSwitchItem>
-      )}
-      {mark !== "pie" && chart.showGrid !== false ? (
-        <>
-          <DropdownMenuSwitchItem
-            checked={chart.gridVertical === true}
-            onCheckedChange={(next) => {
-              write({ gridVertical: next });
-            }}
-          >
-            Vertical grid
-          </DropdownMenuSwitchItem>
-          <RadioSubmenu
-            currentLabel={chart.gridCount ? String(chart.gridCount) : "Auto"}
-            label="Grid line count"
-            onValueChange={(value) => {
-              write({
-                gridCount: value === "auto" ? undefined : Number(value),
-              });
-            }}
-            options={GRID_COUNT_OPTIONS}
-            value={chart.gridCount ? String(chart.gridCount) : "auto"}
-          />
-        </>
-      ) : null}
+      {mark === "pie" ? null : <GridSubmenu chart={chart} write={write} />}
     </>
   );
 }
