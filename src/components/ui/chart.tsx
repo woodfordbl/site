@@ -30,13 +30,100 @@ const CHART_FILL_CRISP_CLASS =
 const CHART_CURVE_CRISP_CLASS =
   "[&_.recharts-curve]:[shape-rendering:crispEdges]";
 
+type HorizontalGridGenerator = NonNullable<
+  React.ComponentProps<
+    typeof RechartsPrimitive.CartesianGrid
+  >["horizontalCoordinatesGenerator"]
+>;
+
 /**
- * Fainter, dashed styling for the minor (vertical / category-axis) gridlines, so
- * they recede behind the major (horizontal / value-axis) lines. `!` overrides
- * the base grid color rule on `<ChartContainer>`. Add when the minor grid is on.
+ * Builds a `horizontalCoordinatesGenerator` that draws `minor` evenly-spaced
+ * subdivision lines between each pair of major (value-axis tick) gridlines.
+ * Reads the axis' nice ticks and maps them through its scale to pixels, so the
+ * subdivisions stay aligned to the majors the base grid draws.
  */
-export const CHART_MINOR_GRID_CLASS =
-  "[&_.recharts-cartesian-grid-vertical_line]:![stroke-dasharray:2_4] [&_.recharts-cartesian-grid-vertical_line]:!stroke-border/30";
+export function makeMinorGridGenerator(minor: number): HorizontalGridGenerator {
+  return ({ yAxis }) => {
+    // Recharts 3 hands the grid a scale *helper* (value→pixel via `.map`), not a
+    // bare d3 function — support both so this survives either shape.
+    const rawScale = yAxis?.scale as unknown;
+    let toPixel: ((value: number) => number) | null = null;
+    if (typeof rawScale === "function") {
+      toPixel = rawScale as (value: number) => number;
+    } else if (
+      rawScale &&
+      typeof (rawScale as { map?: unknown }).map === "function"
+    ) {
+      const helper = rawScale as { map: (value: number) => number };
+      toPixel = (value: number) => helper.map(value);
+    }
+    const ticks = (yAxis?.niceTicks ?? yAxis?.ticks ?? []) as ReadonlyArray<
+      number | string
+    >;
+    if (!toPixel || minor < 1) {
+      return [];
+    }
+    const majors = ticks
+      .map((tick) => (typeof tick === "number" ? toPixel(tick) : Number.NaN))
+      .filter((coord) => Number.isFinite(coord))
+      .sort((a, b) => a - b);
+    if (majors.length < 2) {
+      return [];
+    }
+    const coords: number[] = [];
+    for (let index = 0; index < majors.length - 1; index++) {
+      const start = majors[index];
+      const step = (majors[index + 1] - start) / (minor + 1);
+      for (let sub = 1; sub <= minor; sub++) {
+        coords.push(start + step * sub);
+      }
+    }
+    return coords;
+  };
+}
+
+/**
+ * Props for the minor (subdivision) `<CartesianGrid>`: dashed and half-opacity
+ * so the subdivisions read as fainter than the solid major lines. Spread onto a
+ * horizontal-only grid driven by {@link makeMinorGridGenerator}.
+ */
+export const MINOR_GRID_PROPS = {
+  strokeDasharray: "2 4",
+  strokeOpacity: 0.5,
+  vertical: false,
+} as const;
+
+/**
+ * The cartesian grid layers for a chart: the major grid (horizontal value-axis
+ * lines + optional vertical category-axis lines) and, when `gridMinor` is set, a
+ * fainter subdivision grid between the major horizontal lines. Returns a
+ * fragment to drop straight into a Recharts chart's children.
+ */
+export function renderCartesianGrids(chart: {
+  showGrid?: boolean;
+  gridVertical?: boolean;
+  gridMinor?: number;
+}): React.ReactNode {
+  const horizontal = chart.showGrid !== false;
+  const vertical = chart.gridVertical === true;
+  const minor = chart.gridMinor ?? 0;
+  return (
+    <>
+      {horizontal || vertical ? (
+        <RechartsPrimitive.CartesianGrid
+          horizontal={horizontal}
+          vertical={vertical}
+        />
+      ) : null}
+      {horizontal && minor > 0 ? (
+        <RechartsPrimitive.CartesianGrid
+          {...MINOR_GRID_PROPS}
+          horizontalCoordinatesGenerator={makeMinorGridGenerator(minor)}
+        />
+      ) : null}
+    </>
+  );
+}
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;

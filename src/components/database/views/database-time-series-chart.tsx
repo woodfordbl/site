@@ -1,23 +1,15 @@
-import { type ReactNode, useMemo } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { type ComponentProps, type ReactNode, useMemo } from "react";
+import { Area, AreaChart, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import { chartConfigPatch } from "@/components/database/views/database-chart-config-helpers.ts";
 import {
-  CHART_MINOR_GRID_CLASS,
   type ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  renderCartesianGrids,
   resolveCurveType,
   useAreaSoftGradient,
   useChartGlow,
@@ -151,6 +143,123 @@ function resolveTimeSeriesAreaFill(
     return softGradient.fill(key);
   }
   return `var(--color-${key})`;
+}
+
+type TimeSeriesTooltipFormatter = NonNullable<
+  ComponentProps<typeof ChartTooltipContent>["formatter"]
+>;
+
+/** Tooltip row: swatch → series label → mono value, keyed by the series name. */
+function makeTimeSeriesTooltipFormatter(
+  chartConfig: ChartConfig,
+  formatValue: (value: number) => string
+): TimeSeriesTooltipFormatter {
+  return (value, name, item) => {
+    const label = chartConfig[String(name)]?.label ?? String(name);
+    const swatch =
+      (item as { color?: string })?.color ?? `var(--color-${String(name)})`;
+    const display =
+      typeof value === "number" ? formatValue(value) : String(value);
+    return (
+      <div className="flex flex-1 items-center gap-2 leading-none">
+        <span
+          aria-hidden
+          className="size-2.5 shrink-0 rounded-[2px]"
+          style={{ backgroundColor: swatch }}
+        />
+        <span className="text-muted-foreground">{label}</span>
+        <span className="ml-auto font-medium font-mono text-foreground tabular-nums">
+          {display}
+        </span>
+      </div>
+    );
+  };
+}
+
+/** Tooltip header: the hovered point's timestamp, formatted. */
+function timeSeriesLabelFormatter(
+  _label: unknown,
+  payload: readonly { payload?: { t?: number } }[]
+): string {
+  const t = payload?.[0]?.payload?.t;
+  return typeof t === "number" ? TOOLTIP_LABEL_FORMAT.format(t) : "";
+}
+
+type MarkStyle = ReturnType<typeof useTimeSeriesMarkStyle>;
+
+/**
+ * The Recharts area/line chart element for the time series. A plain function
+ * (not a component) so the returned `<AreaChart>`/`<LineChart>` stays the direct
+ * child of `ResponsiveContainer`; keeps `DatabaseTimeSeriesChart` under budget.
+ */
+function renderTimeSeriesPlot({
+  axes,
+  curveType,
+  dither,
+  glow,
+  mark,
+  reveal,
+  seriesEntries,
+  softGradient,
+}: {
+  axes: ReactNode;
+  curveType: MarkStyle["curveType"];
+  dither: MarkStyle["dither"];
+  glow: MarkStyle["glow"];
+  mark: "area" | "line";
+  reveal: MarkStyle["reveal"];
+  seriesEntries: { key: string; points: Record<string, number>[] }[];
+  softGradient: MarkStyle["softGradient"];
+}): ReactNode {
+  if (mark === "area") {
+    return (
+      <AreaChart accessibilityLayer>
+        {dither.defs}
+        {softGradient.defs}
+        {reveal.defs}
+        {glow.defs}
+        {axes}
+        {seriesEntries.map(({ points, key }) => (
+          <Area
+            connectNulls
+            data={points}
+            dataKey={key}
+            fill={resolveTimeSeriesAreaFill(key, dither, softGradient)}
+            fillOpacity={dither.enabled || softGradient.enabled ? 1 : 0.3}
+            isAnimationActive={false}
+            key={key}
+            name={key}
+            stroke={`var(--color-${key})`}
+            strokeWidth={2}
+            style={reveal.maskStyle}
+            type={curveType}
+          />
+        ))}
+      </AreaChart>
+    );
+  }
+  return (
+    <LineChart accessibilityLayer>
+      {reveal.defs}
+      {glow.defs}
+      {axes}
+      {seriesEntries.map(({ points, key }) => (
+        <Line
+          connectNulls
+          data={points}
+          dataKey={key}
+          dot={false}
+          isAnimationActive={false}
+          key={key}
+          name={key}
+          stroke={`var(--color-${key})`}
+          strokeWidth={2}
+          style={reveal.maskStyle}
+          type={curveType}
+        />
+      ))}
+    </LineChart>
+  );
 }
 
 interface DatabaseTimeSeriesChartProps {
@@ -325,16 +434,11 @@ export function DatabaseTimeSeriesChart({
     };
   });
 
-  // Grid split per axis: major = horizontal (value axis), minor = vertical
-  // (time axis), toggled independently. Minor lines render fainter/dashed.
-  const majorGrid = chart.showGrid !== false;
-  const minorGrid = chart.gridVertical === true;
+  const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
 
   const axes = (
     <>
-      {majorGrid || minorGrid ? (
-        <CartesianGrid horizontal={majorGrid} vertical={minorGrid} />
-      ) : null}
+      {renderCartesianGrids(chart)}
       <XAxis
         allowDataOverflow
         axisLine={false}
@@ -348,99 +452,43 @@ export function DatabaseTimeSeriesChart({
         type="number"
       />
       <YAxis
+        allowDataOverflow={hasYBound}
         axisLine={false}
-        domain={["auto", "auto"]}
+        domain={[chart.yMin ?? "auto", chart.yMax ?? "auto"]}
         tickCount={chart.gridCount}
         tickFormatter={formatValue}
         tickLine={false}
         width="auto"
       />
-      <ChartTooltip
-        content={
-          <ChartTooltipContent
-            formatter={(value, name, item) => {
-              const label = chartConfig[String(name)]?.label ?? String(name);
-              const swatch =
-                (item as { color?: string })?.color ??
-                `var(--color-${String(name)})`;
-              const display =
-                typeof value === "number" ? formatValue(value) : String(value);
-              return (
-                <div className="flex flex-1 items-center gap-2 leading-none">
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-[2px]"
-                    style={{ backgroundColor: swatch }}
-                  />
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="ml-auto font-medium font-mono text-foreground tabular-nums">
-                    {display}
-                  </span>
-                </div>
-              );
-            }}
-            labelFormatter={(_label, payload) => {
-              const t = payload?.[0]?.payload?.t;
-              return typeof t === "number"
-                ? TOOLTIP_LABEL_FORMAT.format(t)
-                : "";
-            }}
-          />
-        }
-      />
+      {chart.showTooltip === false ? null : (
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={makeTimeSeriesTooltipFormatter(
+                chartConfig,
+                formatValue
+              )}
+              labelFormatter={timeSeriesLabelFormatter}
+            />
+          }
+        />
+      )}
       {seriesEntries.length > 1 ? (
         <ChartLegend content={<ChartLegendContent />} />
       ) : null}
     </>
   );
 
-  const plot =
-    mark === "area" ? (
-      <AreaChart accessibilityLayer>
-        {dither.defs}
-        {softGradient.defs}
-        {reveal.defs}
-        {glow.defs}
-        {axes}
-        {seriesEntries.map(({ points, key }) => (
-          <Area
-            connectNulls
-            data={points}
-            dataKey={key}
-            fill={resolveTimeSeriesAreaFill(key, dither, softGradient)}
-            fillOpacity={dither.enabled || softGradient.enabled ? 1 : 0.3}
-            isAnimationActive={false}
-            key={key}
-            name={key}
-            stroke={`var(--color-${key})`}
-            strokeWidth={2}
-            style={reveal.maskStyle}
-            type={curveType}
-          />
-        ))}
-      </AreaChart>
-    ) : (
-      <LineChart accessibilityLayer>
-        {reveal.defs}
-        {glow.defs}
-        {axes}
-        {seriesEntries.map(({ points, key }) => (
-          <Line
-            connectNulls
-            data={points}
-            dataKey={key}
-            dot={false}
-            isAnimationActive={false}
-            key={key}
-            name={key}
-            stroke={`var(--color-${key})`}
-            strokeWidth={2}
-            style={reveal.maskStyle}
-            type={curveType}
-          />
-        ))}
-      </LineChart>
-    );
+  const plot = renderTimeSeriesPlot({
+    axes,
+    curveType,
+    dither,
+    glow,
+    mark,
+    reveal,
+    seriesEntries,
+    softGradient,
+  });
 
   return (
     <div>
@@ -456,8 +504,7 @@ export function DatabaseTimeSeriesChart({
           CHART_HEIGHT_CLASS,
           dither.fillCrispClassName,
           pixelated && dither.curveCrispClassName,
-          glow.strokeClassName,
-          minorGrid && CHART_MINOR_GRID_CLASS
+          glow.strokeClassName
         )}
         config={chartConfig}
         palette={palette}

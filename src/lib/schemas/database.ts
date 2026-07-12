@@ -334,6 +334,8 @@ export const databaseTableViewConfigSchema = z.object({
       seriesFieldId: z.string().optional(),
       showLegend: z.boolean().optional(),
       legendPosition: z.enum(["top", "bottom", "right"]).optional(),
+      /** Hover tooltip on cartesian/pie marks (absent = on). */
+      showTooltip: z.boolean().optional(),
       /** Chart palette id from lib/charts (absent = site default). */
       palette: z.string().optional(),
       /** Per-series color overrides: series key → chart token index 1-5. */
@@ -341,8 +343,17 @@ export const databaseTableViewConfigSchema = z.object({
       showGrid: z.boolean().optional(),
       /** Draw vertical grid lines too (absent = horizontal only). */
       gridVertical: z.boolean().optional(),
-      /** Target number of horizontal grid lines (absent = auto). 2–12. */
+      /** Target number of major horizontal grid lines (absent = auto). 2–12. */
       gridCount: z.number().int().min(2).max(12).optional(),
+      /**
+       * Minor horizontal gridlines: subdivisions drawn between each pair of
+       * major lines (absent/0 = none). Rendered fainter and dashed.
+       */
+      gridMinor: z.number().int().min(0).max(8).optional(),
+      /** Fixed Y-axis lower bound (absent = auto from the data). */
+      yMin: z.number().optional(),
+      /** Fixed Y-axis upper bound (absent = auto from the data). */
+      yMax: z.number().optional(),
       stacked: z.boolean().optional(),
       /**
        * Smooth the line/area curve (absent = on). When off, segments are

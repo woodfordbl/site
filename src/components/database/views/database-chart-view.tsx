@@ -10,7 +10,6 @@ import {
   AreaChart,
   Bar,
   BarChart,
-  CartesianGrid,
   Line,
   LineChart,
   Pie,
@@ -21,13 +20,13 @@ import {
 
 import { DatabaseTimeSeriesChart } from "@/components/database/views/database-time-series-chart.tsx";
 import {
-  CHART_MINOR_GRID_CLASS,
   type ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  renderCartesianGrids,
   resolveCurveType,
   useAreaSoftGradient,
   useChartDither,
@@ -273,15 +272,10 @@ function CartesianChart({
     formatChartYValue(aggregate, yField, value);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
   const stacked = chart.stacked === true;
-  // Grid split per axis: major = horizontal (value axis), minor = vertical
-  // (category axis), toggled independently. Minor lines render fainter/dashed.
-  const majorGrid = chart.showGrid !== false;
-  const minorGrid = chart.gridVertical === true;
-
-  const grid =
-    majorGrid || minorGrid ? (
-      <CartesianGrid horizontal={majorGrid} vertical={minorGrid} />
-    ) : null;
+  // Horizontal (value-axis) gridlines carry the major/minor ruler; vertical
+  // (category-axis) lines are a plain toggle. Minor lines subdivide each major
+  // gap and render fainter/dashed.
+  const grid = renderCartesianGrids(chart);
   const xAxis = (
     <XAxis
       axisLine={false}
@@ -291,21 +285,25 @@ function CartesianChart({
       tickMargin={8}
     />
   );
+  const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
   const yAxis = (
     <YAxis
+      allowDataOverflow={hasYBound}
       allowDecimals={aggregate !== "count"}
       axisLine={false}
+      domain={[chart.yMin ?? "auto", chart.yMax ?? "auto"]}
       tickCount={chart.gridCount}
       tickFormatter={formatValue}
       tickLine={false}
       width={48}
     />
   );
-  const tooltip = (
-    <ChartTooltip
-      content={<ChartTooltipContent formatter={tooltipFormatter} />}
-    />
-  );
+  const tooltip =
+    chart.showTooltip === false ? null : (
+      <ChartTooltip
+        content={<ChartTooltipContent formatter={tooltipFormatter} />}
+      />
+    );
   const legend = (
     <ChartLegendSlot chart={chart} seriesCount={data.series.length} />
   );
@@ -398,8 +396,7 @@ function CartesianChart({
         CHART_HEIGHT_CLASS,
         dither.fillCrispClassName,
         pixelated && dither.curveCrispClassName,
-        glow.strokeClassName,
-        minorGrid && CHART_MINOR_GRID_CLASS
+        glow.strokeClassName
       )}
       config={chartConfig}
       palette={palette}

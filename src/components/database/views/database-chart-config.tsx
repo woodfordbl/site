@@ -21,6 +21,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
 } from "@/components/ui/dropdown-menu.tsx";
+import { MenuNumberField } from "@/components/ui/number-field.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import {
   CHART_PALETTE_IDS,
@@ -136,15 +137,6 @@ function PaletteSwatch({ palette }: { palette: ChartPaletteId }): ReactNode {
   );
 }
 
-/** Grid-line count choices (horizontal gridlines / Y ticks); "auto" clears. */
-const GRID_COUNT_OPTIONS: RadioSubmenuOption[] = [
-  { value: "auto", label: "Auto" },
-  ...["3", "4", "5", "6", "8", "10", "12"].map((n) => ({
-    value: n,
-    label: n,
-  })),
-];
-
 /** Field picker option with the field's (custom or type) icon. */
 function fieldOption(field: DatabaseField): RadioSubmenuOption {
   const FieldIcon = resolveFieldIcon(field);
@@ -202,7 +194,7 @@ function MarkPicker({
   );
 }
 
-/** Trigger summary for the grid submenu from the two axis toggles. */
+/** Trigger summary for the grid submenu from the horizontal/vertical state. */
 function gridSummary(horizontal: boolean, vertical: boolean): string {
   if (horizontal && vertical) {
     return "Both";
@@ -217,9 +209,11 @@ function gridSummary(horizontal: boolean, vertical: boolean): string {
 }
 
 /**
- * Grid-lines submenu: independent major (horizontal / value axis) and minor
- * (vertical / category axis) toggles, plus the major line count. Minor lines
- * render fainter and dashed in the chart itself.
+ * Grid-lines submenu. Horizontal (value-axis) lines carry the major/minor
+ * ruler: `Major lines` sets how many top-level lines, `Minor lines` how many
+ * fainter subdivisions to draw between each pair of majors. Vertical
+ * (category-axis) lines are a plain on/off. Enabling the horizontal grid seeds
+ * a 4 major / 1 minor default.
  */
 function GridSubmenu({
   chart,
@@ -242,32 +236,100 @@ function GridSubmenu({
         <DropdownMenuSwitchItem
           checked={horizontal}
           onCheckedChange={(next) => {
-            write({ showGrid: next });
+            write(
+              next
+                ? {
+                    showGrid: true,
+                    gridCount: chart.gridCount ?? 4,
+                    gridMinor: chart.gridMinor ?? 1,
+                  }
+                : { showGrid: false }
+            );
           }}
         >
-          Horizontal (major)
+          Horizontal
         </DropdownMenuSwitchItem>
+        {horizontal ? (
+          <>
+            <MenuNumberField
+              label="Major lines"
+              max={12}
+              min={2}
+              onValueChange={(next) => {
+                write({ gridCount: next ?? undefined });
+              }}
+              placeholder="Auto"
+              value={chart.gridCount ?? null}
+            />
+            <MenuNumberField
+              label="Minor lines"
+              max={8}
+              min={0}
+              onValueChange={(next) => {
+                write({ gridMinor: next && next > 0 ? next : undefined });
+              }}
+              placeholder="Off"
+              value={chart.gridMinor ?? null}
+            />
+          </>
+        ) : null}
         <DropdownMenuSwitchItem
           checked={vertical}
           onCheckedChange={(next) => {
             write({ gridVertical: next });
           }}
         >
-          Vertical (minor)
+          Vertical
         </DropdownMenuSwitchItem>
-        {horizontal ? (
-          <RadioSubmenu
-            currentLabel={chart.gridCount ? String(chart.gridCount) : "Auto"}
-            label="Line count"
-            onValueChange={(value) => {
-              write({
-                gridCount: value === "auto" ? undefined : Number(value),
-              });
-            }}
-            options={GRID_COUNT_OPTIONS}
-            value={chart.gridCount ? String(chart.gridCount) : "auto"}
-          />
-        ) : null}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/** Trigger summary for the Y-range submenu. */
+function yRangeSummary(
+  min: number | undefined,
+  max: number | undefined
+): string {
+  if (min === undefined && max === undefined) {
+    return "Auto";
+  }
+  return `${min ?? "Auto"} – ${max ?? "Auto"}`;
+}
+
+/** Y-axis range submenu: fixed min/max, each clearable back to auto. */
+function YRangeSubmenu({
+  chart,
+  write,
+}: {
+  chart: ChartViewConfig;
+  write: WriteChartPatch;
+}): ReactNode {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className="shrink-0">Y axis range</span>
+        <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
+          {yRangeSummary(chart.yMin, chart.yMax)}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <MenuNumberField
+          label="Min"
+          onValueChange={(next) => {
+            write({ yMin: next ?? undefined });
+          }}
+          placeholder="Auto"
+          value={chart.yMin ?? null}
+        />
+        <MenuNumberField
+          label="Max"
+          onValueChange={(next) => {
+            write({ yMax: next ?? undefined });
+          }}
+          placeholder="Auto"
+          value={chart.yMax ?? null}
+        />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -313,6 +375,14 @@ function ChartToggleItems({
           value={chart.legendPosition ?? "bottom"}
         />
       ) : null}
+      <DropdownMenuSwitchItem
+        checked={chart.showTooltip !== false}
+        onCheckedChange={(next) => {
+          write({ showTooltip: next });
+        }}
+      >
+        Tooltip
+      </DropdownMenuSwitchItem>
       {mark === "bar" || mark === "area" ? (
         <DropdownMenuSwitchItem
           checked={chart.stacked === true}
@@ -343,7 +413,12 @@ function ChartToggleItems({
           Gradient fill
         </DropdownMenuSwitchItem>
       ) : null}
-      {mark === "pie" ? null : <GridSubmenu chart={chart} write={write} />}
+      {mark === "pie" ? null : (
+        <>
+          <GridSubmenu chart={chart} write={write} />
+          <YRangeSubmenu chart={chart} write={write} />
+        </>
+      )}
     </>
   );
 }
