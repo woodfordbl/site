@@ -1,5 +1,5 @@
 import {
-  IconChevronRight,
+  IconCaretRightFilled,
   IconLayoutColumns,
   IconLayoutNavbar,
   IconTable,
@@ -177,7 +177,7 @@ describe("applyBlockConversion toggle heading", () => {
         toggleHeadingLevel: 2,
         label: "Toggle heading 2",
         aliases: [],
-        icon: IconChevronRight,
+        icon: IconCaretRightFilled,
         keywords: ["toggle heading 2"],
       },
       (command) => {
@@ -212,7 +212,7 @@ describe("applyBlockConversion toggle heading", () => {
         toggleHeadingLevel: 1,
         label: "Toggle heading 1",
         aliases: [],
-        icon: IconChevronRight,
+        icon: IconCaretRightFilled,
         keywords: ["toggle heading 1"],
       },
       (command) => {

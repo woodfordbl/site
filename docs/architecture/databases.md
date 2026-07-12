@@ -15,7 +15,7 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 
 | Entity | Shape |
 |--------|-------|
-| `LocalDatabase` | `id`, `name`, `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, timestamps |
+| `LocalDatabase` | `id`, `name`, `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`. All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, `externalId?` (connector row identity), timestamps |
 | `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
@@ -405,11 +405,17 @@ surface, not a sidebar page document.
 ## Row pages (virtual + copy-on-write)
 
 Every row "has" a page with **zero per-row storage**: the `/db/$databaseId/$rowId`
-route ([`db.$databaseId.$rowId.tsx`](../../src/routes/db.$databaseId.$rowId.tsx),
+route ([`db.$databaseId_.$rowId.tsx`](../../src/routes/db.$databaseId_.$rowId.tsx),
 client-only — SSR renders a neutral shell like `/p/$`) renders
 [`DatabaseRowPage`](../../src/components/database/row-page/database-row-page.tsx):
-title = primary field value, a properties panel reusing the grid's cell editors
-(local fields inline-editable, synced fields read-only, formulas computed), and a body
+title = primary field value, a properties panel
+([`row-properties-panel.tsx`](../../src/components/database/row-page/row-properties-panel.tsx))
+reusing the grid's cell editors (local fields inline-editable, synced fields
+read-only, formulas computed), property **names** open the same
+[`DatabaseColumnMenu`](../../src/components/database/database-column-menu.tsx)
+as table headers with `actions="schema"` (rename / type / icon / duplicate /
+delete — no sort, freeze, wrap, or insert), and an **Add Property** footer creates a text field like the
+table `+` — and a body
 instantiated per render from the database's shared **row template** via
 [`instantiateTemplateBlocks`](../../src/lib/databases/row-template.ts) —
 `{{ thisPage.X }}` tokens in text-bearing props (`text`, tab `label`, embed `caption`;
@@ -428,7 +434,7 @@ record + block shard managed by
 site page template: excluded from the merged page list, slug resolution, id resolution,
 and `saveAllLocalPages`, so it never appears in the sidebar, dispatch, or publish. It's
 edited as a NORMAL page through the `/db/$databaseId/template` route
-([`db.$databaseId.template.tsx`](../../src/routes/db.$databaseId.template.tsx),
+([`db.$databaseId_.template.tsx`](../../src/routes/db.$databaseId_.template.tsx),
 `PageWorkspace` + a back-link sidebar; the template is created on first visit), entered
 from the database ⋯ menu's **Row pages** item (which shows default/custom status).
 Rendering reads the shard: virtual row pages via the reactive
@@ -452,10 +458,16 @@ route-mounted, not threaded through the slash-menu plumbing). The whole row-page
 (virtual page, preview, template editor) shares a **properties rail**
 ([`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx)):
 a resizable side panel — the default — with the same field-row presentation as the
-in-page properties block (placement menu in the panel corner; the host header bar
-stays full width above the split). Where properties show is a per-database setting
-(`database.rowPropertiesPlacement`, side panel vs top of page) switched from the
-placement menu in the page's top right; always in-page on narrow viewports.
+in-page properties block (hover-reveal Properties ⋯ on the collapsible header
+or the inline section corner; the host header bar stays full width above the
+split). The ⋯ menu switches layout (`database.rowPropertiesPlacement`, side
+panel vs top of page — desktop only; always in-page on narrow viewports) and
+hosts the shared
+[`DatabasePropertiesList`](../../src/components/database/database-properties-list.tsx)
+(reorder / show-hide / delete — same UI as the database settings Properties
+submenu). Row-page show/hide writes `database.rowPropertiesVisibleFieldIds`
+(DB-wide, independent of per-view `visibleFieldIds`); settings still write the
+active view's list. `removeDatabaseField` strips both.
 
 **Copy-on-write:** the first body click instantiates the template
 (a snapshot — live tokens inside real pages are a future phase), remaps ids

@@ -17,11 +17,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Kbd } from "@/components/ui/kbd.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { setDatabaseRowPropertiesPlacement } from "@/db/queries/database-collection-ops.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
@@ -54,6 +61,9 @@ export function useRowPropertiesRail(
     placement,
   };
 }
+
+/** Wait before showing rail hints so quick passes do not flash tooltips. */
+const RAIL_TOOLTIP_DELAY_MS = 300;
 
 const PLACEMENT_OPTIONS: Array<{
   label: string;
@@ -151,10 +161,49 @@ function RowPropertiesRailPanelShell({
   );
 }
 
+/** Resize divider between canvas and properties panel. */
+function RowPropertiesResizeHandle(): ReactNode {
+  return (
+    <TooltipProvider delay={RAIL_TOOLTIP_DELAY_MS}>
+      <Tooltip trackCursorAxis="y">
+        <TooltipTrigger
+          render={
+            <ResizableHandle
+              aria-label="Drag to resize"
+              className={cn(
+                // Wider transparent hit target (react-resizable-panels pads to 10px anyway).
+                "w-3 cursor-col-resize bg-transparent outline-none ring-0",
+                // Visible w-0.5 rail only on the center line — matches PageSidebarRail pattern.
+                "after:w-0.5 after:bg-transparent after:transition-colors",
+                "hover:after:bg-selection-primary",
+                "data-[separator=active]:after:bg-selection-primary",
+                "focus-visible:outline-none focus-visible:ring-0"
+              )}
+            />
+          }
+        />
+        <TooltipContent
+          className="flex-col items-start gap-1 py-2"
+          showArrow={false}
+          side="left"
+          sideOffset={8}
+        >
+          <span className="inline-flex items-center gap-1">
+            Resize
+            <Kbd>Drag</Kbd>
+          </span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 /**
  * Split layout while properties live in the side panel — wraps the page body
  * scroll region only (the host header bar stays full width above). The resize
- * handle is invisible until hovered or dragged.
+ * handle is invisible until hovered or dragged, then shows a centered w-0.5
+ * selection line inside a wider transparent hit target, with a cursor-tracking
+ * tooltip.
  */
 export function RowPropertiesRailLayout({
   children,
@@ -166,6 +215,7 @@ export function RowPropertiesRailLayout({
   return (
     <ResizablePanelGroup
       className="min-h-0 min-w-0 flex-1"
+      disableCursor
       id="row-properties-rail"
       orientation="horizontal"
     >
@@ -175,7 +225,7 @@ export function RowPropertiesRailLayout({
       >
         {children}
       </ResizablePanel>
-      <ResizableHandle className="bg-transparent transition-colors hover:bg-border active:bg-border" />
+      <RowPropertiesResizeHandle />
       <ResizablePanel
         className="flex h-full min-h-0 min-w-0 flex-col"
         defaultSize="19rem"

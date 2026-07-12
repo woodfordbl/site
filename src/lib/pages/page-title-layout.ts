@@ -37,6 +37,9 @@ export const pageCanvasMobileScrollClassName =
 export const pageCanvasTouchScrollClassName =
   "no-scrollbar pr-4 pb-[50vh] pl-3 md:overflow-auto md:px-12 md:pt-16 md:pb-12";
 
+/** Desktop canvas top scroll inset — title column starts below this. */
+export const pageCanvasDesktopScrollTopInsetClassName = "md:pt-16";
+
 /**
  * Mobile header slot (cover-less pages). Negative margins cancel the scroll
  * padding so the header sits flush to the panel edge (gutter-lane variant).

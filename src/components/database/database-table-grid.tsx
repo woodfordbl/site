@@ -1,6 +1,6 @@
 import {
   IconArrowsDiagonal,
-  IconChevronRight,
+  IconCaretRightFilled,
   IconFileText,
   IconPlus,
 } from "@tabler/icons-react";
@@ -1150,10 +1150,10 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
         />
         {/* Visible content: sticky against horizontal scroll, click-through
             to the full-row toggle underneath (the "+" opts back in). */}
-        <div className="pointer-events-none sticky left-0 z-10 flex max-w-full items-center gap-1.5 px-2">
-          <IconChevronRight
+        <div className="pointer-events-none sticky left-0 z-10 flex max-w-full items-center gap-2 px-2">
+          <IconCaretRightFilled
             className={cn(
-              "size-4 shrink-0 stroke-[1.5px] text-muted-foreground transition-transform",
+              "size-3 shrink-0 text-muted-foreground transition-transform",
               !collapsed && "rotate-90"
             )}
           />
