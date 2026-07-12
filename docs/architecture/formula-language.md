@@ -92,7 +92,9 @@ which spelling was used (`via: "prop" | "scope"`).
   rule the checker and rewriters use — the three can never disagree). Cell → value
   mapping mirrors the checker's `formulaPropertyValueType`: text/url/select → text,
   number → number, checkbox → boolean, date → date-only `FormulaDate`, multiSelect →
-  a real list of option names, empty/mistyped → blank.
+  a real list of option names, empty/mistyped → blank. `relation` fields exist in
+  `FormulaFieldKind` but stay compile-neutral for now: they type as unknown and
+  evaluate as blank until the relation evaluation stage lands (`list<row>` values).
 - **Startup migration** —
   [`formula-ref-migration.ts`](../../src/db/queries/formula-ref-migration.ts)
   (wired in `startLocalCollectionsSync`,

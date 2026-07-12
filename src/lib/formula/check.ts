@@ -70,7 +70,10 @@ export type FormulaFieldKind =
   | "multiSelect"
   | "date"
   | "url"
-  | "formula";
+  | "formula"
+  // Projects to unknown for now — row-typed relation values arrive with the
+  // relation evaluation stage (`formulaPropertyValueType` default).
+  | "relation";
 
 /** One schema field visible to the formula being checked. */
 export interface FormulaCheckProperty {

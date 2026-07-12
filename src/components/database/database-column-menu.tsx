@@ -50,6 +50,7 @@ import {
   numberFormatPatch,
   numberGroupingPatch,
   recoloredSelectOptions,
+  relationTargetPatch,
   renamedSelectOptions,
   selectOptionsPatch,
   showsEditPropertySubmenu,
@@ -105,7 +106,11 @@ import {
   updateDatabaseField,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
-import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import {
+  useAllDatabases,
+  useDatabase,
+  useDatabaseRows,
+} from "@/db/queries/use-database.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,
@@ -708,7 +713,66 @@ function EditPropertySubmenu({
     );
   }
 
+  if (field.type === "relation") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconSettings />
+          Edit property
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <RelationTargetEditor databaseId={databaseId} field={field} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
   return null;
+}
+
+interface RelationTargetEditorProps {
+  databaseId: string;
+  field: DatabaseField & { type: "relation" };
+}
+
+/**
+ * Relation target picker inside Edit property: a radio-style list of every
+ * database (self-relations allowed, synced targets allowed) with the current
+ * target checked. Retargeting keeps stored cell ids — they simply stop
+ * resolving against the new target and render as nothing.
+ */
+function RelationTargetEditor({
+  databaseId,
+  field,
+}: RelationTargetEditorProps) {
+  const databases = useAllDatabases();
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>Related to</DropdownMenuLabel>
+      </DropdownMenuGroup>
+      <DropdownMenuRadioGroup
+        onValueChange={(value) => {
+          if (value !== field.targetDatabaseId) {
+            updateDatabaseField(
+              databaseId,
+              field.id,
+              relationTargetPatch(value)
+            );
+          }
+        }}
+        value={field.targetDatabaseId}
+      >
+        {databases.map((database) => (
+          <DropdownMenuRadioItem key={database.id} value={database.id}>
+            <span className="min-w-0 truncate">
+              {database.name.trim() === "" ? "Untitled" : database.name}
+            </span>
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </>
+  );
 }
 
 interface ChangeTypeSubmenuProps {
@@ -717,8 +781,53 @@ interface ChangeTypeSubmenuProps {
 }
 
 /**
+ * Nested target-database list under the Change-type "Relation" entry —
+ * becoming a relation requires a target, so the type change only applies
+ * once a database is picked (self-relations and synced targets allowed).
+ */
+function RelationTargetSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
+  const databases = useAllDatabases();
+  const TypeIcon = DATABASE_FIELD_TYPE_ICONS.relation;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <TypeIcon className="stroke-[1.5px]" />
+        {FIELD_TYPE_DEFS.relation.label}
+        <ItemCheck checked={field.type === "relation"} />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {databases.map((database) => (
+          <DropdownMenuItem
+            key={database.id}
+            onClick={() => {
+              updateDatabaseField(
+                databaseId,
+                field.id,
+                fieldTypeChangePatch("relation", database.id)
+              );
+            }}
+          >
+            <span className="min-w-0 truncate">
+              {database.name.trim() === "" ? "Untitled" : database.name}
+            </span>
+            <ItemCheck
+              checked={
+                field.type === "relation" &&
+                field.targetDatabaseId === database.id
+              }
+            />
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/**
  * "Change type" submenu over every field type (formula included — changing
  * TO formula starts with an empty expression written via Edit property).
+ * "Relation" opens a nested target-database picker instead of patching
+ * immediately — the type change needs a target to be complete.
  * Cell values are NOT migrated this wave — see `fieldTypeChangePatch`.
  */
 function ChangeTypeSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
@@ -730,6 +839,15 @@ function ChangeTypeSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         {databaseFieldTypeSchema.options.map((type) => {
+          if (type === "relation") {
+            return (
+              <RelationTargetSubmenu
+                databaseId={databaseId}
+                field={field}
+                key={type}
+              />
+            );
+          }
           const TypeIcon = DATABASE_FIELD_TYPE_ICONS[type];
           return (
             <DropdownMenuItem

@@ -6,6 +6,7 @@ import {
   IconLink,
   IconList,
   IconMathFunction,
+  IconRelationManyToMany,
   IconSquareCheck,
 } from "@tabler/icons-react";
 import { type ComponentType, createElement } from "react";
@@ -39,6 +40,7 @@ export const DATABASE_FIELD_TYPE_ICONS: Record<
   date: IconCalendar,
   url: IconLink,
   formula: IconMathFunction,
+  relation: IconRelationManyToMany,
 };
 
 /**
@@ -116,6 +118,18 @@ export const DATABASE_FIELD_TYPE_ICON_NODES: Record<
     ["path", { d: "M5 12h6" }],
     ["path", { d: "M15 12l6 6" }],
     ["path", { d: "M15 18l6 -6" }],
+  ],
+  relation: [
+    [
+      "path",
+      {
+        d: "M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10",
+      },
+    ],
+    ["path", { d: "M15 14v-4l3 4v-4" }],
+    ["path", { d: "M6 14v-4l3 4v-4" }],
+    ["path", { d: "M12 10.5l0 .01" }],
+    ["path", { d: "M12 13.5l0 .01" }],
   ],
 };
 

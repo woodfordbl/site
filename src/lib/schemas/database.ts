@@ -19,6 +19,7 @@ export const databaseFieldTypeSchema = z.enum([
   "date",
   "url",
   "formula",
+  "relation",
 ]);
 
 export type DatabaseFieldType = z.infer<typeof databaseFieldTypeSchema>;
@@ -114,6 +115,15 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
      */
     expression: z.string().default(""),
   }),
+  databaseFieldBaseSchema.extend({
+    type: z.literal("relation"),
+    /**
+     * Database whose rows this field links to. Cell values store target-row
+     * id arrays; retargeting keeps stored ids (they simply stop resolving).
+     * Self-relations (target = own database) and synced targets are allowed.
+     */
+    targetDatabaseId: z.string(),
+  }),
 ]);
 
 export type DatabaseField = z.infer<typeof databaseFieldSchema>;
@@ -121,8 +131,8 @@ export type DatabaseField = z.infer<typeof databaseFieldSchema>;
 /**
  * One cell value. Interpretation is field-typed: `text`/`url` → string,
  * `number` → number, `checkbox` → boolean, `select` → option id string,
- * `multiSelect` → option id array, `date` → ISO date string. `null` and
- * missing keys both mean empty.
+ * `multiSelect` → option id array, `date` → ISO date string, `relation` →
+ * target-row id array. `null` and missing keys both mean empty.
  */
 export const databaseCellValueSchema = z.union([
   z.string(),

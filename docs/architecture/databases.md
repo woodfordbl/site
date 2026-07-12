@@ -16,13 +16,25 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | Entity | Shape |
 |--------|-------|
 | `LocalDatabase` | `id`, `name`, `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, timestamps |
-| `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`. All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
+| `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`, `formula` (`expression`), `relation` (`targetDatabaseId` — cells store target-row id arrays). All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, `externalId?` (connector row identity), timestamps |
 | `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
 drag-reorder semantics use `order` only when the active view has no sorts.
+
+**Relation fields** link rows across databases (self-relations and synced targets
+allowed): the field stores `targetDatabaseId`, each cell a `string[]` of target-row ids.
+Cells render neutral chips titled by the target's primary field ("Untitled" when blank;
+ids that no longer resolve are skipped), edited via a searchable multi-toggle over the
+target's rows in manual order. Relations are created/retargeted ONLY through the column
+menu (Change type → Relation → target picker; Edit property retargets, keeping stored
+ids — they simply stop resolving). v1 limits: filtering is emptiness-only (no
+contains-row), no grouping by relation, and `cellToPlainText` projects relation cells to
+`""` — search/countUnique/group labels don't see relation titles. Formula integration
+(relation values as `list<row>`) is a later stage; today relation properties type as
+unknown and evaluate as blank.
 
 ## Storage
 
@@ -122,7 +134,8 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   block color tokens), inline input editors for text/url/number + checkbox toggle,
   popover editors for select/multiSelect (searchable
   [`database-option-combobox.tsx`](../../src/components/database/database-option-combobox.tsx)
-  with create-option) and date (react-day-picker), Tab/Enter navigation
+  with create-option), date (react-day-picker), and relation (searchable target-row
+  multi-toggle — no create-row affordance in v1), Tab/Enter navigation
   (`nextEditTarget` in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts)).
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —

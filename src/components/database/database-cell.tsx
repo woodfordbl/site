@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 
 import { urlCellHref } from "@/components/database/database-grid-helpers.ts";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
 import {
+  cellToPlainText,
   coerceCellValue,
   formatCellValue,
   isCellEmpty,
@@ -71,6 +73,74 @@ function selectedOptions(
   return result;
 }
 
+interface RelationCellViewProps {
+  field: DatabaseField & { type: "relation" };
+  /** Coerced target-row id array; may be empty or hold stale ids. */
+  rowIds: readonly string[];
+}
+
+/**
+ * Relation cell display: one neutral chip per linked target row, titled by
+ * the target database's primary field (blank titles read "Untitled"), with
+ * the same `MAX_VISIBLE_OPTION_PILLS` + "+n" overflow as multi-select. Ids
+ * that resolve to no target row are skipped — stale links render nothing
+ * rather than error chips. Fetches the target schema and rows itself, so the
+ * grid stays ignorant of cross-database reads.
+ */
+export function RelationCellView({
+  field,
+  rowIds,
+}: RelationCellViewProps): ReactNode {
+  const targetDatabase = useDatabase(field.targetDatabaseId);
+  const targetRows = useDatabaseRows(field.targetDatabaseId);
+
+  const titles = useMemo(() => {
+    const primaryField = targetDatabase?.fields.find(
+      (entry) => entry.id === targetDatabase.primaryFieldId
+    );
+    if (!primaryField) {
+      return [];
+    }
+    const rowsById = new Map(targetRows.map((row) => [row.id, row]));
+    const result: { id: string; title: string }[] = [];
+    for (const rowId of rowIds) {
+      const row = rowsById.get(rowId);
+      if (!row) {
+        continue;
+      }
+      const title = cellToPlainText(
+        primaryField,
+        row.values[primaryField.id]
+      ).trim();
+      result.push({ id: rowId, title: title === "" ? "Untitled" : title });
+    }
+    return result;
+  }, [rowIds, targetDatabase, targetRows]);
+
+  if (titles.length === 0) {
+    return null;
+  }
+  const visible = titles.slice(0, MAX_VISIBLE_OPTION_PILLS);
+  const overflow = titles.length - visible.length;
+  return (
+    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+      {visible.map((entry) => (
+        <span
+          className="inline-flex min-w-0 shrink-0 items-center rounded-md bg-muted px-1.5 py-0.5 text-foreground text-xs"
+          key={entry.id}
+        >
+          <span className="truncate">{entry.title}</span>
+        </span>
+      ))}
+      {overflow > 0 ? (
+        <span className="shrink-0 text-muted-foreground text-xs">
+          +{overflow}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 interface DatabaseCellValueViewProps {
   field: DatabaseField;
   mode: "view" | "edit";
@@ -118,6 +188,37 @@ function DatabaseFormulaCellValue({
     ? value.join(", ")
     : formulaValueToDisplay(value);
   return display === "" ? null : <span className="truncate">{display}</span>;
+}
+
+/**
+ * Multi-select cell display: selected option pills (stale ids skipped) with
+ * the shared `MAX_VISIBLE_OPTION_PILLS` + "+n" overflow pattern.
+ */
+function DatabaseMultiSelectCellValue({
+  field,
+  optionIds,
+}: {
+  field: DatabaseField & { type: "multiSelect" };
+  optionIds: readonly string[];
+}): ReactNode {
+  const options = selectedOptions(field.options, optionIds);
+  if (options.length === 0) {
+    return null;
+  }
+  const visible = options.slice(0, MAX_VISIBLE_OPTION_PILLS);
+  const overflow = options.length - visible.length;
+  return (
+    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+      {visible.map((option) => (
+        <DatabaseOptionPill key={option.id} option={option} />
+      ))}
+      {overflow > 0 ? (
+        <span className="shrink-0 text-muted-foreground text-xs">
+          +{overflow}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 /**
@@ -203,30 +304,22 @@ export function DatabaseCellValueView({
           : undefined;
       return option ? <DatabaseOptionPill option={option} /> : null;
     }
-    case "multiSelect": {
-      const options = Array.isArray(coerced)
-        ? selectedOptions(field.options, coerced)
-        : [];
-      if (options.length === 0) {
-        return null;
-      }
-      const visible = options.slice(0, MAX_VISIBLE_OPTION_PILLS);
-      const overflow = options.length - visible.length;
+    case "multiSelect":
       return (
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-          {visible.map((option) => (
-            <DatabaseOptionPill key={option.id} option={option} />
-          ))}
-          {overflow > 0 ? (
-            <span className="shrink-0 text-muted-foreground text-xs">
-              +{overflow}
-            </span>
-          ) : null}
-        </span>
+        <DatabaseMultiSelectCellValue
+          field={field}
+          optionIds={Array.isArray(coerced) ? coerced : []}
+        />
       );
-    }
     case "date":
       return <DatabaseDateCellValue field={field} now={now} value={coerced} />;
+    case "relation":
+      return (
+        <RelationCellView
+          field={field}
+          rowIds={Array.isArray(coerced) ? coerced : []}
+        />
+      );
     default:
       return null;
   }

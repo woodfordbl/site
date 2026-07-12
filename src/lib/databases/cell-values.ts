@@ -96,7 +96,10 @@ export function coerceCellValue(
       return typeof value === "number" && Number.isFinite(value) ? value : null;
     case "checkbox":
       return typeof value === "boolean" ? value : null;
-    case "multiSelect": {
+    case "multiSelect":
+    case "relation": {
+      // Relation cells store target-row id arrays — same shape as
+      // multi-select option ids.
       if (!Array.isArray(value)) {
         return null;
       }
@@ -178,6 +181,12 @@ export function cellToPlainText(
       return typeof coerced === "string" ? toIsoDatePart(coerced) : "";
     case "formula":
       return formulaPlainText(coerced);
+    case "relation":
+      // Title projection needs the TARGET database's rows, which a pure
+      // per-field function can't reach — relation cells project to "" in v1
+      // (search/countUnique/group labels don't see relation titles). A later
+      // stage may thread a cross-database title resolver here.
+      return "";
     default:
       return "";
   }

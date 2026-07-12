@@ -346,6 +346,9 @@ describe("isInlineEditableField", () => {
     if (type === "formula") {
       return { id: "f", name: "F", type, expression: "" };
     }
+    if (type === "relation") {
+      return { id: "f", name: "F", type, targetDatabaseId: "db-target" };
+    }
     return { id: "f", name: "F", type };
   };
 
@@ -356,6 +359,7 @@ describe("isInlineEditableField", () => {
     expect(isInlineEditableField(field("select"))).toBe(true);
     expect(isInlineEditableField(field("multiSelect"))).toBe(true);
     expect(isInlineEditableField(field("date"))).toBe(true);
+    expect(isInlineEditableField(field("relation"))).toBe(true);
   });
 
   it("excludes checkbox — it toggles in place", () => {
