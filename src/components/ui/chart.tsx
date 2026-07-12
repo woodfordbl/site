@@ -83,13 +83,14 @@ export function makeMinorGridGenerator(minor: number): HorizontalGridGenerator {
 }
 
 /**
- * Props for the minor (subdivision) `<CartesianGrid>`: dashed and half-opacity
- * so the subdivisions read as fainter than the solid major lines. Spread onto a
- * horizontal-only grid driven by {@link makeMinorGridGenerator}.
+ * Props for the minor (subdivision) `<CartesianGrid>`: dashed, and only slightly
+ * lighter than the solid major lines so the subdivisions stay legible. The base
+ * `<ChartContainer>` rule already paints grid lines at `border/50`, so this
+ * `strokeOpacity` composes on top of that.
  */
 export const MINOR_GRID_PROPS = {
   strokeDasharray: "2 4",
-  strokeOpacity: 0.5,
+  strokeOpacity: 0.9,
   vertical: false,
 } as const;
 
