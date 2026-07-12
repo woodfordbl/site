@@ -6,6 +6,7 @@ import {
 } from "@/lib/formula/catalog.ts";
 import {
   checkFormula,
+  type FormulaCheckContext,
   type FormulaCheckProperty,
   type FormulaCheckResult,
   formulaPropertyValueType,
@@ -23,6 +24,7 @@ import {
   lambdaTypeOf,
   listTypeOf,
   NUMBER_TYPE,
+  rowTypeOf,
   TEXT_TYPE,
   UNKNOWN_TYPE,
   unionTypeOf,
@@ -706,19 +708,163 @@ describe("if, switch, and unions", () => {
 });
 
 describe("member access", () => {
-  it("diagnoses member access at the member name span", () => {
+  it("diagnoses member access on a definite non-row at the member name span", () => {
     const result = resultOf('prop("f_est").owner', SCHEMA);
     expect(result.diagnostics).toEqual([
       {
         end: 19,
-        message:
-          "Property access works on relation values, which arrive with relations; call a function instead, like .round()",
+        message: "Property access works on a row from a relation, got number",
         severity: "error",
         start: 14,
       },
     ]);
     // The receiver is still walked for references.
     expect(result.references).toEqual(["f_est"]);
+    expect(result.resultType).toEqual(UNKNOWN_TYPE);
+  });
+
+  it("stays optimistic when the receiver could be a row", () => {
+    // Unknown receiver (an unresolved reference already diagnosed) adds no
+    // second member diagnostic — one mistake, one diagnostic.
+    const result = resultOf('prop("gone").owner', SCHEMA);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.resultType).toEqual(UNKNOWN_TYPE);
+  });
+});
+
+// --- relation typing ---------------------------------------------------------
+
+/** Local schema: Rel links to Tasks (db-t); Tasks has a relation on to Subs (db-u). */
+const RELATION_PROPERTIES: FormulaCheckProperty[] = [
+  { id: "f_est", kind: "number", name: "Estimate", type: UNKNOWN_TYPE },
+  {
+    id: "f_rel",
+    kind: "relation",
+    name: "Rel",
+    targetDatabaseId: "db-t",
+    type: UNKNOWN_TYPE,
+  },
+];
+
+const RELATION_CONTEXT: FormulaCheckContext = {
+  databases: new Map([
+    [
+      "db-t",
+      {
+        name: "Tasks",
+        properties: [
+          { id: "f-est", kind: "number", name: "Estimate", type: UNKNOWN_TYPE },
+          { id: "f-done", kind: "checkbox", name: "Done", type: UNKNOWN_TYPE },
+          { id: "f-total", kind: "formula", name: "Total", type: NUMBER_TYPE },
+          {
+            id: "f-subs",
+            kind: "relation",
+            name: "Subtasks",
+            targetDatabaseId: "db-u",
+            type: UNKNOWN_TYPE,
+          },
+        ],
+      },
+    ],
+    [
+      "db-u",
+      {
+        name: "Subs",
+        properties: [
+          { id: "f-name", kind: "text", name: "Name", type: UNKNOWN_TYPE },
+        ],
+      },
+    ],
+  ]),
+  properties: RELATION_PROPERTIES,
+};
+
+function relationResultOf(source: string): FormulaCheckResult {
+  const parsed = parseFormula(source);
+  if (!parsed.ok) {
+    throw new Error(
+      `parse failed for ${JSON.stringify(source)}: ${parsed.error.message}`
+    );
+  }
+  return checkFormula(parsed.ast, RELATION_CONTEXT);
+}
+
+function relationTypeOf(source: string): FormulaType {
+  const result = relationResultOf(source);
+  if (result.diagnostics.length > 0) {
+    throw new Error(
+      `expected no diagnostics for ${JSON.stringify(source)}, got: ${result.diagnostics[0].message}`
+    );
+  }
+  return result.resultType;
+}
+
+describe("relation typing", () => {
+  it("types a relation property as a list of the target's rows", () => {
+    expectTypesEqual(
+      relationTypeOf('prop("f_rel")'),
+      listTypeOf(rowTypeOf("db-t"))
+    );
+    expect(formulaTypeBadge(listTypeOf(rowTypeOf("db-t")))).toBe(
+      "list of rows"
+    );
+    expect(formulaTypeBadge(rowTypeOf("db-t"))).toBe("row");
+  });
+
+  it("types member access by field name against the target database", () => {
+    expectTypesEqual(
+      relationTypeOf('map(prop("f_rel"), r => r.Estimate)'),
+      listTypeOf(NUMBER_TYPE)
+    );
+    // The rollup shape end-to-end, method spelling included.
+    expectTypesEqual(
+      relationTypeOf('prop("f_rel").map(r => r.Estimate).sum()'),
+      NUMBER_TYPE
+    );
+    expectTypesEqual(relationTypeOf('first(prop("f_rel")).Done'), BOOLEAN_TYPE);
+  });
+
+  it("types a formula member with its precomputed result type", () => {
+    expectTypesEqual(relationTypeOf('first(prop("f_rel")).Total'), NUMBER_TYPE);
+  });
+
+  it("types nested relation members recursively", () => {
+    expectTypesEqual(
+      relationTypeOf('first(prop("f_rel")).Subtasks'),
+      listTypeOf(rowTypeOf("db-u"))
+    );
+    expectTypesEqual(
+      relationTypeOf('first(prop("f_rel")).Subtasks.map(s => s.Name)'),
+      listTypeOf(TEXT_TYPE)
+    );
+  });
+
+  it("diagnoses unknown members naming the target database", () => {
+    const result = relationResultOf('first(prop("f_rel")).Nope');
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].message).toBe(
+      '"Nope" isn\'t a property of Tasks'
+    );
+    expect(result.resultType).toEqual(UNKNOWN_TYPE);
+  });
+
+  it("points member access on the whole relation list at .map", () => {
+    const result = relationResultOf('prop("f_rel").Estimate');
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].message).toBe(
+      'Use .map(r => r.Estimate) to read "Estimate" from each row of the list'
+    );
+  });
+
+  it("checks members optimistically without a databases map", () => {
+    const parsed = parseFormula('first(prop("f_rel")).Whatever');
+    if (!parsed.ok) {
+      throw new Error("parse failed");
+    }
+    const result = checkFormula(parsed.ast, {
+      properties: RELATION_PROPERTIES,
+    });
+    expect(result.diagnostics).toEqual([]);
     expect(result.resultType).toEqual(UNKNOWN_TYPE);
   });
 });

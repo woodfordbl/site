@@ -9,6 +9,12 @@
 
 import type { FormulaNode } from "@/lib/formula/ast.ts";
 import type { FormulaType } from "@/lib/formula/types.ts";
+// Type-only (erased at compile time), so the runtime value model stays free
+// of any schema/database coupling.
+import type {
+  DatabaseCellValue,
+  DatabaseField,
+} from "@/lib/schemas/database.ts";
 
 /**
  * A calendar-aware date value: an instant plus a `dateOnly` flag. Comparisons
@@ -33,9 +39,10 @@ export class FormulaDate {
 
 /**
  * A typed reference to a row of a known database — the value a relation
- * field will produce. The type ships now so the model is complete, but no
- * stdlib function produces one yet; every operation on a row evaluates to
- * {@link RELATIONS_UNAVAILABLE_MESSAGE}.
+ * cell produces (one ref per linked target row). Deliberately just the two
+ * ids: member access (`r.Estimate`) resolves lazily through the scope's
+ * {@link FormulaRelationResolver}, so refs stay cheap to build, copy, and
+ * compare (`formulaValuesEqual` compares by database + row id).
  */
 export class FormulaRowRef {
   readonly databaseId: string;
@@ -115,24 +122,72 @@ export function isFormulaError(value: FormulaValue): value is FormulaError {
   return value instanceof FormulaError;
 }
 
-/** Error message for any use of a row value or member access, for now. */
-export const RELATIONS_UNAVAILABLE_MESSAGE =
-  "Relations arrive in a later phase";
+/**
+ * One target database as the relation resolver exposes it: the schema needed
+ * to resolve members by name, the primary field for row display labels, and
+ * a per-row values lookup (`null` = the id no longer resolves — deleted row
+ * or retargeted relation — so stale refs read as blank, never throw).
+ */
+export interface FormulaRelationDatabase {
+  readonly fields: readonly DatabaseField[];
+  readonly name: string;
+  readonly primaryFieldId: string;
+  row(rowId: string): Record<string, DatabaseCellValue> | null;
+}
+
+/**
+ * Cross-database reader injected into evaluation so relation values resolve
+ * lazily: relation cells project to {@link FormulaRowRef} lists, and member
+ * access on a ref reads the target row through this interface. The pure
+ * layer only defines the contract — the database layer implements it over
+ * the local collections (`lib/databases/formula-relations.ts`).
+ *
+ * `formulaValue` computes a FORMULA member of a target row (the target's own
+ * per-database plan: topological order, same-database cycles as named
+ * errors). Implementations must guard cross-database cycles themselves — a
+ * re-entrant (databaseId, fieldId, rowId) returns a "Circular reference"
+ * error value. Optional so pure test stubs without formula fields stay tiny;
+ * absent, formula members read as blank.
+ */
+export interface FormulaRelationResolver {
+  database(databaseId: string): FormulaRelationDatabase | null;
+  formulaValue?(
+    databaseId: string,
+    rowId: string,
+    fieldId: string
+  ): FormulaValue;
+}
 
 /** Error message for using a lambda anywhere except a function argument. */
 export const LAMBDA_AS_VALUE_MESSAGE =
   "A function needs to be called, not used as a value";
 
 /**
+ * Member access on something that isn't a row. Shared by the checker
+ * (static type name) and the evaluator (runtime type name) so the message
+ * can never drift between them.
+ */
+export function formulaMemberOnNonRowMessage(typeName: string): string {
+  return `Property access works on a row from a relation, got ${typeName}`;
+}
+
+/** Member access on a LIST of rows — point the user at `.map`. */
+export function formulaMemberOnRowListMessage(name: string): string {
+  return `Use .map(r => r.${name}) to read "${name}" from each row of the list`;
+}
+
+/**
  * The evaluation environment injected by the caller. `getProperty` resolves
  * `thisPage.X` / `prop("…")` references. `now` is the injected clock for
  * `now()`/`today()` — when absent, a fixed epoch keeps pure callers
  * deterministic; interactive callers pass the real clock. (Same shape as
- * v1's `ExprScope`.)
+ * v1's `ExprScope`.) `relations` resolves member access on relation row
+ * refs; absent, relation members read as unresolvable errors.
  */
 export interface FormulaScope {
   getProperty(ref: string): FormulaValue;
   now?(): Date;
+  relations?: FormulaRelationResolver;
 }
 
 /**

@@ -116,6 +116,7 @@ import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import { canonicalizeExpression } from "@/lib/formula/ref-rewrite.ts";
@@ -444,6 +445,7 @@ function FormulaExpressionEditor({
 }: FormulaExpressionEditorProps) {
   const database = useDatabase(databaseId);
   const rows = useDatabaseRows(databaseId);
+  const relatedDatabases = useAllDatabases();
   const fields = database?.fields ?? [];
   const primaryFieldId = database?.primaryFieldId;
   const previewRows = useMemo(
@@ -453,6 +455,15 @@ function FormulaExpressionEditor({
         database?.fields.find((candidate) => candidate.id === primaryFieldId)
       ),
     [rows, database?.fields, primaryFieldId]
+  );
+  // Recreated whenever any database definition changes so the preview's
+  // cross-database reads track schema edits; row edits in TARGET databases
+  // while the submenu is open stay stale until reopen (non-reactive reads —
+  // accepted v1 limitation, see formula-relations.ts).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
+  const relations = useMemo(
+    () => localFormulaRelationResolver(),
+    [relatedDatabases]
   );
 
   return (
@@ -472,6 +483,8 @@ function FormulaExpressionEditor({
         onSaved();
       }}
       previewRows={previewRows}
+      relatedDatabases={relatedDatabases}
+      relations={relations}
     />
   );
 }

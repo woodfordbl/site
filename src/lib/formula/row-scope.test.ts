@@ -5,10 +5,14 @@ import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
 import {
   createFormulaRowScope,
+  formulaRowLabelOf,
+  formulaRowRefLabel,
   type ResolvedFormulaValues,
 } from "@/lib/formula/row-scope.ts";
 import {
   FormulaDate,
+  type FormulaRelationResolver,
+  FormulaRowRef,
   type FormulaValue,
   formulaError,
   isFormulaError,
@@ -268,5 +272,138 @@ describe("createFormulaRowScope clock injection", () => {
     expect((result as FormulaDate).date.toISOString()).toBe(
       "2020-01-01T12:00:00.000Z"
     );
+  });
+});
+
+describe("createFormulaRowScope relations", () => {
+  // Target databases the stub resolver serves: Tasks (with a number, a
+  // formula, and a nested relation into Subs) and Subs.
+  const tasksFields: DatabaseField[] = [
+    { id: "t-name", name: "Name", type: "text" },
+    { id: "t-est", name: "Estimate", type: "number" },
+    {
+      expression: 'prop("t-est") * 2',
+      id: "t-double",
+      name: "Double",
+      type: "formula",
+    },
+    { id: "t-subs", name: "Subs", targetDatabaseId: "db-u", type: "relation" },
+  ];
+  const taskRows: Record<string, Record<string, DatabaseCellValue>> = {
+    r1: { "t-est": 3, "t-name": "Alpha" },
+    r2: { "t-est": 4, "t-name": " ", "t-subs": ["u1", "stale-sub"] },
+  };
+  const subsFields: DatabaseField[] = [
+    { id: "u-name", name: "Name", type: "text" },
+  ];
+  const subRows: Record<string, Record<string, DatabaseCellValue>> = {
+    u1: { "u-name": "Leaf" },
+  };
+
+  function stubResolver(): FormulaRelationResolver {
+    return {
+      database(databaseId) {
+        if (databaseId === "db-t") {
+          return {
+            fields: tasksFields,
+            name: "Tasks",
+            primaryFieldId: "t-name",
+            row: (rowId) => taskRows[rowId] ?? null,
+          };
+        }
+        if (databaseId === "db-u") {
+          return {
+            fields: subsFields,
+            name: "Subs",
+            primaryFieldId: "u-name",
+            row: (rowId) => subRows[rowId] ?? null,
+          };
+        }
+        return null;
+      },
+      formulaValue(databaseId, rowId, fieldId) {
+        if (databaseId !== "db-t" || fieldId !== "t-double") {
+          return null;
+        }
+        const estimate = taskRows[rowId]?.["t-est"];
+        return typeof estimate === "number" ? estimate * 2 : null;
+      },
+    };
+  }
+
+  const relFields: DatabaseField[] = [
+    { id: "f-rel", name: "Rel", targetDatabaseId: "db-t", type: "relation" },
+  ];
+
+  // `null` = deliberately no resolver (the legacy pure-caller path).
+  function runRel(
+    source: string,
+    rowValues: Record<string, DatabaseCellValue>,
+    relations: FormulaRelationResolver | null = stubResolver()
+  ): FormulaValue {
+    const parsed = parseFormula(source);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+    return evaluateFormula(
+      parsed.ast,
+      createFormulaRowScope(relFields, rowValues, undefined, {
+        relations: relations ?? undefined,
+      })
+    );
+  }
+
+  it("evaluates the canonical rollup end-to-end", () => {
+    expect(
+      runRel('prop("f-rel").map(r => r.Estimate).sum()', {
+        "f-rel": ["r1", "r2"],
+      })
+    ).toBe(7);
+  });
+
+  it("reads a blank relation cell as the EMPTY list, so rollups sum to 0", () => {
+    expect(runRel('prop("f-rel")', {})).toEqual([]);
+    expect(runRel('prop("f-rel")', { "f-rel": null })).toEqual([]);
+    expect(runRel('prop("f-rel").map(r => r.Estimate).sum()', {})).toBe(0);
+  });
+
+  it("skips stale target row ids", () => {
+    expect(
+      runRel('prop("f-rel").map(r => r.Name)', { "f-rel": ["r1", "ghost"] })
+    ).toEqual(["Alpha"]);
+  });
+
+  it("computes formula members of target rows through the resolver", () => {
+    expect(runRel('first(prop("f-rel")).Double', { "f-rel": ["r1"] })).toBe(6);
+  });
+
+  it("resolves nested relation members recursively, stale ids skipped", () => {
+    expect(
+      runRel('first(prop("f-rel")).Subs.map(s => s.Name)', {
+        "f-rel": ["r2"],
+      })
+    ).toEqual(["Leaf"]);
+  });
+
+  it("keeps relation cells blank without a resolver (legacy pure callers)", () => {
+    expect(runRel('prop("f-rel")', { "f-rel": ["r1"] }, null)).toBeNull();
+  });
+
+  it("labels row refs by primary-field text with an Untitled fallback", () => {
+    const relations = stubResolver();
+    expect(formulaRowRefLabel(new FormulaRowRef("db-t", "r1"), relations)).toBe(
+      "Alpha"
+    );
+    // Blank title and unresolvable refs both read "Untitled".
+    expect(formulaRowRefLabel(new FormulaRowRef("db-t", "r2"), relations)).toBe(
+      "Untitled"
+    );
+    expect(
+      formulaRowRefLabel(new FormulaRowRef("db-t", "ghost"), relations)
+    ).toBe("Untitled");
+    const value = runRel('prop("f-rel")', { "f-rel": ["r1", "r2"] }, relations);
+    expect(
+      formulaValueToDisplay(value, { rowLabel: formulaRowLabelOf(relations) })
+    ).toBe("Alpha, Untitled");
   });
 });

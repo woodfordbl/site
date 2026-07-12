@@ -9,6 +9,7 @@
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
+import { formulaRowLabelOf } from "@/lib/formula/row-scope.ts";
 import { type FormulaScope, formulaError } from "@/lib/formula/values.ts";
 
 /** One span of a template: literal text or an embedded expression source. */
@@ -97,6 +98,9 @@ export function evaluateTemplateText(
   scope: FormulaScope
 ): string {
   const parts: string[] = [];
+  // Relation row values render as their target row's title, when the scope
+  // can resolve them.
+  const display = { rowLabel: formulaRowLabelOf(scope.relations) };
   for (const segment of splitTemplateText(text)) {
     if (segment.kind === "text") {
       parts.push(segment.text);
@@ -107,7 +111,9 @@ export function evaluateTemplateText(
       parts.push(formulaValueToDisplay(formulaError(parsed.error.message)));
       continue;
     }
-    parts.push(formulaValueToDisplay(evaluateFormula(parsed.ast, scope)));
+    parts.push(
+      formulaValueToDisplay(evaluateFormula(parsed.ast, scope), display)
+    );
   }
   return parts.join("");
 }

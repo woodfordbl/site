@@ -54,6 +54,7 @@ import {
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
 import { cellToPlainText } from "@/lib/databases/cell-values.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import {
   findDatabaseHostPageId,
   resolveDatabaseHostParentId,
@@ -394,7 +395,7 @@ function useMaterializeRowPage(
           database.rowTemplate,
           database.fields,
           row.values,
-          { now: () => new Date() }
+          { now: () => new Date(), relations: localFormulaRelationResolver() }
         )
       );
       const parentId = resolveDatabaseHostParentId({
@@ -493,7 +494,7 @@ function RowPageBody({
         database.rowTemplate,
         database.fields,
         row.values,
-        { now: () => new Date() }
+        { now: () => new Date(), relations: localFormulaRelationResolver() }
       ),
     [database.rowTemplate, database.fields, row.values]
   );

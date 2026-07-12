@@ -32,9 +32,10 @@ target's rows in manual order. Relations are created/retargeted ONLY through the
 menu (Change type → Relation → target picker; Edit property retargets, keeping stored
 ids — they simply stop resolving). v1 limits: filtering is emptiness-only (no
 contains-row), no grouping by relation, and `cellToPlainText` projects relation cells to
-`""` — search/countUnique/group labels don't see relation titles. Formula integration
-(relation values as `list<row>`) is a later stage; today relation properties type as
-unknown and evaluate as blank.
+`""` — search/countUnique/group labels don't see relation titles. In formulas a
+relation property is a `list<row<Target>>` — `prop("Rel").map(r => r.Estimate).sum()`
+rolls up target rows, target formula fields included (see
+[formula-language — Relations](./formula-language.md#relations)).
 
 ## Storage
 
@@ -281,7 +282,7 @@ Formula values are computed at **read time** — never stored in `row.values`.
 over the v2 engine in [`src/lib/formula/`](../../src/lib/formula/) (typed values,
 static checker, id-canonical references — full reference:
 [formula-language](./formula-language.md)): `computeFormulaOverlay(fields, rows,
-{ now? })` parses and checks each formula's expression once per call (never per row),
+{ now?, relations? })` parses and checks each formula's expression once per call (never per row),
 orders formula fields **topologically** over their formula→formula references, and
 evaluates column-major via `createFormulaRowScope` — so formulas may reference other
 formulas; reference cycles yield named per-cell errors (`Circular reference:
@@ -290,7 +291,12 @@ Total → Subtotal → Total`). Each cell records `{ cellValue, display, isError
 parse-error and blank expressions yield `null` cells, shadowing any stale stored
 values under the field id). `database-table-view.tsx` feeds these merged rows to the
 whole pipeline — filter, sort, group, Calculate row, and the grid — so formulas
-participate in the view machinery like stored columns:
+participate in the view machinery like stored columns. Interactive call sites pass
+`relations: localFormulaRelationResolver()`
+([`formula-relations.ts`](../../src/lib/databases/formula-relations.ts)) so relation
+rollups read target databases (synchronous, non-reactive v1 reads; cross-database
+cycles degrade to named per-cell errors — see
+[formula-language — Relations](./formula-language.md#relations)):
 
 - **Coercion** — `coerceCellValue`'s formula case passes scalar string/number/boolean
   through; everything else reads as empty.
@@ -436,7 +442,9 @@ Row drag-reorder UI (table grid — board card drag shipped),
 row-page template authoring UI and live tokens
 (virtual pages + copy-on-write with host-page nesting shipped — see
 [Row pages](#row-pages-virtual--copy-on-write)), sidebar database-row
-scroll-to-block navigation, relations/rollups,
+scroll-to-block navigation, the rollup template picker and reactive cross-database
+recompute (relation values in formulas shipped — see
+[formula-language — Relations](./formula-language.md#relations)),
 formula-aware typed filter operators (formula→formula references shipped with the
 v2 engine — see [formula-language](./formula-language.md)),
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views

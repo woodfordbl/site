@@ -12,6 +12,8 @@ import {
   FormulaCodeEditorBoundary,
   FormulaEditorPanel,
 } from "@/components/database/formula-editor-panel.tsx";
+import type { FormulaRelatedDatabase } from "@/lib/databases/formula-values.ts";
+import type { FormulaRelationResolver } from "@/lib/formula/values.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 // Coarse pointers keep the plain textarea (the CM6 code editor is the fine-
@@ -41,6 +43,7 @@ const PARSE_ERROR_RE = /Unexpected end of expression/;
 const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
 const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
 const PARSE_ERROR_AT_8_RE = /Unexpected end of expression.*\(at character 8\)/;
+const NOT_A_TASKS_PROPERTY_RE = /isn't a property of Tasks/;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
 function flushFrames(): Promise<void> {
@@ -238,6 +241,74 @@ describe("FormulaEditorPanel", () => {
     expect(textarea.value).toBe('thisPage["Unit Count"] * 2');
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).toHaveBeenCalledWith('prop("f-qty") * 2');
+  });
+
+  describe("relations", () => {
+    const relationFields: DatabaseField[] = [
+      { id: "f-rel", name: "Rel", targetDatabaseId: "db-t", type: "relation" },
+      { id: "f-roll", name: "Rollup", type: "formula", expression: "" },
+    ];
+    const targetFields: DatabaseField[] = [
+      { id: "t-name", name: "Name", type: "text" },
+      { id: "t-est", name: "Estimate", type: "number" },
+    ];
+    const targetRows: Record<string, Record<string, string | number>> = {
+      r1: { "t-est": 3, "t-name": "Alpha" },
+      r2: { "t-est": 4, "t-name": "Beta" },
+    };
+    const relatedDatabases: FormulaRelatedDatabase[] = [
+      { fields: targetFields, id: "db-t", name: "Tasks" },
+    ];
+    const relations: FormulaRelationResolver = {
+      database: (databaseId) =>
+        databaseId === "db-t"
+          ? {
+              fields: targetFields,
+              name: "Tasks",
+              primaryFieldId: "t-name",
+              row: (rowId) => targetRows[rowId] ?? null,
+            }
+          : null,
+    };
+
+    it("previews a relation rollup when relatedDatabases/relations are provided", async () => {
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={relationFields}
+          onSave={vi.fn()}
+          previewRows={[
+            {
+              id: "row-1",
+              label: "First row",
+              values: { "f-rel": ["r1", "r2"] },
+            },
+          ]}
+          relatedDatabases={relatedDatabases}
+          relations={relations}
+        />
+      );
+      await flushFrames();
+
+      const textarea = screen.getByLabelText("Formula expression");
+      fireEvent.change(textarea, {
+        target: { value: "thisPage.Rel.map(r => r.Estimate).sum()" },
+      });
+      // Checker: member typed by name against the target schema → clean.
+      expect(screen.getByText("✓ Valid")).toBeDefined();
+      expect(screen.getByText("number")).toBeDefined();
+      // Preview: 3 + 4 over the stub resolver's target rows.
+      expect(screen.getByText("Preview: 7")).toBeDefined();
+
+      // Unknown members diagnose with the target database's name — in the
+      // status row (checker) AND the preview (the runtime's matching error).
+      fireEvent.change(textarea, {
+        target: { value: "thisPage.Rel.map(r => r.Nope).sum()" },
+      });
+      expect(
+        screen.getAllByText(NOT_A_TASKS_PROPERTY_RE).length
+      ).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe("code editor (fine pointers)", () => {

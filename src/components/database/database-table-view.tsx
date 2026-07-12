@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { buildChartData } from "@/lib/databases/chart-data.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import {
   computeFormulaOverlay,
   hasVolatileFormula,
@@ -333,10 +334,16 @@ export function DatabaseTableView({
   // Formula overlay: computed values merged into row COPIES so formulas ride
   // the whole existing pipeline — filter, sort, group, Calculate row, and the
   // grid's cells all read merged values. No formula fields → rows pass
-  // through untouched.
+  // through untouched. The relation resolver is created fresh per compute so
+  // relation rollups read the target collections' current rows — but only
+  // when THIS database's rows/fields (or the clock) change; edits to a
+  // target database alone don't retrigger (accepted v1 limitation, see
+  // formula-relations.ts).
   const mergedRows = useMemo<LocalDatabaseRow[]>(() => {
+    const now = () => clockNow;
     const overlay = computeFormulaOverlay(fields, allRows, {
-      now: () => clockNow,
+      now,
+      relations: localFormulaRelationResolver({ now }),
     });
     return withFormulaValues(allRows, overlay);
   }, [allRows, fields, clockNow]);

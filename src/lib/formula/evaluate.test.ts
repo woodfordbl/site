@@ -10,12 +10,12 @@ import {
   FORMULA_FIXED_NOW_ISO,
   FormulaDate,
   FormulaLambda,
+  FormulaRowRef,
   type FormulaScope,
   type FormulaValue,
   formulaError,
   isFormulaError,
   LAMBDA_AS_VALUE_MESSAGE,
-  RELATIONS_UNAVAILABLE_MESSAGE,
 } from "@/lib/formula/values.ts";
 
 /** Scope over a plain record; unknown names produce an error value. */
@@ -807,12 +807,55 @@ describe("scope properties", () => {
 });
 
 describe("member access", () => {
-  it("evaluates to the relations-later error for now", () => {
+  it("rejects non-row receivers with a typed error", () => {
     expect(errorMessage(run("let(r, 1, r.Estimate)"))).toBe(
-      RELATIONS_UNAVAILABLE_MESSAGE
+      "Property access works on a row from a relation, got number"
     );
-    expect(errorMessage(run('prop("x").owner', scopeOf({ x: 1 })))).toBe(
-      RELATIONS_UNAVAILABLE_MESSAGE
+    expect(errorMessage(run('prop("x").owner', scopeOf({ x: "a" })))).toBe(
+      "Property access works on a row from a relation, got text"
+    );
+  });
+
+  it("points a list-of-rows receiver at .map", () => {
+    const rel = [new FormulaRowRef("db-t", "r1")];
+    expect(
+      errorMessage(run('prop("Rel").Estimate', scopeOf({ Rel: rel })))
+    ).toBe(
+      'Use .map(r => r.Estimate) to read "Estimate" from each row of the list'
+    );
+  });
+
+  it("propagates blank receivers as blank", () => {
+    // first(<empty relation>) is blank; the chained member stays blank so
+    // rollup chains over unlinked rows read empty, not error.
+    expect(run('prop("Rel").first().Estimate', scopeOf({ Rel: [] }))).toBe(
+      null
+    );
+  });
+
+  it("resolves row members through the scope's relation resolver", () => {
+    const scope: FormulaScope = {
+      getProperty: () => new FormulaRowRef("db-t", "r1"),
+      relations: {
+        database: () => ({
+          fields: [{ id: "f-est", name: "Estimate", type: "number" }],
+          name: "Tasks",
+          primaryFieldId: "f-est",
+          row: (rowId) => (rowId === "r1" ? { "f-est": 8 } : null),
+        }),
+      },
+    };
+    expect(run('prop("row").Estimate', scope)).toBe(8);
+    // Unknown member names error with the target database's name.
+    expect(errorMessage(run('prop("row").Nope', scope))).toBe(
+      '"Nope" isn\'t a property of Tasks'
+    );
+  });
+
+  it("errors when a row ref reaches a scope without a resolver", () => {
+    const scope = scopeOf({ row: new FormulaRowRef("db-t", "r1") });
+    expect(errorMessage(run('prop("row").Estimate', scope))).toBe(
+      "Related rows are not available here"
     );
   });
 

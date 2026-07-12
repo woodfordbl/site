@@ -78,6 +78,12 @@ export interface InstantiateTemplateBlocksOptions {
    * clock.
    */
   now?: CreateFormulaRowScopeOptions["now"];
+  /**
+   * Cross-database reader for relation tokens/rollups
+   * (`localFormulaRelationResolver()` from UI callers). Omitted, relation
+   * values in tokens read as blank.
+   */
+  relations?: CreateFormulaRowScopeOptions["relations"];
 }
 
 /**
@@ -103,7 +109,7 @@ export function instantiateTemplateBlocks(
     template !== undefined && template.length > 0
       ? template
       : defaultRowTemplateBlocks();
-  const scopeOpts = opts?.now === undefined ? undefined : { now: opts.now };
+  const scopeOpts = { now: opts?.now, relations: opts?.relations };
   const resolved = computeFormulaRowValues(fields, values, scopeOpts);
   const scope = createFormulaRowScope(fields, values, resolved, scopeOpts);
 

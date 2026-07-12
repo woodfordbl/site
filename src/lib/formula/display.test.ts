@@ -13,7 +13,6 @@ import {
   FormulaRowRef,
   formulaError,
   LAMBDA_AS_VALUE_MESSAGE,
-  RELATIONS_UNAVAILABLE_MESSAGE,
 } from "@/lib/formula/values.ts";
 
 const LITERAL_ONE: FormulaNode = {
@@ -57,6 +56,19 @@ describe("formulaValueToDisplay", () => {
       "⚠ Division by zero"
     );
   });
+
+  it("labels rows through opts.rowLabel, recursively inside lists", () => {
+    const rowLabel = (ref: FormulaRowRef) => `Row ${ref.rowId}`;
+    expect(
+      formulaValueToDisplay(new FormulaRowRef("db", "r1"), { rowLabel })
+    ).toBe("Row r1");
+    expect(
+      formulaValueToDisplay(
+        [new FormulaRowRef("db", "r1"), new FormulaRowRef("db", "r2")],
+        { rowLabel }
+      )
+    ).toBe("Row r1, Row r2");
+  });
 });
 
 describe("formulaDateToDisplay", () => {
@@ -87,7 +99,7 @@ describe("formulaValueToText", () => {
     expect(
       (formulaValueToText(new FormulaRowRef("db", "row")) as FormulaError)
         .message
-    ).toBe(RELATIONS_UNAVAILABLE_MESSAGE);
+    ).toBe("Cannot convert a row to text");
     expect(
       (
         formulaValueToText(

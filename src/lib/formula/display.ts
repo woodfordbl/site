@@ -14,7 +14,6 @@ import {
   type FormulaValue,
   formulaError,
   LAMBDA_AS_VALUE_MESSAGE,
-  RELATIONS_UNAVAILABLE_MESSAGE,
 } from "@/lib/formula/values.ts";
 
 /** en-US display formatter: grouping, trailing zeros trimmed, ≤6 decimals. */
@@ -36,13 +35,27 @@ export function formulaDateToDisplay(value: FormulaDate): string {
   );
 }
 
+/** Options for {@link formulaValueToDisplay}. */
+export interface FormulaValueDisplayOptions {
+  /**
+   * Label for relation row refs — the target row's primary-field text
+   * (`formulaRowRefLabel` in `row-scope.ts`). Absent (pure callers with no
+   * resolver), rows render the "[row]" placeholder.
+   */
+  rowLabel?: (ref: FormulaRowRef) => string;
+}
+
 /**
  * Human display string for any formula value: numbers via `Intl` (en-US,
  * trimmed), booleans "Yes"/"No", blank → "", text as-is, dates per
- * {@link formulaDateToDisplay}, lists comma-joined, rows a placeholder,
- * lambdas "ƒ", errors "⚠ message" (all v1 shapes where shared).
+ * {@link formulaDateToDisplay}, lists comma-joined, rows via `opts.rowLabel`
+ * (their target row's title) or a placeholder, lambdas "ƒ", errors
+ * "⚠ message" (all v1 shapes where shared).
  */
-export function formulaValueToDisplay(value: FormulaValue): string {
+export function formulaValueToDisplay(
+  value: FormulaValue,
+  opts?: FormulaValueDisplayOptions
+): string {
   if (value === null) {
     return "";
   }
@@ -56,13 +69,13 @@ export function formulaValueToDisplay(value: FormulaValue): string {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map(formulaValueToDisplay).join(", ");
+    return value.map((item) => formulaValueToDisplay(item, opts)).join(", ");
   }
   if (value instanceof FormulaDate) {
     return formulaDateToDisplay(value);
   }
   if (value instanceof FormulaRowRef) {
-    return "[row]";
+    return opts?.rowLabel?.(value) ?? "[row]";
   }
   if (value instanceof FormulaLambda) {
     return "ƒ";
@@ -93,7 +106,7 @@ export function formulaValueToText(value: FormulaValue): string | FormulaError {
     return formulaError("Cannot convert a list to text");
   }
   if (value instanceof FormulaRowRef) {
-    return formulaError(RELATIONS_UNAVAILABLE_MESSAGE);
+    return formulaError("Cannot convert a row to text");
   }
   if (value instanceof FormulaLambda) {
     return formulaError(LAMBDA_AS_VALUE_MESSAGE);

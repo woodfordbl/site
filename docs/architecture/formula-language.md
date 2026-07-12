@@ -33,7 +33,7 @@ plus small `instanceof`-discriminated classes:
 | blank | `null` — valid in every type, replaces null-chaos (Power Fx model) |
 | date | `FormulaDate` — an instant + `dateOnly` flag (flag affects display and calendar-math defaults only; comparisons use the instant) |
 | list | plain array, elements any `FormulaValue` |
-| row | `FormulaRowRef` (databaseId + rowId) — the type ships so the model is complete, but nothing produces one yet; every operation on it evaluates to the "Relations arrive in a later phase" error |
+| row | `FormulaRowRef` (databaseId + rowId) — the value a relation cell produces (one ref per linked row). Member access resolves lazily through the scope’s relation resolver (see [Relations](#relations)); refs compare by database + row id |
 | lambda | `FormulaLambda` — params + body node + captured environment (persistent linked-list frames); a value only so higher-order functions can apply it |
 | error | `FormulaError` — a value, never a thrown exception |
 
@@ -44,7 +44,8 @@ wins through operators and eager arguments; only lazily-evaluated branches are e
 `unique`: mismatched types are unequal (not an error), blank equals only blank, dates
 compare by instant, lists element-wise, lambdas by reference.
 
-Evaluation runs against an injected `FormulaScope` (`getProperty` + optional `now`).
+Evaluation runs against an injected `FormulaScope` (`getProperty` + optional `now` +
+optional `relations`).
 Without a clock, `now()`/`today()` report the fixed epoch `FORMULA_FIXED_NOW_ISO` so
 pure callers stay deterministic; interactive callers inject the real clock.
 
@@ -166,6 +167,53 @@ its dependency's real result type. `hasVolatileFormula` flags clock-dependent sc
 the table view re-evaluates the overlay on a 60-second tick (paused while the tab is
 hidden). `formulaDisplayInfo` supplies the parse-error badge on column headers.
 
+## Relations
+
+A relation cell evaluates to `list<row<Target>>`, so rollups are plain formulas:
+`prop("Rel").map(r => r.Estimate).sum()`.
+
+**Typing** ([`check.ts`](../../src/lib/formula/check.ts)): a relation property types
+as `listTypeOf(rowTypeOf(targetDatabaseId))` (`FormulaCheckProperty.targetDatabaseId`
+carries the link). Member access `r.Estimate` resolves by field NAME (field id
+accepted too) against the receiver row’s database in the optional
+`FormulaCheckContext.databases` map (`formulaCheckContext(fields, relatedDatabases)`
+builds it, typing each related schema’s formula fields through the same topological
+pass). Unknown members diagnose naming the database (`"Estimate" isn’t a property of
+Tasks`); member access on a definite non-row diagnoses, with a `.map` hint when the
+receiver is a whole relation list; an anonymous row type or a database missing from
+the map checks optimistically. **Name-based member access is a v1 limitation**:
+renaming a target field breaks formulas that reference it by name — member
+references are not id-canonicalized the way same-row `prop("…")` references are
+(member canonicalization belongs to the dependency-graph stage).
+
+**Evaluation** ([`row-scope.ts`](../../src/lib/formula/row-scope.ts)): relation cells
+project to `FormulaRowRef` lists — ALWAYS a list: a blank cell is the EMPTY list
+(rollups over unlinked rows aggregate to 0/empty, never blank), and stale target-row
+ids are SKIPPED. Members resolve through the pure-layer `FormulaRelationResolver`
+interface ([`values.ts`](../../src/lib/formula/values.ts)) riding on the scope:
+`database(id)` exposes a target’s schema/name/primary field and per-row values;
+`formulaValue(databaseId, rowId, fieldId)` computes a FORMULA member through the
+target database’s own per-row plan. Blank receivers propagate blank
+(`rel.first().Estimate` over no links is blank); non-row receivers error with the
+checker’s exact messages.
+
+**Implementation** ([`formula-relations.ts`](../../src/lib/databases/formula-relations.ts)):
+`localFormulaRelationResolver()` reads `localDatabasesCollection` /
+`localDatabaseRowsCollection` synchronously, caching each target’s rows per
+instance — call sites create a fresh resolver per compute pass. Cross-database reads
+are **non-reactive** (accepted v1 limitation): edits to a target database don’t
+retrigger the referring database’s overlay until its own inputs change; the P3.3
+engine adds subscriptions. Cross-database formula cycles are guarded at evaluation
+time by a visiting set keyed by (databaseId, fieldId, rowId) — re-entry returns a
+named error (`Circular reference: Tasks.Calc → Projects.Rollup → Tasks.Calc`);
+same-database formula-on-formula still flows through the overlay’s topological plan.
+
+**Display**: a row ref renders as its target row’s primary-field text ("Untitled"
+fallback — the relation chip rule) via `formulaValueToDisplay(value, { rowLabel })` /
+`formulaRowLabelOf(relations)`; lists of rows comma-join like any list, and
+`formulaValueToCellValue` projects rows/row lists to those titles for the merged-row
+pipeline. The type badge reads "row" / "list of rows".
+
 ## Editor panel
 
 [`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx)
@@ -254,6 +302,8 @@ errors inline as "⚠ message". Never throws.
 
 ## Deferred
 
-Relations/rollups (the `row` type is a placeholder), `db()` whole-database references,
-the incremental dependency-graph engine, and the CodeMirror chip editor are planned
-later phases — see the [proposal](../proposals/formula-language-v2.md) §4.4–§7.
+`db()` whole-database references, the incremental dependency-graph engine (reverse
+index, dirty tracking, reactive cross-database reads, member canonicalization,
+member autocomplete after `r.`), and save-time cross-database cycle rejection are
+planned later phases — see the [proposal](../proposals/formula-language-v2.md)
+§4.4–§7.

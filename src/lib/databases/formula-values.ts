@@ -1,14 +1,25 @@
-import { checkFormula, type FormulaCheckContext } from "@/lib/formula/check.ts";
 import {
+  checkFormula,
+  type FormulaCheckContext,
+  type FormulaCheckDatabase,
+  type FormulaCheckProperty,
+} from "@/lib/formula/check.ts";
+import {
+  type FormulaValueDisplayOptions,
   formulaDateToDisplay,
   formulaValueToDisplay,
 } from "@/lib/formula/display.ts";
 import { evaluateFormula, isVolatileFormula } from "@/lib/formula/evaluate.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
-import { createFormulaRowScope } from "@/lib/formula/row-scope.ts";
+import {
+  createFormulaRowScope,
+  formulaRowLabelOf,
+} from "@/lib/formula/row-scope.ts";
 import { type FormulaType, UNKNOWN_TYPE } from "@/lib/formula/types.ts";
 import {
   FormulaDate,
+  type FormulaRelationResolver,
+  FormulaRowRef,
   type FormulaScope,
   type FormulaValue,
   formulaError,
@@ -17,6 +28,7 @@ import {
 import type {
   DatabaseCellValue,
   DatabaseField,
+  LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
@@ -60,6 +72,13 @@ export type FormulaOverlay = Map<string, Record<string, FormulaCellResult>>;
 export interface ComputeFormulaOverlayOptions {
   /** Injected clock for `now()`/`today()`; omit for the fixed epoch. */
   now?: () => Date;
+  /**
+   * Cross-database reader for relation cells and row members — pass
+   * `localFormulaRelationResolver()` (`formula-relations.ts`) from
+   * interactive call sites. Omitted (pure tests, legacy paths), relation
+   * cells read as blank and members can't resolve.
+   */
+  relations?: FormulaRelationResolver;
 }
 
 /** Shared result for cells with no computable value (blank/parse-error). */
@@ -73,10 +92,15 @@ const EMPTY_RESULT: FormulaCellResult = {
  * Project a formula value into the cell-value domain for the merged-row
  * pipeline: scalars pass through (non-finite numbers → null), dates render
  * `yyyy-mm-dd` when date-only and the full ISO instant otherwise, lists
- * become their elements' display strings, everything else (blank, errors,
- * lambdas, rows) is null.
+ * become their elements' display strings (row elements labeled by their
+ * target row's title via `display.rowLabel`), a lone row ref becomes its
+ * title text, everything else (blank, errors, lambdas, unlabeled rows) is
+ * null.
  */
-function formulaValueToCellValue(value: FormulaValue): DatabaseCellValue {
+function formulaValueToCellValue(
+  value: FormulaValue,
+  display: FormulaValueDisplayOptions
+): DatabaseCellValue {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
   }
@@ -88,13 +112,19 @@ function formulaValueToCellValue(value: FormulaValue): DatabaseCellValue {
       ? formulaDateToDisplay(value)
       : value.date.toISOString();
   }
+  if (value instanceof FormulaRowRef) {
+    return display.rowLabel === undefined ? null : display.rowLabel(value);
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => formulaValueToDisplay(item));
+    return value.map((item) => formulaValueToDisplay(item, display));
   }
   return null;
 }
 
-function resultOf(value: FormulaValue): FormulaCellResult {
+function resultOf(
+  value: FormulaValue,
+  display: FormulaValueDisplayOptions
+): FormulaCellResult {
   if (isFormulaError(value)) {
     return {
       cellValue: null,
@@ -103,8 +133,8 @@ function resultOf(value: FormulaValue): FormulaCellResult {
     };
   }
   return {
-    cellValue: formulaValueToCellValue(value),
-    display: formulaValueToDisplay(value),
+    cellValue: formulaValueToCellValue(value, display),
+    display: formulaValueToDisplay(value, display),
     isError: false,
   };
 }
@@ -148,18 +178,29 @@ interface FormulaPlan {
   ordered: PlannedField[];
 }
 
-/** Build a check context; formula fields type from `types` (or unknown). */
+/** One field as a checker property; formula fields type from `types` (or unknown). */
+function checkPropertyOf(
+  field: DatabaseField,
+  types?: ReadonlyMap<string, FormulaType>
+): FormulaCheckProperty {
+  return {
+    id: field.id,
+    kind: field.type,
+    name: field.name,
+    ...(field.type === "relation"
+      ? { targetDatabaseId: field.targetDatabaseId }
+      : {}),
+    type: types?.get(field.id) ?? UNKNOWN_TYPE,
+  };
+}
+
+/** Build a check context over one schema. */
 function checkContextOf(
   fields: readonly DatabaseField[],
   types?: ReadonlyMap<string, FormulaType>
 ): FormulaCheckContext {
   return {
-    properties: fields.map((field) => ({
-      id: field.id,
-      kind: field.type,
-      name: field.name,
-      type: types?.get(field.id) ?? UNKNOWN_TYPE,
-    })),
+    properties: fields.map((field) => checkPropertyOf(field, types)),
   };
 }
 
@@ -298,12 +339,10 @@ function rowEvaluationOf(
   opts?: ComputeFormulaOverlayOptions
 ): RowEvaluation {
   const resolved = new Map<string, FormulaValue>(plan.cycleErrors);
-  const scope = createFormulaRowScope(
-    fields,
-    values,
-    resolved,
-    opts?.now === undefined ? undefined : { now: opts.now }
-  );
+  const scope = createFormulaRowScope(fields, values, resolved, {
+    now: opts?.now,
+    relations: opts?.relations,
+  });
   return { resolved, scope };
 }
 
@@ -324,13 +363,16 @@ export function computeFormulaOverlay(
   if (!fields.some((field) => field.type === "formula")) {
     return overlay;
   }
+  const display: FormulaValueDisplayOptions = {
+    rowLabel: formulaRowLabelOf(opts?.relations),
+  };
   const plan = buildFormulaPlan(fields);
   const evaluations: RowEvaluation[] = [];
   for (const row of rows) {
     evaluations.push(rowEvaluationOf(plan, fields, row.values, opts));
     const entry: Record<string, FormulaCellResult> = {};
     for (const [fieldId, error] of plan.cycleErrors) {
-      entry[fieldId] = resultOf(error);
+      entry[fieldId] = resultOf(error, display);
     }
     overlay.set(row.id, entry);
   }
@@ -341,7 +383,8 @@ export function computeFormulaOverlay(
       resolved.set(field.id, value);
       const entry = overlay.get(row.id);
       if (entry) {
-        entry[field.id] = ast === null ? EMPTY_RESULT : resultOf(value);
+        entry[field.id] =
+          ast === null ? EMPTY_RESULT : resultOf(value, display);
       }
     }
   }
@@ -397,14 +440,41 @@ export function formulaFieldTypes(
   return types;
 }
 
+/** The related-database slice {@link formulaCheckContext} consumes. */
+export type FormulaRelatedDatabase = Pick<
+  LocalDatabase,
+  "fields" | "id" | "name"
+>;
+
 /**
  * The check context for a database schema, formula fields typed via
  * {@link formulaFieldTypes} — what the formula editor checks drafts against.
+ * Pass `relatedDatabases` (every database, own included — self-relations
+ * are legal) to type member access on relation rows: each related schema's
+ * formula fields get their real result types through the same per-database
+ * topological pass, so `r.SomeRollup` types precisely too.
  */
 export function formulaCheckContext(
-  fields: readonly DatabaseField[]
+  fields: readonly DatabaseField[],
+  relatedDatabases?: readonly FormulaRelatedDatabase[]
 ): FormulaCheckContext {
-  return checkContextOf(fields, formulaFieldTypes(fields));
+  const context = checkContextOf(fields, formulaFieldTypes(fields));
+  if (relatedDatabases === undefined) {
+    return context;
+  }
+  const databases = new Map<string, FormulaCheckDatabase>(
+    relatedDatabases.map((database) => [
+      database.id,
+      {
+        name: database.name,
+        properties: checkContextOf(
+          database.fields,
+          formulaFieldTypes(database.fields)
+        ).properties,
+      },
+    ])
+  );
+  return { ...context, databases };
 }
 
 // --- merged rows ----------------------------------------------------------------

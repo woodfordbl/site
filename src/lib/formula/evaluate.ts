@@ -15,6 +15,7 @@
 import type {
   FormulaBinaryOp,
   FormulaCallNode,
+  FormulaMemberNode,
   FormulaNameNode,
   FormulaNode,
 } from "@/lib/formula/ast.ts";
@@ -31,21 +32,24 @@ import {
   VOLATILE_FORMULA_FUNCTION_NAMES,
 } from "@/lib/formula/catalog.ts";
 import { formulaValueToText } from "@/lib/formula/display.ts";
+import { resolveFormulaRowMember } from "@/lib/formula/row-scope.ts";
 import { formulaTypeExpectedPhrase } from "@/lib/formula/types.ts";
 import {
   FormulaDate,
   type FormulaEnvironment,
   type FormulaError,
   FormulaLambda,
+  FormulaRowRef,
   type FormulaScope,
   type FormulaValue,
   formulaError,
+  formulaMemberOnNonRowMessage,
+  formulaMemberOnRowListMessage,
   formulaValueMatchesType,
   formulaValuesEqual,
   formulaValueTypeName,
   isFormulaError,
   LAMBDA_AS_VALUE_MESSAGE,
-  RELATIONS_UNAVAILABLE_MESSAGE,
   requireBooleanValue,
 } from "@/lib/formula/values.ts";
 
@@ -304,7 +308,7 @@ class Evaluator {
       case "call":
         return this.evalCall(node, env);
       case "member":
-        return this.evalMember(node.receiver, env);
+        return this.evalMember(node, env);
       case "lambda":
         return new FormulaLambda(
           node.params.map((param) => param.name),
@@ -335,15 +339,40 @@ class Evaluator {
     return formulaError(`Unknown name "${node.name}"`);
   }
 
+  /**
+   * `receiver.Name` — property access on a relation row ref, resolved
+   * through the scope's relation resolver (`row-scope.ts` owns the field
+   * lookup and cell mapping). Blank receivers propagate blank so chains
+   * like `prop("Rel").first().Estimate` read as blank for unlinked rows;
+   * every other non-row receiver is a type error mirroring the checker's
+   * member diagnostics (a list of rows gets the `.map` hint).
+   */
   private evalMember(
-    receiver: FormulaNode,
+    node: FormulaMemberNode,
     env: FormulaEnvironment | null
   ): FormulaValue {
-    const value = this.evalNode(receiver, env);
+    const value = this.evalNode(node.receiver, env);
     if (isFormulaError(value)) {
       return value;
     }
-    return formulaError(RELATIONS_UNAVAILABLE_MESSAGE);
+    if (value instanceof FormulaRowRef) {
+      return resolveFormulaRowMember(value, node.name, this.scope.relations);
+    }
+    if (value === null) {
+      return null;
+    }
+    if (value instanceof FormulaLambda) {
+      return formulaError(LAMBDA_AS_VALUE_MESSAGE);
+    }
+    if (
+      Array.isArray(value) &&
+      value.some((item) => item instanceof FormulaRowRef)
+    ) {
+      return formulaError(formulaMemberOnRowListMessage(node.name));
+    }
+    return formulaError(
+      formulaMemberOnNonRowMessage(formulaValueTypeName(value))
+    );
   }
 
   private evalList(

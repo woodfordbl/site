@@ -10,6 +10,7 @@ import {
 import { computeAggregate } from "@/lib/databases/row-aggregate.ts";
 import { rowMatchesCondition } from "@/lib/databases/row-filter.ts";
 import { applySorts } from "@/lib/databases/row-sort.ts";
+import type { FormulaRelationResolver } from "@/lib/formula/values.ts";
 import type {
   DatabaseField,
   DatabaseFilterOperator,
@@ -180,6 +181,86 @@ describe("computeFormulaOverlay", () => {
       now: () => new Date("2026-03-05T12:00:00.000Z"),
     });
     expect(injected.get("r1")?.["f-today"].cellValue).toBe("2026-03-05");
+  });
+});
+
+describe("relation rollups in the overlay", () => {
+  const relationField: DatabaseField = {
+    id: "f-rel",
+    name: "Rel",
+    targetDatabaseId: "db-t",
+    type: "relation",
+  };
+  const targetFields: DatabaseField[] = [
+    { id: "t-name", name: "Name", type: "text" },
+    { id: "t-est", name: "Estimate", type: "number" },
+  ];
+  const targetRows: Record<string, Record<string, number | string>> = {
+    r1: { "t-est": 3, "t-name": "Alpha" },
+    r2: { "t-est": 4, "t-name": "Beta" },
+  };
+  const relations: FormulaRelationResolver = {
+    database: (databaseId) =>
+      databaseId === "db-t"
+        ? {
+            fields: targetFields,
+            name: "Tasks",
+            primaryFieldId: "t-name",
+            row: (rowId) => targetRows[rowId] ?? null,
+          }
+        : null,
+  };
+
+  it("computes a relation rollup per row through the resolver", () => {
+    const rollup = formulaField(
+      "f-roll",
+      'prop("f-rel").map(r => r.Estimate).sum()'
+    );
+    const rows = [
+      row("a", { "f-rel": ["r1", "r2"] }),
+      row("b", { "f-rel": ["r1"] }),
+      // Blank relation → empty list → the rollup sums to 0, not blank.
+      row("c", {}),
+    ];
+    const overlay = computeFormulaOverlay(
+      [nameField, relationField, rollup],
+      rows,
+      { relations }
+    );
+    expect(overlay.get("a")?.["f-roll"].cellValue).toBe(7);
+    expect(overlay.get("b")?.["f-roll"].cellValue).toBe(3);
+    expect(overlay.get("c")?.["f-roll"]).toEqual({
+      cellValue: 0,
+      display: "0",
+      isError: false,
+    });
+  });
+
+  it("projects row lists to target titles in display and cell value", () => {
+    const passthrough = formulaField("f-rows", 'prop("f-rel")');
+    const overlay = computeFormulaOverlay(
+      [nameField, relationField, passthrough],
+      [row("a", { "f-rel": ["r1", "r2"] })],
+      { relations }
+    );
+    expect(overlay.get("a")?.["f-rows"]).toEqual({
+      cellValue: ["Alpha", "Beta"],
+      display: "Alpha, Beta",
+      isError: false,
+    });
+  });
+
+  it("reads relation cells as blank without a resolver (legacy overlay calls)", () => {
+    const rollup = formulaField("f-roll", 'prop("f-rel")');
+    const overlay = computeFormulaOverlay(
+      [relationField, rollup],
+      [row("a", { "f-rel": ["r1"] })]
+    );
+    expect(overlay.get("a")?.["f-roll"]).toEqual({
+      cellValue: null,
+      display: "",
+      isError: false,
+    });
   });
 });
 

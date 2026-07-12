@@ -48,11 +48,16 @@ import {
   lambdaTypeOf,
   listTypeOf,
   NUMBER_TYPE,
+  rowTypeOf,
   TEXT_TYPE,
   UNKNOWN_TYPE,
   unionTypeOf,
 } from "@/lib/formula/types.ts";
-import { LAMBDA_AS_VALUE_MESSAGE } from "@/lib/formula/values.ts";
+import {
+  formulaMemberOnNonRowMessage,
+  formulaMemberOnRowListMessage,
+  LAMBDA_AS_VALUE_MESSAGE,
+} from "@/lib/formula/values.ts";
 
 type LambdaType = Extract<FormulaType, { kind: "lambda" }>;
 
@@ -71,8 +76,6 @@ export type FormulaFieldKind =
   | "date"
   | "url"
   | "formula"
-  // Projects to unknown for now — row-typed relation values arrive with the
-  // relation evaluation stage (`formulaPropertyValueType` default).
   | "relation";
 
 /** One schema field visible to the formula being checked. */
@@ -81,6 +84,13 @@ export interface FormulaCheckProperty {
   readonly kind: FormulaFieldKind;
   readonly name: string;
   /**
+   * For `relation` fields: the linked database's id, typing the cell as
+   * `list<row<target>>` and keying member access into
+   * {@link FormulaCheckContext.databases}. Absent (caller can't know), the
+   * cell types as a list of anonymous rows and members check optimistically.
+   */
+  readonly targetDatabaseId?: string;
+  /**
    * For `formula` fields: the pre-computed result type, or `unknown` when
    * the caller can't know yet (cross-formula ordering is the caller's job).
    * Ignored for every other kind — the cell type derives from `kind`.
@@ -88,8 +98,20 @@ export interface FormulaCheckProperty {
   readonly type: FormulaType;
 }
 
+/** One related database member access can resolve into. */
+export interface FormulaCheckDatabase {
+  readonly name: string;
+  readonly properties: readonly FormulaCheckProperty[];
+}
+
 /** Schema context a formula checks against. */
 export interface FormulaCheckContext {
+  /**
+   * Databases relation members resolve against, keyed by database id.
+   * Optional — without it, member access on typed rows checks
+   * optimistically (`unknown`), never wrongly.
+   */
+  readonly databases?: ReadonlyMap<string, FormulaCheckDatabase>;
   readonly properties: readonly FormulaCheckProperty[];
 }
 
@@ -127,11 +149,12 @@ export function normalizeFormulaPropertyName(name: string): string {
 /**
  * The formula type a field's cells produce: text/url/select → text, number
  * → number, checkbox → boolean, date → date, multiSelect → list of text,
- * formula → its pre-computed result type. Shared with the evaluator's row
- * scope (next stage) so checking and evaluation can never disagree.
+ * relation → list of rows of its target database, formula → its
+ * pre-computed result type. Shared with the evaluator's row scope so
+ * checking and evaluation can never disagree.
  */
 export function formulaPropertyValueType(
-  field: Pick<FormulaCheckProperty, "kind" | "type">
+  field: Pick<FormulaCheckProperty, "kind" | "targetDatabaseId" | "type">
 ): FormulaType {
   switch (field.kind) {
     case "number":
@@ -142,6 +165,8 @@ export function formulaPropertyValueType(
       return DATE_TYPE;
     case "multiSelect":
       return listTypeOf(TEXT_TYPE);
+    case "relation":
+      return listTypeOf(rowTypeOf(field.targetDatabaseId));
     case "formula":
       return field.type;
     case "text":
@@ -250,9 +275,6 @@ const LAMBDA_ACCEPTING_NAMES = FORMULA_FUNCTION_CATALOG.filter((entry) =>
 ).map((entry) => entry.name);
 
 const MISPLACED_LAMBDA_MESSAGE = `A function like x => … can only be used as an argument of ${proseNameList(LAMBDA_ACCEPTING_NAMES)}`;
-
-const MEMBER_ACCESS_MESSAGE =
-  "Property access works on relation values, which arrive with relations; call a function instead, like .round()";
 
 const DELETED_FIELD_MESSAGE = "References a deleted or unknown field";
 
@@ -396,6 +418,56 @@ function orderableKindsOf(type: FormulaType): ReadonlySet<OrderableKind> {
     return new Set([type.kind]);
   }
   return new Set();
+}
+
+type RowType = Extract<FormulaType, { kind: "row" }>;
+
+/** The row member of a type (the type itself, or a union member), if any. */
+function rowMemberOf(type: FormulaType): RowType | null {
+  if (type.kind === "row") {
+    return type;
+  }
+  if (type.kind === "union") {
+    for (const member of type.members) {
+      if (member.kind === "row") {
+        return member;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a type can never be a row at runtime — the member-access
+ * diagnostic gate. Blank stays optimistic (blankness is a runtime concern:
+ * `first(rel).X` types the receiver `row`, and a blank receiver propagates
+ * blank at evaluation).
+ */
+function definitelyNotRow(type: FormulaType): boolean {
+  switch (type.kind) {
+    case "number":
+    case "text":
+    case "boolean":
+    case "date":
+    case "list":
+    case "lambda":
+      return true;
+    case "union":
+      return type.members.every(definitelyNotRow);
+    default:
+      return false;
+  }
+}
+
+/** Whether the type is (or unions in) a list whose elements can be rows. */
+function isRowListType(type: FormulaType): boolean {
+  if (type.kind === "list") {
+    return rowMemberOf(type.element) !== null;
+  }
+  return (
+    type.kind === "union" &&
+    type.members.some((member) => isRowListType(member))
+  );
 }
 
 /** Whether the type is, or could be, text — enabling `+` concatenation. */
@@ -566,6 +638,7 @@ function opSpan(node: FormulaBinaryNode): Span {
 }
 
 class Checker {
+  private readonly databases?: ReadonlyMap<string, FormulaCheckDatabase>;
   private readonly diagnostics: FormulaCheckDiagnostic[] = [];
   private readonly fieldsById = new Map<string, FormulaCheckProperty>();
   private readonly fieldsByName = new Map<string, FormulaCheckProperty>();
@@ -575,6 +648,7 @@ class Checker {
   private readonly unresolvedNames: string[] = [];
 
   constructor(context: FormulaCheckContext) {
+    this.databases = context.databases;
     for (const property of context.properties) {
       this.fieldsById.set(property.id, property);
       const key = normalizeFormulaPropertyName(property.name);
@@ -853,15 +927,56 @@ class Checker {
     return listTypeOf(unionTypeOf(...itemTypes));
   }
 
+  /**
+   * `receiver.Name` — member access on a relation row. The member resolves
+   * by field NAME (id accepted too) against the receiver's database in
+   * `context.databases`, the same id-then-name rule evaluation uses
+   * (`resolveFormulaRowMember`); name-based cross-row resolution is a v1
+   * limitation (see `row-scope.ts`). Optimistic where the context can't
+   * know: an anonymous row type, or a database missing from the map,
+   * synthesizes `unknown` without a diagnostic. Definite non-rows diagnose,
+   * with a `.map` hint when the receiver is a LIST of rows.
+   */
   private synthMember(
     node: FormulaMemberNode,
     env: CheckBinding | null
   ): FormulaType {
-    this.synth(node.receiver, env);
-    return this.report(MEMBER_ACCESS_MESSAGE, {
-      end: node.end,
-      start: node.namePosition,
-    });
+    const receiver = this.synth(node.receiver, env);
+    const span: Span = { end: node.end, start: node.namePosition };
+    const row = rowMemberOf(receiver);
+    if (row === null) {
+      if (isRowListType(receiver)) {
+        return this.report(formulaMemberOnRowListMessage(node.name), span);
+      }
+      if (definitelyNotRow(receiver)) {
+        return this.report(
+          formulaMemberOnNonRowMessage(formulaTypeName(receiver)),
+          span
+        );
+      }
+      return UNKNOWN_TYPE;
+    }
+    if (row.databaseId === undefined) {
+      return UNKNOWN_TYPE;
+    }
+    const database = this.databases?.get(row.databaseId);
+    if (database === undefined) {
+      return UNKNOWN_TYPE;
+    }
+    const property =
+      database.properties.find((entry) => entry.id === node.name) ??
+      database.properties.find(
+        (entry) =>
+          normalizeFormulaPropertyName(entry.name) ===
+          normalizeFormulaPropertyName(node.name)
+      );
+    if (property === undefined) {
+      return this.report(
+        `"${node.name}" isn't a property of ${database.name}`,
+        span
+      );
+    }
+    return formulaPropertyValueType(property);
   }
 
   /**

@@ -12,9 +12,11 @@ import {
   isInlineEditableField,
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { computeFormulaRowValues } from "@/lib/databases/formula-values.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
+import { formulaRowLabelOf } from "@/lib/formula/row-scope.ts";
 import { formulaError } from "@/lib/formula/values.ts";
 import type {
   DatabaseField,
@@ -50,10 +52,14 @@ function formulaDisplay(
   if (!parsed.ok) {
     return formulaValueToDisplay(formulaError(parsed.error.message));
   }
-  const resolved = computeFormulaRowValues(fields, values, {
-    now: () => new Date(),
+  const now = () => new Date();
+  // Fresh per call: cross-database reads are synchronous and non-reactive
+  // (see formula-relations.ts), so a cached resolver would serve stale rows.
+  const relations = localFormulaRelationResolver({ now });
+  const resolved = computeFormulaRowValues(fields, values, { now, relations });
+  return formulaValueToDisplay(resolved.get(field.id) ?? null, {
+    rowLabel: formulaRowLabelOf(relations),
   });
-  return formulaValueToDisplay(resolved.get(field.id) ?? null);
 }
 
 interface RowPropertyValueProps {

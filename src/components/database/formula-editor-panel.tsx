@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
   computeFormulaRowValues,
+  type FormulaRelatedDatabase,
   formulaCheckContext,
 } from "@/lib/databases/formula-values.ts";
 import {
@@ -48,7 +49,11 @@ import {
   canonicalPropertyReference,
   humanizeExpression,
 } from "@/lib/formula/ref-rewrite.ts";
-import { createFormulaRowScope } from "@/lib/formula/row-scope.ts";
+import {
+  createFormulaRowScope,
+  formulaRowLabelOf,
+} from "@/lib/formula/row-scope.ts";
+import type { FormulaRelationResolver } from "@/lib/formula/values.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -303,6 +308,18 @@ export interface FormulaEditorPanelProps {
    * Empty when the table is empty — no preview renders.
    */
   previewRows: readonly FormulaPreviewRow[];
+  /**
+   * Every database (own included) for the checker's member-access typing —
+   * `r.Estimate` resolves against the relation target's schema. Omitted,
+   * relation members check optimistically (no diagnostics, unknown type).
+   */
+  relatedDatabases?: readonly FormulaRelatedDatabase[];
+  /**
+   * Cross-database reader for the live preview, so relation rollups in the
+   * draft evaluate against real target rows. Omitted, relation cells
+   * preview as blank.
+   */
+  relations?: FormulaRelationResolver;
 }
 
 /** The formula builder panel (see module docs). */
@@ -311,6 +328,8 @@ export function FormulaEditorPanel({
   fields,
   onSave,
   previewRows,
+  relatedDatabases,
+  relations,
 }: FormulaEditorPanelProps): ReactNode {
   // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
   // natively; the textarea path humanizes for display below.
@@ -407,8 +426,12 @@ export function FormulaEditorPanel({
   };
 
   // Static check of the parsed draft against the schema — formula fields
-  // typed via the same topological pass the overlay uses.
-  const checkContext = useMemo(() => formulaCheckContext(fields), [fields]);
+  // typed via the same topological pass the overlay uses; related databases
+  // (when supplied) type member access on relation rows.
+  const checkContext = useMemo(
+    () => formulaCheckContext(fields, relatedDatabases),
+    [fields, relatedDatabases]
+  );
   const checked: FormulaCheckResult | null = useMemo(
     () => (parsed?.ok ? checkFormula(parsed.ast, checkContext) : null),
     [parsed, checkContext]
@@ -430,12 +453,18 @@ export function FormulaEditorPanel({
       return null;
     }
     const now = () => new Date();
-    const resolved = computeFormulaRowValues(fields, previewValues, { now });
+    const resolved = computeFormulaRowValues(fields, previewValues, {
+      now,
+      relations,
+    });
     const scope = createFormulaRowScope(fields, previewValues, resolved, {
       now,
+      relations,
     });
-    return formulaValueToDisplay(evaluateFormula(parsed.ast, scope));
-  }, [parsed, fields, previewValues]);
+    return formulaValueToDisplay(evaluateFormula(parsed.ast, scope), {
+      rowLabel: formulaRowLabelOf(relations),
+    });
+  }, [parsed, fields, previewValues, relations]);
 
   // Canonical-offset → visible-offset mapping for status positions: each
   // `prop("<id>")` span before an offset renders shorter than its canonical
