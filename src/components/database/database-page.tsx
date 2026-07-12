@@ -13,6 +13,7 @@ import { DatabaseTableView } from "@/components/database/database-table-view.tsx
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
+import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
   PageSidebarChromeProvider,
@@ -210,6 +211,7 @@ function DatabasePageBody({
           </div>
         </div>
       </div>
+      <PageInsetFooter />
     </div>
   );
 }
@@ -254,6 +256,7 @@ function DatabasePageNotFoundBody(): ReactNode {
           </div>
         </div>
       </div>
+      <PageInsetFooter />
     </div>
   );
 }

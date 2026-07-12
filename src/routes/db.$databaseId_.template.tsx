@@ -137,12 +137,11 @@ function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
     <PageWorkspace
       contentWrapper={
         rail.panelMode
-          ? (content) => (
+          ? (canvasRegion) => (
               <RowPropertiesRailLayout
-                database={database}
                 panel={<RowTemplateDefaultsList database={database} />}
               >
-                {content}
+                {canvasRegion}
               </RowPropertiesRailLayout>
             )
           : undefined
