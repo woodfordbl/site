@@ -27,6 +27,8 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  resolveCurveType,
+  useAreaSoftGradient,
   useChartDither,
   useChartGlow,
   useChartGradientDither,
@@ -186,6 +188,21 @@ function ChartLegendSlot({
   );
 }
 
+/** Area fill: dither texture → soft vertical gradient → flat color, in order. */
+function resolveAreaFill(
+  key: string,
+  dither: { enabled: boolean; fill: (key: string) => string },
+  softGradient: { enabled: boolean; fill: (key: string) => string }
+): string {
+  if (dither.enabled) {
+    return dither.fill(key);
+  }
+  if (softGradient.enabled) {
+    return softGradient.fill(key);
+  }
+  return `var(--color-${key})`;
+}
+
 interface CartesianChartProps {
   aggregate: DatabaseChartYAggregate;
   chart: ChartViewConfig;
@@ -228,7 +245,23 @@ function CartesianChart({
   }, [data]);
 
   const seriesKeys = Object.keys(chartConfig);
-  const dither = useChartGradientDither(chartConfig);
+  // Per-chart curve + fill options (both default on).
+  const smoothing = chart.smoothing !== false;
+  const gradient = chart.gradient !== false;
+  // Flatten the dither fade for areas when the gradient is off (gamma 0 =
+  // uniform density); other marks keep the default fade.
+  const dither = useChartGradientDither(chartConfig, {
+    gamma: mark === "area" && !gradient ? 0 : undefined,
+  });
+  // Non-dithered area fade, for when the workspace dither is off but the
+  // gradient option is on.
+  const softGradient = useAreaSoftGradient(chartConfig, {
+    enabled: mark === "area" && gradient && !dither.enabled,
+  });
+  // Smoothing off + dither on = crisp pixel staircase; otherwise smooth
+  // (monotone) or straight (linear) per the smoothing option.
+  const pixelated = dither.enabled && !smoothing;
+  const curveType = resolveCurveType(smoothing, dither);
   // Line/area strokes get a soft colour bloom and a one-shot entrance wipe; bars
   // keep their native grow. Both compose with the dither above.
   const wantsPolish = mark === "line" || mark === "area";
@@ -316,7 +349,7 @@ function CartesianChart({
             stroke={`var(--color-${key})`}
             strokeWidth={2}
             style={reveal.maskStyle}
-            type={dither.lineType}
+            type={curveType}
           />
         ))}
         {legend}
@@ -326,6 +359,7 @@ function CartesianChart({
     plot = (
       <AreaChart accessibilityLayer data={chartRows}>
         {dither.defs}
+        {softGradient.defs}
         {reveal.defs}
         {glow.defs}
         {grid}
@@ -336,15 +370,15 @@ function CartesianChart({
           <Area
             connectNulls={false}
             dataKey={key}
-            fill={dither.fill(key)}
-            fillOpacity={dither.enabled ? 1 : 0.4}
+            fill={resolveAreaFill(key, dither, softGradient)}
+            fillOpacity={dither.enabled || softGradient.enabled ? 1 : 0.4}
             isAnimationActive={introAnimation}
             key={key}
             stackId={stacked ? "stack" : undefined}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
             style={reveal.maskStyle}
-            type={dither.lineType}
+            type={curveType}
           />
         ))}
         {legend}
@@ -357,7 +391,8 @@ function CartesianChart({
       className={cn(
         "aspect-auto w-full",
         CHART_HEIGHT_CLASS,
-        dither.crispClassName,
+        dither.fillCrispClassName,
+        pixelated && dither.curveCrispClassName,
         glow.strokeClassName
       )}
       config={chartConfig}

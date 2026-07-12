@@ -17,6 +17,8 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  resolveCurveType,
+  useAreaSoftGradient,
   useChartGlow,
   useChartGradientDither,
   useChartReveal,
@@ -103,6 +105,51 @@ function toPercentChange(points: FieldHistoryPoint[]): FieldHistoryPoint[] {
 function formatPercentChange(value: number): string {
   const sign = value >= 0 ? "+" : "−";
   return `${sign}${Math.abs(value).toFixed(2)}%`;
+}
+
+/**
+ * Curve + fill styling for the time-series marks, derived from the shared chart
+ * options (smoothing / gradient) and the workspace dither. Extracted as a hook
+ * so the chart component stays under the complexity budget.
+ */
+function useTimeSeriesMarkStyle(
+  chart: ChartViewConfig,
+  chartConfig: ChartConfig,
+  mark: "area" | "line"
+) {
+  const smoothing = chart.smoothing !== false;
+  const gradient = chart.gradient !== false;
+  const dither = useChartGradientDither(chartConfig, {
+    gamma: mark === "area" && !gradient ? 0 : undefined,
+  });
+  const softGradient = useAreaSoftGradient(chartConfig, {
+    enabled: mark === "area" && gradient && !dither.enabled,
+  });
+  const glow = useChartGlow();
+  const reveal = useChartReveal();
+  return {
+    curveType: resolveCurveType(smoothing, dither),
+    dither,
+    glow,
+    pixelated: dither.enabled && !smoothing,
+    reveal,
+    softGradient,
+  };
+}
+
+/** Area fill: dither texture → soft vertical gradient → flat color, in order. */
+function resolveTimeSeriesAreaFill(
+  key: string,
+  dither: { enabled: boolean; fill: (key: string) => string },
+  softGradient: { enabled: boolean; fill: (key: string) => string }
+): string {
+  if (dither.enabled) {
+    return dither.fill(key);
+  }
+  if (softGradient.enabled) {
+    return softGradient.fill(key);
+  }
+  return `var(--color-${key})`;
 }
 
 interface DatabaseTimeSeriesChartProps {
@@ -216,12 +263,10 @@ export function DatabaseTimeSeriesChart({
     return config;
   }, [data]);
 
-  const dither = useChartGradientDither(chartConfig);
-  // Soft colour bloom on strokes + a one-shot entrance wipe, matching the
-  // categorical charts. Marks already run with Recharts animation off, so the
-  // wipe is the sole intro.
-  const glow = useChartGlow();
-  const reveal = useChartReveal();
+  // Per-chart curve + fill options (smoothing / gradient) + stroke bloom and a
+  // one-shot entrance wipe, all shared with the categorical chart config.
+  const { curveType, dither, glow, pixelated, reveal, softGradient } =
+    useTimeSeriesMarkStyle(chart, chartConfig, mark);
   const timeFormatter = makeTimeFormatter(windowMs);
   const formatValue = (value: number) => {
     if (percent) {
@@ -347,6 +392,7 @@ export function DatabaseTimeSeriesChart({
     mark === "area" ? (
       <AreaChart accessibilityLayer>
         {dither.defs}
+        {softGradient.defs}
         {reveal.defs}
         {glow.defs}
         {axes}
@@ -355,15 +401,15 @@ export function DatabaseTimeSeriesChart({
             connectNulls
             data={points}
             dataKey={key}
-            fill={dither.fill(key)}
-            fillOpacity={dither.enabled ? 1 : 0.3}
+            fill={resolveTimeSeriesAreaFill(key, dither, softGradient)}
+            fillOpacity={dither.enabled || softGradient.enabled ? 1 : 0.3}
             isAnimationActive={false}
             key={key}
             name={key}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
             style={reveal.maskStyle}
-            type={dither.lineType}
+            type={curveType}
           />
         ))}
       </AreaChart>
@@ -384,7 +430,7 @@ export function DatabaseTimeSeriesChart({
             stroke={`var(--color-${key})`}
             strokeWidth={2}
             style={reveal.maskStyle}
-            type={dither.lineType}
+            type={curveType}
           />
         ))}
       </LineChart>
@@ -402,7 +448,8 @@ export function DatabaseTimeSeriesChart({
         className={cn(
           "aspect-auto w-full",
           CHART_HEIGHT_CLASS,
-          dither.crispClassName,
+          dither.fillCrispClassName,
+          pixelated && dither.curveCrispClassName,
           glow.strokeClassName
         )}
         config={chartConfig}

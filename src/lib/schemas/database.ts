@@ -344,6 +344,16 @@ export const databaseTableViewConfigSchema = z.object({
       /** Target number of horizontal grid lines (absent = auto). 2–12. */
       gridCount: z.number().int().min(2).max(12).optional(),
       stacked: z.boolean().optional(),
+      /**
+       * Smooth the line/area curve (absent = on). When off, segments are
+       * straight — or a crisp pixel staircase when the workspace dither is on.
+       */
+      smoothing: z.boolean().optional(),
+      /**
+       * Area fill fades toward the baseline (absent = on). Area mark only; when
+       * off the fill is flat. Follows dither and palette like every other fill.
+       */
+      gradient: z.boolean().optional(),
     })
     .optional(),
 });

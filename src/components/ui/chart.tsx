@@ -10,7 +10,10 @@ import {
   createDitherGradient,
   cssColorToRgb,
 } from "@/lib/charts/dither-texture.ts";
-import { makePixelCurve } from "@/lib/charts/pixel-curve.ts";
+import {
+  makePixelCurve,
+  type PixelCurveFactory,
+} from "@/lib/charts/pixel-curve.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
@@ -19,8 +22,13 @@ import { cn } from "@/lib/utils.ts";
  * dots and staircase read as crisp pixels. Apply to `<ChartContainer>` only when
  * dither is on — `useChartGradientDither` hands it back as `crispClassName`.
  */
-const CHART_CRISP_CLASS =
-  "[&_.recharts-area-area]:[shape-rendering:crispEdges] [&_.recharts-curve]:[shape-rendering:crispEdges] [&_.recharts-rectangle]:[shape-rendering:crispEdges] [&_image]:[image-rendering:pixelated]";
+// Split so the line curve can render smooth (antialiased) independently of the
+// pixel-snapped fill: the fill class always applies when dithering, the curve
+// class only when the line is also drawn as a pixel staircase (smoothing off).
+const CHART_FILL_CRISP_CLASS =
+  "[&_.recharts-area-area]:[shape-rendering:crispEdges] [&_.recharts-rectangle]:[shape-rendering:crispEdges] [&_image]:[image-rendering:pixelated]";
+const CHART_CURVE_CRISP_CLASS =
+  "[&_.recharts-curve]:[shape-rendering:crispEdges]";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
@@ -422,9 +430,80 @@ export function useChartGradientDither(
     lineType,
     /** Square off corners on `<Bar>` when dithering so bars snap to the grid. */
     barRadius: enabled ? 0 : undefined,
-    /** Add to `<ChartContainer className>` so dithered shapes render crisp. */
-    crispClassName: enabled ? CHART_CRISP_CLASS : "",
+    /** Crisp rendering for the dithered *fill* (area/bar/texture). */
+    fillCrispClassName: enabled ? CHART_FILL_CRISP_CLASS : "",
+    /** Crisp rendering for the *line* — only wanted with the pixel staircase. */
+    curveCrispClassName: enabled ? CHART_CURVE_CRISP_CLASS : "",
+    /**
+     * Fill + curve crisp together — for charts that always draw the line as a
+     * pixel staircase (e.g. the analytics metric board) and never smooth it.
+     */
+    crispClassName: enabled
+      ? `${CHART_FILL_CRISP_CLASS} ${CHART_CURVE_CRISP_CLASS}`
+      : "",
   };
+}
+
+/**
+ * Resolves the curve interpolation for a line/area from the per-chart
+ * `smoothing` option and the dither state: a crisp pixel staircase when
+ * dithering with smoothing off, otherwise a smooth `monotone` curve (smoothing
+ * on) or straight `linear` segments (smoothing off, no dither).
+ */
+export function resolveCurveType(
+  smoothing: boolean,
+  dither: { enabled: boolean; lineType: "monotone" | PixelCurveFactory }
+): "linear" | "monotone" | PixelCurveFactory {
+  if (dither.enabled && !smoothing) {
+    return dither.lineType;
+  }
+  return smoothing ? "monotone" : "linear";
+}
+
+/**
+ * Non-dithered area fill: a vertical fade from the series color to transparent.
+ * Used when the workspace dither is off but the chart still wants a gradient
+ * fill (the `gradient` chart option) — mirrors evilcharts' GradientPattern
+ * without the dither texture. Returns `{ defs, fill, enabled }`; render `{defs}`
+ * inside the chart and set `fill={soft.fill(key)}` on the `<Area>`.
+ */
+export function useAreaSoftGradient(
+  config: ChartConfig,
+  options?: { enabled?: boolean; topOpacity?: number }
+) {
+  const enabled = options?.enabled ?? true;
+  const topOpacity = options?.topOpacity ?? 0.45;
+  const id = `soft-${React.useId().replace(/:/g, "")}`;
+  const defs = enabled ? (
+    <defs>
+      {Object.keys(config).map((key) => (
+        <linearGradient
+          id={`${id}-${key}`}
+          key={key}
+          x1="0"
+          x2="0"
+          y1="0"
+          y2="1"
+        >
+          <stop
+            offset="0%"
+            stopColor={`var(--color-${key})`}
+            stopOpacity={topOpacity}
+          />
+          <stop
+            offset="100%"
+            stopColor={`var(--color-${key})`}
+            stopOpacity={0}
+          />
+        </linearGradient>
+      ))}
+    </defs>
+  ) : null;
+  const fill = React.useCallback(
+    (key: string) => (enabled ? `url(#${id}-${key})` : `var(--color-${key})`),
+    [enabled, id]
+  );
+  return { defs, enabled, fill };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

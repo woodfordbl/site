@@ -252,6 +252,26 @@ function ChartToggleItems({
           Stacked
         </DropdownMenuSwitchItem>
       ) : null}
+      {mark === "line" || mark === "area" ? (
+        <DropdownMenuSwitchItem
+          checked={chart.smoothing !== false}
+          onCheckedChange={(next) => {
+            write({ smoothing: next });
+          }}
+        >
+          Smoothing
+        </DropdownMenuSwitchItem>
+      ) : null}
+      {mark === "area" ? (
+        <DropdownMenuSwitchItem
+          checked={chart.gradient !== false}
+          onCheckedChange={(next) => {
+            write({ gradient: next });
+          }}
+        >
+          Gradient fill
+        </DropdownMenuSwitchItem>
+      ) : null}
       {mark === "pie" ? null : (
         <DropdownMenuSwitchItem
           checked={chart.showGrid !== false}
