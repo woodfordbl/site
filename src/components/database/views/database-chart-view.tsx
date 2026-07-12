@@ -28,7 +28,9 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   useChartDither,
+  useChartGlow,
   useChartGradientDither,
+  useChartReveal,
 } from "@/components/ui/chart.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import {
@@ -227,6 +229,12 @@ function CartesianChart({
 
   const seriesKeys = Object.keys(chartConfig);
   const dither = useChartGradientDither(chartConfig);
+  // Line/area strokes get a soft colour bloom and a one-shot entrance wipe; bars
+  // keep their native grow. Both compose with the dither above.
+  const wantsPolish = mark === "line" || mark === "area";
+  const glow = useChartGlow({ enabled: wantsPolish });
+  const reveal = useChartReveal({ enabled: wantsPolish });
+  const introAnimation = !(reduceMotion || reveal.enabled);
   const formatValue = (value: number) =>
     formatChartYValue(aggregate, yField, value);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
@@ -292,6 +300,8 @@ function CartesianChart({
   } else if (mark === "line") {
     plot = (
       <LineChart accessibilityLayer data={chartRows}>
+        {reveal.defs}
+        {glow.defs}
         {grid}
         {xAxis}
         {yAxis}
@@ -301,10 +311,11 @@ function CartesianChart({
             connectNulls={false}
             dataKey={key}
             dot={false}
-            isAnimationActive={!reduceMotion}
+            isAnimationActive={introAnimation}
             key={key}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
+            style={reveal.maskStyle}
             type={dither.lineType}
           />
         ))}
@@ -315,6 +326,8 @@ function CartesianChart({
     plot = (
       <AreaChart accessibilityLayer data={chartRows}>
         {dither.defs}
+        {reveal.defs}
+        {glow.defs}
         {grid}
         {xAxis}
         {yAxis}
@@ -325,11 +338,12 @@ function CartesianChart({
             dataKey={key}
             fill={dither.fill(key)}
             fillOpacity={dither.enabled ? 1 : 0.4}
-            isAnimationActive={!reduceMotion}
+            isAnimationActive={introAnimation}
             key={key}
             stackId={stacked ? "stack" : undefined}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
+            style={reveal.maskStyle}
             type={dither.lineType}
           />
         ))}
@@ -343,7 +357,8 @@ function CartesianChart({
       className={cn(
         "aspect-auto w-full",
         CHART_HEIGHT_CLASS,
-        dither.crispClassName
+        dither.crispClassName,
+        glow.strokeClassName
       )}
       config={chartConfig}
       palette={palette}

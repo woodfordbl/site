@@ -17,7 +17,9 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  useChartGlow,
   useChartGradientDither,
+  useChartReveal,
 } from "@/components/ui/chart.tsx";
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
@@ -215,6 +217,11 @@ export function DatabaseTimeSeriesChart({
   }, [data]);
 
   const dither = useChartGradientDither(chartConfig);
+  // Soft colour bloom on strokes + a one-shot entrance wipe, matching the
+  // categorical charts. Marks already run with Recharts animation off, so the
+  // wipe is the sole intro.
+  const glow = useChartGlow();
+  const reveal = useChartReveal();
   const timeFormatter = makeTimeFormatter(windowMs);
   const formatValue = (value: number) => {
     if (percent) {
@@ -340,6 +347,8 @@ export function DatabaseTimeSeriesChart({
     mark === "area" ? (
       <AreaChart accessibilityLayer>
         {dither.defs}
+        {reveal.defs}
+        {glow.defs}
         {axes}
         {seriesEntries.map(({ points, key }) => (
           <Area
@@ -353,12 +362,15 @@ export function DatabaseTimeSeriesChart({
             name={key}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
+            style={reveal.maskStyle}
             type={dither.lineType}
           />
         ))}
       </AreaChart>
     ) : (
       <LineChart accessibilityLayer>
+        {reveal.defs}
+        {glow.defs}
         {axes}
         {seriesEntries.map(({ points, key }) => (
           <Line
@@ -371,6 +383,7 @@ export function DatabaseTimeSeriesChart({
             name={key}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
+            style={reveal.maskStyle}
             type={dither.lineType}
           />
         ))}
@@ -389,7 +402,8 @@ export function DatabaseTimeSeriesChart({
         className={cn(
           "aspect-auto w-full",
           CHART_HEIGHT_CLASS,
-          dither.crispClassName
+          dither.crispClassName,
+          glow.strokeClassName
         )}
         config={chartConfig}
         palette={palette}

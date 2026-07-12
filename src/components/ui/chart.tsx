@@ -1,5 +1,6 @@
 "use client";
 
+import { motion, useReducedMotion } from "motion/react";
 import * as React from "react";
 import type { TooltipValueType } from "recharts";
 import * as RechartsPrimitive from "recharts";
@@ -423,6 +424,207 @@ export function useChartGradientDither(
     barRadius: enabled ? 0 : undefined,
     /** Add to `<ChartContainer className>` so dithered shapes render crisp. */
     crispClassName: enabled ? CHART_CRISP_CLASS : "",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Polish primitives — colour bloom (glow) + entrance reveal
+//
+// Ported to our Recharts + SVG-`<defs>` substrate from the evilcharts dithered-
+// chart system (MIT, github.com/legions-developer/evilcharts): a soft outer
+// glow via blur + alpha-boost + merge, and a motion.dev mask wipe that plays
+// once on mount. Both compose with the Bayer dither above — drop the returned
+// `defs` into the chart and spread the returned refs onto the marks.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Soft outer colour-bloom filter. Operates on `SourceGraphic`, so it is
+ * color-agnostic — one filter serves every series in a chart. Blurs the shape,
+ * boosts the blurred copy's alpha, then merges it back under the crisp original.
+ */
+function ChartGlowFilter({
+  id,
+  blur,
+  strength,
+}: {
+  id: string;
+  blur: number;
+  strength: number;
+}) {
+  return (
+    <filter height="200%" id={id} width="200%" x="-50%" y="-50%">
+      <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation={blur} />
+      <feColorMatrix
+        in="blur"
+        result="glow"
+        type="matrix"
+        values={`1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 ${strength} 0`}
+      />
+      <feMerge>
+        <feMergeNode in="glow" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  );
+}
+
+type ChartGlowOptions = {
+  /** Blur radius of the bloom in px. Default 8. */
+  blur?: number;
+  /** Alpha multiplier on the blurred copy — higher = brighter bloom. Default 2. */
+  strength?: number;
+  /** Force on/off. Default on. */
+  enabled?: boolean;
+};
+
+/**
+ * Soft colour-bloom for chart strokes. Returns `{ defs, strokeClassName }`:
+ * render `{defs}` inside the chart and add `strokeClassName` to the
+ * `<ChartContainer>` so the bloom filter targets only the line/area *stroke*
+ * paths (never the dithered fill, which must stay crisp). One filter per chart.
+ */
+export function useChartGlow(options?: ChartGlowOptions) {
+  const { blur = 8, strength = 2 } = options ?? {};
+  const enabled = options?.enabled ?? true;
+  const id = `glow-${React.useId().replace(/:/g, "")}`;
+  const defs = enabled ? (
+    <defs>
+      <ChartGlowFilter blur={blur} id={id} strength={strength} />
+    </defs>
+  ) : null;
+
+  return {
+    defs,
+    enabled,
+    /** Raw `url(#…)` reference, for applying the filter directly to a mark. */
+    filter: enabled ? `url(#${id})` : undefined,
+    /**
+     * Applies the bloom to line/area stroke paths only. The fill keeps its crisp
+     * dither; targeting the stroke path mirrors evilcharts' stroke-only glow.
+     */
+    strokeClassName: enabled
+      ? `[&_.recharts-line-curve]:[filter:url(#${id})] [&_.recharts-area-curve]:[filter:url(#${id})]`
+      : "",
+  };
+}
+
+/** Direction the entrance wipe grows from. */
+export type ChartRevealType =
+  | "none"
+  | "left-to-right"
+  | "right-to-left"
+  | "center-out"
+  | "edges-in";
+
+const REVEAL_DURATION = 1; // intro wipe length, in seconds
+const REVEAL_EASE: [number, number, number, number] = [0, 0.7, 0.5, 1];
+
+// motion `originX` per single-rect wipe: 0 = left edge, 1 = right, 0.5 = centre.
+const REVEAL_ORIGIN: Record<
+  Exclude<ChartRevealType, "none" | "edges-in">,
+  number
+> = {
+  "left-to-right": 0,
+  "right-to-left": 1,
+  "center-out": 0.5,
+};
+
+/**
+ * A one-shot wipe mask driven by motion.dev, played once when the chart mounts.
+ * The same mask is spread onto every mark (fill, stroke, dots) so all reveal in
+ * lockstep. Each rect animates `scaleX` 0 → 1 from `originX`; "edges-in" uses
+ * two rects meeting in the middle.
+ */
+function ChartRevealMask({
+  id,
+  type,
+}: {
+  id: string;
+  type: Exclude<ChartRevealType, "none">;
+}) {
+  const reveal = {
+    initial: { scaleX: 0 },
+    animate: { scaleX: 1 },
+    transition: { duration: REVEAL_DURATION, ease: REVEAL_EASE },
+  };
+
+  return (
+    <mask
+      height="100%"
+      id={id}
+      maskContentUnits="userSpaceOnUse"
+      maskUnits="userSpaceOnUse"
+      width="100%"
+      x="0"
+      y="0"
+    >
+      {type === "edges-in" ? (
+        <>
+          <motion.rect
+            {...reveal}
+            fill="white"
+            height="100%"
+            style={{ originX: 0 }}
+            width="50%"
+            x="0"
+            y="0"
+          />
+          <motion.rect
+            {...reveal}
+            fill="white"
+            height="100%"
+            style={{ originX: 1 }}
+            width="50%"
+            x="50%"
+            y="0"
+          />
+        </>
+      ) : (
+        <motion.rect
+          {...reveal}
+          fill="white"
+          height="100%"
+          style={{ originX: REVEAL_ORIGIN[type] }}
+          width="100%"
+          x="0"
+          y="0"
+        />
+      )}
+    </mask>
+  );
+}
+
+type ChartRevealOptions = {
+  /** Wipe direction. Default `left-to-right`. `none` disables. */
+  type?: ChartRevealType;
+  /** Force on/off. Default on (still auto-disabled under reduced motion). */
+  enabled?: boolean;
+};
+
+/**
+ * One-shot entrance wipe for a chart. Returns `{ defs, maskStyle, enabled }`:
+ * render `{defs}` inside the chart and spread `style={reveal.maskStyle}` onto
+ * each mark. Honors `prefers-reduced-motion` (and `type: "none"`) by disabling.
+ *
+ * IMPORTANT: when `enabled`, set `isAnimationActive={false}` on the masked marks
+ * — the wipe drives the intro, and Recharts' own draw animation would fight it.
+ */
+export function useChartReveal(options?: ChartRevealOptions) {
+  const reduceMotion = useReducedMotion();
+  const type = options?.type ?? "left-to-right";
+  const enabled =
+    (options?.enabled ?? true) && !reduceMotion && type !== "none";
+  const id = `reveal-${React.useId().replace(/:/g, "")}`;
+  const defs = enabled ? (
+    <defs>
+      <ChartRevealMask id={id} type={type} />
+    </defs>
+  ) : null;
+
+  return {
+    defs,
+    enabled,
+    maskStyle: (enabled ? { mask: `url(#${id})` } : {}) as React.CSSProperties,
   };
 }
 
