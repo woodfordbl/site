@@ -246,7 +246,9 @@ function CartesianChart({
 
   const seriesKeys = Object.keys(chartConfig);
   // Per-chart curve + fill options (both default on).
-  const smoothing = chart.smoothing !== false;
+  // Default off: dithered charts read as a pixel staircase (the dither-kit
+  // look); turn Smoothing on for a monotone curve.
+  const smoothing = chart.smoothing === true;
   const gradient = chart.gradient !== false;
   // Flatten the dither fade for areas when the gradient is off (gamma 0 =
   // uniform density); other marks keep the default fade.

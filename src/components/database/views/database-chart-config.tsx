@@ -395,7 +395,7 @@ function ChartToggleItems({
       ) : null}
       {mark === "line" || mark === "area" ? (
         <DropdownMenuSwitchItem
-          checked={chart.smoothing !== false}
+          checked={chart.smoothing === true}
           onCheckedChange={(next) => {
             write({ smoothing: next });
           }}

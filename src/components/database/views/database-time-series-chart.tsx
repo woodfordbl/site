@@ -110,7 +110,8 @@ function useTimeSeriesMarkStyle(
   chartConfig: ChartConfig,
   mark: "area" | "line"
 ) {
-  const smoothing = chart.smoothing !== false;
+  // Default off: pixel staircase (dither-kit look) unless Smoothing is on.
+  const smoothing = chart.smoothing === true;
   const gradient = chart.gradient !== false;
   const dither = useChartGradientDither(chartConfig, {
     gamma: mark === "area" && !gradient ? 0 : undefined,
