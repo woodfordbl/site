@@ -27,6 +27,7 @@ import {
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
+import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
   PageSidebarChromeProvider,
@@ -191,6 +192,7 @@ function RowPageNotFoundBody(): ReactNode {
           </div>
         </div>
       </div>
+      <PageInsetFooter />
     </div>
   );
 }
@@ -414,45 +416,40 @@ function RowPageBody({
     return null;
   }
 
-  // Header + scroll region — the rail wraps BOTH so its "Properties" band
-  // sits level with the header bar (same height, continuous border line).
-  const main = (
-    <>
-      <RowPageHeader database={database} rowTitle={displayTitle} />
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path. */}
-      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button. */}
-      <div
-        {...pageContentTypographyProps({
-          font: resolvePageFont(template?.font),
-          textScale: undefined,
-        })}
-        className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-        onClick={handleBodyClick}
-      >
-        <CanvasBlocksReadOnly
-          blocks={templateBlocks}
-          isNarrowViewport={isNarrowViewport}
-          mode="view"
-          pageId={`db-row:${row.id}`}
-          titleSlot={
-            <RowPageTitleSection
-              database={database}
-              displayTitle={displayTitle}
-              icon={template?.icon}
-              propertiesExtra={
-                <RowPropertiesPlacementMenu
-                  className="hover-reveal"
-                  database={database}
-                />
-              }
-              row={row}
-              showProperties={!rail.panelMode}
-            />
-          }
-        />
-      </div>
-    </>
+  const canvasRegion = (
+    // biome-ignore lint/a11y/noStaticElementInteractions: whole-body click is a redundant affordance — the Edit page button is the accessible path.
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same — redundant pointer affordance only.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users use the Edit page button.
+    <div
+      {...pageContentTypographyProps({
+        font: resolvePageFont(template?.font),
+        textScale: undefined,
+      })}
+      className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
+      onClick={handleBodyClick}
+    >
+      <CanvasBlocksReadOnly
+        blocks={templateBlocks}
+        isNarrowViewport={isNarrowViewport}
+        mode="view"
+        pageId={`db-row:${row.id}`}
+        titleSlot={
+          <RowPageTitleSection
+            database={database}
+            displayTitle={displayTitle}
+            icon={template?.icon}
+            propertiesExtra={
+              <RowPropertiesPlacementMenu
+                className="hover-reveal"
+                database={database}
+              />
+            }
+            row={row}
+            showProperties={!rail.panelMode}
+          />
+        }
+      />
+    </div>
   );
 
   return (
@@ -463,18 +460,19 @@ function RowPageBody({
           className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
           data-page-main-panel=""
         >
+          <RowPageHeader database={database} rowTitle={displayTitle} />
           {rail.panelMode ? (
             <RowPropertiesRailLayout
-              database={database}
               panel={<RowPropertiesPanel database={database} row={row} />}
             >
-              {main}
+              {canvasRegion}
             </RowPropertiesRailLayout>
           ) : (
-            main
+            canvasRegion
           )}
         </div>
       </div>
+      <PageInsetFooter />
     </div>
   );
 }

@@ -7,7 +7,8 @@ import { DEFAULT_SETTINGS_SECTION } from "@/components/settings/site-settings-se
 import { Button } from "@/components/ui/button.tsx";
 
 interface SiteSettingsTriggerProps {
-  pageId: string;
+  /** Page the user came from; omitted on database routes. */
+  pageId?: string;
 }
 
 export function SiteSettingsTrigger({ pageId }: SiteSettingsTriggerProps) {
@@ -22,7 +23,10 @@ export function SiteSettingsTrigger({ pageId }: SiteSettingsTriggerProps) {
       render={
         <Link
           params={{ section: DEFAULT_SETTINGS_SECTION }}
-          search={{ pageId, returnTo: pathname }}
+          search={{
+            ...(pageId ? { pageId } : {}),
+            returnTo: pathname,
+          }}
           to="/settings/$section"
         />
       }

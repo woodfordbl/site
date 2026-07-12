@@ -8,11 +8,11 @@ import {
 } from "react";
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
-import { PageCanvasFooter } from "@/components/canvas/page-canvas-footer.tsx";
 import { PageCommandHotkeys } from "@/components/keyboard/page-command-hotkeys.tsx";
 import { PageCover } from "@/components/pages/page-cover.tsx";
 import { PageCoverProvider } from "@/components/pages/page-cover-context.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
+import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
   PageSidebarChromeProvider,
@@ -25,7 +25,6 @@ import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import { PageVersionPreview } from "@/components/pages/page-version-preview.tsx";
 import { ServerVersionPreview } from "@/components/pages/server-version-preview.tsx";
 import { VersionPreviewProvider } from "@/components/pages/version-preview-context.tsx";
-import { SiteSettingsTrigger } from "@/components/settings/site-settings-trigger.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import {
   useIsCoarsePrimaryPointer,
@@ -58,12 +57,11 @@ import { cn } from "@/lib/utils.ts";
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
   /**
-   * Wraps the header bar + canvas scroll region — e.g. the row-template
-   * editor's properties rail splits them into content + side panel (its
-   * "Properties" band level with the header) while the footer actions keep
-   * their normal placement outside the canvas.
+   * Wraps the canvas scroll region only — e.g. the row-template editor's
+   * properties rail splits content + side panel while the page header stays
+   * full width above the split.
    */
-  contentWrapper?: (content: ReactNode) => ReactNode;
+  contentWrapper?: (canvasRegion: ReactNode) => ReactNode;
   /** Overrides the default page sidebar (e.g. the template editor's chrome). */
   sidebar?: ReactNode;
   /**
@@ -324,8 +322,6 @@ function PageWorkspaceBody({
     </div>
   );
 
-  // Header + scroll region together, so a contentWrapper (the row-template
-  // properties rail) can sit its panel band level with the header bar.
   const workspaceMain = (
     <>
       {/* Desktop with no cover: header is a fixed bar above the scroll
@@ -381,10 +377,7 @@ function PageWorkspaceBody({
                 : workspaceMain}
             </div>
           </div>
-          <div className="pointer-events-none z-30 flex h-9 shrink-0 items-center justify-end gap-1 px-2 max-md:hidden md:px-0">
-            <PageCanvasFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
-            <SiteSettingsTrigger pageId={page.id} />
-          </div>
+          <PageInsetFooter onAfterReset={bumpCanvasNonce} pageId={page.id} />
         </div>
       </VersionPreviewProvider>
     </PageCoverProvider>

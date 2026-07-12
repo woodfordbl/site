@@ -52,47 +52,36 @@ export function RowTemplatePreviewBody({
     [template?.blocks, database.fields, row.values]
   );
 
-  // Bar + scroll region — the rail wraps BOTH so its "Properties" band sits
-  // level with the "Previewing as" bar (same height, continuous border line).
-  const main = (
-    <>
-      {/* h-[37px] matches the properties band / page header bars exactly. */}
-      <div className="flex h-[37px] shrink-0 items-center gap-2 border-sidebar-border border-b bg-muted/40 px-3 text-muted-foreground text-sm">
-        <IconEye aria-hidden className="size-4 shrink-0" />
-        <span className="min-w-0 truncate">
-          Previewing as <span className="text-foreground">{displayTitle}</span>
-        </span>
-      </div>
-      <div
-        {...pageContentTypographyProps({
-          font: resolvePageFont(template?.font),
-          textScale: undefined,
-        })}
-        className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-      >
-        <CanvasBlocksReadOnly
-          blocks={templateBlocks}
-          isNarrowViewport={isNarrowViewport}
-          mode="view"
-          pageId={`db-template-preview:${row.id}`}
-          titleSlot={
-            <RowPageTitleSection
-              database={database}
-              displayTitle={displayTitle}
-              icon={template?.icon}
-              propertiesExtra={
-                <RowPropertiesPlacementMenu
-                  className="hover-reveal"
-                  database={database}
-                />
-              }
-              row={row}
-              showProperties={!rail.panelMode}
-            />
-          }
-        />
-      </div>
-    </>
+  const canvasRegion = (
+    <div
+      {...pageContentTypographyProps({
+        font: resolvePageFont(template?.font),
+        textScale: undefined,
+      })}
+      className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
+    >
+      <CanvasBlocksReadOnly
+        blocks={templateBlocks}
+        isNarrowViewport={isNarrowViewport}
+        mode="view"
+        pageId={`db-template-preview:${row.id}`}
+        titleSlot={
+          <RowPageTitleSection
+            database={database}
+            displayTitle={displayTitle}
+            icon={template?.icon}
+            propertiesExtra={
+              <RowPropertiesPlacementMenu
+                className="hover-reveal"
+                database={database}
+              />
+            }
+            row={row}
+            showProperties={!rail.panelMode}
+          />
+        }
+      />
+    </div>
   );
 
   return (
@@ -103,15 +92,21 @@ export function RowTemplatePreviewBody({
           className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
           data-page-main-panel=""
         >
+          <div className="flex h-[37px] shrink-0 items-center gap-2 border-sidebar-border border-b bg-muted/40 px-3 text-muted-foreground text-sm">
+            <IconEye aria-hidden className="size-4 shrink-0" />
+            <span className="min-w-0 truncate">
+              Previewing as{" "}
+              <span className="text-foreground">{displayTitle}</span>
+            </span>
+          </div>
           {rail.panelMode ? (
             <RowPropertiesRailLayout
-              database={database}
               panel={<RowPropertiesPanel database={database} row={row} />}
             >
-              {main}
+              {canvasRegion}
             </RowPropertiesRailLayout>
           ) : (
-            main
+            canvasRegion
           )}
         </div>
       </div>
