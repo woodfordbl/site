@@ -517,7 +517,8 @@ function TimeAxisOptions({
   );
   const firstTimeFieldId = timeFieldCandidates[0]?.id;
   const currentWindowMs = chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS;
-  const currentWindowId = presetForWindow(currentWindowMs).id;
+  const currentWindow = presetForWindow(currentWindowMs);
+  const currentWindowId = currentWindow.id;
   const currentScale = chart.timeSeries?.scale ?? "absolute";
   const fieldName = (fieldId: string | undefined): string =>
     fields.find((field) => field.id === fieldId)?.name ?? "None";
@@ -534,7 +535,7 @@ function TimeAxisOptions({
         value={chart.timeSeries?.fieldId ?? ""}
       />
       <RadioSubmenu
-        currentLabel={currentWindowId}
+        currentLabel={currentWindow.label}
         label="Window"
         onValueChange={(value) => {
           const preset = TIME_WINDOW_PRESETS.find(
