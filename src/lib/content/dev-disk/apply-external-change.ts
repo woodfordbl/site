@@ -66,7 +66,20 @@ export async function applyExternalContentChange(
     return;
   }
 
-  if (event.event === "bulk" || event.kind === "database") {
+  if (event.kind === "database") {
+    // The boot seeder's replace-if-unedited semantics apply cleanly to a
+    // live external edit too: re-fetch shipped databases and re-seed.
+    const [{ loadShippedDatabases }, { seedShippedDatabases }] =
+      await Promise.all([
+        import("@/lib/content/load-databases.ts"),
+        import("@/lib/databases/seed-shipped-databases.ts"),
+      ]);
+    seedShippedDatabases(await loadShippedDatabases());
+    await queryClient.invalidateQueries();
+    return;
+  }
+
+  if (event.event === "bulk") {
     await queryClient.invalidateQueries();
     return;
   }

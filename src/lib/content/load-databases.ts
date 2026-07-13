@@ -11,5 +11,5 @@ import {
  * (page-metadata scale), so no per-database endpoint is needed.
  */
 export const loadShippedDatabases = createServerFn({ method: "GET" }).handler(
-  (): Promise<ShippedDatabaseEntry[]> => Promise.resolve(getShippedDatabases())
+  (): Promise<ShippedDatabaseEntry[]> => getShippedDatabases()
 );

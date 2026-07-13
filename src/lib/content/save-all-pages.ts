@@ -83,8 +83,12 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
  * surface reads the local collections, so clearing it would blank open views
  * until the next boot re-seed.
  */
-async function saveLocalDatabaseToSource(database: LocalDatabase): Promise<{
+export async function flushLocalDatabaseToSource(
+  database: LocalDatabase
+): Promise<{
   changed: boolean;
+  /** Written-file hashes — dev-disk echo suppression tokens. */
+  contentHashes: string[];
 }> {
   const doc = exportDatabaseDocument(
     database,
@@ -92,16 +96,22 @@ async function saveLocalDatabaseToSource(database: LocalDatabase): Promise<{
   );
   const contentHash = hashDatabaseDocument(doc);
   if (contentHash === database.serverBaselineHash) {
-    return { changed: false }; // already shipped byte-identical content
+    return { changed: false, contentHashes: [] }; // already shipped byte-identical content
   }
 
-  await saveDatabase({ data: doc });
+  const result = await saveDatabase({ data: doc });
 
   localDatabasesCollection.update(database.id, (draft) => {
     draft.serverBaselineHash = contentHash;
     draft.updatedAt = new Date().toISOString();
   });
-  return { changed: true };
+  return { changed: true, contentHashes: result.contentHashes };
+}
+
+async function saveLocalDatabaseToSource(database: LocalDatabase): Promise<{
+  changed: boolean;
+}> {
+  return await flushLocalDatabaseToSource(database);
 }
 
 /**

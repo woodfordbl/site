@@ -1,12 +1,17 @@
 import {
   localBlocksCollection,
+  localDatabaseRowsCollection,
+  localDatabasesCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { deletePage } from "@/lib/content/delete-page.ts";
 import { isDevDiskMode } from "@/lib/content/dev-disk/dev-disk-mode.ts";
 import { recordOwnWrite } from "@/lib/content/dev-disk/own-writes.ts";
-import { flushLocalPageToSource } from "@/lib/content/save-all-pages.ts";
+import {
+  flushLocalDatabaseToSource,
+  flushLocalPageToSource,
+} from "@/lib/content/save-all-pages.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import { isLocallyDeletedPage } from "@/lib/schemas/local-page.ts";
 
@@ -93,6 +98,48 @@ async function deletePageFile(pageId: string): Promise<void> {
   }
 }
 
+const pendingDatabases = new Map<string, number>();
+const databasesInFlight = new Set<string>();
+
+async function flushDatabase(databaseId: string): Promise<void> {
+  const timer = pendingDatabases.get(databaseId);
+  if (timer !== undefined) {
+    window.clearTimeout(timer);
+    pendingDatabases.delete(databaseId);
+  }
+  if (databasesInFlight.has(databaseId)) {
+    scheduleDatabaseFlush(databaseId);
+    return;
+  }
+  const database = localDatabasesCollection.get(databaseId);
+  if (!database) {
+    return;
+  }
+  databasesInFlight.add(databaseId);
+  try {
+    const { contentHashes } = await flushLocalDatabaseToSource(database);
+    for (const hash of contentHashes) {
+      recordOwnWrite(hash);
+    }
+  } catch (error) {
+    reportPersistenceError(error);
+    window.setTimeout(() => scheduleDatabaseFlush(databaseId), RETRY_MS);
+  } finally {
+    databasesInFlight.delete(databaseId);
+  }
+}
+
+function scheduleDatabaseFlush(databaseId: string): void {
+  const existing = pendingDatabases.get(databaseId);
+  if (existing !== undefined) {
+    window.clearTimeout(existing);
+  }
+  pendingDatabases.set(
+    databaseId,
+    window.setTimeout(() => flushDatabase(databaseId), IDLE_FLUSH_MS)
+  );
+}
+
 /** True while a flush for the page is queued or on the wire. */
 export function hasPendingFlush(pageId: string): boolean {
   return pending.has(pageId) || inFlight.has(pageId);
@@ -112,6 +159,26 @@ export function startDevDiskSync(): void {
       const pageId = change.value?.pageId;
       if (pageId) {
         schedulePageFlush(pageId);
+      }
+    }
+  });
+
+  localDatabasesCollection.subscribeChanges((changes) => {
+    for (const change of changes) {
+      const databaseId = change.value?.id ?? String(change.key);
+      if (databaseId) {
+        scheduleDatabaseFlush(databaseId);
+      }
+    }
+  });
+
+  localDatabaseRowsCollection.subscribeChanges((changes) => {
+    for (const change of changes) {
+      const databaseId =
+        change.value?.databaseId ??
+        localDatabaseRowsCollection.get(String(change.key))?.databaseId;
+      if (databaseId) {
+        scheduleDatabaseFlush(databaseId);
       }
     }
   });

@@ -53,6 +53,21 @@ function extractLenientTitle(nodes: RootContent[]): {
   };
 }
 
+/**
+ * Body-only parse: blocks from markdown with no frontmatter handling and no
+ * H1 title lift (database row templates, clipboard paste).
+ */
+export function parseBlocksMarkdown(
+  raw: string,
+  options: Pick<ParsePageOptions, "linkContext" | "pageId"> = {}
+): Block[] {
+  const tree = parseMarkdownToTree(raw);
+  return mdastToBlocks(tree.children, {
+    ctx: options.linkContext ?? {},
+    pageId: options.pageId ?? "body",
+  });
+}
+
 export function parsePageMarkdown(
   raw: string,
   options: ParsePageOptions = {}
