@@ -1,46 +1,54 @@
+import {
+  assembleMarkdownPages,
+  type RawPageFile,
+} from "@/lib/content/assemble-markdown-pages.ts";
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
-import { type Page, pageSchema } from "@/lib/schemas/page.ts";
+import type { Page } from "@/lib/schemas/page.ts";
 
 /**
- * Shipped pages, bundled at build time. Runtime `readFile(process.cwd(), …)`
- * is not portable to deployed server functions (the content directory is not
- * traced into the bundle); the glob guarantees inclusion and stays HMR-aware
- * for author dev mode saves.
+ * Shipped pages, bundled at build time as raw markdown. Runtime
+ * `readFile(process.cwd(), …)` is not portable to deployed server functions
+ * (the content directory is not traced into the bundle); the glob guarantees
+ * inclusion and stays HMR-aware for author dev mode saves. Parsing happens
+ * once per module instance and is memoized.
  */
-const pageModules = import.meta.glob("../../../content/pages/**/*.json", {
+const pageModules = import.meta.glob("../../../content/pages/**/*.md", {
   eager: true,
+  query: "?raw",
   import: "default",
 });
 
 const CONTENT_PREFIX = "content/pages/";
 
-let cachedPagesByPath: Map<string, Page> | null = null;
+let cachedPagesBySlug: Map<string, Page> | null = null;
 
-function getPagesByRelativePath(): Map<string, Page> {
-  if (cachedPagesByPath) {
-    return cachedPagesByPath;
+function getPagesBySlug(): Map<string, Page> {
+  if (cachedPagesBySlug) {
+    return cachedPagesBySlug;
   }
 
-  cachedPagesByPath = new Map(
-    Object.entries(pageModules).map(([modulePath, moduleData]) => {
-      const relativePath = modulePath.slice(
+  const files: RawPageFile[] = Object.entries(pageModules).map(
+    ([modulePath, raw]) => ({
+      relativePath: modulePath.slice(
         modulePath.indexOf(CONTENT_PREFIX) + CONTENT_PREFIX.length
-      );
-      return [relativePath, pageSchema.parse(moduleData)];
+      ),
+      raw: raw as string,
     })
   );
-  return cachedPagesByPath;
+
+  cachedPagesBySlug = new Map(
+    assembleMarkdownPages(files).map((page) => [page.slug, page])
+  );
+  return cachedPagesBySlug;
 }
 
 export function getShippedPages(): Page[] {
-  return [...getPagesByRelativePath().values()];
+  return [...getPagesBySlug().values()];
 }
 
-/** Lookup by `slugToRelativePath` output (e.g. `home.json`, `previous-work/altitude.json`). */
-export function getShippedPageByRelativePath(
-  relativePath: string
-): Page | undefined {
-  return getPagesByRelativePath().get(relativePath);
+/** Lookup by normalized metadata slug (e.g. `/`, `/previous-work/altitude`). */
+export function getShippedPageBySlug(slug: string): Page | undefined {
+  return getPagesBySlug().get(slug);
 }
 
 /** Revision token for the shipped catalog; exposed to the client for deploy freshness. */

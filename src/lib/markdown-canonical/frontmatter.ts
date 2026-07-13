@@ -18,6 +18,12 @@ export const pageFrontmatterSchema = z.object({
   id: z.string(),
   title: z.string(),
   icon: z.string().optional(),
+  /**
+   * Explicit `parentId` override — emitted only when the tree parent differs
+   * from the path-derived one (a child of home keeps its top-level slug, so
+   * the folder layout alone cannot express that nesting).
+   */
+  parent: z.string().optional(),
   /** `sidebarOrder` — sibling sort weight in the sidebar tree. */
   order: z.number().optional(),
   font: pageFontSchema.optional(),
@@ -33,6 +39,7 @@ const KEY_ORDER = [
   "id",
   "title",
   "icon",
+  "parent",
   "order",
   "font",
   "textScale",
