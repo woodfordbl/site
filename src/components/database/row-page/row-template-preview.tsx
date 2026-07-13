@@ -12,6 +12,7 @@ import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useRowTemplate } from "@/hooks/use-row-template.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import type {
@@ -47,9 +48,14 @@ export function RowTemplatePreviewBody({
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
   const templateBlocks = useMemo(
     () =>
-      instantiateTemplateBlocks(template?.blocks, database.fields, row.values, {
-        now: () => new Date(),
-      }),
+      instantiateTemplateBlocks(
+        template?.blocks,
+        database.fields,
+        row.values,
+        // relations: template tokens can traverse relation fields — the
+        // preview must evaluate them like the materialized copy does.
+        { now: () => new Date(), relations: localFormulaRelationResolver() }
+      ),
     [template?.blocks, database.fields, row.values]
   );
 

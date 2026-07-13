@@ -6,12 +6,16 @@ import {
   IconLink,
   IconList,
   IconMathFunction,
+  IconRelationManyToMany,
   IconSquareCheck,
 } from "@tabler/icons-react";
 import { type ComponentType, createElement } from "react";
 
 import { TablerGlyph } from "@/components/pages/tabler-glyph.tsx";
-import { TABLER_PAGE_ICON_PREFIX } from "@/lib/pages/page-icon.ts";
+import {
+  TABLER_PAGE_ICON_PREFIX,
+  type TablerIconNode,
+} from "@/lib/pages/page-icon.ts";
 import { useTablerIconGlyph } from "@/lib/pages/page-icon-catalog.ts";
 import type {
   DatabaseField,
@@ -36,6 +40,97 @@ export const DATABASE_FIELD_TYPE_ICONS: Record<
   date: IconCalendar,
   url: IconLink,
   formula: IconMathFunction,
+  relation: IconRelationManyToMany,
+};
+
+/**
+ * The same field-type glyphs as raw Tabler node data (path lists), for
+ * surfaces that build DOM without React — the CodeMirror property-chip
+ * widget renders these via `document.createElementNS`. Hand-copied from
+ * `@tabler/icons-react`'s icon nodes;
+ * `database-field-icons.dom.test.tsx` asserts parity with the React
+ * components above so the two maps can't drift.
+ */
+export const DATABASE_FIELD_TYPE_ICON_NODES: Record<
+  DatabaseFieldType,
+  TablerIconNode
+> = {
+  text: [
+    ["path", { d: "M4 6l16 0" }],
+    ["path", { d: "M4 12l10 0" }],
+    ["path", { d: "M4 18l14 0" }],
+  ],
+  number: [
+    ["path", { d: "M5 9l14 0" }],
+    ["path", { d: "M5 15l14 0" }],
+    ["path", { d: "M11 4l-4 16" }],
+    ["path", { d: "M17 4l-4 16" }],
+  ],
+  checkbox: [
+    [
+      "path",
+      {
+        d: "M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14",
+      },
+    ],
+    ["path", { d: "M9 12l2 2l4 -4" }],
+  ],
+  select: [
+    ["path", { d: "M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" }],
+    ["path", { d: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" }],
+  ],
+  multiSelect: [
+    ["path", { d: "M9 6l11 0" }],
+    ["path", { d: "M9 12l11 0" }],
+    ["path", { d: "M9 18l11 0" }],
+    ["path", { d: "M5 6l0 .01" }],
+    ["path", { d: "M5 12l0 .01" }],
+    ["path", { d: "M5 18l0 .01" }],
+  ],
+  date: [
+    [
+      "path",
+      {
+        d: "M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12",
+      },
+    ],
+    ["path", { d: "M16 3v4" }],
+    ["path", { d: "M8 3v4" }],
+    ["path", { d: "M4 11h16" }],
+    ["path", { d: "M11 15h1" }],
+    ["path", { d: "M12 15v3" }],
+  ],
+  url: [
+    ["path", { d: "M9 15l6 -6" }],
+    ["path", { d: "M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" }],
+    [
+      "path",
+      {
+        d: "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463",
+      },
+    ],
+  ],
+  formula: [
+    [
+      "path",
+      { d: "M3 19a2 2 0 0 0 2 2c2 0 2 -4 3 -9s1 -9 3 -9a2 2 0 0 1 2 2" },
+    ],
+    ["path", { d: "M5 12h6" }],
+    ["path", { d: "M15 12l6 6" }],
+    ["path", { d: "M15 18l6 -6" }],
+  ],
+  relation: [
+    [
+      "path",
+      {
+        d: "M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10",
+      },
+    ],
+    ["path", { d: "M15 14v-4l3 4v-4" }],
+    ["path", { d: "M6 14v-4l3 4v-4" }],
+    ["path", { d: "M12 10.5l0 .01" }],
+    ["path", { d: "M12 13.5l0 .01" }],
+  ],
 };
 
 type FieldIconComponent = ComponentType<{ className?: string }>;

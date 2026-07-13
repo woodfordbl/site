@@ -25,7 +25,10 @@ import {
 } from "react";
 
 import { DatabaseAddRow } from "@/components/database/database-add-row.tsx";
-import { DatabaseCalculateRow } from "@/components/database/database-calculate-row.tsx";
+import {
+  DatabaseCalculateRow,
+  DatabaseGroupAggregateCells,
+} from "@/components/database/database-calculate-row.tsx";
 import { DatabaseCellValueView } from "@/components/database/database-cell.tsx";
 import {
   DatabaseCellInlineEditor,
@@ -92,6 +95,7 @@ import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
 import type {
+  DatabaseAggregateFn,
   DatabaseField,
   DatabaseView,
   LocalDatabaseRow,
@@ -110,7 +114,9 @@ import { cn } from "@/lib/utils.ts";
  * list (`flattenGridItems`); buckets render the incoming sorted-or-manual
  * row order as given — drag-reorder across/within groups is out of scope.
  * The Calculate row still aggregates over ALL filtered rows, collapsed
- * groups included.
+ * groups included; grouped views with calculations ALSO render each group's
+ * own aggregates inside its header band (`DatabaseGroupAggregateCells`), so
+ * collapsed groups keep their summary visible.
  */
 
 /** Extra virtual rows above/below the viewport. */
@@ -903,6 +909,10 @@ export function DatabaseTableGrid({
   const calculations = view.config.calculations;
   const hasCalculations =
     calculations !== undefined && Object.keys(calculations).length > 0;
+  // Grouped views render each group's own aggregates in its header band —
+  // `null` (ungrouped or no calculations) keeps the headers aggregate-free.
+  const groupCalculations =
+    hasCalculations && groups !== null ? (calculations ?? null) : null;
 
   // Page icon in the primary (title) cells — a per-view toggle (⋯ menu),
   // shown unless explicitly disabled.
@@ -1060,7 +1070,9 @@ export function DatabaseTableGrid({
                     if (item.kind === "groupHeader") {
                       return (
                         <GridGroupHeaderRow
+                          calculations={groupCalculations}
                           collapsed={collapsedKeySet.has(item.group.key)}
+                          columns={gridColumns}
                           group={item.group}
                           hiddenGroupCount={hiddenGroupCount}
                           key={`group:${item.group.key}`}
@@ -1072,6 +1084,7 @@ export function DatabaseTableGrid({
                           onShowHiddenGroups={handleShowHiddenGroups}
                           onToggle={handleToggleGroup}
                           rowIndex={virtualRow.index}
+                          rowSelectLeadingWidth={rowSelectLeadingWidth}
                           selectColumnPinned={selectColumnPinned}
                           showAddRow={mode === "edit" && !isSyncedDatabase}
                           showMenu={mode === "edit"}
@@ -1328,7 +1341,16 @@ function GridHeaderCell({
 }
 
 interface GridGroupHeaderRowProps {
+  /**
+   * Per-column aggregates rendered inside the header band over THIS group's
+   * rows (`view.config.calculations`); `null` when the view has none
+   * configured. Collapsed groups keep their header, so their aggregates
+   * stay visible.
+   */
+  calculations: Partial<Record<string, DatabaseAggregateFn>> | null;
   collapsed: boolean;
+  /** Column render metadata — the aggregate cells reuse the grid geometry. */
+  columns: readonly GridColumn[];
   group: DatabaseRowGroup;
   /** Buckets hidden via `hiddenGroupKeys` — threaded to the context menu. */
   hiddenGroupCount: number;
@@ -1342,6 +1364,8 @@ interface GridGroupHeaderRowProps {
   onToggle: (groupKey: string) => void;
   /** Zero-based flattened item index (drives measurement + ARIA row index). */
   rowIndex: number;
+  /** Leading select-lane width, offsetting the aggregate cells layer. */
+  rowSelectLeadingWidth: number;
   /** Leading select column pinned when horizontal pinning is enabled. */
   selectColumnPinned: boolean;
   /** Edit mode on a non-synced database — synced rows come from the source. */
@@ -1359,12 +1383,16 @@ interface GridGroupHeaderRowProps {
  * the label; the muted count and the hover-revealed per-group "+" (adds a
  * row pre-seeded with the group's value) trail it. In gutter row-select
  * modes the band's background starts at the data columns (the select lane
- * bleeds into the canvas gutter and must stay unpainted). Edit mode wraps
- * the row in the group display context menu. Memoized separately from
+ * bleeds into the canvas gutter and must stay unpainted). With calculations
+ * configured, each header also carries its group's own aggregate values
+ * (`DatabaseGroupAggregateCells`) — visible while collapsed too. Edit mode
+ * wraps the row in the group display context menu. Memoized separately from
  * `GridRow` so scrolling stays cheap.
  */
 const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
+  calculations,
   collapsed,
+  columns,
   group,
   hiddenGroupCount,
   measureRow,
@@ -1375,6 +1403,7 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
   onShowHiddenGroups,
   onToggle,
   rowIndex,
+  rowSelectLeadingWidth,
   selectColumnPinned,
   showAddRow,
   showMenu,
@@ -1454,6 +1483,17 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
           ) : null}
         </div>
       </div>
+      {calculations ? (
+        // Per-group aggregates on the footer's column geometry; paints
+        // under the sticky label (z-10) and clicks pass through to the
+        // full-row collapse toggle.
+        <DatabaseGroupAggregateCells
+          calculations={calculations}
+          columns={columns}
+          rowSelectLeadingWidth={rowSelectLeadingWidth}
+          rows={group.rows}
+        />
+      ) : null}
     </div>
   );
 

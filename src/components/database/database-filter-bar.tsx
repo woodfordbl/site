@@ -20,6 +20,7 @@ import {
 import type { DateRange } from "react-day-picker";
 import { createPortal } from "react-dom";
 
+import { DatabaseAdvancedFilterChip } from "@/components/database/database-advanced-filter-chip.tsx";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   appendFilterCondition,
@@ -44,6 +45,7 @@ import {
   useListReorder,
 } from "@/components/database/use-list-reorder.ts";
 import { Calendar } from "@/components/ui/calendar.tsx";
+import { Chip, ChipButton, ChipSegment } from "@/components/ui/chip.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +67,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
+import { useAllDatabases } from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { toIsoDatePart } from "@/lib/databases/cell-values.ts";
 import {
   FIELD_TYPE_DEFS,
@@ -104,31 +108,6 @@ import { cn } from "@/lib/utils.ts";
  *   with a remove action; creating/editing groups via UI arrives later.
  */
 
-// `pointer-coarse:` bumps: 24px-tall chip segments are too small a touch
-// target, so chips grow to 32px with wider segment padding on touch devices.
-const CHIP_CLASS =
-  "flex h-6 shrink-0 items-stretch divide-x divide-border overflow-hidden rounded-md border border-border bg-background text-xs pointer-coarse:h-8";
-
-const CHIP_SEGMENT_CLASS =
-  "flex items-center gap-1 px-1.5 text-muted-foreground outline-none transition-colors pointer-coarse:px-2";
-
-const CHIP_BUTTON_CLASS = cn(
-  CHIP_SEGMENT_CLASS,
-  "hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
-);
-
-/** Small dashed "+ Filter"/"+ Sort" chip trigger (inline bars). */
-const ADD_CHIP_CLASS =
-  "flex h-6 pointer-coarse:h-8 shrink-0 items-center gap-1 rounded-md border border-border border-dashed pointer-coarse:px-2 px-1.5 text-muted-foreground text-xs outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground";
-
-/**
- * Full-width dashed add trigger for the mobile filter/sort drawers — fills the
- * surface width inside the container's own padding (`w-full` under the
- * popover/drawer `p-2`).
- */
-const ADD_FULL_WIDTH_CLASS =
-  "flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border border-dashed px-2 text-muted-foreground text-sm outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground";
-
 interface ChipStripProps {
   /**
    * Wrapper class. The desktop bar passes `contents` so the chips join its
@@ -141,9 +120,11 @@ interface ChipStripProps {
 }
 
 /**
- * The filter half of the chip bar: one chip per root filter entry plus the
- * "+ Filter" type-ahead picker. Reused by the desktop inline bar and the
- * mobile funnel popover.
+ * The filter half of the chip bar: one chip per root filter entry, the
+ * "+ Filter" type-ahead picker, and the view's single ADVANCED filter chip
+ * (`database-advanced-filter-chip.tsx` — a boolean formula filtering rows;
+ * dashed "+ Advanced" trigger while unset, under the same `showAddTrigger`
+ * gate). Reused by the desktop inline bar and the mobile funnel popover.
  */
 export function DatabaseFilterChips({
   addFullWidth = false,
@@ -160,6 +141,10 @@ export function DatabaseFilterChips({
   // Condition whose value popover should open as soon as its chip mounts —
   // set when "+ Filter" appends a fresh condition.
   const [autoOpenId, setAutoOpenId] = useState<string | null>(null);
+  // The advanced chip's editor checks drafts against every workspace schema
+  // (member typing on relation rows) and the user-function registry.
+  const relatedDatabases = useAllDatabases();
+  const userFunctions = useFormulaUserFunctions();
 
   const fieldsById = useMemo(() => {
     const byId: Record<string, DatabaseField> = {};
@@ -228,6 +213,19 @@ export function DatabaseFilterChips({
           onPick={handleAddField}
         />
       ) : null}
+      <DatabaseAdvancedFilterChip
+        fields={fields}
+        onAdvancedFilterChange={(expression) => {
+          updateDatabaseView(databaseId, view.id, {
+            advancedFilter:
+              expression === undefined ? undefined : { expression },
+          });
+        }}
+        relatedDatabases={relatedDatabases}
+        showAddTrigger={showAddTrigger}
+        userFunctions={userFunctions}
+        view={view}
+      />
     </div>
   );
 }
@@ -352,12 +350,12 @@ export function DatabaseGroupByChip({
     "Unknown field";
 
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>
+    <Chip>
+      <ChipSegment>
         <IconLayoutGrid className="size-3.5 shrink-0 stroke-[1.5px]" />
         Grouped by
         <span className="max-w-32 truncate text-foreground">{fieldName}</span>
-      </span>
+      </ChipSegment>
       <RemoveChipButton
         label={`Clear grouping by ${fieldName}`}
         onRemove={() => {
@@ -367,7 +365,7 @@ export function DatabaseGroupByChip({
           });
         }}
       />
-    </div>
+    </Chip>
   );
 }
 
@@ -482,10 +480,10 @@ function FilterConditionChip({
   if (!field) {
     // Stale condition (field deleted elsewhere): removable label only.
     return (
-      <div className={CHIP_CLASS}>
-        <span className={CHIP_SEGMENT_CLASS}>Unknown field</span>
+      <Chip>
+        <ChipSegment>Unknown field</ChipSegment>
         <RemoveChipButton label="Remove filter" onRemove={onRemove} />
-      </div>
+      </Chip>
     );
   }
 
@@ -500,18 +498,14 @@ function FilterConditionChip({
   };
 
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>
+    <Chip>
+      <ChipSegment>
         <Icon className="size-3.5 shrink-0 stroke-[1.5px]" />
         <span className="max-w-32 truncate text-foreground">{field.name}</span>
-      </span>
+      </ChipSegment>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={
-            <button className={CHIP_BUTTON_CLASS} type="button">
-              {operatorLabel(condition.operator)}
-            </button>
-          }
+          render={<ChipButton>{operatorLabel(condition.operator)}</ChipButton>}
         />
         <DropdownMenuContent align="start">
           <DropdownMenuRadioGroup
@@ -542,7 +536,7 @@ function FilterConditionChip({
         <Popover onOpenChange={handleValueOpenChange} open={valueOpen}>
           <PopoverTrigger
             render={
-              <button className={CHIP_BUTTON_CLASS} type="button">
+              <ChipButton>
                 {valueLabel === "" ? (
                   <span className="text-muted-foreground/70">Value</span>
                 ) : (
@@ -550,7 +544,7 @@ function FilterConditionChip({
                     {valueLabel}
                   </span>
                 )}
-              </button>
+              </ChipButton>
             }
           />
           <PopoverContent
@@ -567,7 +561,7 @@ function FilterConditionChip({
         </Popover>
       ) : null}
       <RemoveChipButton label="Remove filter" onRemove={onRemove} />
-    </div>
+    </Chip>
   );
 }
 
@@ -815,10 +809,10 @@ function FilterGroupChip({
   onRemove: () => void;
 }): ReactNode {
   return (
-    <div className={CHIP_CLASS}>
-      <span className={CHIP_SEGMENT_CLASS}>{innerGroupChipLabel(group)}</span>
+    <Chip>
+      <ChipSegment>{innerGroupChipLabel(group)}</ChipSegment>
       <RemoveChipButton label="Remove filter group" onRemove={onRemove} />
-    </div>
+    </Chip>
   );
 }
 
@@ -831,14 +825,9 @@ function RemoveChipButton({
   onRemove: () => void;
 }): ReactNode {
   return (
-    <button
-      aria-label={label}
-      className={cn(CHIP_BUTTON_CLASS, "px-1")}
-      onClick={onRemove}
-      type="button"
-    >
+    <ChipButton aria-label={label} className="px-1" onClick={onRemove}>
       <IconX className="size-3.5 stroke-[1.5px]" />
-    </button>
+    </ChipButton>
   );
 }
 
@@ -944,15 +933,21 @@ function FieldPickerPopover({
   );
 }
 
-/** Plain field list dropdown for title-row filter/sort icon triggers. */
+/**
+ * Plain field list dropdown for title-row filter/sort icon triggers.
+ * `footer` renders after the field list — the mobile funnel appends its
+ * "Advanced filter" item there.
+ */
 export function FieldPickerDropdown({
   emptyLabel = "No properties",
   fields,
+  footer,
   onPick,
   trigger,
 }: {
   emptyLabel?: string;
   fields: readonly DatabaseField[];
+  footer?: ReactNode;
   onPick: (field: DatabaseField) => void;
   trigger: ReactElement;
 }): ReactNode {
@@ -974,27 +969,29 @@ export function FieldPickerDropdown({
             {emptyLabel}
           </div>
         ) : null}
+        {footer}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 /**
- * Dashed add trigger element for `FieldPickerPopover`'s `render` prop — a raw
- * `<button>` (not a component wrapper) so Base UI can clone the popover's
- * onClick/ref onto it. Small inline chip, or full-width for the drawers.
+ * Dashed add trigger element for `FieldPickerPopover`'s `render` prop — a
+ * `Chip` rendered as a `<button>` (via `useRender`, so Base UI can still merge
+ * the popover's onClick/ref onto it). Small inline chip, or full-width for
+ * the drawers.
  */
 function addTriggerButton(fullWidth: boolean, label: string): ReactElement {
   return (
-    <button
-      className={fullWidth ? ADD_FULL_WIDTH_CLASS : ADD_CHIP_CLASS}
-      type="button"
+    <Chip
+      render={<button type="button" />}
+      variant={fullWidth ? "dashed-wide" : "dashed"}
     >
       <IconPlus
         className={cn("stroke-[1.5px]", fullWidth ? "size-4" : "size-3.5")}
       />
       {label}
-    </button>
+    </Chip>
   );
 }
 
@@ -1120,15 +1117,12 @@ function SortChipBody({
   const Arrow = direction === "asc" ? IconArrowUp : IconArrowDown;
   return (
     <>
-      <span className={CHIP_SEGMENT_CLASS}>
+      <ChipSegment>
         <span className="max-w-32 truncate text-foreground">{fieldName}</span>
-      </span>
-      <span
-        aria-hidden
-        className={cn(CHIP_SEGMENT_CLASS, "px-1 text-muted-foreground")}
-      >
+      </ChipSegment>
+      <ChipSegment aria-hidden className="px-1">
         <Arrow className="size-3.5 stroke-[1.5px]" />
-      </span>
+      </ChipSegment>
     </>
   );
 }
@@ -1153,14 +1147,9 @@ function SortChipDragPreview({
         width: preview.width > 0 ? preview.width : undefined,
       }}
     >
-      <div
-        className={cn(
-          CHIP_CLASS,
-          "cursor-grabbing shadow-md ring-1 ring-border"
-        )}
-      >
+      <Chip className="cursor-grabbing shadow-md ring-1 ring-border">
         <SortChipBody direction={direction} fieldName={fieldName} />
-      </div>
+      </Chip>
     </div>
   );
 }
@@ -1187,21 +1176,17 @@ function SortChip({
     <div className="relative shrink-0" data-reorder-item="">
       {dropBefore ? <SortDropLine position="left" /> : null}
       {dropAfter ? <SortDropLine position="right" /> : null}
-      <div className={cn(CHIP_CLASS, isDragging && "invisible")}>
+      <Chip className={cn(isDragging && "invisible")}>
         {reorderHandleProps ? (
-          <button
+          <ChipButton
             aria-label={`Reorder sort by ${fieldName}`}
-            className={cn(
-              CHIP_SEGMENT_CLASS,
-              "cursor-grab touch-none active:cursor-grabbing"
-            )}
-            type="button"
+            className="cursor-grab touch-none active:cursor-grabbing"
             {...reorderHandleProps}
           >
             {fieldLabel}
-          </button>
+          </ChipButton>
         ) : (
-          <span className={CHIP_SEGMENT_CLASS}>{fieldLabel}</span>
+          <ChipSegment>{fieldLabel}</ChipSegment>
         )}
         <SortChipDirectionButton
           direction={direction}
@@ -1212,7 +1197,7 @@ function SortChip({
           label={`Remove sort by ${fieldName}`}
           onRemove={onRemove}
         />
-      </div>
+      </Chip>
     </div>
   );
 }
@@ -1228,15 +1213,14 @@ function SortChipDirectionButton({
 }): ReactNode {
   const Arrow = direction === "asc" ? IconArrowUp : IconArrowDown;
   return (
-    <button
+    <ChipButton
       aria-label={`Sort ${fieldName} ${
         direction === "asc" ? "descending" : "ascending"
       }`}
-      className={cn(CHIP_BUTTON_CLASS, "px-1")}
+      className="px-1"
       onClick={onFlip}
-      type="button"
     >
       <Arrow className="size-3.5 stroke-[1.5px]" />
-    </button>
+    </ChipButton>
   );
 }

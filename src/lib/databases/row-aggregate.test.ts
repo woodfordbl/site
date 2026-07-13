@@ -4,9 +4,11 @@ import {
   computeAggregate,
   formatAggregateValue,
 } from "@/lib/databases/row-aggregate.ts";
+import { groupRowsForView } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
+  DatabaseView,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
@@ -135,6 +137,108 @@ describe("computeAggregate — dates", () => {
   it("returns null on non-date fields or empty inputs", () => {
     expect(computeAggregate("earliest", amountField, rows)).toBeNull();
     expect(computeAggregate("latest", dueField, [])).toBeNull();
+  });
+});
+
+describe("computeAggregate — list-valued formula cells", () => {
+  // Merged formula cells: a LIST result projects to its elements' display
+  // strings (formula-engine/project.ts); an evaluation error is the
+  // single-element "⚠ …" marker. Scalars stay scalars.
+  const rollupField: DatabaseField = {
+    id: "f-roll",
+    name: "Rollup",
+    type: "formula",
+    expression: 'prop("Items")',
+  };
+  const rows = [
+    makeRow("r1", { [rollupField.id]: ["1,000", "2"] }),
+    makeRow("r2", { [rollupField.id]: 5 }),
+    makeRow("r3", { [rollupField.id]: ["Yes", "3.5"] }),
+    makeRow("r4", { [rollupField.id]: [] }),
+    makeRow("r5", { [rollupField.id]: ["⚠ Division by zero"] }),
+    makeRow("r6", {}),
+  ];
+
+  it("flattens numeric list elements into the numeric reducers", () => {
+    // Numeric data: 1000, 2 (r1) + 5 (r2) + 3.5 (r3; "Yes" skipped).
+    expect(computeAggregate("sum", rollupField, rows)).toBe(1010.5);
+    expect(computeAggregate("average", rollupField, rows)).toBe(1010.5 / 4);
+    expect(computeAggregate("min", rollupField, rows)).toBe(2);
+    expect(computeAggregate("max", rollupField, rows)).toBe(1000);
+    expect(computeAggregate("median", rollupField, rows)).toBe((3.5 + 5) / 2);
+    expect(computeAggregate("range", rollupField, rows)).toBe(998);
+  });
+
+  it("counts a non-empty list as one value; empty lists and errors as empty", () => {
+    expect(computeAggregate("countValues", rollupField, rows)).toBe(3);
+    expect(computeAggregate("countNotEmpty", rollupField, rows)).toBe(3);
+    expect(computeAggregate("countEmpty", rollupField, rows)).toBe(3);
+    expect(computeAggregate("percentNotEmpty", rollupField, rows)).toBe(0.5);
+    expect(computeAggregate("percentEmpty", rollupField, rows)).toBe(0.5);
+    expect(computeAggregate("countAll", rollupField, rows)).toBe(6);
+  });
+
+  it("dedupes identical lists as one unique value keyed by joined text", () => {
+    const uniqueRows = [
+      makeRow("u1", { [rollupField.id]: ["a", "b"] }),
+      makeRow("u2", { [rollupField.id]: ["a", "b"] }),
+      makeRow("u3", { [rollupField.id]: ["b", "a"] }),
+      makeRow("u4", { [rollupField.id]: "a" }),
+      makeRow("u5", { [rollupField.id]: [] }),
+    ];
+    // ["a","b"], ["b","a"] (order-sensitive), and scalar "a".
+    expect(computeAggregate("countUnique", rollupField, uniqueRows)).toBe(3);
+  });
+
+  it("keeps multiSelect/relation id arrays out of the list path", () => {
+    const tagsField: DatabaseField = {
+      id: "f-tags",
+      name: "Tags",
+      type: "multiSelect",
+      options: [{ id: "opt-x", name: "Alpha" }],
+    };
+    const tagRows = [makeRow("t1", { [tagsField.id]: ["opt-x"] })];
+    // Numeric reducers still refuse non-number fields even with arrays.
+    expect(computeAggregate("sum", tagsField, tagRows)).toBeNull();
+    expect(computeAggregate("countValues", tagsField, tagRows)).toBe(1);
+  });
+});
+
+describe("computeAggregate — per-group row subsets", () => {
+  it("aggregates each group bucket over exactly its own rows", () => {
+    const statusField: DatabaseField = {
+      id: "f-status",
+      name: "Status",
+      type: "select",
+      options: [
+        { id: "opt-a", name: "Alpha" },
+        { id: "opt-b", name: "Beta" },
+      ],
+    };
+    const fields = [statusField, amountField];
+    const view: DatabaseView = {
+      id: "v-1",
+      name: "All",
+      type: "table",
+      groupBy: { fieldId: statusField.id },
+      config: {},
+    };
+    const rows = [
+      makeRow("r1", { [statusField.id]: "opt-a", [amountField.id]: 1 }),
+      makeRow("r2", { [statusField.id]: "opt-b", [amountField.id]: 5 }),
+      makeRow("r3", { [statusField.id]: "opt-a", [amountField.id]: 2 }),
+    ];
+    const groups = groupRowsForView(rows, fields, view);
+    const sums = groups.map((group) => [
+      group.label,
+      computeAggregate("sum", amountField, group.rows),
+    ]);
+    expect(sums).toEqual([
+      ["Alpha", 3],
+      ["Beta", 5],
+    ]);
+    // The whole-table footer keeps aggregating over every filtered row.
+    expect(computeAggregate("sum", amountField, rows)).toBe(8);
   });
 });
 

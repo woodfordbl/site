@@ -40,6 +40,7 @@ import {
   dateFormatPatch,
   expressionPatch,
   fieldTypeChangePatch,
+  formulaPreviewRows,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
   logicalColumnOrder,
@@ -48,6 +49,7 @@ import {
   numberFormatPatch,
   numberGroupingPatch,
   recoloredSelectOptions,
+  relationTargetPatch,
   renamedSelectOptions,
   selectOptionsPatch,
   showsEditPropertySubmenu,
@@ -72,8 +74,15 @@ import {
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
+import { FormulaFunctionManagerDialog } from "@/components/database/formula-function-manager.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -103,15 +112,22 @@ import {
   updateDatabaseField,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
-import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import {
+  useAllDatabases,
+  useDatabase,
+  useDatabaseRows,
+} from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
-import { compareManualOrder } from "@/lib/databases/row-sort.ts";
+import { canonicalizeExpression } from "@/lib/formula/ref-rewrite.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
@@ -317,7 +333,7 @@ function SelectOptionRow({
             and crush the rename input); touch gets a larger hit area. */}
         <DropdownMenuSubTrigger
           aria-label={`Change color for option ${option.name}`}
-          className="pointer-coarse:size-10 size-7 shrink-0 justify-center rounded-md p-0 [&>span]:justify-center [&>svg]:hidden"
+          className="pointer-coarse:size-10 size-8 shrink-0 justify-center rounded-md p-0 [&>span]:justify-center [&>svg]:hidden"
         >
           <BlockColorSwatch color={option.color} variant="background" />
         </DropdownMenuSubTrigger>
@@ -348,10 +364,11 @@ function SelectOptionRow({
       <Button
         aria-label={`Delete option ${option.name}`}
         onClick={onDelete}
-        size="icon-xs"
+        size="icon"
         variant="ghost"
       >
-        <IconTrash />
+        {/* Explicit size: the row matches the h-8 input, the glyph stays 16px. */}
+        <IconTrash className="size-4" />
       </Button>
     </div>
   );
@@ -434,37 +451,72 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
 interface FormulaExpressionEditorProps {
   databaseId: string;
   field: DatabaseField & { type: "formula" };
-  /** Closes the whole column menu after Save. */
+  /** Passed through to the panel: `wide` for the dialog host, `sheet` for the coarse-pointer submenu drawer. */
+  layout?: "sheet" | "stack" | "wide";
+  /** Sheet layout's Cancel — backs out of the host without saving. */
+  onCancel?: () => void;
+  /** Opens the function manager dialog; only the wide dialog host wires it. */
+  onManageFunctions?: () => void;
+  /** Closes the host (column menu or dialog) after Save. */
   onSaved: () => void;
 }
 
 /**
  * Formula builder inside the Edit property submenu: threads the live schema
- * and the FIRST row's values (manual/table order) into the shared
- * `FormulaEditorPanel` so it can render the Properties section and the live
- * preview. Mounted only while the submenu is open, so the live queries here
- * cost nothing for non-formula columns. Save writes the expression only when
- * it changed (evaluation is read-time — the overlay recomputes on write).
+ * and the first rows (manual/table order, capped at
+ * `FORMULA_PREVIEW_ROW_LIMIT`, labeled by primary-field text) into the
+ * shared `FormulaEditorPanel` so it can render the Properties section and
+ * the live preview with its row picker. Mounted only while the submenu is
+ * open, so the live queries here cost nothing for non-formula columns. The
+ * panel emits field-id canonical text; Save writes it only when it differs
+ * from the stored expression's canonical form (evaluation is read-time —
+ * the overlay recomputes on write).
  */
 function FormulaExpressionEditor({
   databaseId,
   field,
+  layout,
+  onCancel,
+  onManageFunctions,
   onSaved,
 }: FormulaExpressionEditorProps) {
   const database = useDatabase(databaseId);
   const rows = useDatabaseRows(databaseId);
-  const firstRow = useMemo(
-    () => (rows.length > 0 ? [...rows].sort(compareManualOrder)[0] : null),
-    [rows]
+  const relatedDatabases = useAllDatabases();
+  const userFunctions = useFormulaUserFunctions();
+  const fields = database?.fields ?? [];
+  const primaryFieldId = database?.primaryFieldId;
+  const previewRows = useMemo(
+    () =>
+      formulaPreviewRows(
+        rows,
+        database?.fields.find((candidate) => candidate.id === primaryFieldId)
+      ),
+    [rows, database?.fields, primaryFieldId]
+  );
+  // Recreated whenever any database definition changes so the preview's
+  // cross-database reads track schema edits; row edits in TARGET databases
+  // while the submenu is open stay stale until reopen (non-reactive reads —
+  // accepted v1 limitation, see formula-relations.ts).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
+  const relations = useMemo(
+    () => localFormulaRelationResolver(),
+    [relatedDatabases]
   );
 
   return (
     <FormulaEditorPanel
       expression={field.expression}
-      fields={database?.fields ?? []}
-      firstRowValues={firstRow?.values ?? null}
+      fields={fields}
+      layout={layout}
+      onCancel={onCancel}
+      onManageFunctions={onManageFunctions}
       onSave={(expression) => {
-        if (expression !== field.expression) {
+        if (
+          expression !==
+          canonicalizeExpression(field.expression, fields, relatedDatabases)
+            .text
+        ) {
           updateDatabaseField(
             databaseId,
             field.id,
@@ -473,6 +525,10 @@ function FormulaExpressionEditor({
         }
         onSaved();
       }}
+      previewRows={previewRows}
+      relatedDatabases={relatedDatabases}
+      relations={relations}
+      userFunctions={userFunctions}
     />
   );
 }
@@ -631,6 +687,13 @@ interface EditPropertySubmenuProps {
    */
   displayOnly?: boolean;
   field: DatabaseField;
+  /**
+   * Fine pointers: closes the menu and opens the wide formula dialog
+   * (hosted by {@link DatabaseColumnMenu}, so it outlives the menu).
+   * Hosts without a dialog (the settings menu's property items) omit it
+   * and get the in-menu stacked panel instead.
+   */
+  onOpenFormulaEditor?: () => void;
   /** Closes the whole column menu (used after the formula editor saves). */
   onRequestClose: () => void;
 }
@@ -646,25 +709,44 @@ function EditPropertySubmenu({
   databaseId,
   displayOnly = false,
   field,
+  onOpenFormulaEditor,
   onRequestClose,
 }: EditPropertySubmenuProps) {
+  const coarsePointer = useIsCoarsePrimaryPointer();
+
   if (displayOnly && field.type !== "date" && field.type !== "number") {
     return null;
   }
 
   if (field.type === "formula") {
+    // Fine pointers escalate to the wide dialog — the 360px submenu is too
+    // cramped for real formula work — when the host provides one (the column
+    // menu); dialog-less hosts (settings-menu property items) keep the
+    // in-menu stacked panel. Coarse pointers render the panel's mobile sheet
+    // form inside the submenu drawer: CM6 editor, Cancel/Done header, and
+    // the keyboard-anchored accessory row.
+    if (!coarsePointer && onOpenFormulaEditor !== undefined) {
+      return (
+        <DropdownMenuItem onClick={onOpenFormulaEditor}>
+          <IconSettings />
+          Edit property
+        </DropdownMenuItem>
+      );
+    }
     return (
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
           <IconSettings />
           Edit property
         </DropdownMenuSubTrigger>
-        {/* Wider than the standard submenu so the builder's reference list
-            breathes; ignored in drawer presentation (panel is width-fluid). */}
-        <DropdownMenuSubContent className="w-[360px] min-w-[360px]">
+        <DropdownMenuSubContent
+          className={coarsePointer ? undefined : "w-[360px] min-w-[360px]"}
+        >
           <FormulaExpressionEditor
             databaseId={databaseId}
             field={field}
+            layout={coarsePointer ? "sheet" : "stack"}
+            onCancel={coarsePointer ? onRequestClose : undefined}
             onSaved={onRequestClose}
           />
         </DropdownMenuSubContent>
@@ -714,7 +796,66 @@ function EditPropertySubmenu({
     );
   }
 
+  if (field.type === "relation") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconSettings />
+          Edit property
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <RelationTargetEditor databaseId={databaseId} field={field} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+
   return null;
+}
+
+interface RelationTargetEditorProps {
+  databaseId: string;
+  field: DatabaseField & { type: "relation" };
+}
+
+/**
+ * Relation target picker inside Edit property: a radio-style list of every
+ * database (self-relations allowed, synced targets allowed) with the current
+ * target checked. Retargeting keeps stored cell ids — they simply stop
+ * resolving against the new target and render as nothing.
+ */
+function RelationTargetEditor({
+  databaseId,
+  field,
+}: RelationTargetEditorProps) {
+  const databases = useAllDatabases();
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>Related to</DropdownMenuLabel>
+      </DropdownMenuGroup>
+      <DropdownMenuRadioGroup
+        onValueChange={(value) => {
+          if (value !== field.targetDatabaseId) {
+            updateDatabaseField(
+              databaseId,
+              field.id,
+              relationTargetPatch(value)
+            );
+          }
+        }}
+        value={field.targetDatabaseId}
+      >
+        {databases.map((database) => (
+          <DropdownMenuRadioItem key={database.id} value={database.id}>
+            <span className="min-w-0 truncate">
+              {database.name.trim() === "" ? "Untitled" : database.name}
+            </span>
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </>
+  );
 }
 
 interface ChangeTypeSubmenuProps {
@@ -723,8 +864,53 @@ interface ChangeTypeSubmenuProps {
 }
 
 /**
+ * Nested target-database list under the Change-type "Relation" entry —
+ * becoming a relation requires a target, so the type change only applies
+ * once a database is picked (self-relations and synced targets allowed).
+ */
+function RelationTargetSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
+  const databases = useAllDatabases();
+  const TypeIcon = DATABASE_FIELD_TYPE_ICONS.relation;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <TypeIcon className="stroke-[1.5px]" />
+        {FIELD_TYPE_DEFS.relation.label}
+        <ItemCheck checked={field.type === "relation"} />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {databases.map((database) => (
+          <DropdownMenuItem
+            key={database.id}
+            onClick={() => {
+              updateDatabaseField(
+                databaseId,
+                field.id,
+                fieldTypeChangePatch("relation", database.id)
+              );
+            }}
+          >
+            <span className="min-w-0 truncate">
+              {database.name.trim() === "" ? "Untitled" : database.name}
+            </span>
+            <ItemCheck
+              checked={
+                field.type === "relation" &&
+                field.targetDatabaseId === database.id
+              }
+            />
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/**
  * "Change type" submenu over every field type (formula included — changing
  * TO formula starts with an empty expression written via Edit property).
+ * "Relation" opens a nested target-database picker instead of patching
+ * immediately — the type change needs a target to be complete.
  * Cell values are NOT migrated this wave — see `fieldTypeChangePatch`.
  */
 function ChangeTypeSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
@@ -736,6 +922,15 @@ function ChangeTypeSubmenu({ databaseId, field }: ChangeTypeSubmenuProps) {
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         {databaseFieldTypeSchema.options.map((type) => {
+          if (type === "relation") {
+            return (
+              <RelationTargetSubmenu
+                databaseId={databaseId}
+                field={field}
+                key={type}
+              />
+            );
+          }
           const TypeIcon = DATABASE_FIELD_TYPE_ICONS[type];
           return (
             <DropdownMenuItem
@@ -924,6 +1119,13 @@ export function DatabaseColumnMenu({
   // The picker opens anchored to the header cell after the menu closes —
   // same controlled `hideTrigger` pattern as the sidebar "Change icon".
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  // The wide formula dialog opens after the menu closes (fine pointers) —
+  // hosted here so it survives the menu unmounting.
+  const [formulaEditorOpen, setFormulaEditorOpen] = useState(false);
+  // The function manager stacks INSIDE the formula dialog (nested Base UI
+  // dialog: Escape closes only the manager), opened from the reference
+  // list's Custom functions section.
+  const [functionManagerOpen, setFunctionManagerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const queryClient = useQueryClient();
   const config = view.config;
@@ -1091,6 +1293,10 @@ export function DatabaseColumnMenu({
               databaseId={databaseId}
               displayOnly={synced}
               field={field}
+              onOpenFormulaEditor={() => {
+                handleOpenChange(false);
+                setFormulaEditorOpen(true);
+              }}
               onRequestClose={() => {
                 handleOpenChange(false);
               }}
@@ -1249,6 +1455,40 @@ export function DatabaseColumnMenu({
         onSelect={writeIcon}
         open={iconPickerOpen}
       />
+      {field.type === "formula" ? (
+        <Dialog
+          onOpenChange={(nextOpen) => {
+            setFormulaEditorOpen(nextOpen);
+            if (!nextOpen) {
+              // Closing the host also forgets a still-open manager, so
+              // reopening the formula dialog never resurrects it.
+              setFunctionManagerOpen(false);
+            }
+          }}
+          open={formulaEditorOpen}
+        >
+          <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>{field.name}</DialogTitle>
+            </DialogHeader>
+            <FormulaExpressionEditor
+              databaseId={databaseId}
+              field={field}
+              layout="wide"
+              onManageFunctions={() => {
+                setFunctionManagerOpen(true);
+              }}
+              onSaved={() => {
+                setFormulaEditorOpen(false);
+              }}
+            />
+            <FormulaFunctionManagerDialog
+              onOpenChange={setFunctionManagerOpen}
+              open={functionManagerOpen}
+            />
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }

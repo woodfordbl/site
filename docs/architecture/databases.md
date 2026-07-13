@@ -16,13 +16,29 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | Entity | Shape |
 |--------|-------|
 | `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`; default `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
-| `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`. All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
+| `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`, `formula` (`expression`), `relation` (`targetDatabaseId` — cells store target-row id arrays). All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, optional `icon` (light override; no seed), `externalId?` (connector row identity), timestamps |
-| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
+| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `advancedFilter?` (ONE boolean formula filtering rows — see the filter bar bullet under [Table view](#table-view)), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
 drag-reorder semantics use `order` only when the active view has no sorts.
+
+**Relation fields** link rows across databases (self-relations and synced targets
+allowed): the field stores `targetDatabaseId`, each cell a `string[]` of target-row ids.
+Cells render neutral chips titled by the target's primary field ("Untitled" when blank;
+ids that no longer resolve are skipped), edited via a searchable multi-toggle over the
+target's rows in manual order. Relations are created/retargeted ONLY through the column
+menu (Change type → Relation → target picker; Edit property retargets, keeping stored
+ids — they simply stop resolving). v1 limits: filtering is emptiness-only (no
+contains-row), no grouping by relation, and `cellToPlainText` projects relation cells to
+`""` — search/countUnique/group labels don't see relation titles. In formulas a
+relation property is a `list<row<Target>>` — `prop("Rel").map(r => r.Estimate).sum()`
+rolls up target rows, target formula fields included (see
+[formula-language — Relations](./formula-language.md#relations)); `db("…")` reads a
+whole database as the same `list<row<Target>>` value without any relation field,
+with deliberately coarse recompute (see [formula-language — Whole-database
+references](./formula-language.md#whole-database-references-db)).
 
 ## Storage
 
@@ -108,6 +124,19 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   phones can always reach unfrozen columns); grid ARIA roles; memoized rows (stable
   callbacks via a latest-values ref; row identity from the collection layer's
   structural sharing).
+  **Grouped views & aggregates:** `view.groupBy` buckets the filtered + sorted rows
+  ([`row-group.ts`](../../src/lib/databases/row-group.ts) `groupRowsForView`; the grid is
+  the only group renderer) and the grid virtualizes a flattened header+row item list —
+  collapsed groups (`config.collapsedGroupKeys`) contribute only their header band. The
+  footer **Calculate row** ([`database-calculate-row.tsx`](../../src/components/database/database-calculate-row.tsx))
+  renders `view.config.calculations` over ALL filtered rows, collapsed groups included.
+  Grouped views ALSO render **per-group aggregates**: each group header band carries the
+  same calculations computed over that group's rows (`DatabaseGroupAggregateCells` — the
+  footer's column geometry and formatting, as a non-interactive overlay that paints under
+  the sticky group label and passes clicks through to the collapse toggle; cells are
+  statically positioned, no pinned-column stickiness). Because collapsed groups keep
+  their header, a collapsed group keeps its aggregate summary visible — the point of the
+  feature.
   **Row selection:** per-view `config.rowSelectDisplay` — `always` (checkboxes
   always visible in the leading lane), `hover` (default when absent:
   `.hover-reveal` on row checkboxes, forced visible while any row is selected),
@@ -162,7 +191,8 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   block color tokens), inline input editors for text/url/number + checkbox toggle,
   popover editors for select/multiSelect (searchable
   [`database-option-combobox.tsx`](../../src/components/database/database-option-combobox.tsx)
-  with create-option) and date (react-day-picker), Tab/Enter navigation
+  with create-option), date (react-day-picker), and relation (searchable target-row
+  multi-toggle — no create-row affordance in v1), Tab/Enter navigation
   (`nextEditTarget` in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts)).
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —
@@ -181,6 +211,30 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   when multi-sort, remove); exports the chip strips (`DatabaseFilterChips`, `DatabaseSortChips`,
   `DatabaseFilterMatchOp`) reused by the mobile toolbar popovers; pure mutations in
   [`database-filter-helpers.ts`](../../src/components/database/database-filter-helpers.ts).
+- **Advanced filter** ([`database-advanced-filter-chip.tsx`](../../src/components/database/database-advanced-filter-chip.tsx),
+  evaluated by [`advanced-row-filter.ts`](../../src/lib/databases/advanced-row-filter.ts)) —
+  a view carries at most ONE `advancedFilter` — an arbitrary boolean formula
+  (canonical `prop("<id>")`/`db("<id>")` text) evaluated per row at view time;
+  rollups, `db()` references, and user functions all work. **Pass contract**: a
+  row stays visible only when the formula evaluates to exactly `true` — errors,
+  blank, and non-boolean results hide the row (fail closed) — EXCEPT an
+  unparseable expression, which disables the filter entirely (every row visible).
+  Coexists with the structured `filter`: structured runs first, the advanced
+  filter over its survivors (rows must pass BOTH); the hidden-rows notice counts
+  both kinds and its Clear drops both. The expression parses once per apply;
+  formula-field references read the ENGINE overlay (never re-evaluated);
+  volatile expressions (`now()`/`today()`) keep the display clock ticking so the
+  filter re-runs each minute. UI: a dashed "+ Advanced" chip (same gate as
+  "+ Filter") opens a mini formula editor — the lazy CM6 editor in a popover
+  (drawer/textarea on coarse pointers), a parse/type status line warning when
+  the checked type isn't boolean-compatible, Apply (blocked on parse errors and
+  checker diagnostics) + Clear. **Broken states** style the chip destructive
+  with a `title` naming the issue: unparseable text → "ignored" (filter
+  skipped); a checker diagnostic on saved text (e.g. a referenced field was
+  deleted) → "broken" (errored rows are hidden). Mobile: the title-row funnel's
+  field dropdown appends an "Advanced filter" item that writes a BLANK
+  expression and expands the bar — the chip auto-opens its editor, and
+  dismissing without applying clears the placeholder.
 - [`database-title.tsx`](../../src/components/database/database-title.tsx) — h3-equivalent
   title (shares `headingTypographyClassNames[3]`), rename-in-place, a database **icon**
   beside the name (edit mode opens the shared `GlyphIconPicker` — emoji or `tabler:` glyph
@@ -307,15 +361,37 @@ UI surfaces:
 ## Formula fields
 
 Formula values are computed at **read time** — never stored in `row.values`.
-[`formula-values.ts`](../../src/lib/databases/formula-values.ts) is the pure overlay:
-`computeFormulaOverlay(fields, rows, { now? })` parses each formula's expression once
-per call (`lib/expr` engine), evaluates per row via `createRowScope`, and records
-`{ cellValue, display, isError }` per cell (`exprValueToCellValue` /
-`exprValueToDisplay`). `withFormulaValues` merges the results into row **copies**
-(inputs never mutated; parse-error and blank expressions yield `null` cells, shadowing
-any stale stored values under the field id). `database-table-view.tsx` feeds these
-merged rows to the whole pipeline — filter, sort, group, Calculate row, and the grid —
-so formulas participate in the view machinery like stored columns:
+[`formula-values.ts`](../../src/lib/databases/formula-values.ts) is the pure overlay
+over the v2 engine in [`src/lib/formula/`](../../src/lib/formula/) (typed values,
+static checker, id-canonical references — full reference:
+[formula-language](./formula-language.md)): `computeFormulaOverlay(fields, rows,
+{ now?, relations? })` parses and checks each formula's expression once per call (never per row),
+orders formula fields **topologically** over their formula→formula references, and
+evaluates column-major via `createFormulaRowScope` — so formulas may reference other
+formulas; reference cycles yield named per-cell errors (`Circular reference:
+Total → Subtotal → Total`). Each cell records `{ cellValue, display, isError }` —
+cycle naming, topological ordering, and the cell projection are shared with the
+incremental engine core via `src/lib/formula-engine/{topo,project}.ts`
+([formula-language — Incremental engine core](./formula-language.md#incremental-engine-core)).
+`withFormulaValues` merges the results into row **copies** (inputs never mutated;
+parse-error and blank expressions yield `null` cells, shadowing any stale stored
+values under the field id). `database-table-view.tsx` feeds these merged rows to the
+whole pipeline — filter, sort, group, Calculate row, and the grid — so formulas
+participate in the view machinery like stored columns. The view (and the row-page
+properties panel) get the overlay from the **stateful engine**
+(`useFormulaOverlay`, [`src/db/formula-engine.ts`](../../src/db/formula-engine.ts) —
+[formula-language — Engine shell](./formula-language.md#engine-shell)): a
+collection-subscribed singleton whose incremental passes make cross-database
+rollups **reactive** (editing a target row updates referrer views live) and whose
+per-database snapshots re-render only affected views. `computeFormulaOverlay`
+stays the equivalent pure one-shot path (editor preview, templates, tests —
+engine parity is pinned by test). One-shot call sites pass
+`relations: localFormulaRelationResolver()`
+([`formula-relations.ts`](../../src/lib/databases/formula-relations.ts)) so relation
+rollups read target databases (cross-database cycles degrade to named per-cell
+errors — see [formula-language — Relations](./formula-language.md#relations)); the
+resolver also implements the interface's `rowIds` extension, enumerating a
+database's live rows for whole-database `db("…")` references:
 
 - **Coercion** — `coerceCellValue`'s formula case passes scalar string/number/boolean
   through; everything else reads as empty.
@@ -328,22 +404,48 @@ so formulas participate in the view machinery like stored columns:
   numbers right-aligned tabular-nums, booleans "Yes"/"No" text, strings plain.
 - **Filtering** — string operator set (`FIELD_TYPE_DEFS.formula`) over the computed
   value; **mixed-type formula columns filter as strings v1** (number results satisfy
-  emptiness operators but not text matches). Sorting compares same-type pairs natively,
+  emptiness operators but not text matches) — the advanced filter (see
+  [Table view](#table-view)) is the typed escape hatch, and its formula-field
+  references read the engine overlay's projected values rather than re-evaluating.
+  Sorting compares same-type pairs natively,
   mixed pairs by text collation. Numeric Calculate reducers (sum/average/…) work over a
-  formula column's number-typed results; grouping stays excluded (`isGroupableField`).
-- **Volatile clocks** — when any expression uses `now()`/`today()`
-  (`hasVolatileFormula`), the table view re-evaluates every 60s, pausing while the tab
-  is hidden and refreshing on visibility return.
+  formula column's number-typed results and are **list-aware**
+  ([`row-aggregate.ts`](../../src/lib/databases/row-aggregate.ts), exact semantics in its
+  module JSDoc): a list-valued formula cell (show-all rollups, `db()` references — merged
+  as its elements' display strings) contributes its FLATTENED numeric elements — each
+  element that reads back as an en-US number (grouping commas stripped) is one datum,
+  non-numeric elements are skipped, and average/median divide over the flattened
+  numeric-element count. Count aggregates treat a non-empty list as ONE value (empty
+  lists and "⚠ …" error markers stay empty; countUnique keys a list by its comma-joined
+  element text, so identical lists dedupe); `countAll` still counts rows. Grouping stays
+  excluded (`isGroupableField`).
+- **Volatile clocks** — when any expression uses `now()`/`today()`, the ENGINE
+  re-evaluates volatile columns every 60s (subscribers present + tab visible,
+  refreshing on visibility return) and pushes a fresh overlay snapshot; the table
+  view's own display clock ticks only for relative-format dates, relative
+  filter windows, and volatile advanced filters.
 - **Editing** — the column menu's Edit property submenu becomes a formula **builder**
   ([`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx),
-  width-fluid for the desktop submenu and the touch menu drawer alike): monospace
-  expression textarea with live parse feedback (positioned error / "✓ Valid") and a live
-  first-row preview, over a searchable Properties / Functions / Operators reference
-  (docs sourced from [`function-catalog.ts`](../../src/lib/expr/function-catalog.ts),
-  drift-tested against the evaluator) that inserts at the caret, plus an explicit Save;
-  broken expressions show a warning badge on the column header (`formulaDisplayInfo`).
-  Formula→formula references are per-cell errors v1 (cycle safety without a dependency
-  graph); the dependency-DAG upgrade is sketched in `createRowScope`'s docs.
+  width-fluid for the desktop submenu and the touch menu drawer alike): a monospace
+  expression input with live parse/check feedback (positioned error / "✓ Valid"
+  plus a result-type badge from the static checker) and a live first-row preview, over
+  a searchable Properties / Functions / Operators reference (docs sourced from the
+  typed catalog, [`catalog.ts`](../../src/lib/formula/catalog.ts)) that inserts at the
+  caret, plus an explicit Save; broken expressions show a warning badge on the column
+  header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
+  diagnostics warn but save (cells degrade per row, never crash); error positions
+  index the DISPLAY text the user sees, not the canonical draft. On fine pointers the
+  input is a lazy-loaded CodeMirror 6 editor with tokenizer-driven syntax highlighting,
+  atomic schema-labeled property chips over the canonical `prop("<id>")` text, and a
+  fused type-aware autocomplete (properties + functions + keywords in one ranked list)
+  ([formula-language — Editor panel](./formula-language.md#editor-panel)); coarse
+  pointers keep a plain textarea.
+- **Id-canonical references** — stored expressions reference fields by id
+  (`prop("<fieldId>")`), so field renames never break formulas; the CM6 editor shows
+  each reference as a chip labeled with the field's current name, while the textarea
+  path humanizes to `thisPage.Name` for display and re-canonicalizes on change; a
+  startup migration rewrites legacy name-form expressions
+  ([formula-language — Property references](./formula-language.md#property-references-id-canonical)).
 
 ## Draft-proxy invariant (mutations)
 
@@ -410,7 +512,7 @@ title-row switcher.
 ## Review-hardening invariants
 
 Post-review guarantees worth knowing when editing this area: the expression
-parser enforces length/depth caps so `parseExpression` never throws (hostile
+parser enforces length/depth caps so `parseFormula` never throws (hostile
 synced cell text cannot crash render); formula columns filter on their
 displayed text; multiSelect plain text joins in field-option order so
 Calculate/sort/grouping agree; the editing grid row is pinned into the virtual
@@ -514,8 +616,10 @@ page id. Breadcrumbs follow the normal page header once seeded.
 
 Row drag-reorder UI (table grid — board card drag shipped),
 live tokens inside already-seeded pages, duplicate-database template cloning,
-relations/rollups,
-formula-aware typed filter operators and formula→formula references,
+formula-aware typed filter operators (relations, rollups — wizard included —
+reactive cross-database recompute, formula→formula references, and
+boolean-formula ADVANCED filters shipped with
+the v2 engine — see [formula-language](./formula-language.md)),
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views
 shipped — see [Table view](#table-view)), workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push

@@ -5,8 +5,10 @@ import {
   isCellEmpty,
   toIsoDatePart,
 } from "@/lib/databases/cell-values.ts";
+import { formulaCellErrorDisplay } from "@/lib/databases/formula-values.ts";
 import type {
   DatabaseAggregateFn,
+  DatabaseCellValue,
   DatabaseField,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
@@ -18,9 +20,70 @@ import type {
  * their merged computed values); earliest/latest to date fields only
  * (returning the winning cell's ISO string). Percent functions return 0–1
  * fractions — display formatting is `formatAggregateValue`'s job.
+ *
+ * LIST-VALUED FORMULA CELLS (show-all rollups, `db()` references): the merged
+ * overlay projects a list result to an array of its elements' display strings
+ * (`formula-engine/project.ts`), and this module treats those arrays as lists
+ * rather than empty cells. The exact semantics shipped:
+ *
+ * - `countAll` — unchanged: counts rows, never list elements.
+ * - `countValues`/`countNotEmpty`/`countEmpty` and the percent pair — a
+ *   non-empty list counts as ONE value; empty lists, evaluation-error
+ *   markers, and blank cells stay empty.
+ * - `countUnique` — a list is one value, keyed by its comma-joined element
+ *   text (mirroring the cell's display join), so identical lists dedupe.
+ * - `sum`/`average`/`median`/`min`/`max`/`range` — aggregate over the
+ *   FLATTENED numeric elements: each element that reads back as an en-US
+ *   number (grouping commas stripped) contributes one datum; non-numeric
+ *   elements are skipped. `average`/`median` divide over the flattened
+ *   numeric-element count, not the row count.
+ * - `earliest`/`latest` — date fields only, as before (formula columns
+ *   return `null`).
  */
 
 const PERCENT_SCALE = 100;
+
+/**
+ * A formula cell's genuine list elements (display strings), or `null` for
+ * every other shape — non-formula fields, scalar cells, and the single-item
+ * "⚠ …" evaluation-error marker (`formulaCellErrorDisplay`), which keeps
+ * reading as an empty cell.
+ */
+function formulaListElements(
+  field: DatabaseField,
+  value: DatabaseCellValue | undefined
+): readonly string[] | null {
+  if (field.type !== "formula" || !Array.isArray(value)) {
+    return null;
+  }
+  return formulaCellErrorDisplay(value) === null ? value : null;
+}
+
+/**
+ * Parse one list element back into a number: the overlay renders numeric
+ * elements via en-US `Intl` display (grouping commas, ≤6 decimals), so strip
+ * grouping and `Number()` the rest. Non-numeric text returns `null`.
+ */
+function numericListElement(element: string): number | null {
+  const normalized = element.replaceAll(",", "").trim();
+  if (normalized === "") {
+    return null;
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Whether one cell counts as a value (lists: non-empty counts as one). */
+function cellHasValue(
+  field: DatabaseField,
+  value: DatabaseCellValue | undefined
+): boolean {
+  const list = formulaListElements(field, value);
+  if (list !== null) {
+    return list.length > 0;
+  }
+  return !isCellEmpty(coerceCellValue(field, value));
+}
 
 function countNonEmpty(
   field: DatabaseField,
@@ -28,7 +91,7 @@ function countNonEmpty(
 ): number {
   let count = 0;
   for (const row of rows) {
-    if (!isCellEmpty(coerceCellValue(field, row.values[field.id]))) {
+    if (cellHasValue(field, row.values[field.id])) {
       count += 1;
     }
   }
@@ -41,7 +104,16 @@ function countUnique(
 ): number {
   const seen = new Set<string>();
   for (const row of rows) {
-    const cell = coerceCellValue(field, row.values[field.id]);
+    const raw = row.values[field.id];
+    const list = formulaListElements(field, raw);
+    if (list !== null) {
+      if (list.length > 0) {
+        // One key per list, joined like the cell's display text.
+        seen.add(list.join(", "));
+      }
+      continue;
+    }
+    const cell = coerceCellValue(field, raw);
     if (!isCellEmpty(cell)) {
       seen.add(cellToPlainText(field, cell));
     }
@@ -55,7 +127,18 @@ function numericValues(
 ): number[] {
   const values: number[] = [];
   for (const row of rows) {
-    const cell = coerceCellValue(field, row.values[field.id]);
+    const raw = row.values[field.id];
+    const list = formulaListElements(field, raw);
+    if (list !== null) {
+      for (const element of list) {
+        const parsed = numericListElement(element);
+        if (parsed !== null) {
+          values.push(parsed);
+        }
+      }
+      continue;
+    }
+    const cell = coerceCellValue(field, raw);
     if (typeof cell === "number") {
       values.push(cell);
     }
@@ -108,7 +191,8 @@ function computeNumberAggregate(
   rows: readonly LocalDatabaseRow[]
 ): number | null {
   // Formula columns qualify over their merged (computed) values —
-  // `numericValues` keeps only the number-typed results.
+  // `numericValues` keeps number-typed scalars plus each list cell's
+  // flattened numeric elements (module JSDoc has the exact semantics).
   if (field.type !== "number" && field.type !== "formula") {
     return null;
   }

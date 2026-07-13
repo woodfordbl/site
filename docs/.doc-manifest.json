@@ -286,6 +286,16 @@
     },
     {
       "globs": [
+        "src/lib/formula/**",
+        "src/lib/formula-engine/**",
+        "src/lib/databases/formula-values.ts",
+        "src/db/queries/formula-ref-migration.ts",
+        "src/components/database/formula-editor-panel.tsx"
+      ],
+      "docs": ["docs/architecture/formula-language.md"]
+    },
+    {
+      "globs": [
         "src/components/database/**",
         "src/components/blocks/types/database/**",
         "src/lib/databases/**",

@@ -18,6 +18,7 @@ export const databaseFieldTypeSchema = z.enum([
   "date",
   "url",
   "formula",
+  "relation",
 ]);
 
 export type DatabaseFieldType = z.infer<typeof databaseFieldTypeSchema>;
@@ -116,11 +117,20 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
   databaseFieldBaseSchema.extend({
     type: z.literal("formula"),
     /**
-     * Expression source (`lib/expr` grammar) evaluated per row with
+     * Expression source (`lib/formula` grammar) evaluated per row with
      * `thisRow`/`thisPage` property scope. Computed at read time — formula
      * values never live in `row.values`, and formula cells are read-only.
      */
     expression: z.string().default(""),
+  }),
+  databaseFieldBaseSchema.extend({
+    type: z.literal("relation"),
+    /**
+     * Database whose rows this field links to. Cell values store target-row
+     * id arrays; retargeting keeps stored ids (they simply stop resolving).
+     * Self-relations (target = own database) and synced targets are allowed.
+     */
+    targetDatabaseId: z.string(),
   }),
 ]);
 
@@ -129,8 +139,8 @@ export type DatabaseField = z.infer<typeof databaseFieldSchema>;
 /**
  * One cell value. Interpretation is field-typed: `text`/`url` → string,
  * `number` → number, `checkbox` → boolean, `select` → option id string,
- * `multiSelect` → option id array, `date` → ISO date string. `null` and
- * missing keys both mean empty.
+ * `multiSelect` → option id array, `date` → ISO date string, `relation` →
+ * target-row id array. `null` and missing keys both mean empty.
  */
 export const databaseCellValueSchema = z.union([
   z.string(),
@@ -216,6 +226,25 @@ export const databaseFilterGroupSchema = z.object({
 });
 
 export type DatabaseFilterGroup = z.infer<typeof databaseFilterGroupSchema>;
+
+/**
+ * Advanced view filter: ONE arbitrary boolean formula evaluated per row
+ * (`lib/databases/advanced-row-filter.ts`). `expression` is CANONICAL formula
+ * text (`prop("<id>")` / `db("<id>")` references — exactly what formula
+ * fields store), so field renames never break it. Independent of the
+ * structured `filter`; when both exist a row must pass BOTH. Pass rule: a
+ * row stays visible only when the formula evaluates to exactly `true` —
+ * errors, blank, and non-boolean results hide the row (fail closed) — except
+ * an unparseable expression, which disables the filter entirely (every row
+ * visible) and surfaces as a broken chip in the filter bar.
+ */
+export const databaseAdvancedFilterSchema = z.object({
+  expression: z.string(),
+});
+
+export type DatabaseAdvancedFilter = z.infer<
+  typeof databaseAdvancedFilterSchema
+>;
 
 export const databaseSortSchema = z.object({
   fieldId: z.string(),
@@ -403,6 +432,8 @@ export const databaseViewSchema = z.object({
   name: z.string(),
   type: databaseViewTypeSchema,
   filter: databaseFilterGroupSchema.optional(),
+  /** One boolean-formula filter; rows must pass it AND `filter`. */
+  advancedFilter: databaseAdvancedFilterSchema.optional(),
   sorts: z.array(databaseSortSchema).optional(),
   /**
    * Row grouping: rows bucket by this field's value (select option order

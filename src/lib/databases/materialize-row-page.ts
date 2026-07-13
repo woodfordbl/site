@@ -6,6 +6,7 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { resolveRowSlug } from "@/lib/databases/database-page-paths.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
 import { ensureDatabaseHubPage } from "@/lib/databases/ensure-database-hub-page.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
 import { readRowTemplateSnapshot } from "@/lib/databases/row-template-store.ts";
 import {
@@ -105,9 +106,14 @@ export async function ensureDatabaseRowPage(options: {
     }
     const template = readRowTemplateSnapshot(database.id);
     const blocks = clonePageBlocks(
-      instantiateTemplateBlocks(template?.blocks, database.fields, row.values, {
-        now: () => new Date(),
-      })
+      instantiateTemplateBlocks(
+        template?.blocks,
+        database.fields,
+        row.values,
+        // relations: template tokens can traverse relation fields — the
+        // materialized copy must evaluate them like the virtual render does.
+        { now: () => new Date(), relations: localFormulaRelationResolver() }
+      )
     );
     const rowSegment = dedupePageSegment(
       resolveRowSlug(database, row),

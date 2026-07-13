@@ -15,16 +15,17 @@ import {
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
 import { Button } from "@/components/ui/button.tsx";
+import { useFormulaOverlay } from "@/db/formula-engine.ts";
 import {
   addDatabaseField,
   setDatabaseRowPropertiesVisibleFieldIds,
 } from "@/db/queries/database-collection-ops.ts";
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
+import type { FormulaCellResult } from "@/lib/databases/formula-values.ts";
 import { resolveColumnOrder } from "@/lib/databases/view-config.ts";
-import { evaluateExpression, exprError } from "@/lib/expr/evaluate.ts";
-import { exprValueToDisplay } from "@/lib/expr/format-result.ts";
-import { parseExpression } from "@/lib/expr/parse.ts";
-import { createRowScope } from "@/lib/expr/row-scope.ts";
+import { formulaValueToDisplay } from "@/lib/formula/display.ts";
+import { parseFormula } from "@/lib/formula/parse.ts";
+import { formulaError } from "@/lib/formula/values.ts";
 import type {
   DatabaseField,
   LocalDatabase,
@@ -42,27 +43,32 @@ import { cn } from "@/lib/utils.ts";
  * `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of views).
  */
 
-/** Evaluate a formula field's expression against the row for display. */
+/**
+ * Display string for a formula field: the ENGINE overlay's cell result for
+ * this row (same values the table grid shows, reactive to cross-database
+ * edits), except parse errors — the engine leaves unparseable expressions
+ * blank (the grid surfaces them as a header badge), while this panel keeps
+ * rendering the "⚠ …" parse message inline like it always has.
+ */
 function formulaDisplay(
   field: Extract<DatabaseField, { type: "formula" }>,
-  fields: DatabaseField[],
-  values: LocalDatabaseRow["values"]
+  results: Record<string, FormulaCellResult> | undefined
 ): string {
   if (field.expression.trim() === "") {
     return "";
   }
-  const parsed = parseExpression(field.expression);
+  const parsed = parseFormula(field.expression);
   if (!parsed.ok) {
-    return exprValueToDisplay(exprError(parsed.error.message));
+    return formulaValueToDisplay(formulaError(parsed.error.message));
   }
-  const scope = createRowScope(fields, values, { now: () => new Date() });
-  return exprValueToDisplay(evaluateExpression(parsed.ast, scope));
+  return results?.[field.id]?.display ?? "";
 }
 
 interface RowPropertyValueProps {
   editing: boolean;
   field: DatabaseField;
-  fields: DatabaseField[];
+  /** Engine-computed formula results for THIS row (rowId picked by the panel). */
+  formulaResults: Record<string, FormulaCellResult> | undefined;
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   onStartEdit: (fieldId: string) => void;
   onStopEdit: () => void;
@@ -72,7 +78,7 @@ interface RowPropertyValueProps {
 function RowPropertyValue({
   editing,
   field,
-  fields,
+  formulaResults,
   onNavigate,
   onStartEdit,
   onStopEdit,
@@ -81,7 +87,7 @@ function RowPropertyValue({
   const value = row.values[field.id];
 
   if (field.type === "formula") {
-    const display = formulaDisplay(field, fields, row.values);
+    const display = formulaDisplay(field, formulaResults);
     return (
       <div className="flex min-h-8 w-full min-w-0 items-center overflow-hidden px-2">
         {display === "" ? (
@@ -203,6 +209,12 @@ export function RowPropertiesPanel({
 }: RowPropertiesPanelProps): ReactNode {
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
 
+  // Engine overlay for the whole database; this row's results picked below.
+  // Reactive to cross-database edits (rollups update live) unlike the old
+  // per-row compute, which only re-ran when this component re-rendered.
+  const formulaOverlay = useFormulaOverlay(database.id);
+  const formulaResults = formulaOverlay.get(row.id);
+
   const view = database.views[0];
   const displayFieldIds = useMemo(
     () =>
@@ -295,7 +307,7 @@ export function RowPropertiesPanel({
               <RowPropertyValue
                 editing={editingFieldId === field.id}
                 field={field}
-                fields={database.fields}
+                formulaResults={formulaResults}
                 onNavigate={handleNavigate}
                 onStartEdit={handleStartEdit}
                 onStopEdit={handleStopEdit}
