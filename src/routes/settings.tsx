@@ -7,7 +7,7 @@ import { parseSettingsSearch } from "@/lib/settings/settings-search.ts";
 export const Route = createFileRoute("/settings")({
   component: SettingsRoute,
   head: () => ({
-    meta: buildNoIndexMeta(),
+    meta: buildNoIndexMeta("Settings"),
   }),
   validateSearch: parseSettingsSearch,
 });

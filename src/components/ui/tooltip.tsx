@@ -2,9 +2,12 @@
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
-import { Shortcut } from "@/components/ui/shortcut.tsx";
+import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import type { CommandId } from "@/lib/settings/keyboard-commands.ts";
+import type {
+  CommandId,
+  SequenceCommandId,
+} from "@/lib/settings/keyboard-commands.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
@@ -31,6 +34,16 @@ function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+type TooltipShortcutProps =
+  | {
+      command?: CommandId;
+      sequence?: never;
+    }
+  | {
+      command?: never;
+      sequence?: SequenceCommandId;
+    };
+
 function TooltipContent({
   className,
   side = "top",
@@ -39,6 +52,7 @@ function TooltipContent({
   alignOffset = 0,
   showArrow = false,
   command,
+  sequence,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
@@ -51,8 +65,7 @@ function TooltipContent({
      * Appends the live keybinding for this command as `<Kbd>` chips, kept in
      * sync with the user's current binding via the keybindings store.
      */
-    command?: CommandId;
-  }) {
+  } & TooltipShortcutProps) {
   // Touch devices have no hover affordance and shortcuts are irrelevant there,
   // so suppress all tooltip popups on a coarse primary pointer.
   const isCoarsePointer = useIsCoarsePrimaryPointer();
@@ -71,7 +84,7 @@ function TooltipContent({
       >
         <TooltipPrimitive.Popup
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-background text-xs has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm",
+            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-background text-xs has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50",
             // Interruptible enter/exit from the trigger; instant for adjacent tooltips.
             "transition-[opacity,scale] duration-[125ms] ease-[var(--ease-out-strong)]",
             "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
@@ -85,6 +98,7 @@ function TooltipContent({
         >
           {children}
           {command ? <Shortcut command={command} /> : null}
+          {sequence ? <SequenceShortcut sequenceId={sequence} /> : null}
           {showArrow ? (
             <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=right]:top-1/2! data-[side=inline-start]:-right-1 data-[side=left]:-right-1 data-[side=top]:-bottom-2.5 data-[side=inline-end]:-left-1 data-[side=right]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2" />
           ) : null}

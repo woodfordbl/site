@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sweepOrphanAssets } from "@/db/assets/asset-gc.ts";
-import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import {
+  localDatabasesCollection,
+  localPagesCollection,
+} from "@/db/collections/local-collections.ts";
 import { saveAllLocalPages } from "@/lib/content/save-all-pages.ts";
+import { saveDatabase } from "@/lib/content/save-database.ts";
 import { savePage } from "@/lib/content/save-page.ts";
 
 const tombstoned = {
@@ -41,6 +45,11 @@ vi.mock("@/db/assets/asset-gc.ts", () => ({
 }));
 vi.mock("@/db/collections/local-collections.ts", () => ({
   localPagesCollection: { toArray: [], delete: vi.fn() },
+  localDatabasesCollection: { toArray: [], update: vi.fn() },
+  localDatabaseRowsCollection: { toArray: [] },
+}));
+vi.mock("@/lib/content/save-database.ts", () => ({
+  saveDatabase: vi.fn().mockResolvedValue({ ok: true }),
 }));
 vi.mock("@/db/collections/read-block-shard.ts", () => ({
   readBlockShardForPage: vi.fn(() => []),
@@ -108,5 +117,55 @@ describe("saveAllLocalPages", () => {
       { pageId: "about", title: "About", error: "disk full" },
     ]);
     expect(sweepOrphanAssets).toHaveBeenCalledTimes(1);
+  });
+
+  it("exports changed databases, stamps their baseline, and skips unchanged ones", async () => {
+    (localPagesCollection as unknown as { toArray: unknown[] }).toArray = [];
+    const changed = {
+      id: "db-changed",
+      name: "Reading list",
+      primaryFieldId: "f1",
+      fields: [],
+      views: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const unchanged = {
+      ...changed,
+      id: "db-unchanged",
+      // hashDatabaseDocument of the exported doc below — verified by the
+      // stamp call this test asserts for the changed database.
+      serverBaselineHash: "stale-baseline",
+    };
+    (localDatabasesCollection as unknown as { toArray: unknown[] }).toArray = [
+      changed,
+      unchanged,
+    ];
+
+    const first = await saveAllLocalPages();
+    expect(first.savedDatabases).toBe(2); // both differ from their baseline
+    expect(saveDatabase).toHaveBeenCalledTimes(2);
+    expect(localDatabasesCollection.update).toHaveBeenCalledWith(
+      "db-changed",
+      expect.any(Function)
+    );
+
+    // Stamp the baseline the way the real update would, then save again:
+    // byte-identical content is skipped.
+    const stampedHash = (() => {
+      const draft = { serverBaselineHash: "", updatedAt: "" };
+      const updater = vi.mocked(localDatabasesCollection.update).mock
+        .calls[0]?.[1] as (d: typeof draft) => void;
+      updater(draft);
+      return draft.serverBaselineHash;
+    })();
+    (localDatabasesCollection as unknown as { toArray: unknown[] }).toArray = [
+      { ...changed, serverBaselineHash: stampedHash },
+    ];
+    vi.mocked(saveDatabase).mockClear();
+
+    const second = await saveAllLocalPages();
+    expect(second.savedDatabases).toBe(0);
+    expect(saveDatabase).not.toHaveBeenCalled();
   });
 });

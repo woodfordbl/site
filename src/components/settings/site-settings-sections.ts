@@ -46,7 +46,9 @@ export const SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   },
   {
     id: "development",
-    label: "Development",
+    // Visitors see this section too (refresh/reset/keep local changes), where
+    // "Development" would be a misnomer — author save is the only dev-only part.
+    label: import.meta.env.DEV ? "Development" : "Local changes",
     group: "Workspace",
     icon: "code",
   },

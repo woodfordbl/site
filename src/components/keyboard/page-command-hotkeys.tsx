@@ -12,8 +12,10 @@ import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import { readPageListExpandedIdsFromDocument } from "@/lib/pages/page-list-expanded-cookie.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import { resolvePageNavTarget } from "@/lib/pages/resolve-page-nav-target.ts";
+import { resolveAdjacentSidebarPageId } from "@/lib/pages/resolve-sidebar-nav-page-ids.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
 interface PageCommandHotkeysProps {
@@ -39,16 +41,17 @@ function PageCommandHotkeysLive({
     serverPage,
   });
 
-  // Step to the previous/next page in sidebar order, wrapping is intentionally
-  // avoided (no-op at the ends).
+  // Step to the previous/next visible sidebar row in tree preorder; wrapping is
+  // intentionally avoided (no-op at the ends).
   const goToAdjacent = (delta: number) => {
-    const index = pages.findIndex((candidate) => candidate.id === pageId);
-    if (index === -1) {
-      return;
-    }
-    const target = pages[index + delta];
-    if (target) {
-      navigate(resolvePageNavTarget(target.id, pages));
+    const targetId = resolveAdjacentSidebarPageId({
+      activePageId: pageId,
+      delta,
+      expandedIds: readPageListExpandedIdsFromDocument(),
+      pages,
+    });
+    if (targetId) {
+      navigate(resolvePageNavTarget(targetId, pages));
     }
   };
 

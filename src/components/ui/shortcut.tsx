@@ -4,8 +4,13 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { formatHotkeyTokens } from "@/lib/settings/format-hotkey.ts";
 import type { CommandId } from "@/lib/settings/keyboard-commands.ts";
-import { getCommand } from "@/lib/settings/keyboard-commands.ts";
+import {
+  getCommand,
+  getSequenceCommand,
+  type SequenceCommandId,
+} from "@/lib/settings/keyboard-commands.ts";
 import { useResolvedKeybindings } from "@/lib/settings/use-keybindings.ts";
+import { cn } from "@/lib/utils.ts";
 
 type ShortcutProps = {
   className?: string;
@@ -21,6 +26,80 @@ type ShortcutProps = {
       command?: never;
     }
 );
+
+type SequenceShortcutProps = {
+  className?: string;
+} & (
+  | {
+      /** Render a fixed char + char chord from `KEYBOARD_SEQUENCES`. */
+      sequenceId: SequenceCommandId;
+      sequence?: never;
+    }
+  | {
+      /** Render an explicit char + char sequence (e.g. ["G", "H"]). */
+      sequence: Hotkey[];
+      sequenceId?: never;
+    }
+);
+
+function SequenceThenLabel() {
+  return (
+    <span className="in-data-[slot=tooltip-content]:text-background/60 text-muted-foreground text-xs">
+      then
+    </span>
+  );
+}
+
+function formatSequenceStep(step: Hotkey): string {
+  return formatHotkeyTokens(step)[0] ?? String(step);
+}
+
+/**
+ * Renders a fixed two-step char + char chord as `<Kbd>` **then** `<Kbd>`.
+ * Use only for `KEYBOARD_SEQUENCES` — Mod/combo shortcuts use `Shortcut`.
+ */
+export function SequenceShortcut({
+  sequenceId,
+  sequence,
+  className,
+}: SequenceShortcutProps) {
+  const isCoarsePointer = useIsCoarsePrimaryPointer();
+
+  if (isCoarsePointer) {
+    return null;
+  }
+
+  const resolved = sequenceId
+    ? getSequenceCommand(sequenceId)
+    : { label: undefined, sequence: sequence ?? [] };
+  const steps = resolved.sequence;
+  const label = resolved.label;
+
+  const elements = steps.flatMap((step, index) => {
+    const keycap = (
+      // biome-ignore lint/suspicious/noArrayIndexKey: positional chord steps
+      <Kbd key={`step-${index}`}>{formatSequenceStep(step)}</Kbd>
+    );
+    if (index === 0) {
+      return [keycap];
+    }
+    return [
+      // biome-ignore lint/suspicious/noArrayIndexKey: positional chord steps
+      <SequenceThenLabel key={`then-${index}`} />,
+      keycap,
+    ];
+  });
+
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1", className)}
+      data-slot="sequence-shortcut"
+      {...(label ? { "aria-label": label, role: "group" } : {})}
+    >
+      {elements}
+    </span>
+  );
+}
 
 /**
  * Renders a keyboard shortcut as platform-aware `<Kbd>` tokens. Pass `command`

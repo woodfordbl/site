@@ -4,27 +4,28 @@ import {
   retryAfterMsFromHeaders,
 } from "@/lib/connectors/http.ts";
 import {
-  type ConnectorDefinition,
   ConnectorError,
   type ConnectorFetchContext,
   type ConnectorFetchResult,
-  type ConnectorFieldDef,
   type ConnectorRow,
 } from "@/lib/connectors/types.ts";
 
 /**
- * CoinGecko crypto markets connector: one row per configured coin id, USD
- * quotes from the keyless public `/coins/markets` endpoint (open CORS, no
- * auth — proposal §4.1). No ETag support: the endpoint's payload changes on
- * effectively every poll, so conditional requests would never hit.
+ * CoinGecko markets transport: the price / market-cap / real-currency plumbing
+ * behind the unified "Live" connector's `crypto` type (see `live-markets.ts`).
+ * One row per configured ticker, resolved by CoinGecko's `symbols` filter and
+ * quoted in an arbitrary `vs_currency` (true conversion, unlike the Binance
+ * live tick). Binance streaming overlays live price updates on top, keyed by
+ * the same base-ticker `externalId`. Keyless public `/coins/markets` endpoint
+ * (open CORS, no auth). No ETag: the payload changes on effectively every poll.
  */
 
-const coingeckoMarketsConfigSchema = z.object({
-  /** CoinGecko coin ids (e.g. "bitcoin", "ethereum") — not ticker symbols. */
-  coinIds: z.array(z.string().min(1)).min(1),
+const coingeckoConfigSchema = z.object({
+  /** Base tickers, e.g. "BTC", "ETH" (the quote currency is `currency`). */
+  symbols: z.array(z.string().min(1)).min(1),
+  /** ISO 4217 quote currency; CoinGecko converts server-side. */
+  currency: z.string().default("USD"),
 });
-
-type CoingeckoMarketsConfig = z.infer<typeof coingeckoMarketsConfigSchema>;
 
 /** The subset of a `/coins/markets` entry this connector maps into cells. */
 const coingeckoMarketSchema = z.object({
@@ -39,30 +40,6 @@ const coingeckoMarketSchema = z.object({
 
 const coingeckoMarketListSchema = z.array(coingeckoMarketSchema);
 
-const COINGECKO_MARKET_FIELDS: ConnectorFieldDef[] = [
-  { sourceKey: "name", name: "Name", type: "text" },
-  { sourceKey: "symbol", name: "Symbol", type: "text" },
-  {
-    sourceKey: "price",
-    name: "Price",
-    type: "number",
-    numberFormat: "currency",
-  },
-  {
-    sourceKey: "change24h",
-    name: "24h change",
-    type: "number",
-    numberFormat: "percent",
-  },
-  {
-    sourceKey: "marketCap",
-    name: "Market cap",
-    type: "number",
-    numberFormat: "integer",
-  },
-  { sourceKey: "updatedAt", name: "Updated", type: "date" },
-];
-
 /**
  * CoinGecko reports 24h change as a percentage number (2.5 = 2.5%), but the
  * `percent` number format renders via `Intl.NumberFormat` fraction semantics
@@ -71,13 +48,11 @@ const COINGECKO_MARKET_FIELDS: ConnectorFieldDef[] = [
  */
 const PERCENT_TO_FRACTION = 100;
 
-const ISO_DATE_PART_LENGTH = 10;
-
-const MINUTE_MS = 60_000;
-const TWO_MINUTES_MS = 2 * MINUTE_MS;
-
-function parseConfig(config: Record<string, unknown>): CoingeckoMarketsConfig {
-  const parsed = coingeckoMarketsConfigSchema.safeParse(config);
+function parseConfig(config: Record<string, unknown>): {
+  symbols: string[];
+  currency: string;
+} {
+  const parsed = coingeckoConfigSchema.safeParse(config);
   if (!parsed.success) {
     throw new ConnectorError("Invalid CoinGecko connector config", {
       kind: "config",
@@ -91,31 +66,53 @@ function toConnectorRow(
   coin: z.infer<typeof coingeckoMarketSchema>
 ): ConnectorRow {
   return {
-    externalId: coin.id,
+    // Base ticker (uppercase) so the Binance live stream can key the same row.
+    externalId: coin.symbol.toUpperCase(),
     values: {
-      name: coin.name,
-      // Uppercased for display — CoinGecko returns lowercase ("btc").
       symbol: coin.symbol.toUpperCase(),
+      name: coin.name,
       price: coin.current_price,
-      change24h:
+      change:
         coin.price_change_percentage_24h === null
           ? null
           : coin.price_change_percentage_24h / PERCENT_TO_FRACTION,
       marketCap: coin.market_cap,
-      updatedAt: coin.last_updated
-        ? coin.last_updated.slice(0, ISO_DATE_PART_LENGTH)
-        : null,
+      // Full ISO timestamp (with time) so the Updated column reflects the poll.
+      updatedAt: coin.last_updated,
     },
   };
 }
 
-async function fetchRows(
+/** Market cap for ranking duplicate-ticker rows; missing sorts lowest. */
+function marketCapOf(row: ConnectorRow): number {
+  const value = row.values.marketCap;
+  return typeof value === "number" ? value : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * Keep the highest-market-cap coin when a ticker resolves to several — CoinGecko
+ * usually returns market-cap-desc, but don't rely on order; pick the largest so
+ * "BTC" never resolves to a low-cap impostor. First-seen order is preserved.
+ */
+function dedupeByExternalId(rows: ConnectorRow[]): ConnectorRow[] {
+  const byId = new Map<string, ConnectorRow>();
+  for (const row of rows) {
+    const existing = byId.get(row.externalId);
+    if (!existing || marketCapOf(row) > marketCapOf(existing)) {
+      byId.set(row.externalId, row);
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Seed rows for the crypto type: price + market cap in the chosen currency. */
+export async function coingeckoCryptoFetchRows(
   ctx: ConnectorFetchContext
 ): Promise<ConnectorFetchResult> {
-  const { coinIds } = parseConfig(ctx.config);
+  const { symbols, currency } = parseConfig(ctx.config);
   const params = new URLSearchParams({
-    vs_currency: "usd",
-    ids: coinIds.join(","),
+    vs_currency: currency.toLowerCase(),
+    symbols: symbols.map((symbol) => symbol.trim().toLowerCase()).join(","),
   });
   const url = `https://api.coingecko.com/api/v3/coins/markets?${params.toString()}`;
   let response: Response;
@@ -145,30 +142,8 @@ async function fetchRows(
       cause: payload.error,
     });
   }
-  return { kind: "rows", rows: payload.data.map(toConnectorRow) };
-}
-
-/** CoinGecko crypto-markets connector definition. */
-export const coingeckoMarketsConnector: ConnectorDefinition<CoingeckoMarketsConfig> =
-  {
-    id: "coingecko-markets",
-    title: "Crypto prices",
-    description:
-      "USD price, 24h change, and market cap for your coin watchlist.",
-    icon: "tabler:IconCoinBitcoin",
-    configSchema: coingeckoMarketsConfigSchema,
-    configFields: [
-      {
-        key: "coinIds",
-        label: "Coin ids",
-        placeholder: "bitcoin, ethereum",
-        kind: "list",
-      },
-    ],
-    fields() {
-      return COINGECKO_MARKET_FIELDS;
-    },
-    primarySourceKey: "name",
-    fetchRows,
-    pollPolicy: { minMs: MINUTE_MS, defaultMs: TWO_MINUTES_MS },
+  return {
+    kind: "rows",
+    rows: dedupeByExternalId(payload.data.map(toConnectorRow)),
   };
+}

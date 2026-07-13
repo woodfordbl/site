@@ -1,3 +1,7 @@
+import {
+  DatabaseBlockLoading,
+  useDatabaseBlockReady,
+} from "@/components/blocks/types/database/database-block-gate.tsx";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import type { BlockViewProps } from "@/lib/canvas/block-spec.types.ts";
 
@@ -11,10 +15,18 @@ type DatabaseViewProps = BlockViewProps<"database">;
  * block props, so tab switches stay ephemeral local state in the entry.
  */
 export function DatabaseView({ props }: DatabaseViewProps) {
+  // Gate mounting the table view: SSR safety (useLiveQuery has no server
+  // snapshot) + the shipped-database seed window on first visit.
+  const ready = useDatabaseBlockReady();
+
   if (props.databaseId === "") {
     return (
       <div className="text-muted-foreground text-sm">No database linked</div>
     );
+  }
+
+  if (!ready) {
+    return <DatabaseBlockLoading />;
   }
 
   return (

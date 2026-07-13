@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { CANVAS_ROW_DRAG_PREVIEW_OPACITY } from "@/lib/dnd/drag-image.ts";
 import type { DragPointer } from "@/lib/dnd/drag-store.ts";
+import { cn } from "@/lib/utils.ts";
 
 export interface CanvasRowDragPreviewState {
   /** Detached clone of the dragged row content, with live field values copied in. */
@@ -45,7 +46,13 @@ export function CanvasRowDragPreview({
 
   return (
     <div
-      className="absolute top-0 left-0 origin-top-left rounded-lg bg-background px-3 py-1.5 ring-1 ring-foreground/10"
+      className={cn(
+        "absolute top-0 left-0 origin-top-left",
+        // Database grid cards already carry their own opaque surface;
+        // live clones get the floating card chrome.
+        !preview.node.hasAttribute("data-database-drag-preview") &&
+          "rounded-lg bg-background px-3 py-1.5 ring-1 ring-foreground/10"
+      )}
       ref={hostRef}
       style={{
         opacity: CANVAS_ROW_DRAG_PREVIEW_OPACITY,

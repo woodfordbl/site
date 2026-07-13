@@ -5,6 +5,7 @@ import type {
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import type {
   DatabaseField,
+  JsonValue,
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
@@ -25,8 +26,17 @@ export function connectorFieldToDatabaseField(
 ): DatabaseField {
   const field = createDatabaseField(def.type, def.name);
   field.sourceKey = def.sourceKey;
+  if (def.icon) {
+    field.icon = def.icon;
+  }
   if (field.type === "number") {
     field.format = def.numberFormat;
+    if (def.currencyCode) {
+      field.currencyCode = def.currencyCode;
+    }
+    if (def.captureHistory) {
+      field.captureHistory = true;
+    }
   }
   if (field.type === "select" || field.type === "multiSelect") {
     field.options = def.options ?? [];
@@ -44,7 +54,7 @@ export function connectorFieldToDatabaseField(
  */
 export function buildSyncedDatabaseSeed(
   connector: ConnectorDefinition,
-  parsedConfig: Record<string, unknown>,
+  parsedConfig: Record<string, JsonValue>,
   name?: string
 ): { database: LocalDatabase; rows: LocalDatabaseRow[] } {
   const now = new Date().toISOString();

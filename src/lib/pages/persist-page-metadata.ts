@@ -1,6 +1,7 @@
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
 import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
+import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
@@ -124,6 +125,11 @@ export function persistPageMetadata(options: {
       updatedAt: now,
     });
     seedPageBlocks(options.pageId, options.seed.blocks);
+    capturePageBaseline(
+      options.pageId,
+      options.seed.blocks,
+      options.seed.serverBaselineHash
+    );
     seededPageIds.add(options.pageId);
     markPageDirty(options.pageId);
     didPersist = true;

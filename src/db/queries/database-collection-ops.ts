@@ -4,8 +4,10 @@ import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
+import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -168,6 +170,37 @@ export function createDatabaseWithDefaults(seed: DatabaseSeed): void {
 }
 
 /**
+ * Shipped-content deploy update: swap an UNEDITED seeded database for the new
+ * shipped version in one transaction (definition + full row set). Never call
+ * this for user-edited copies — the seeder's action resolver guards that.
+ * Bypasses `deleteDatabase` deliberately: this is not a user deletion, so no
+ * shipped tombstone is recorded and field history is kept.
+ */
+export function replaceShippedDatabase(seed: DatabaseSeed): void {
+  const existing = localDatabasesCollection.get(seed.database.id);
+  const staleRowIds = localDatabaseRowsCollection.toArray
+    .filter((row) => row.databaseId === seed.database.id)
+    .map((row) => row.id);
+
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    if (existing) {
+      localDatabasesCollection.delete(seed.database.id);
+    }
+    for (const rowId of staleRowIds) {
+      localDatabaseRowsCollection.delete(rowId);
+    }
+    localDatabasesCollection.insert(seed.database);
+    for (const row of seed.rows) {
+      localDatabaseRowsCollection.insert(row);
+    }
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
  * Insert a new empty row, ordered after `options.after` when given (midpoint
  * between it and its successor) or appended at the end otherwise. Returns the
  * created row so callers can focus it.
@@ -263,6 +296,81 @@ export function deleteDatabaseRows(rowIds: string[]): void {
     }
   });
   commitDatabaseTransaction(tx);
+}
+
+/**
+ * Duplicate local rows by id: clones `values`, assigns new ids, and inserts
+ * each copy after its source sibling (document order). Synced rows
+ * (`externalId`) and missing ids are skipped — copies never inherit
+ * `externalId` or `pageId`. Returns the inserted rows in the same order as
+ * the source ids that were duplicated.
+ * @see docs/architecture/databases.md#table-view
+ */
+export function duplicateDatabaseRows(rowIds: string[]): LocalDatabaseRow[] {
+  const sources: LocalDatabaseRow[] = [];
+  for (const rowId of rowIds) {
+    const row = localDatabaseRowsCollection.get(rowId);
+    if (row && row.externalId === undefined) {
+      sources.push(row);
+    }
+  }
+  if (sources.length === 0) {
+    return [];
+  }
+
+  // Group by database so each insert plans against that DB's sibling list.
+  // Within a database, process in current sibling order and always insert
+  // after the source (or its running copy), so multi-select keeps relative order.
+  const byDatabase = new Map<string, LocalDatabaseRow[]>();
+  for (const source of sources) {
+    const group = byDatabase.get(source.databaseId) ?? [];
+    group.push(source);
+    byDatabase.set(source.databaseId, group);
+  }
+
+  const createdBySourceId = new Map<string, LocalDatabaseRow>();
+  const timestamp = nowIso();
+
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const [databaseId, group] of byDatabase) {
+      const siblingOrder = new Map(
+        sortedDatabaseRows(databaseId).map((row, index) => [row.id, index])
+      );
+      const ordered = [...group].sort(
+        (left, right) =>
+          (siblingOrder.get(left.id) ?? 0) - (siblingOrder.get(right.id) ?? 0)
+      );
+
+      for (const source of ordered) {
+        // Insert immediately after the source so multi-select copies stack in
+        // document order beside their originals.
+        const siblings = sortedDatabaseRows(databaseId);
+        const afterIndex = siblings.findIndex((row) => row.id === source.id);
+        const targetIndex = afterIndex >= 0 ? afterIndex + 1 : siblings.length;
+        const plan = planRowOrderAt(siblings, targetIndex);
+        applyRowOrderRenumber(plan);
+
+        const copy: LocalDatabaseRow = {
+          id: crypto.randomUUID(),
+          databaseId,
+          values: { ...source.values },
+          order: plan.order,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        localDatabaseRowsCollection.insert(copy);
+        createdBySourceId.set(source.id, copy);
+      }
+    }
+  });
+  commitDatabaseTransaction(tx);
+
+  // Preserve the caller's id order for return (skip sources that were filtered).
+  return rowIds.flatMap((rowId) => {
+    const copy = createdBySourceId.get(rowId);
+    return copy ? [copy] : [];
+  });
 }
 
 /**
@@ -882,8 +990,10 @@ export function updateDatabaseSource(
       // `toPlain` drops keys whose value is undefined, so the explicit
       // "clear the refresh override" case rebuilds the source without the
       // key via rest-destructuring (the linter bans `delete`).
+      // The draft's deep-writable mapping degrades the recursive JsonValue
+      // config to `unknown`; the runtime shape is the validated source.
       const merged: ConnectorDatabaseSource = {
-        ...toPlain(draft.source),
+        ...(toPlain(draft.source) as ConnectorDatabaseSource),
         ...toPlain(patch),
         kind: "connector",
       };
@@ -949,6 +1059,12 @@ export function deleteDatabase(databaseId: string): void {
     return;
   }
 
+  // A seeded shipped database must stay deleted — without a tombstone the
+  // shipped-content seeder would resurrect it at the next boot.
+  if (database?.serverBaselineHash != null) {
+    recordShippedDatabaseTombstone(databaseId);
+  }
+
   const tx = createDatabaseTransaction();
   tx.mutate(() => {
     if (database) {
@@ -959,4 +1075,8 @@ export function deleteDatabase(databaseId: string): void {
     }
   });
   commitDatabaseTransaction(tx);
+
+  // Best-effort: drop the database's captured field history (IndexedDB) so it
+  // doesn't leak after the table is gone. Derived data — failures are non-fatal.
+  clearDatabaseFieldHistory(databaseId).catch(reportPersistenceError);
 }

@@ -14,6 +14,7 @@ import {
   upsertPageBlock,
 } from "@/db/queries/block-collection-ops.ts";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
+import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import {
   buildBlockTree,
   type CanvasRow,
@@ -39,6 +40,14 @@ export interface ServerPageSource {
   icon?: string;
   id: string;
   parentId: string | null;
+  /**
+   * Shipped sidebar position. Must ride along so the canvas lazy-seed writes
+   * it to the local row AND hashes it into `serverMetadataBaseline` — the
+   * stale check (`computePageStaleState`) hashes shipped metadata including
+   * `sidebarOrder`, so omitting it here would flag a false conflict right
+   * after the first canvas edit of any page that has it set.
+   */
+  sidebarOrder?: number;
   slug: string;
   title: string;
 }
@@ -90,10 +99,17 @@ export function usePageCanvas(
       hashPageMetadata({
         icon: serverPage.icon,
         parentId: serverPage.parentId,
+        sidebarOrder: serverPage.sidebarOrder,
         slug: serverPage.slug,
         title: serverPage.title,
       }),
-    [serverPage.icon, serverPage.parentId, serverPage.slug, serverPage.title]
+    [
+      serverPage.icon,
+      serverPage.parentId,
+      serverPage.sidebarOrder,
+      serverPage.slug,
+      serverPage.title,
+    ]
   );
   const blocksStale =
     localPage?.serverBaselineHash != null &&
@@ -233,20 +249,26 @@ export function usePageCanvas(
         title: serverPage.title,
         icon: serverPage.icon,
         parentId: serverPage.parentId,
+        sidebarOrder: serverPage.sidebarOrder,
         blockOrder,
         serverBaselineHash,
         serverMetadataBaseline,
         createdAt: timestamp,
         updatedAt: timestamp,
       });
+      // The seeded shard holds post-edit blocks; the conflict baseline is the
+      // pristine server content this overlay diverged from.
+      capturePageBaseline(pageId, serverPage.blocks, serverBaselineHash);
     },
     [
       localPage,
       pageId,
       serverBaselineHash,
       serverMetadataBaseline,
+      serverPage.blocks,
       serverPage.icon,
       serverPage.parentId,
+      serverPage.sidebarOrder,
       serverPage.slug,
       serverPage.title,
     ]

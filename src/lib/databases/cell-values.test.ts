@@ -261,10 +261,12 @@ describe("formatCellValue", () => {
     expect(formatCellValue(numberField, 1234.5)).toBe("1,234.5");
   });
 
-  it("formats dates for display", () => {
+  it("formats dates for display, adding time when the value carries one", () => {
     expect(formatCellValue(dateField, "2026-03-05")).toBe("Mar 5, 2026");
-    expect(formatCellValue(dateField, "2026-03-05T23:59:00.000Z")).toBe(
-      "Mar 5, 2026"
+    // A stored value with a clock time renders the time too. A timezone-less
+    // instant parses as local, so the assertion is stable across TZs.
+    expect(formatCellValue(dateField, "2026-03-05T14:30:00")).toBe(
+      "Mar 5, 2026, 2:30 PM"
     );
   });
 
@@ -296,6 +298,20 @@ describe("formatCellValue", () => {
       "in 3 days"
     );
     expect(formatCellValue(relativeField, "not a date", { now })).toBe("");
+  });
+
+  it("clamps a future real-time instant to now, sparing date-only future dates", () => {
+    const relativeField: DatabaseField = { ...dateField, format: "relative" };
+    const now = () => new Date(2026, 2, 5, 12, 0, 0);
+    // A time-bearing instant slightly ahead of the clock (skew) never reads
+    // future — an "updated" timestamp can't be in the future.
+    expect(formatCellValue(relativeField, "2026-03-05T12:00:30", { now })).toBe(
+      "less than a minute ago"
+    );
+    // A date-only future value (e.g. a due date) keeps its natural distance.
+    expect(formatCellValue(relativeField, "2026-03-08", { now })).toBe(
+      "in 3 days"
+    );
   });
 
   it("falls back to plain text and empty strings", () => {

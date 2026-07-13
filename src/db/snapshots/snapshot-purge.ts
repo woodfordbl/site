@@ -1,5 +1,9 @@
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
 import {
+  clearPageBaseline,
+  listBaselinePageIds,
+} from "@/db/snapshots/page-baseline-store.ts";
+import {
   clearPageSnapshots,
   deleteSnapshotContent,
   listSnapshotPageIds,
@@ -34,14 +38,25 @@ async function purgePageSnapshots(
   await writeSnapshotIndex({ pageId, descriptors: keep });
 }
 
+/** Drops conflict baselines for pages whose local overlay is gone. */
+async function purgeOrphanBaselines(localPageIds: Set<string>): Promise<void> {
+  const baselinePageIds = await listBaselinePageIds();
+
+  for (const pageId of baselinePageIds) {
+    if (localPageIds.has(pageId)) {
+      continue;
+    }
+    try {
+      await clearPageBaseline(pageId);
+    } catch {
+      // One bad key must not abort the sweep.
+    }
+  }
+}
+
 /** Applies tiered retention to every page's snapshot history. */
 export async function purgeAllSnapshots(): Promise<void> {
   if (typeof indexedDB === "undefined") {
-    return;
-  }
-
-  const pageIds = await listSnapshotPageIds();
-  if (pageIds.length === 0) {
     return;
   }
 
@@ -50,6 +65,14 @@ export async function purgeAllSnapshots(): Promise<void> {
       (page) => page.id
     )
   );
+
+  await purgeOrphanBaselines(localPageIds).catch(() => undefined);
+
+  const pageIds = await listSnapshotPageIds();
+  if (pageIds.length === 0) {
+    return;
+  }
+
   const nowMs = Date.now();
 
   for (const pageId of pageIds) {

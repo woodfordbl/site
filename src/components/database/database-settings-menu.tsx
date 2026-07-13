@@ -1,6 +1,7 @@
 import {
   IconChartBar,
   IconCheck,
+  IconCheckbox,
   IconClock,
   IconColumns3,
   IconCopy,
@@ -16,6 +17,7 @@ import {
   IconListDetails,
   IconRefresh,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import { format } from "date-fns/format";
 import {
@@ -28,8 +30,10 @@ import {
 } from "react";
 
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
+import { DatabasePropertyEditItems } from "@/components/database/database-column-menu.tsx";
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
 import {
   AddDatabaseViewMenuItems,
   DATABASE_VIEW_TYPE_ICONS,
@@ -61,6 +65,13 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.tsx";
+import {
   deleteDatabase,
   duplicateDatabaseView,
   removeDatabaseField,
@@ -77,13 +88,18 @@ import {
   getConnectorToken,
   setConnectorToken,
 } from "@/lib/connectors/token-store.ts";
-import type { ConnectorAuthSpec } from "@/lib/connectors/types.ts";
+import type {
+  ConnectorAuthSpec,
+  ConnectorConfigField,
+  ConnectorConfigOption,
+} from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseField,
   DatabaseSource,
   DatabaseView,
+  JsonValue,
   LocalDatabase,
 } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -174,6 +190,7 @@ function DatabaseRenameInput({
 }
 
 interface PropertyRowProps {
+  databaseId: string;
   /** Drop-line below the last row while a row is dragged past the end. */
   dropAfter: boolean;
   /** Drop-line above this row while another row is dragged over its top slot. */
@@ -184,6 +201,8 @@ interface PropertyRowProps {
   isPrimary: boolean;
   isVisible: boolean;
   onDelete: () => void;
+  /** Closes the whole settings menu (rename Enter, formula editor Save). */
+  onRequestClose: () => void;
   onToggleVisible: () => void;
   /** Pointer handlers for the left grip; drives {@link useListReorder}. */
   reorderHandleProps: ListReorderHandleProps;
@@ -191,18 +210,21 @@ interface PropertyRowProps {
 
 /**
  * One field row in the Properties list: a left grip that drag-reorders the
- * schema, the field icon + name, a "Title" badge beside the primary field's
- * name, and — for non-primary fields — hide/show and delete controls on the
- * right. The primary field can never be hidden or deleted. Tapping the name
- * opens nothing this wave — field editing lives in the column menu.
+ * schema, then the field name as a per-field edit submenu trigger (rename,
+ * per-type config, change type — the same editing core as the column
+ * menu), a "Title" badge beside the primary field's name, and — for
+ * non-primary fields — hide/show and delete controls on the right. The
+ * primary field can never be hidden or deleted.
  */
 function PropertyRow({
+  databaseId,
   dropBefore,
   dropAfter,
   field,
   isDragging,
   isPrimary,
   isVisible,
+  onRequestClose,
   reorderHandleProps,
   onDelete,
   onToggleVisible,
@@ -229,15 +251,27 @@ function PropertyRow({
       >
         <IconGripVertical className="size-4 stroke-[1.5px]" />
       </button>
-      <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="min-w-0 truncate">{field.name}</span>
-        {isPrimary ? (
-          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-            Title
-          </span>
-        ) : null}
-      </div>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger
+          aria-label={`Edit ${field.name}`}
+          className="min-h-7 pointer-coarse:min-h-10 min-w-0 flex-1 gap-1.5 px-1"
+        >
+          <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+          <span className="min-w-0 truncate">{field.name}</span>
+          {isPrimary ? (
+            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              Title
+            </span>
+          ) : null}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-64 min-w-64">
+          <DatabasePropertyEditItems
+            databaseId={databaseId}
+            field={field}
+            onRequestClose={onRequestClose}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
       {isPrimary ? null : (
         <>
           <Button
@@ -277,16 +311,23 @@ function PropertyDropLine({ position }: { position: "top" | "bottom" }) {
 
 interface PropertiesSubmenuProps {
   database: LocalDatabase;
+  /** Closes the whole settings menu (threaded into each row's edit submenu). */
+  onRequestClose: () => void;
   /** The active view — field visibility is a per-view setting. */
   view: DatabaseView;
 }
 
 /**
- * Properties submenu: one row per field in schema order with a drag grip,
- * hide/show, and delete. Visibility writes `visibleFieldIds` on the ACTIVE
- * view; reorder rewrites the schema (all views).
+ * Properties submenu: one row per field in schema order with a drag grip, a
+ * per-field edit submenu (rename / per-type config / change type), hide/show,
+ * and delete. Visibility writes `visibleFieldIds` on the ACTIVE view; reorder
+ * and field edits rewrite the schema (all views).
  */
-function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
+function PropertiesSubmenu({
+  database,
+  onRequestClose,
+  view,
+}: PropertiesSubmenuProps) {
   const isVisible = (fieldId: string): boolean =>
     !view.visibleFieldIds || view.visibleFieldIds.includes(fieldId);
 
@@ -320,6 +361,7 @@ function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
         <div ref={containerRef}>
           {database.fields.map((field, index) => (
             <PropertyRow
+              databaseId={database.id}
               dropAfter={
                 isReordering &&
                 index === lastIndex &&
@@ -334,6 +376,7 @@ function PropertiesSubmenu({ database, view }: PropertiesSubmenuProps) {
               onDelete={() => {
                 removeDatabaseField(database.id, field.id);
               }}
+              onRequestClose={onRequestClose}
               onToggleVisible={() => {
                 toggleVisible(field.id);
               }}
@@ -361,14 +404,30 @@ interface GroupSubmenuProps {
 function GroupSubmenu({ database, view }: GroupSubmenuProps) {
   const activeFieldId = view.groupBy?.fieldId;
   const groupableFields = database.fields.filter(isGroupableField);
+  // Groups hidden via the group header context menu — recoverable here even
+  // when every group is hidden (no header left to right-click).
+  const hiddenGroupCount = view.config.hiddenGroupKeys?.length ?? 0;
+
+  const showHiddenGroups = () => {
+    updateDatabaseView(database.id, view.id, {
+      config: { ...view.config, hiddenGroupKeys: undefined },
+    });
+  };
 
   const writeGroupBy = (fieldId: string | null) => {
     if (fieldId === activeFieldId || (fieldId === null && !activeFieldId)) {
       return;
     }
+    // Collapse AND hidden state reset together — both store bucket keys of
+    // the previous field, which can collide with the new field's buckets
+    // (`""` empty, checkbox `true`/`false`, plain text/number values).
     updateDatabaseView(database.id, view.id, {
       groupBy: fieldId === null ? undefined : { fieldId },
-      config: { ...view.config, collapsedGroupKeys: undefined },
+      config: {
+        ...view.config,
+        collapsedGroupKeys: undefined,
+        hiddenGroupKeys: undefined,
+      },
     });
   };
 
@@ -406,6 +465,60 @@ function GroupSubmenu({ database, view }: GroupSubmenuProps) {
             </DropdownMenuItem>
           );
         })}
+        {hiddenGroupCount > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={showHiddenGroups}>
+              <IconEye />
+              Show {hiddenGroupCount} hidden{" "}
+              {hiddenGroupCount === 1 ? "group" : "groups"}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/** Table-only: leading row-select gutter/column display mode. */
+function RowSelectDisplaySubmenu({
+  databaseId,
+  view,
+}: {
+  databaseId: string;
+  view: DatabaseView;
+}) {
+  const active = resolveRowSelectDisplay(view.config);
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconCheckbox />
+        Row select
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => {
+            updateDatabaseView(databaseId, view.id, {
+              config: {
+                ...view.config,
+                rowSelectDisplay:
+                  value === "hover" ? undefined : (value as typeof active),
+              },
+            });
+          }}
+          value={active}
+        >
+          <DropdownMenuRadioItem value="always">
+            Always show
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="hover">
+            Show on hover
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="number">
+            Show number
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -663,6 +776,315 @@ function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
   );
 }
 
+/** Max instruments per synced source — matches the Finnhub proxy's peer cap. */
+const MAX_CONNECTOR_SYMBOLS = 30;
+/** Provider symbol shape once uppercased: A–Z 0–9 . : _ - up to 20 chars. */
+const CONNECTOR_SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
+/** Splits pasted/typed input into candidate symbols on commas or newlines. */
+const SYMBOL_INPUT_SEPARATOR = /[\n,]/;
+
+interface SymbolListEditorProps {
+  config: Record<string, JsonValue>;
+  configKey: string;
+  databaseId: string;
+  label: string;
+  placeholder?: string;
+  values: string[];
+}
+
+/**
+ * Editor for a `list` config field (symbol/ticker set): removable chips plus an
+ * add input. Every mutation writes the full config back through
+ * `updateDatabaseSource`; the sync engine's collection watcher then refetches
+ * and reopens the live socket against the new set (database-sync-engine.ts).
+ * Enforces the provider caps (≤ {@link MAX_CONNECTOR_SYMBOLS}, symbol shape) so
+ * the next poll can't fail config validation, and blocks removing the last one
+ * (connectors require ≥ 1).
+ */
+function SymbolListEditor({
+  config,
+  configKey,
+  databaseId,
+  label,
+  placeholder,
+  values,
+}: SymbolListEditorProps) {
+  const [error, setError] = useState("");
+
+  const write = (next: string[]) => {
+    updateDatabaseSource(databaseId, {
+      config: { ...config, [configKey]: next },
+    });
+  };
+
+  // Returns true when the input produced at least one new symbol (so the caller
+  // can clear the field); sets an inline note for anything skipped.
+  const addFromInput = (text: string): boolean => {
+    const parsed = text
+      .split(SYMBOL_INPUT_SEPARATOR)
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean);
+    const next = [...values];
+    const skipped: string[] = [];
+    for (const symbol of parsed) {
+      if (next.includes(symbol)) {
+        continue;
+      }
+      if (
+        next.length >= MAX_CONNECTOR_SYMBOLS ||
+        !CONNECTOR_SYMBOL_PATTERN.test(symbol)
+      ) {
+        skipped.push(symbol);
+        continue;
+      }
+      next.push(symbol);
+    }
+    setError(skipped.length > 0 ? `Skipped ${skipped.join(", ")}` : "");
+    if (next.length !== values.length) {
+      write(next);
+      return true;
+    }
+    return false;
+  };
+
+  const remove = (symbol: string) => {
+    if (values.length <= 1) {
+      setError("Keep at least one");
+      return;
+    }
+    setError("");
+    write(values.filter((value) => value !== symbol));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      {values.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {values.map((symbol) => (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-muted py-0.5 pr-1 pl-1.5 text-foreground text-xs tabular-nums"
+              key={symbol}
+            >
+              {symbol}
+              <button
+                aria-label={`Remove ${symbol}`}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                disabled={values.length <= 1}
+                onClick={() => remove(symbol)}
+                type="button"
+              >
+                <IconX className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <InputGroup className="h-8 pointer-coarse:h-10">
+        <InputGroupInput
+          aria-label={`Add to ${label}`}
+          autoComplete="off"
+          onBlur={(event) => {
+            if (addFromInput(event.currentTarget.value)) {
+              event.currentTarget.value = "";
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.currentTarget.value = "";
+              return;
+            }
+            stopMenuKeys(event);
+            if (event.key === "Enter" || event.key === ",") {
+              event.preventDefault();
+              if (addFromInput(event.currentTarget.value)) {
+                event.currentTarget.value = "";
+              }
+            }
+          }}
+          placeholder={placeholder ?? "Add…"}
+        />
+      </InputGroup>
+      {error ? <p className="text-destructive text-xs">{error}</p> : null}
+    </div>
+  );
+}
+
+interface ConnectorTextConfigRowProps {
+  config: Record<string, JsonValue>;
+  configKey: string;
+  databaseId: string;
+  label: string;
+  placeholder?: string;
+  value: string;
+}
+
+/**
+ * Editor for a `text` config field (e.g. a repo owner). Commits the trimmed
+ * value on Enter or on blur when it changed; Escape reverts the draft. Same
+ * dirty-check / `stopMenuKeys` conventions as {@link ConnectorTokenRow}.
+ */
+function ConnectorTextConfigRow({
+  config,
+  configKey,
+  databaseId,
+  label,
+  placeholder,
+  value,
+}: ConnectorTextConfigRowProps) {
+  const commit = (next: string) => {
+    const trimmed = next.trim();
+    if (trimmed !== value) {
+      updateDatabaseSource(databaseId, {
+        config: { ...config, [configKey]: trimmed },
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <InputGroup className="h-8 pointer-coarse:h-10">
+        <InputGroupInput
+          aria-label={label}
+          autoComplete="off"
+          defaultValue={value}
+          onBlur={(event) => commit(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.currentTarget.value = value;
+              return;
+            }
+            stopMenuKeys(event);
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit(event.currentTarget.value);
+            }
+          }}
+          placeholder={placeholder}
+        />
+      </InputGroup>
+    </div>
+  );
+}
+
+interface ConnectorSelectConfigRowProps {
+  config: Record<string, JsonValue>;
+  configKey: string;
+  databaseId: string;
+  label: string;
+  options: ConnectorConfigOption[];
+  value: string;
+}
+
+/**
+ * Editor for an editable `select` config field (e.g. display currency).
+ * Writes the picked value straight through `updateDatabaseSource`, same
+ * dirty-check convention as {@link ConnectorTextConfigRow}.
+ */
+function ConnectorSelectConfigRow({
+  config,
+  configKey,
+  databaseId,
+  label,
+  options,
+  value,
+}: ConnectorSelectConfigRowProps) {
+  return (
+    <div className="space-y-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <Select
+        onValueChange={(next) => {
+          if (typeof next === "string" && next !== value) {
+            updateDatabaseSource(databaseId, {
+              config: { ...config, [configKey]: next },
+            });
+          }
+        }}
+        value={value}
+      >
+        <SelectTrigger aria-label={label}>
+          <SelectValue>
+            {(current) =>
+              options.find((option) => option.value === current)?.label ??
+              String(current ?? "")
+            }
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+interface ConnectorConfigEditorProps {
+  config: Record<string, JsonValue>;
+  databaseId: string;
+  field: ConnectorConfigField;
+}
+
+/**
+ * Live editor for one connector config field, replacing the old read-only
+ * summary so a synced source's instruments can change after creation. `list`
+ * fields get chips; editable `select` fields a dropdown; `creationOnly`
+ * fields (e.g. asset type — schema-locked at create) show read-only; `text`
+ * fields a single input.
+ */
+function ConnectorConfigEditor({
+  config,
+  databaseId,
+  field,
+}: ConnectorConfigEditorProps) {
+  if (field.kind === "list") {
+    const raw = config[field.key];
+    return (
+      <SymbolListEditor
+        config={config}
+        configKey={field.key}
+        databaseId={databaseId}
+        label={field.label}
+        placeholder={field.placeholder}
+        values={Array.isArray(raw) ? raw.map(String) : []}
+      />
+    );
+  }
+  if (field.kind === "select") {
+    const options = field.options ?? [];
+    const value = String(config[field.key] ?? field.defaultValue ?? "");
+    const currentLabel =
+      options.find((option) => option.value === value)?.label ?? value;
+    if (field.creationOnly) {
+      return <InfoRow label={field.label} value={currentLabel} />;
+    }
+    return (
+      <ConnectorSelectConfigRow
+        config={config}
+        configKey={field.key}
+        databaseId={databaseId}
+        label={field.label}
+        options={options}
+        value={value}
+      />
+    );
+  }
+  return (
+    <ConnectorTextConfigRow
+      config={config}
+      configKey={field.key}
+      databaseId={databaseId}
+      label={field.label}
+      placeholder={field.placeholder}
+      value={String(config[field.key] ?? "")}
+    />
+  );
+}
+
 interface ConnectorSourceSubmenuProps {
   database: LocalDatabase;
   rowCount: number;
@@ -683,14 +1105,6 @@ function ConnectorSourceSubmenu({
   const connector = getConnector(source.connectorId);
   const status = useSyncStatus(database.id);
 
-  const configRows: { label: string; value: string }[] = (
-    connector?.configFields ?? []
-  ).flatMap((configField) => {
-    const raw = source.config[configField.key];
-    const value = Array.isArray(raw) ? raw.join(", ") : String(raw ?? "");
-    return value === "" ? [] : [{ label: configField.label, value }];
-  });
-
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
@@ -708,8 +1122,13 @@ function ConnectorSourceSubmenu({
               {connector?.title ?? "Unknown connector"}
             </span>
           </div>
-          {configRows.map((row) => (
-            <InfoRow key={row.label} label={row.label} value={row.value} />
+          {(connector?.configFields ?? []).map((configField) => (
+            <ConnectorConfigEditor
+              config={source.config}
+              databaseId={database.id}
+              field={configField}
+              key={configField.key}
+            />
           ))}
           <InfoRow label="Rows" value={String(rowCount)} />
           <InfoRow
@@ -1017,7 +1436,15 @@ export function DatabaseSettingsMenu({
           }}
         />
         <DropdownMenuSeparator />
-        {view ? <PropertiesSubmenu database={database} view={view} /> : null}
+        {view ? (
+          <PropertiesSubmenu
+            database={database}
+            onRequestClose={() => {
+              handleOpenChange(false);
+            }}
+            view={view}
+          />
+        ) : null}
         <ViewsSubmenu database={database} onViewIdChange={onViewIdChange} />
         {/* Grouping drives the table/list render; board columns and chart axes
             have their own per-type options below, so Group is table/list-only
@@ -1060,6 +1487,9 @@ export function DatabaseSettingsMenu({
             <IconEyeOff />
             Hide title
           </DropdownMenuSwitchItem>
+        ) : null}
+        {view && view.type === "table" ? (
+          <RowSelectDisplaySubmenu databaseId={database.id} view={view} />
         ) : null}
         {view && view.type === "table" ? (
           <DropdownMenuSwitchItem

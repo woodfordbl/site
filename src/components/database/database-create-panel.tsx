@@ -8,6 +8,7 @@ import { useForm } from "@tanstack/react-form";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { ConnectorIcon } from "@/components/database/connector-icon.tsx";
+import { DatabaseLinkPicker } from "@/components/database/database-link-picker.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -18,6 +19,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.tsx";
 import {
   Tabs,
   TabsContent,
@@ -34,6 +42,7 @@ import {
 } from "@/lib/connectors/token-store.ts";
 import type {
   ConnectorConfigField,
+  ConnectorConfigOption,
   ConnectorDefinition,
 } from "@/lib/connectors/types.ts";
 import { createDefaultDatabaseSeed } from "@/lib/databases/database-defaults.ts";
@@ -41,7 +50,7 @@ import { createDefaultDatabaseSeed } from "@/lib/databases/database-defaults.ts"
 /**
  * Popover panel behind an unlinked database block's placeholder trigger
  * (media/embed source-picker conventions): **New** (default local seed),
- * **Linked** (existing workspace database — picker stub), and **Synced**
+ * **Linked** (existing workspace database — search picker), and **Synced**
  * (connector cards whose pick opens a config form generated from the
  * connector's `configFields`). Submit validates via the connector's zod
  * `configSchema` (inline errors per the url-input conventions), stores any
@@ -60,8 +69,8 @@ function parseListInput(raw: string): string[] {
 
 /**
  * Raw config record from the form drafts: "list" inputs always contribute an
- * array; empty "text" inputs are omitted so schema defaults (e.g. base
- * currency "USD") can apply.
+ * array; "select" inputs fall back to their `defaultValue`; empty "text"
+ * inputs are omitted so schema defaults (e.g. base currency "USD") can apply.
  */
 function buildRawConfig(
   configFields: readonly ConnectorConfigField[],
@@ -74,11 +83,114 @@ function buildRawConfig(
       config[field.key] = parseListInput(raw);
       continue;
     }
+    if (field.kind === "select") {
+      config[field.key] = raw || field.defaultValue;
+      continue;
+    }
     if (raw !== "") {
       config[field.key] = raw;
     }
   }
   return config;
+}
+
+/** Trigger + popup for a `"select"` config field, styled like the inputs. */
+function ConnectorSelectControl({
+  id,
+  invalid,
+  onValueChange,
+  options,
+  value,
+}: {
+  id: string;
+  invalid: boolean;
+  onValueChange: (value: string) => void;
+  options: ConnectorConfigOption[];
+  value: string;
+}): ReactNode {
+  return (
+    <Select
+      onValueChange={(next) => {
+        onValueChange(typeof next === "string" ? next : "");
+      }}
+      value={value}
+    >
+      <SelectTrigger aria-invalid={invalid ? true : undefined} id={id}>
+        <SelectValue>
+          {(current) =>
+            options.find((option) => option.value === current)?.label ??
+            String(current ?? "")
+          }
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** One config field's control — a `Select` for `"select"`, else an `Input`. */
+function ConnectorConfigControl({
+  configField,
+  error,
+  focusRef,
+  name,
+  onBlur,
+  onChange,
+  value,
+}: {
+  configField: ConnectorConfigField;
+  error: boolean;
+  focusRef?: (node: HTMLInputElement | null) => void;
+  name: string;
+  onBlur?: () => void;
+  onChange: (value: string) => void;
+  value: string;
+}): ReactNode {
+  if (configField.kind === "select") {
+    return (
+      <ConnectorSelectControl
+        id={`connector-${configField.key}`}
+        invalid={error}
+        onValueChange={onChange}
+        options={configField.options ?? []}
+        value={value}
+      />
+    );
+  }
+  return (
+    <Input
+      aria-invalid={error ? true : undefined}
+      autoComplete="off"
+      id={`connector-${configField.key}`}
+      name={name}
+      onBlur={onBlur}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={configField.placeholder}
+      ref={focusRef}
+      value={value}
+    />
+  );
+}
+
+/**
+ * Whether the connector's auth token input applies to the current draft. A
+ * connector with a `type` selector only needs its token for the `stocks`
+ * type (crypto is keyless); connectors without a `type` field always show it.
+ */
+function connectorAuthApplies(
+  connector: ConnectorDefinition,
+  typeValue: unknown
+): boolean {
+  const hasTypeField = connector.configFields.some(
+    (field) => field.key === "type"
+  );
+  return hasTypeField ? typeValue === "stocks" : true;
 }
 
 export interface DatabaseCreatePanelProps {
@@ -129,10 +241,7 @@ export function DatabaseCreatePanel({
         </Button>
       </TabsContent>
       <TabsContent className="mt-3 space-y-2" value="linked">
-        <p className="text-muted-foreground text-sm">
-          Link an existing database from your workspace. Database picker coming
-          soon.
-        </p>
+        <DatabaseLinkPicker onSelect={onCreated} />
       </TabsContent>
       <TabsContent className="mt-3" value="sync">
         {connector ? (
@@ -210,7 +319,7 @@ function ConnectorConfigForm({
   const defaultValues = useMemo(() => {
     const drafts: Record<string, string> = {};
     for (const field of connector.configFields) {
-      drafts[field.key] = "";
+      drafts[field.key] = field.defaultValue ?? "";
     }
     if (connector.auth) {
       drafts.token = getConnectorToken(connector.id) ?? "";
@@ -297,18 +406,16 @@ function ConnectorConfigForm({
                   {configField.label}
                 </FieldLabel>
                 <FieldContent>
-                  <Input
-                    aria-invalid={error ? true : undefined}
-                    autoComplete="off"
-                    id={`connector-${configField.key}`}
+                  <ConnectorConfigControl
+                    configField={configField}
+                    error={Boolean(error)}
+                    focusRef={index === 0 ? focusFirstInput : undefined}
                     name={field.name}
                     onBlur={field.handleBlur}
-                    onChange={(event) => {
-                      field.handleChange(event.target.value);
+                    onChange={(value) => {
+                      field.handleChange(value);
                       clearError(configField.key);
                     }}
-                    placeholder={configField.placeholder}
-                    ref={index === 0 ? focusFirstInput : undefined}
                     value={field.state.value}
                   />
                   {configField.kind === "list" ? (
@@ -324,43 +431,49 @@ function ConnectorConfigForm({
         </form.Field>
       ))}
       {connector.auth ? (
-        <form.Field name="token">
-          {(field) => {
-            const error = errors.token;
-            return (
-              <Field data-invalid={error ? true : undefined}>
-                <FieldLabel htmlFor="connector-token">
-                  {connector.auth?.label}
-                  {connector.auth?.required ? null : (
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      (optional)
-                    </span>
-                  )}
-                </FieldLabel>
-                <FieldContent>
-                  <Input
-                    aria-invalid={error ? true : undefined}
-                    autoComplete="off"
-                    id="connector-token"
-                    name={field.name}
-                    onBlur={field.handleBlur}
-                    onChange={(event) => {
-                      field.handleChange(event.target.value);
-                      clearError("token");
-                    }}
-                    type="password"
-                    value={field.state.value}
-                  />
-                  <FieldDescription>
-                    {connector.auth?.help} Saved only in this browser.
-                  </FieldDescription>
-                  {error ? <FieldError>{error}</FieldError> : null}
-                </FieldContent>
-              </Field>
-            );
-          }}
-        </form.Field>
+        <form.Subscribe selector={(state) => state.values.type}>
+          {(typeValue) =>
+            connectorAuthApplies(connector, typeValue) ? (
+              <form.Field name="token">
+                {(field) => {
+                  const error = errors.token;
+                  return (
+                    <Field data-invalid={error ? true : undefined}>
+                      <FieldLabel htmlFor="connector-token">
+                        {connector.auth?.label}
+                        {connector.auth?.required ? null : (
+                          <span className="font-normal text-muted-foreground">
+                            {" "}
+                            (optional)
+                          </span>
+                        )}
+                      </FieldLabel>
+                      <FieldContent>
+                        <Input
+                          aria-invalid={error ? true : undefined}
+                          autoComplete="off"
+                          id="connector-token"
+                          name={field.name}
+                          onBlur={field.handleBlur}
+                          onChange={(event) => {
+                            field.handleChange(event.target.value);
+                            clearError("token");
+                          }}
+                          type="password"
+                          value={field.state.value}
+                        />
+                        <FieldDescription>
+                          {connector.auth?.help} Saved only in this browser.
+                        </FieldDescription>
+                        {error ? <FieldError>{error}</FieldError> : null}
+                      </FieldContent>
+                    </Field>
+                  );
+                }}
+              </form.Field>
+            ) : null
+          }
+        </form.Subscribe>
       ) : null}
       <Button className="w-full" type="submit">
         Create synced table

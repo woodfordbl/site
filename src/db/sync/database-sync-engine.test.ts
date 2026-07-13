@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LocalDatabase } from "@/lib/schemas/database.ts";
+import type { JsonValue, LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
  * Engine-level regression tests. Each test imports a FRESH engine module
@@ -75,7 +75,7 @@ function setVisibility(next: DocumentVisibilityState): void {
 
 function makeDatabase(
   id: string,
-  config: Record<string, unknown>
+  config: Record<string, JsonValue>
 ): LocalDatabase {
   return {
     id,
@@ -485,5 +485,97 @@ describe("visibility-aware leadership", () => {
     await advance(0);
     expect(locks.isHeld).toBe(true);
     expect(engine.requestImmediateSync(database.id)).toBe(true);
+  });
+});
+
+describe("live streams follow source config edits", () => {
+  it("reopens the socket against the new symbol set when the config changes", async () => {
+    const locks = new FakeLockManager();
+    installLocks(locks);
+
+    const streamUnsubs: ReturnType<typeof vi.fn>[] = [];
+    const subscribe = vi.fn(
+      (_ctx: { config: Record<string, unknown> }, _handlers: unknown) => {
+        const unsub = vi.fn();
+        streamUnsubs.push(unsub);
+        return unsub;
+      }
+    );
+    mocks.getConnector.mockReturnValue({
+      id: "live",
+      pollPolicy: { minMs: 60_000, defaultMs: 300_000 },
+      fields: () => [],
+      fetchRows: mocks.fetchRows,
+      stream: { subscribe },
+    });
+    mocks.fetchRows.mockResolvedValue({ kind: "notModified" });
+
+    const v1 = makeDatabase("db-stream", { symbols: ["BTCUSDT"] });
+    seedDatabase(v1);
+
+    const engine = await importEngine();
+    await advance(0);
+
+    // A view watching the database opens the live socket (after the token
+    // microtask resolves) against the seeded symbol set.
+    const unwatch = engine.watchDatabaseSync(v1.id);
+    await flushMicrotasks();
+    expect(subscribe).toHaveBeenCalledTimes(1);
+    expect(subscribe.mock.calls[0][0].config).toEqual({ symbols: ["BTCUSDT"] });
+
+    // Editing the symbol list lands as a collection update. The engine drops
+    // the socket bound to the old set and reopens against the new one.
+    const v2 = makeDatabase("db-stream", { symbols: ["BTCUSDT", "ETHUSDT"] });
+    mocks.databaseGet.mockImplementation((id: string) =>
+      id === v2.id ? v2 : undefined
+    );
+    changeCallback?.([{ type: "update", value: v2 }]);
+    await flushMicrotasks();
+
+    expect(streamUnsubs[0]).toHaveBeenCalledTimes(1);
+    expect(subscribe).toHaveBeenCalledTimes(2);
+    expect(subscribe.mock.calls[1][0].config).toEqual({
+      symbols: ["BTCUSDT", "ETHUSDT"],
+    });
+
+    unwatch();
+    await flushMicrotasks();
+  });
+
+  it("leaves the socket alone when a non-config edit lands", async () => {
+    const locks = new FakeLockManager();
+    installLocks(locks);
+
+    const subscribe = vi.fn(() => vi.fn());
+    mocks.getConnector.mockReturnValue({
+      id: "live",
+      pollPolicy: { minMs: 60_000, defaultMs: 300_000 },
+      fields: () => [],
+      fetchRows: mocks.fetchRows,
+      stream: { subscribe },
+    });
+    mocks.fetchRows.mockResolvedValue({ kind: "notModified" });
+
+    const v1 = makeDatabase("db-stream-rename", { symbols: ["BTCUSDT"] });
+    seedDatabase(v1);
+
+    const engine = await importEngine();
+    await advance(0);
+    const unwatch = engine.watchDatabaseSync(v1.id);
+    await flushMicrotasks();
+    expect(subscribe).toHaveBeenCalledTimes(1);
+
+    // Same config, only the name changed — the socket must not churn.
+    const renamed = { ...v1, name: "Renamed" };
+    mocks.databaseGet.mockImplementation((id: string) =>
+      id === renamed.id ? renamed : undefined
+    );
+    changeCallback?.([{ type: "update", value: renamed }]);
+    await flushMicrotasks();
+
+    expect(subscribe).toHaveBeenCalledTimes(1);
+
+    unwatch();
+    await flushMicrotasks();
   });
 });

@@ -52,17 +52,27 @@ import {
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
   type GridItem,
+  GUTTER_LANE_SCROLL_CLASS,
   isInlineEditableField,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
   minColumnWidthPx,
   nextEditTarget,
+  nextSelectedRowIds,
+  type RowSelectDisplay,
   resolveColumnWidthPx,
+  resolveRowSelectDisplay,
+  rowSelectLeadingWidthPx,
+  SELECTION_COLUMN_WIDTH_PX,
+  usesRowSelectGutter,
   withPinnedRowIndex,
 } from "@/components/database/database-grid-helpers.ts";
+import { DatabaseGroupMenu } from "@/components/database/database-group-menu.tsx";
+import { DatabaseRowMenu } from "@/components/database/database-row-menu.tsx";
 import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
 import { useDatabaseColumnResize } from "@/components/database/use-database-column-resize.ts";
 import { Button } from "@/components/ui/button.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area.tsx";
 import {
   addDatabaseField,
@@ -106,9 +116,6 @@ const GRID_MAX_HEIGHT_CLASS = "max-h-[600px]";
  */
 const ADD_FIELD_CELL_WIDTH_PX = 28;
 
-/** Scroll distance over which the pinned-edge fade ramps from 0 to 1. */
-const PINNED_FADE_RAMP_PX = 24;
-
 /**
  * Wrapped cells clamp to two lines inside the auto-height row (the
  * virtualizer measures real row heights via `measureElement`); unclamped
@@ -124,10 +131,178 @@ const WRAPPED_CELL_CONTENT_CLASS =
  */
 const EMPTY_PINNED_FIELDS: readonly DatabaseField[] = [];
 
+/**
+ * Classes for the grid's outer layout shells. Embedded hosts cap the
+ * scrollport at {@link GRID_MAX_HEIGHT_CLASS}; `fillHeight` hosts (the
+ * standalone database page) become a shrinkable flex column instead, so the
+ * scrollport takes the remaining page height and the add-row strip pins
+ * below it. Mobile keeps the embedded cap even there — the document scrolls
+ * on narrow viewports, so there is no bounded height to fill.
+ */
+function resolveGridLayoutClasses(
+  fillHeight: boolean,
+  rowSelectGutter: boolean
+): { dropZone: string; scrollArea: string; scrollWrap: string } {
+  return {
+    dropZone: cn(
+      "w-full min-w-0 rounded-lg",
+      // Gutter modes bleed the select lane (and the scroll clip boundary)
+      // left of the block; keep overflow visible so the negative margin on
+      // the scroll wrap is not clipped.
+      rowSelectGutter ? "overflow-visible" : "overflow-hidden",
+      fillHeight && "flex min-h-0 flex-1 flex-col"
+    ),
+    scrollWrap: cn("relative", fillHeight && "flex min-h-0 flex-col"),
+    scrollArea: cn(
+      "w-full overflow-hidden rounded-lg",
+      GRID_MAX_HEIGHT_CLASS,
+      fillHeight && "min-h-0 md:max-h-none"
+    ),
+  };
+}
+
+interface GutterBleedMetrics {
+  /** Block content width (the drop zone) — sizes the right overhang. */
+  hostWidthPx: number;
+  /**
+   * Left bleed: at least the select lane, extended to the boundary so
+   * scrolled content clips at the page's left side.
+   */
+  leftBleedPx: number;
+  /** Room between the block's right edge and the boundary's right edge. */
+  rightAvailPx: number;
+}
+
+/**
+ * Live scrollport bleed measurements against the nearest column box
+ * (`[data-column-content]`) or the page panel (`[data-page-main-panel]`):
+ * horizontally scrolled content clips at the page's left side instead of an
+ * arbitrary line 48px before the table — matching the standalone database
+ * page — and overflowing tables extend rightward into the page margin as
+ * far as the boundary allows. Both stay inside the column when the block
+ * sits in a column layout. Nothing moves at rest on the left — only the
+ * clip boundary for scrolled content (and the sticky lane's viewport
+ * offset) extends.
+ */
+function useGutterBleed(
+  scrollWrapRef: React.RefObject<HTMLDivElement | null>
+): GutterBleedMetrics {
+  const [metrics, setMetrics] = useState<GutterBleedMetrics>({
+    hostWidthPx: 0,
+    leftBleedPx: SELECTION_COLUMN_WIDTH_PX,
+    rightAvailPx: 0,
+  });
+
+  useEffect(() => {
+    const wrap = scrollWrapRef.current;
+    // The wrap's parent (the drop zone) sits at the block's content box —
+    // the wrap itself carries the negative margins being measured.
+    const host = wrap?.parentElement;
+    const boundary = wrap?.closest(
+      "[data-column-content], [data-page-main-panel]"
+    );
+    if (!(wrap && host && boundary)) {
+      return;
+    }
+    const measure = () => {
+      const hostRect = host.getBoundingClientRect();
+      const boundaryRect = boundary.getBoundingClientRect();
+      setMetrics({
+        hostWidthPx: Math.round(hostRect.width),
+        leftBleedPx: Math.max(
+          SELECTION_COLUMN_WIDTH_PX,
+          Math.round(hostRect.left - boundaryRect.left)
+        ),
+        rightAvailPx: Math.max(
+          0,
+          Math.round(boundaryRect.right - hostRect.right)
+        ),
+      });
+    };
+    // Panel/column resizes reposition the block relative to the boundary
+    // (centered canvas, column drags, sidebar collapse) — remeasure on both.
+    const observer = new ResizeObserver(measure);
+    observer.observe(boundary);
+    observer.observe(host);
+    measure();
+    return () => observer.disconnect();
+  }, [scrollWrapRef]);
+
+  return metrics;
+}
+
+/**
+ * Gutter select-lane scroll state machine: stamps `data-lane` on the
+ * scrollport — absent at rest, `"scrolled"` while horizontally scrolled
+ * (the lane is pushed off with the content; its cells go transparent and
+ * click-through), and `"peek"` while the pointer hovers the covered lane
+ * region (the lane column slides back in over the content). The lane cells'
+ * `in-data-[lane=…]` variants key off this.
+ */
+function useGutterLaneState(
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  gutterBleed: number
+): void {
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    let frame = 0;
+    let pointerX: number | null = null;
+    const apply = () => {
+      frame = 0;
+      if (element.scrollLeft <= 0) {
+        element.removeAttribute("data-lane");
+        return;
+      }
+      const inLaneZone =
+        pointerX !== null &&
+        pointerX <= element.getBoundingClientRect().left + gutterBleed;
+      element.setAttribute("data-lane", inLaneZone ? "peek" : "scrolled");
+    };
+    const schedule = () => {
+      if (frame === 0) {
+        frame = requestAnimationFrame(apply);
+      }
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      pointerX = event.clientX;
+      schedule();
+    };
+    const handlePointerLeave = () => {
+      pointerX = null;
+      schedule();
+    };
+    apply();
+    element.addEventListener("scroll", schedule, { passive: true });
+    element.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
+    element.addEventListener("pointerleave", handlePointerLeave);
+    return () => {
+      element.removeEventListener("scroll", schedule);
+      element.removeEventListener("pointermove", handlePointerMove);
+      element.removeEventListener("pointerleave", handlePointerLeave);
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, [gutterBleed, scrollRef]);
+}
+
 interface DatabaseTableGridProps {
   /** Visible fields in display order (`resolveColumnOrder`). */
   columns: readonly DatabaseField[];
   databaseId: string;
+  /**
+   * Full-page hosts (the `/db/$databaseId` route): the scrollport flexes to
+   * the host's remaining height instead of the embedded 600px cap, so the
+   * add-row strip pins to the bottom of the screen once rows overflow.
+   * Mobile keeps the cap — the document scrolls there, so there is no
+   * bounded height to fill.
+   */
+  fillHeight?: boolean;
   /**
    * Row buckets when the view has a resolvable `groupBy` (built by
    * `groupRowsForView` over the same filtered + sorted `rows`); `null`
@@ -158,6 +333,7 @@ interface DatabaseTableGridProps {
 export function DatabaseTableGrid({
   columns,
   databaseId,
+  fillHeight = false,
   groups = null,
   isSyncedDatabase = false,
   mode,
@@ -169,8 +345,9 @@ export function DatabaseTableGrid({
 }: DatabaseTableGridProps): ReactNode {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const pinnedShadowRef = useRef<HTMLDivElement | null>(null);
   const [editing, setEditing] = useState<CellEditTarget | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<readonly string[]>([]);
+  const lastToggledRowIdRef = useRef<string | null>(null);
 
   // Divider resize: live pixel widths during a drag, committed to
   // `view.config.columnWidths` on pointer up.
@@ -197,8 +374,23 @@ export function DatabaseTableGrid({
     return () => observer.disconnect();
   }, []);
 
+  const rowSelectDisplay = resolveRowSelectDisplay(view.config);
+  const rowSelectGutter = usesRowSelectGutter(rowSelectDisplay);
+  const rowSelectLeadingWidth = rowSelectLeadingWidthPx();
+  const layoutClasses = resolveGridLayoutClasses(fillHeight, rowSelectGutter);
+  const scrollWrapRef = useRef<HTMLDivElement | null>(null);
+  // Gutter modes: how far the scrollport extends left of the block (lane +
+  // page/column margin); the grid pads content back by the extra so nothing
+  // moves at rest — only the scrolled-content clip boundary widens.
+  const bleedMetrics = useGutterBleed(scrollWrapRef);
+  const gutterBleed = rowSelectGutter ? bleedMetrics.leftBleedPx : 0;
+  const extraBleed = Math.max(0, gutterBleed - SELECTION_COLUMN_WIDTH_PX);
+  useGutterLaneState(scrollRef, gutterBleed);
+
   const pinnedTotalWidth = useMemo(
     () =>
+      extraBleed +
+      rowSelectLeadingWidth +
       pinnedFields.reduce(
         (total, field) =>
           total +
@@ -210,7 +402,7 @@ export function DatabaseTableGrid({
           ),
         0
       ),
-    [pinnedFields, view.config]
+    [extraBleed, pinnedFields, rowSelectLeadingWidth, view.config]
   );
   // Keep at least one minimum-width column of scrollable room; SSR/first
   // paint (width unknown) keeps the configured pinning for desktop parity.
@@ -233,7 +425,11 @@ export function DatabaseTableGrid({
       ...columns.filter((field) => !pinnedIds.has(field.id)),
     ];
     const verticalLines = view.config.showVerticalLines !== false;
-    let offset = 0;
+    // Pinned sticky offsets start after the bleed padding and the leading
+    // selection column so frozen fields sit flush against the lane (sticky
+    // insets are viewport-relative; the scrollport starts `extraBleed` left
+    // of the grid content in gutter modes).
+    let offset = extraBleed + rowSelectLeadingWidth;
     return ordered.map((field, index) => {
       const width =
         liveWidths?.[field.id] ??
@@ -258,7 +454,14 @@ export function DatabaseTableGrid({
       }
       return column;
     });
-  }, [columns, effectivePinnedFields, liveWidths, view.config]);
+  }, [
+    columns,
+    effectivePinnedFields,
+    extraBleed,
+    liveWidths,
+    rowSelectLeadingWidth,
+    view.config,
+  ]);
 
   const displayFieldIds = useMemo(
     () => gridColumns.map((column) => column.field.id),
@@ -292,55 +495,20 @@ export function DatabaseTableGrid({
       minSize: MIN_COLUMN_WIDTH_PX,
     },
   });
-  const totalWidth = table.getTotalSize();
+  const totalWidth = table.getTotalSize() + rowSelectLeadingWidth;
   const gridWidth =
     mode === "edit" ? totalWidth + ADD_FIELD_CELL_WIDTH_PX : totalWidth;
-  const hasPinnedColumns = effectivePinnedFields.length > 0;
-
-  // Pinned-edge boundary in scrollport coordinates: the last frozen column's
-  // right edge (pinned cells stick at these exact offsets, so the boundary is
-  // viewport-stable regardless of scrollLeft). Tracks live divider drags via
-  // `gridColumns` widths.
-  const pinnedEdgeLeft = useMemo(() => {
-    const last = gridColumns.find((column) => column.isLastPinned);
-    return last && last.left !== null ? last.left + last.width : null;
-  }, [gridColumns]);
-
-  // Pinned-edge fade: a rAF-throttled scroll listener writes the fade
-  // opacity (0 at scrollLeft 0, ramping over PINNED_FADE_RAMP_PX, and only
-  // while real horizontal overflow exists) onto the single full-height
-  // `.database-grid-pinned-shadow` overlay — one gradient spanning header,
-  // rows, and calculate row, so it cannot break at row borders the way a
-  // per-cell box-shadow did.
-  useEffect(() => {
-    const element = scrollRef.current;
-    const shadow = pinnedShadowRef.current;
-    if (!(element && shadow && hasPinnedColumns)) {
-      return;
-    }
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const overflowing = gridWidth > element.clientWidth;
-      const fade = overflowing
-        ? Math.min(element.scrollLeft / PINNED_FADE_RAMP_PX, 1)
-        : 0;
-      shadow.style.opacity = String(fade);
-    };
-    const handleScroll = () => {
-      if (frame === 0) {
-        frame = requestAnimationFrame(update);
-      }
-    };
-    update();
-    element.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      element.removeEventListener("scroll", handleScroll);
-      if (frame !== 0) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  }, [gridWidth, hasPinnedColumns]);
+  // Border-box width of the grid element: content plus the bleed padding
+  // that parks the content back at the block's left edge at rest.
+  const paddedGridWidth = gridWidth + extraBleed;
+  // Overflowing tables extend rightward into the page/column margin as far
+  // as the boundary allows ("as needed"): exactly the overhang past the
+  // block, capped by the measured room. Non-overflowing tables get 0 and
+  // keep the block's right edge.
+  const rightBleed = Math.min(
+    Math.max(0, paddedGridWidth - bleedMetrics.hostWidthPx - gutterBleed),
+    bleedMetrics.rightAvailPx
+  );
 
   const handleAddField = useCallback(() => {
     const field = createDatabaseField("text", "Text");
@@ -365,6 +533,18 @@ export function DatabaseTableGrid({
     [collapsedGroupKeys, groups, rows]
   );
 
+  const rowNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    let rowNumber = 0;
+    for (const item of items) {
+      if (item.kind === "row") {
+        rowNumber += 1;
+        map.set(item.row.id, rowNumber);
+      }
+    }
+    return map;
+  }, [items]);
+
   const handleToggleGroup = useCallback(
     (groupKey: string) => {
       const current = view.config.collapsedGroupKeys ?? [];
@@ -380,6 +560,40 @@ export function DatabaseTableGrid({
     },
     [databaseId, view.config, view.id]
   );
+
+  // Group header context menu actions (edit mode): collapse state batches,
+  // and per-group hiding via `hiddenGroupKeys` (filtered out upstream in
+  // `DatabaseTableView`; the menu and the Group submenu both restore).
+  const hiddenGroupCount = view.config.hiddenGroupKeys?.length ?? 0;
+  const handleCollapseAllGroups = useCallback(() => {
+    updateDatabaseView(databaseId, view.id, {
+      config: {
+        ...view.config,
+        collapsedGroupKeys: (groups ?? []).map((group) => group.key),
+      },
+    });
+  }, [databaseId, groups, view.config, view.id]);
+  const handleExpandAllGroups = useCallback(() => {
+    updateDatabaseView(databaseId, view.id, {
+      config: { ...view.config, collapsedGroupKeys: undefined },
+    });
+  }, [databaseId, view.config, view.id]);
+  const handleHideGroup = useCallback(
+    (groupKey: string) => {
+      updateDatabaseView(databaseId, view.id, {
+        config: {
+          ...view.config,
+          hiddenGroupKeys: [...(view.config.hiddenGroupKeys ?? []), groupKey],
+        },
+      });
+    },
+    [databaseId, view.config, view.id]
+  );
+  const handleShowHiddenGroups = useCallback(() => {
+    updateDatabaseView(databaseId, view.id, {
+      config: { ...view.config, hiddenGroupKeys: undefined },
+    });
+  }, [databaseId, view.config, view.id]);
 
   // Keep the editing row mounted even when scrolled past the overscan
   // window: the inline text editor holds its draft in local state and
@@ -498,6 +712,67 @@ export function DatabaseTableGrid({
     [collapsedKeySet, focusInsertedRow, groups, handleToggleGroup]
   );
 
+  const visibleRowIds = useMemo(
+    () => items.flatMap((item) => (item.kind === "row" ? [item.row.id] : [])),
+    [items]
+  );
+
+  const selectedIdSet = useMemo(
+    () => new Set(selectedRowIds),
+    [selectedRowIds]
+  );
+
+  const allVisibleSelected =
+    visibleRowIds.length > 0 &&
+    visibleRowIds.every((rowId) => selectedIdSet.has(rowId));
+  const someVisibleSelected =
+    !allVisibleSelected &&
+    visibleRowIds.some((rowId) => selectedIdSet.has(rowId));
+
+  const handleToggleSelectAll = useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        setSelectedRowIds(visibleRowIds);
+        lastToggledRowIdRef.current = visibleRowIds.at(-1) ?? null;
+        return;
+      }
+      setSelectedRowIds([]);
+      lastToggledRowIdRef.current = null;
+    },
+    [visibleRowIds]
+  );
+
+  const handleToggleRowSelected = useCallback(
+    (rowId: string, checked: boolean, shiftKey: boolean) => {
+      setSelectedRowIds((current) =>
+        nextSelectedRowIds(current, {
+          anchorRowId: lastToggledRowIdRef.current,
+          checked,
+          rowId,
+          shiftKey,
+          visibleRowIds,
+        })
+      );
+      lastToggledRowIdRef.current = rowId;
+    },
+    [visibleRowIds]
+  );
+
+  const handleContextSelectRow = useCallback((rowId: string) => {
+    setSelectedRowIds((current) => {
+      if (current.includes(rowId)) {
+        return current;
+      }
+      return [rowId];
+    });
+    lastToggledRowIdRef.current = rowId;
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedRowIds([]);
+    lastToggledRowIdRef.current = null;
+  }, []);
+
   const groupByFieldId = view.groupBy?.fieldId;
   const handleAddRowToGroup = useCallback(
     (group: DatabaseRowGroup) => {
@@ -559,6 +834,8 @@ export function DatabaseTableGrid({
   const hasCalculations =
     calculations !== undefined && Object.keys(calculations).length > 0;
 
+  const hasAnyRowSelection = selectedRowIds.length > 0;
+
   // Page icon in the primary (title) cells — a per-view toggle (⋯ menu),
   // shown unless explicitly disabled.
   const showPageIcon = view.config.showPageIcons !== false;
@@ -573,32 +850,59 @@ export function DatabaseTableGrid({
       gridRef={gridRef}
       view={view}
     >
-      <DatabaseColumnDropZone className="w-full min-w-0 overflow-hidden rounded-lg">
-        {/* Positioning parent for the pinned-edge shadow: exactly the
-            scrollport (header through calculate row), not the add-row strip
-            below it. */}
-        <div className="relative">
+      <DatabaseColumnDropZone className={layoutClasses.dropZone}>
+        {/* Scrollport shell (header through calculate row), excluding the
+            add-row strip below it. Gutter modes pull the scrollport left by
+            the measured bleed (select lane + page/column margin); the grid
+            pads content back so the first data column stays flush with
+            filters at rest. */}
+        <div
+          className={layoutClasses.scrollWrap}
+          ref={scrollWrapRef}
+          style={{ marginLeft: -gutterBleed, marginRight: -rightBleed }}
+        >
           <ScrollArea
-            className={cn("w-full", GRID_MAX_HEIGHT_CLASS)}
-            fadeEdges
+            className={layoutClasses.scrollArea}
             viewportRef={scrollRef}
           >
             {/* biome-ignore lint/a11y/useSemanticElements: virtualized sticky/pinned layout — a native <table> cannot express it. */}
             <div
-              aria-colcount={gridColumns.length}
+              aria-colcount={gridColumns.length + 1}
               aria-rowcount={items.length + 1}
               className="relative"
               ref={gridRef}
               role="grid"
-              style={{ width: gridWidth, minWidth: "100%" }}
+              style={
+                {
+                  width: paddedGridWidth,
+                  minWidth: "100%",
+                  paddingLeft: extraBleed,
+                  // Sticky lane cells offset by the extra bleed (insets are
+                  // viewport-relative) so the lane stays at the block's
+                  // gutter, not the page edge.
+                  "--grid-bleed": `${extraBleed}px`,
+                } as React.CSSProperties
+              }
             >
               {/* biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above. */}
               {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
               <div
                 aria-rowindex={1}
-                className="sticky top-0 z-20 flex border-border border-b-[0.5px] bg-background"
+                className={cn(
+                  "sticky top-0 z-20 flex bg-background",
+                  // Gutter modes: border lives on data header cells so the
+                  // select lane stays borderless (canvas-gutter look).
+                  !rowSelectGutter && "border-border border-b-[0.5px]"
+                )}
                 role="row"
               >
+                <GridSelectionHeaderCell
+                  allSelected={allVisibleSelected}
+                  onCheckedChange={handleToggleSelectAll}
+                  rowSelectDisplay={rowSelectDisplay}
+                  showControl={hasAnyRowSelection}
+                  someSelected={someVisibleSelected}
+                />
                 {table.getHeaderGroups().map((headerGroup) =>
                   headerGroup.headers.map((header, headerIndex) => {
                     const column = gridColumns.find(
@@ -612,7 +916,7 @@ export function DatabaseTableGrid({
                     );
                     return (
                       <GridHeaderCell
-                        ariaColIndex={headerIndex + 1}
+                        ariaColIndex={headerIndex + 2}
                         column={column}
                         databaseId={databaseId}
                         displayFieldIds={displayFieldIds}
@@ -620,6 +924,7 @@ export function DatabaseTableGrid({
                         mode={mode}
                         onResizeStart={startResize}
                         primaryFieldId={primaryFieldId}
+                        rowSelectGutter={rowSelectGutter}
                         sortDirection={sort?.direction}
                         view={view}
                         width={header.getSize()}
@@ -631,7 +936,10 @@ export function DatabaseTableGrid({
                   // A real, empty trailing column; its header is a normal
                   // header-style button (mirrors `GridHeaderCell`'s trigger).
                   <div
-                    className="relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground"
+                    className={cn(
+                      "relative isolate flex h-9 shrink-0 items-stretch overflow-hidden bg-background text-muted-foreground",
+                      rowSelectGutter && "border-border border-b-[0.5px]"
+                    )}
                     style={{ width: ADD_FIELD_CELL_WIDTH_PX }}
                   >
                     <button
@@ -646,8 +954,15 @@ export function DatabaseTableGrid({
                 ) : null}
               </div>
               {items.length === 0 ? (
-                <div className="flex h-9 items-center px-2 text-muted-foreground text-sm">
-                  <span className="sticky left-2">No rows</span>
+                <div className="flex h-9 items-center text-muted-foreground text-sm">
+                  <div
+                    aria-hidden
+                    className="shrink-0"
+                    style={{ width: SELECTION_COLUMN_WIDTH_PX }}
+                  />
+                  <span className="sticky left-(--grid-bleed) px-2">
+                    No rows
+                  </span>
                 </div>
               ) : (
                 // biome-ignore lint/a11y/useSemanticElements: div grid — see role="grid" note above.
@@ -663,12 +978,19 @@ export function DatabaseTableGrid({
                         <GridGroupHeaderRow
                           collapsed={collapsedKeySet.has(item.group.key)}
                           group={item.group}
+                          hiddenGroupCount={hiddenGroupCount}
                           key={`group:${item.group.key}`}
                           measureRow={virtualizer.measureElement}
                           onAddRow={handleAddRowToGroup}
+                          onCollapseAll={handleCollapseAllGroups}
+                          onExpandAll={handleExpandAllGroups}
+                          onHideGroup={handleHideGroup}
+                          onShowHiddenGroups={handleShowHiddenGroups}
                           onToggle={handleToggleGroup}
                           rowIndex={virtualRow.index}
+                          rowSelectGutter={rowSelectGutter}
                           showAddRow={mode === "edit" && !isSyncedDatabase}
+                          showMenu={mode === "edit"}
                           top={virtualRow.start}
                         />
                       );
@@ -681,16 +1003,25 @@ export function DatabaseTableGrid({
                         editingFieldId={
                           editing?.rowId === row.id ? editing.fieldId : null
                         }
+                        hasAnyRowSelection={hasAnyRowSelection}
+                        isSelected={selectedIdSet.has(row.id)}
                         key={row.id}
                         measureRow={virtualizer.measureElement}
                         mode={mode}
                         now={now}
+                        onContextSelectRow={handleContextSelectRow}
                         onNavigate={handleNavigate}
+                        onSelectionCleared={clearSelection}
                         onStartEdit={handleStartEdit}
                         onStopEdit={handleStopEdit}
+                        onToggleSelected={handleToggleRowSelected}
                         primaryFieldId={primaryFieldId}
                         row={row}
                         rowIndex={virtualRow.index}
+                        rowNumber={rowNumberById.get(row.id) ?? 0}
+                        rowSelectDisplay={rowSelectDisplay}
+                        rowSelectGutter={rowSelectGutter}
+                        selectedRowIds={selectedRowIds}
                         showPageIcon={showPageIcon}
                         top={virtualRow.start}
                       />
@@ -702,6 +1033,8 @@ export function DatabaseTableGrid({
                 <DatabaseCalculateRow
                   calculations={calculations}
                   columns={gridColumns}
+                  rowSelectGutter={rowSelectGutter}
+                  rowSelectLeadingWidth={rowSelectLeadingWidth}
                   rows={rows}
                   totalWidth={totalWidth}
                 />
@@ -712,14 +1045,6 @@ export function DatabaseTableGrid({
             </div>
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
-          {pinnedEdgeLeft === null ? null : (
-            <div
-              aria-hidden
-              className="database-grid-pinned-shadow pointer-events-none absolute inset-y-0 z-30"
-              ref={pinnedShadowRef}
-              style={{ left: pinnedEdgeLeft }}
-            />
-          )}
         </div>
         {mode === "edit" && !isSyncedDatabase ? (
           <DatabaseAddRow
@@ -732,6 +1057,52 @@ export function DatabaseTableGrid({
         ) : null}
       </DatabaseColumnDropZone>
     </DatabaseColumnDnd>
+  );
+}
+
+function GridSelectionHeaderCell({
+  allSelected,
+  onCheckedChange,
+  rowSelectDisplay,
+  showControl,
+  someSelected,
+}: {
+  allSelected: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  rowSelectDisplay: RowSelectDisplay;
+  /** Keep the control visible while a range is selected (gutter hover modes). */
+  showControl: boolean;
+  someSelected: boolean;
+}): ReactNode {
+  const gutter = usesRowSelectGutter(rowSelectDisplay);
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note.
+    // biome-ignore lint/a11y/useFocusableInteractive: the checkbox inside is the focusable element.
+    <div
+      aria-colindex={1}
+      className={cn(
+        "sticky left-(--grid-bleed) z-10 flex h-9 shrink-0 items-center justify-center",
+        gutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background"
+      )}
+      // Own reveal group — do not put one on the grid root or every column
+      // resize divider would light up on any table hover.
+      data-reveal-group=""
+      role="columnheader"
+      style={{ width: SELECTION_COLUMN_WIDTH_PX }}
+    >
+      <Checkbox
+        aria-label={allSelected ? "Deselect all rows" : "Select all rows"}
+        checked={allSelected}
+        className={cn(
+          rowSelectDisplay !== "always" && !showControl && "hover-reveal",
+          showControl && rowSelectDisplay !== "always" && "opacity-100"
+        )}
+        indeterminate={someSelected}
+        onCheckedChange={(checked) => {
+          onCheckedChange(checked === true);
+        }}
+      />
+    </div>
   );
 }
 
@@ -748,6 +1119,8 @@ interface GridHeaderCellProps {
     event: React.PointerEvent<HTMLElement>
   ) => void;
   primaryFieldId: string;
+  /** When true, draw the header rule on this cell (not under the select lane). */
+  rowSelectGutter: boolean;
   sortDirection: "asc" | "desc" | undefined;
   view: DatabaseView;
   /** TanStack's `header.getSize()` — the table stays the size source at render. */
@@ -759,7 +1132,8 @@ interface GridHeaderCellProps {
  * drag source (click still opens the menu; press-and-move / long-press lifts
  * the header into a reorder drag — see `useDatabaseColumnHeaderDrag`), plus
  * the between-column resize zone on the cell's right edge. The source cell
- * dims to 50% while it is being dragged.
+ * dims to 50% while it is being dragged. Right-click opens the same column
+ * menu via an imperative handle (no second menu surface).
  */
 function GridHeaderCell({
   ariaColIndex,
@@ -769,11 +1143,13 @@ function GridHeaderCell({
   mode,
   onResizeStart,
   primaryFieldId,
+  rowSelectGutter,
   sortDirection,
   view,
   width,
 }: GridHeaderCellProps) {
   const { field } = column;
+  const openMenuRef = useRef<(() => void) | null>(null);
   const { headerProps, isDragging, showGrabbing } = useDatabaseColumnHeaderDrag(
     field.id
   );
@@ -791,6 +1167,17 @@ function GridHeaderCell({
     </>
   );
 
+  const handleHeaderContextMenu = (
+    event: React.MouseEvent<HTMLElement>
+  ): void => {
+    if (mode !== "edit" || isDragging) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    openMenuRef.current?.();
+  };
+
   return (
     // biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note.
     // biome-ignore lint/a11y/useFocusableInteractive: the menu trigger button inside is the focusable element.
@@ -806,10 +1193,12 @@ function GridHeaderCell({
         // Header cells carry no inter-column separators (only body cells do);
         // the freeze-boundary border on the last pinned column still applies.
         "relative isolate flex h-9 shrink-0 items-stretch overflow-visible bg-background text-muted-foreground",
+        rowSelectGutter && "border-border border-b-[0.5px]",
         column.pinned && "sticky z-10",
         column.isLastPinned && "border-r border-r-border",
         isDragging && "opacity-50"
       )}
+      onContextMenu={handleHeaderContextMenu}
       role="columnheader"
       style={{ width, left: column.left ?? undefined }}
       {...{
@@ -830,6 +1219,7 @@ function GridHeaderCell({
             displayFieldIds={displayFieldIds}
             field={field}
             isPrimary={field.id === primaryFieldId}
+            openMenuRef={openMenuRef}
             triggerClassName={cn(
               "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50",
               isCheckbox && "justify-center"
@@ -864,14 +1254,24 @@ function GridHeaderCell({
 interface GridGroupHeaderRowProps {
   collapsed: boolean;
   group: DatabaseRowGroup;
+  /** Buckets hidden via `hiddenGroupKeys` — threaded to the context menu. */
+  hiddenGroupCount: number;
   /** `virtualizer.measureElement` — headers report their fixed 36px height. */
   measureRow: (node: HTMLDivElement | null) => void;
   onAddRow: (group: DatabaseRowGroup) => void;
+  onCollapseAll: () => void;
+  onExpandAll: () => void;
+  onHideGroup: (groupKey: string) => void;
+  onShowHiddenGroups: () => void;
   onToggle: (groupKey: string) => void;
   /** Zero-based flattened item index (drives measurement + ARIA row index). */
   rowIndex: number;
+  /** Skip the rule under the select lane in gutter modes. */
+  rowSelectGutter: boolean;
   /** Edit mode on a non-synced database — synced rows come from the source. */
   showAddRow: boolean;
+  /** Edit mode — the right-click display menu writes view config. */
+  showMenu: boolean;
   top: number;
 }
 
@@ -881,26 +1281,42 @@ interface GridGroupHeaderRowProps {
  * whole row toggles collapse via an invisible full-row button (the chevron
  * rotates when expanded); a colored select option adds a status dot before
  * the label; the muted count and the hover-revealed per-group "+" (adds a
- * row pre-seeded with the group's value) trail it. Memoized separately from
+ * row pre-seeded with the group's value) trail it. In gutter row-select
+ * modes the band's background starts at the data columns (the select lane
+ * bleeds into the canvas gutter and must stay unpainted). Edit mode wraps
+ * the row in the group display context menu. Memoized separately from
  * `GridRow` so scrolling stays cheap.
  */
 const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
   collapsed,
   group,
+  hiddenGroupCount,
   measureRow,
   onAddRow,
+  onCollapseAll,
+  onExpandAll,
+  onHideGroup,
+  onShowHiddenGroups,
   onToggle,
   rowIndex,
+  rowSelectGutter,
   showAddRow,
+  showMenu,
   top,
 }: GridGroupHeaderRowProps) {
   const colorDef = group.color ? BLOCK_COLOR_DEFS[group.color] : undefined;
-  return (
+  const row = (
     // biome-ignore lint/a11y/useSemanticElements: virtualized div grid — see the grid container note.
     // biome-ignore lint/a11y/useFocusableInteractive: the full-row toggle button inside is the focusable element.
     <div
       aria-rowindex={rowIndex + 2}
-      className="absolute top-0 left-0 flex w-full border-border border-b-[0.5px] bg-muted/30"
+      className={cn(
+        "absolute top-0 left-0 flex w-full",
+        // Gutter modes: background and rule live on the data-cell area so
+        // the select lane stays unpainted (canvas-gutter look) and the band
+        // lines up with the table's left edge.
+        !rowSelectGutter && "border-border border-b-[0.5px] bg-muted/30"
+      )}
       data-index={rowIndex}
       data-reveal-group=""
       ref={measureRow}
@@ -910,9 +1326,28 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
         transform: `translateY(${top}px)`,
       }}
     >
+      {rowSelectGutter ? (
+        // Sticky like the row select cells so the peeked lane column stays
+        // continuous across group header rows.
+        <div
+          aria-hidden
+          className={cn(
+            "sticky left-(--grid-bleed) z-10 shrink-0",
+            GUTTER_LANE_SCROLL_CLASS
+          )}
+          style={{ width: SELECTION_COLUMN_WIDTH_PX }}
+        />
+      ) : null}
       {/* biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note. */}
       {/* biome-ignore lint/a11y/useFocusableInteractive: the toggle button inside is the focusable element. */}
-      <div aria-colindex={1} className="flex w-full min-w-0" role="gridcell">
+      <div
+        aria-colindex={1}
+        className={cn(
+          "relative flex min-w-0 flex-1",
+          rowSelectGutter && "border-border border-b-[0.5px] bg-muted/30"
+        )}
+        role="gridcell"
+      >
         <button
           aria-expanded={!collapsed}
           aria-label={`${collapsed ? "Expand" : "Collapse"} group ${group.label}`}
@@ -924,7 +1359,7 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
         />
         {/* Visible content: sticky against horizontal scroll, click-through
             to the full-row toggle underneath (the "+" opts back in). */}
-        <div className="pointer-events-none sticky left-0 z-10 flex max-w-full items-center gap-1.5 px-2">
+        <div className="pointer-events-none sticky left-(--grid-bleed) z-10 flex max-w-full items-center gap-1.5 px-2">
           <IconChevronRight
             className={cn(
               "size-4 shrink-0 stroke-[1.5px] text-muted-foreground transition-transform",
@@ -961,6 +1396,24 @@ const GridGroupHeaderRow = memo(function GridGroupHeaderRowInner({
       </div>
     </div>
   );
+
+  if (!showMenu) {
+    return row;
+  }
+  return (
+    <DatabaseGroupMenu
+      collapsed={collapsed}
+      group={group}
+      hiddenGroupCount={hiddenGroupCount}
+      onCollapseAll={onCollapseAll}
+      onExpandAll={onExpandAll}
+      onHideGroup={onHideGroup}
+      onShowHiddenGroups={onShowHiddenGroups}
+      onToggle={onToggle}
+    >
+      {row}
+    </DatabaseGroupMenu>
+  );
 });
 
 interface GridRowProps {
@@ -969,19 +1422,34 @@ interface GridRowProps {
   databaseId: string;
   /** The field currently editing in this row, `null` otherwise. */
   editingFieldId: string | null;
+  hasAnyRowSelection: boolean;
+  isSelected: boolean;
   /** `virtualizer.measureElement` — rows auto-size when content wraps. */
   measureRow: (node: HTMLDivElement | null) => void;
   mode: "view" | "edit";
   /** Display clock instant — a tick re-renders the row (relative dates). */
   now: Date;
+  onContextSelectRow: (rowId: string) => void;
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
+  onSelectionCleared: () => void;
   onStartEdit: (target: CellEditTarget) => void;
   onStopEdit: () => void;
+  onToggleSelected: (
+    rowId: string,
+    checked: boolean,
+    shiftKey: boolean
+  ) => void;
   /** Primary-field cells carry the hover-revealed row-page "Open" pill. */
   primaryFieldId: string;
   row: LocalDatabaseRow;
   /** Zero-based data row index (drives measurement + ARIA row index). */
   rowIndex: number;
+  /** One-based visible row number (flat data rows only, for number gutter mode). */
+  rowNumber: number;
+  rowSelectDisplay: RowSelectDisplay;
+  /** Skip the rule under the select lane in gutter modes. */
+  rowSelectGutter: boolean;
+  selectedRowIds: readonly string[];
   /** Render a page icon in the primary (title) cell (per-view toggle). */
   showPageIcon: boolean;
   top: number;
@@ -1001,51 +1469,149 @@ const GridRow = memo(function GridRowInner({
   columns,
   databaseId,
   editingFieldId,
+  hasAnyRowSelection,
+  isSelected,
   measureRow,
   mode,
   now,
+  onContextSelectRow,
   onNavigate,
+  onSelectionCleared,
   onStartEdit,
   onStopEdit,
+  onToggleSelected,
   primaryFieldId,
   row,
   rowIndex,
+  rowNumber,
+  rowSelectDisplay,
+  rowSelectGutter,
+  selectedRowIds,
   showPageIcon,
   top,
 }: GridRowProps) {
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: virtualized div grid — native table rows can't be absolutely positioned.
-    // biome-ignore lint/a11y/useFocusableInteractive: focus lives on the cell editors, not the row.
-    <div
-      aria-rowindex={rowIndex + 2}
-      className="absolute top-0 left-0 flex w-full border-border border-b-[0.5px]"
-      data-index={rowIndex}
-      data-reveal-group=""
-      ref={measureRow}
-      role="row"
-      style={{
-        minHeight: GRID_ROW_HEIGHT_PX,
-        transform: `translateY(${top}px)`,
+  const rowAnchorRef = useRef<HTMLDivElement | null>(null);
+  const setRowRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rowAnchorRef.current = node;
+      measureRow(node);
+    },
+    [measureRow]
+  );
+
+  const showSelectControl = isSelected || hasAnyRowSelection;
+  const rowCheckbox = (
+    <Checkbox
+      aria-label="Select row"
+      checked={isSelected}
+      className={cn(
+        rowSelectDisplay === "number" && "swap-reveal absolute inset-0 m-auto",
+        rowSelectDisplay === "hover" && !showSelectControl && "hover-reveal",
+        showSelectControl && rowSelectDisplay !== "always" && "opacity-100",
+        rowSelectDisplay === "number" &&
+          showSelectControl &&
+          "swap-reveal opacity-100"
+      )}
+      onCheckedChange={(checked, eventDetails) => {
+        const shiftKey =
+          "shiftKey" in eventDetails.event &&
+          Boolean((eventDetails.event as { shiftKey?: boolean }).shiftKey);
+        onToggleSelected(row.id, checked === true, shiftKey);
       }}
+    />
+  );
+
+  // Leading select lane — in-flow so data columns never sit under the
+  // checkbox. Gutter modes (`hover` / `number`) hide the control until
+  // row hover (or while any row is selected); the grid itself bleeds
+  // left by this lane's width so the first field stays filter-aligned.
+  const rowSelectCell = (
+    // biome-ignore lint/a11y/useSemanticElements: div grid — see the grid container note.
+    // biome-ignore lint/a11y/useFocusableInteractive: the checkbox inside is the focusable element.
+    <div
+      aria-colindex={1}
+      className={cn(
+        "sticky left-(--grid-bleed) z-10 flex shrink-0 items-center justify-center",
+        isSelected && "bg-muted/40",
+        rowSelectGutter
+          ? GUTTER_LANE_SCROLL_CLASS
+          : !isSelected && "bg-background"
+      )}
+      role="gridcell"
+      style={{ width: SELECTION_COLUMN_WIDTH_PX }}
     >
-      {columns.map((column, columnIndex) => (
-        <GridCell
-          ariaColIndex={columnIndex + 1}
-          column={column}
-          databaseId={databaseId}
-          isEditing={editingFieldId === column.field.id}
-          isPrimary={column.field.id === primaryFieldId}
-          key={column.field.id}
-          mode={mode}
-          now={now}
-          onNavigate={onNavigate}
-          onStartEdit={onStartEdit}
-          onStopEdit={onStopEdit}
-          row={row}
-          showPageIcon={showPageIcon}
-        />
-      ))}
+      {rowSelectDisplay === "number" ? (
+        <div className="relative flex size-full items-center justify-center">
+          <span
+            aria-hidden={showSelectControl}
+            className={cn(
+              "swap-conceal text-muted-foreground text-xs tabular-nums",
+              showSelectControl && "opacity-0"
+            )}
+          >
+            {rowNumber}
+          </span>
+          {rowCheckbox}
+        </div>
+      ) : (
+        rowCheckbox
+      )}
     </div>
+  );
+
+  return (
+    <DatabaseRowMenu
+      contextRow={row}
+      databaseId={databaseId}
+      mode={mode}
+      onBeforeOpen={onContextSelectRow}
+      onSelectionCleared={onSelectionCleared}
+      rowAnchorRef={rowAnchorRef}
+      selectedRowIds={selectedRowIds}
+    >
+      {/* biome-ignore lint/a11y/useSemanticElements: virtualized div grid — native table rows can't be absolutely positioned. */}
+      {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the cell editors, not the row. */}
+      <div
+        aria-rowindex={rowIndex + 2}
+        aria-selected={isSelected}
+        className={cn(
+          "absolute top-0 left-0 flex w-full",
+          // Gutter modes: border lives on data cells so the select lane
+          // stays borderless (canvas-gutter look).
+          !rowSelectGutter && "border-border border-b-[0.5px]",
+          isSelected && "bg-muted/40"
+        )}
+        data-index={rowIndex}
+        data-reveal-group=""
+        ref={setRowRef}
+        role="row"
+        style={{
+          minHeight: GRID_ROW_HEIGHT_PX,
+          transform: `translateY(${top}px)`,
+        }}
+      >
+        {rowSelectCell}
+        {columns.map((column, columnIndex) => (
+          <GridCell
+            ariaColIndex={columnIndex + 2}
+            column={column}
+            databaseId={databaseId}
+            isEditing={editingFieldId === column.field.id}
+            isPrimary={column.field.id === primaryFieldId}
+            isSelected={isSelected}
+            key={column.field.id}
+            mode={mode}
+            now={now}
+            onNavigate={onNavigate}
+            onStartEdit={onStartEdit}
+            onStopEdit={onStopEdit}
+            row={row}
+            rowSelectGutter={rowSelectGutter}
+            showPageIcon={showPageIcon}
+          />
+        ))}
+      </div>
+    </DatabaseRowMenu>
   );
 });
 
@@ -1056,6 +1622,7 @@ interface GridCellProps {
   isEditing: boolean;
   /** Primary-field cell — renders the row-page "Open" pill. */
   isPrimary: boolean;
+  isSelected: boolean;
   mode: "view" | "edit";
   /** Display clock instant for relative date rendering. */
   now: Date;
@@ -1063,6 +1630,8 @@ interface GridCellProps {
   onStartEdit: (target: CellEditTarget) => void;
   onStopEdit: () => void;
   row: LocalDatabaseRow;
+  /** Draw the row rule on data cells (not under the select lane). */
+  rowSelectGutter: boolean;
   /** Prepend a page icon to the primary (title) cell (per-view toggle). */
   showPageIcon: boolean;
 }
@@ -1182,12 +1751,14 @@ function GridCell({
   databaseId,
   isEditing,
   isPrimary,
+  isSelected,
   mode,
   now,
   onNavigate,
   onStartEdit,
   onStopEdit,
   row,
+  rowSelectGutter,
   showPageIcon,
 }: GridCellProps) {
   const { field } = column;
@@ -1234,11 +1805,13 @@ function GridCell({
         // `isolate` mirrors the header cell: positioned children keep their
         // z-index inside the cell instead of leaking above pinned siblings.
         "relative isolate flex shrink-0 items-center overflow-hidden text-foreground text-sm",
+        rowSelectGutter && "border-border border-b-[0.5px]",
         column.showVerticalLine && "border-border/60 border-r-[0.5px]",
         inlineEditable ? "p-0" : "px-2",
         field.type === "number" && "justify-end",
         isCheckbox && "justify-center",
-        column.pinned && "sticky z-10 bg-background",
+        column.pinned && "sticky z-10",
+        column.pinned && (isSelected ? "bg-muted/40" : "bg-background"),
         column.isLastPinned && "border-r border-r-border"
       )}
       role="gridcell"

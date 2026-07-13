@@ -1,7 +1,5 @@
 import {
   IconArrowDown,
-  IconArrowLeft,
-  IconArrowRight,
   IconArrowUp,
   IconCheck,
   IconChevronDown,
@@ -20,6 +18,7 @@ import {
   useState,
 } from "react";
 import type { DateRange } from "react-day-picker";
+import { createPortal } from "react-dom";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
@@ -29,7 +28,6 @@ import {
   flippedSortDirection,
   innerGroupChipLabel,
   isFilterInnerGroup,
-  movedSort,
   patchFilterCondition,
   removeFilterEntry,
   setFilterOp,
@@ -39,6 +37,12 @@ import {
 import { isoDateToLocalDate } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionCombobox } from "@/components/database/database-option-combobox.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
+import {
+  type ListReorderDragPreview,
+  type ListReorderHandleProps,
+  resolveReorderTarget,
+  useListReorder,
+} from "@/components/database/use-list-reorder.ts";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Chip, ChipButton, ChipSegment } from "@/components/ui/chip.tsx";
 import {
@@ -47,7 +51,6 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import {
@@ -91,7 +94,7 @@ import { cn } from "@/lib/utils.ts";
  * per root-level condition — field, operator, and value are separate click
  * targets editing in place via popovers — plus a Match all/any control once
  * two or more root entries exist, and one sort chip per view sort in priority
- * order (flip direction, reorder priority, remove). Each title-row icon toggles
+ * order (flip direction, drag-reorder when multi-sort, remove). Each title-row icon toggles
  * the whole bar when its category exists; otherwise it opens a field dropdown
  * to add the first filter or sort (adding expands the bar).
  *
@@ -232,31 +235,76 @@ export function DatabaseSortChips({
     });
   };
 
+  const reorderSorts = (from: number, to: number) => {
+    const next = [...sorts];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    applySortsChange(next);
+  };
+
+  const { containerRef, getHandleProps, state } = useListReorder(reorderSorts, {
+    axis: "horizontal",
+  });
+
   if (sorts.length === 0) {
     return null;
   }
 
+  const canReorder = sorts.length > 1;
+  const isReordering = state.fromIndex !== null;
+  const lastIndex = sorts.length - 1;
+  const isNoOpDrop =
+    state.fromIndex !== null &&
+    state.overIndex !== null &&
+    resolveReorderTarget(state.fromIndex, state.overIndex) === state.fromIndex;
+  const draggingSort =
+    state.fromIndex === null ? null : (sorts[state.fromIndex] ?? null);
+  const draggingFieldName =
+    draggingSort === null
+      ? null
+      : (fieldsById[draggingSort.fieldId]?.name ?? "Unknown field");
+
   return (
-    <div className={className}>
-      {sorts.map((sort, index) => (
-        <SortChip
-          canMoveLeft={index > 0}
-          canMoveRight={index < sorts.length - 1}
-          direction={sort.direction}
-          fieldName={fieldsById[sort.fieldId]?.name ?? "Unknown field"}
-          key={sort.fieldId}
-          onClearAll={() => applySortsChange(undefined)}
-          onFlip={() =>
-            applySortsChange(flippedSortDirection(sorts, sort.fieldId))
-          }
-          onMove={(delta) =>
-            applySortsChange(movedSort(sorts, sort.fieldId, delta))
-          }
-          onRemove={() => applySortsChange(withoutSort(sorts, sort.fieldId))}
-          priority={sorts.length > 1 ? index + 1 : null}
-        />
-      ))}
-    </div>
+    <>
+      <div className={className} ref={canReorder ? containerRef : undefined}>
+        {sorts.map((sort, index) => (
+          <SortChip
+            direction={sort.direction}
+            dropAfter={
+              canReorder &&
+              isReordering &&
+              !isNoOpDrop &&
+              index === lastIndex &&
+              state.overIndex === index + 1
+            }
+            dropBefore={
+              canReorder &&
+              isReordering &&
+              !isNoOpDrop &&
+              state.overIndex === index
+            }
+            fieldName={fieldsById[sort.fieldId]?.name ?? "Unknown field"}
+            isDragging={canReorder && state.fromIndex === index}
+            key={sort.fieldId}
+            onFlip={() =>
+              applySortsChange(flippedSortDirection(sorts, sort.fieldId))
+            }
+            onRemove={() => applySortsChange(withoutSort(sorts, sort.fieldId))}
+            reorderHandleProps={canReorder ? getHandleProps(index) : undefined}
+          />
+        ))}
+      </div>
+      {state.preview && draggingSort && draggingFieldName
+        ? createPortal(
+            <SortChipDragPreview
+              direction={draggingSort.direction}
+              fieldName={draggingFieldName}
+              preview={state.preview}
+            />,
+            document.body
+          )
+        : null}
+    </>
   );
 }
 
@@ -1007,92 +1055,143 @@ function MatchOpControl({
 }
 
 interface SortChipProps {
-  canMoveLeft: boolean;
-  canMoveRight: boolean;
+  direction: "asc" | "desc";
+  dropAfter: boolean;
+  dropBefore: boolean;
+  fieldName: string;
+  isDragging: boolean;
+  onFlip: () => void;
+  onRemove: () => void;
+  reorderHandleProps?: ListReorderHandleProps;
+}
+
+/** Vertical drop indicator for horizontal sort-chip reorder. */
+function SortDropLine({ position }: { position: "left" | "right" }): ReactNode {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute -inset-y-1 z-20 w-0.5 rounded-full bg-selection-primary",
+        position === "left" ? "-left-1" : "-right-1"
+      )}
+    />
+  );
+}
+
+/** Static chip body shared by the inline sort chip and its drag preview. */
+function SortChipBody({
+  direction,
+  fieldName,
+}: {
   direction: "asc" | "desc";
   fieldName: string;
-  onClearAll: () => void;
-  onFlip: () => void;
-  onMove: (delta: -1 | 1) => void;
-  onRemove: () => void;
-  /** 1-based priority — shown only when the view has 2+ sorts (`null` hides it). */
-  priority: number | null;
+}): ReactNode {
+  const Arrow = direction === "asc" ? IconArrowUp : IconArrowDown;
+  return (
+    <>
+      <ChipSegment>
+        <span className="max-w-32 truncate text-foreground">{fieldName}</span>
+      </ChipSegment>
+      <ChipSegment aria-hidden className="px-1">
+        <Arrow className="size-3.5 stroke-[1.5px]" />
+      </ChipSegment>
+    </>
+  );
+}
+
+/** Follow-the-pointer clone of the chip under drag. */
+function SortChipDragPreview({
+  direction,
+  fieldName,
+  preview,
+}: {
+  direction: "asc" | "desc";
+  fieldName: string;
+  preview: ListReorderDragPreview;
+}): ReactNode {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed top-0 left-0 z-9999"
+      data-sort-chip-drag-preview=""
+      style={{
+        transform: `translate3d(${preview.clientX - preview.offsetX}px, ${preview.clientY - preview.offsetY}px, 0)`,
+        width: preview.width > 0 ? preview.width : undefined,
+      }}
+    >
+      <Chip className="cursor-grabbing shadow-md ring-1 ring-border">
+        <SortChipBody direction={direction} fieldName={fieldName} />
+      </Chip>
+    </div>
+  );
 }
 
 /**
- * One sort chip, rendered per view sort in priority order: priority number
- * (multi-sort only) + field name, a direction-arrow button that flips the
- * sort, a priority dropdown (move left/right, clear all — multi-sort only),
- * and × removing just this sort. Adding sorts lives in the column menu.
+ * One sort chip, rendered per view sort in priority order: field name (drag
+ * handle when multi-sort), a direction-arrow button that flips the sort, and ×
+ * removing just this sort. Adding sorts lives in the column menu.
  */
 function SortChip({
-  canMoveLeft,
-  canMoveRight,
+  direction,
+  dropAfter,
+  dropBefore,
+  fieldName,
+  isDragging,
+  onFlip,
+  onRemove,
+  reorderHandleProps,
+}: SortChipProps): ReactNode {
+  const fieldLabel = (
+    <span className="max-w-32 truncate text-foreground">{fieldName}</span>
+  );
+  return (
+    <div className="relative shrink-0" data-reorder-item="">
+      {dropBefore ? <SortDropLine position="left" /> : null}
+      {dropAfter ? <SortDropLine position="right" /> : null}
+      <Chip className={cn(isDragging && "invisible")}>
+        {reorderHandleProps ? (
+          <ChipButton
+            aria-label={`Reorder sort by ${fieldName}`}
+            className="cursor-grab touch-none active:cursor-grabbing"
+            {...reorderHandleProps}
+          >
+            {fieldLabel}
+          </ChipButton>
+        ) : (
+          <ChipSegment>{fieldLabel}</ChipSegment>
+        )}
+        <SortChipDirectionButton
+          direction={direction}
+          fieldName={fieldName}
+          onFlip={onFlip}
+        />
+        <RemoveChipButton
+          label={`Remove sort by ${fieldName}`}
+          onRemove={onRemove}
+        />
+      </Chip>
+    </div>
+  );
+}
+
+function SortChipDirectionButton({
   direction,
   fieldName,
-  onClearAll,
   onFlip,
-  onMove,
-  onRemove,
-  priority,
-}: SortChipProps): ReactNode {
+}: {
+  direction: "asc" | "desc";
+  fieldName: string;
+  onFlip: () => void;
+}): ReactNode {
   const Arrow = direction === "asc" ? IconArrowUp : IconArrowDown;
   return (
-    <Chip>
-      <ChipSegment>
-        {priority === null ? null : (
-          <span className="tabular-nums">{priority}</span>
-        )}
-        <span className="max-w-32 truncate text-foreground">{fieldName}</span>
-      </ChipSegment>
-      <ChipButton
-        aria-label={`Sort ${fieldName} ${
-          direction === "asc" ? "descending" : "ascending"
-        }`}
-        className="px-1"
-        onClick={onFlip}
-      >
-        <Arrow className="size-3.5 stroke-[1.5px]" />
-      </ChipButton>
-      {priority === null ? null : (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <ChipButton
-                aria-label={`Change sort priority for ${fieldName}`}
-                className="px-1"
-              >
-                <IconChevronDown className="size-3.5 stroke-[1.5px]" />
-              </ChipButton>
-            }
-          />
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem
-              disabled={!canMoveLeft}
-              onClick={() => onMove(-1)}
-            >
-              <IconArrowLeft />
-              Move left
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!canMoveRight}
-              onClick={() => onMove(1)}
-            >
-              <IconArrowRight />
-              Move right
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onClearAll}>
-              <IconX />
-              Clear all sorts
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-      <RemoveChipButton
-        label={`Remove sort by ${fieldName}`}
-        onRemove={onRemove}
-      />
-    </Chip>
+    <ChipButton
+      aria-label={`Sort ${fieldName} ${
+        direction === "asc" ? "descending" : "ascending"
+      }`}
+      className="px-1"
+      onClick={onFlip}
+    >
+      <Arrow className="size-3.5 stroke-[1.5px]" />
+    </ChipButton>
   );
 }

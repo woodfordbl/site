@@ -18,7 +18,7 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | `LocalDatabase` | `id`, `name`, `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`, `formula` (`expression`), `relation` (`targetDatabaseId` — cells store target-row id arrays). All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, `externalId?` (connector row identity), timestamps |
-| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`) |
+| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
@@ -48,15 +48,22 @@ The rows collection carries a **BTree index on `databaseId`** (created in
 [`local-collections.ts`](../../src/db/collections/local-collections.ts)); `createIndex`
 requires an explicit `indexType` — omitting it throws at module init.
 
+Shipped-content bookkeeping: a seeded database carries `serverBaselineHash` on its
+definition row (the shipped document's content hash — pages' baseline pattern), and
+deleted shipped databases are remembered in the `site-shipped-db-tombstones`
+localStorage key ([`shipped-database-tombstones.ts`](../../src/lib/databases/shipped-database-tombstones.ts))
+so the seeder never resurrects them. See [Shipped content](#shipped-content).
+
 ## Mutations and reads
 
 All writes are single explicit-commit transactions
 (`createTransaction({ autoCommit: false })`) with failures routed to
 `reportPersistenceError`: see
 [`database-collection-ops.ts`](../../src/db/queries/database-collection-ops.ts)
-(database create/rename/delete, row insert/reorder/delete with midpoint-then-renumber
+(database create/rename/delete, row insert/reorder/duplicate/delete with midpoint-then-renumber
 sparse ordering, cell merge, field add/update/remove/duplicate with full view-reference
-stripping, view patches). Live reads:
+stripping, view patches). `duplicateDatabaseRows` clones local rows (skips synced
+`externalId` rows and never copies `pageId`/`externalId`). Live reads:
 [`use-database.ts`](../../src/db/queries/use-database.ts) (`useDatabase`,
 `useDatabaseRows` — declarative `eq` so the index serves the query).
 
@@ -66,7 +73,9 @@ coercion/formatting/plain-text (`cell-values.ts`), filter evaluation (`row-filte
 fail-open on stale field references and malformed `between` values; relative date
 windows read an injectable clock, `RowFilterOptions.now`), type-aware sorting with empties-last
 (`row-sort.ts`), the Calculate aggregate taxonomy (`row-aggregate.ts`), view column
-resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
+resolution (`view-config.ts`), row-page materialization (`materialize-row-page.ts` —
+`ensureDatabaseRowPage`, shared by the row page and grid row menu), and the default seed
+(`database-defaults.ts`).
 
 ## Table view
 
@@ -112,10 +121,32 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   phones can always reach unfrozen columns); grid ARIA roles; memoized rows (stable
   callbacks via a latest-values ref; row identity from the collection layer's
   structural sharing).
+  **Row selection:** per-view `config.rowSelectDisplay` — `always` (leading
+  sticky select column, `SELECTION_COLUMN_WIDTH_PX`, not a `DatabaseField`),
+  `hover` (default when absent: same in-flow select lane, but the grid bleeds
+  `-ml-12` so the lane sits in the canvas gutter and the first data column
+  stays flush with the filter bar; `.hover-reveal` on the select-header /
+  row hover groups, forced
+  visible while any row is selected; horizontal row/header rules start at the
+  first data column so the gutter stays borderless), or `number` (1-based visible row numbers
+  in that lane, swapping to the checkbox on row hover or when selected). Header
+  select-all follows the same reveal rules. Shift+click ranges from the last
+  toggled visible row; selection is session state on the grid mount (cleared on
+  database/view change). Selected rows use `bg-muted/40`. Right-click opens
+  [`database-row-menu.tsx`](../../src/components/database/database-row-menu.tsx)
+  (solo-selects if the target was not already selected): Open, Change icon /
+  Favorites (materialize the row page via
+  [`ensureDatabaseRowPage`](../../src/lib/databases/materialize-row-page.ts) with
+  `navigate: false`, then `PageIconPicker` / `toggleFavorite`), Duplicate /
+  Delete in edit mode (`duplicateDatabaseRows` / `deleteDatabaseRows` — synced
+  `externalId` rows skipped). **Header right-click** opens the existing column
+  dropdown (imperative `openMenuRef` on `DatabaseColumnMenu`; ignored while
+  dragging).
   **Column resizing** ([`use-database-column-resize.ts`](../../src/components/database/use-database-column-resize.ts) +
   [`database-column-resize-zone.tsx`](../../src/components/database/database-column-resize-zone.tsx)):
   edge hit zones (wider on coarse pointers, `touch-none` scoped to the zone), hover-reveal
-  `bg-selection` dividers, live rAF widths committed to `view.config.columnWidths`,
+  `bg-primary` dividers scoped to each zone's own `data-reveal-group` (300ms delay —
+  not the whole grid, so hovering the table does not light every boundary), live rAF widths committed to `view.config.columnWidths`,
   double-click/tap reset. **Header drag-reorder**
   ([`use-database-column-drag.ts`](../../src/components/database/use-database-column-drag.ts) +
   [`database-column-dnd.tsx`](../../src/components/database/database-column-dnd.tsx)):
@@ -151,8 +182,8 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   crash at render).
 - [`database-filter-bar.tsx`](../../src/components/database/database-filter-bar.tsx) —
   Linear-style chips (`field · operator · value` segment popovers), type-ahead add-filter
-  picker, match all/any control, and per-sort priority chips (flip direction, remove,
-  move left/right); exports the chip strips (`DatabaseFilterChips`, `DatabaseSortChips`,
+  picker, match all/any control, and per-sort chips (flip direction, drag-reorder
+  when multi-sort, remove); exports the chip strips (`DatabaseFilterChips`, `DatabaseSortChips`,
   `DatabaseFilterMatchOp`) reused by the mobile toolbar popovers; pure mutations in
   [`database-filter-helpers.ts`](../../src/components/database/database-filter-helpers.ts).
 - [`database-title.tsx`](../../src/components/database/database-title.tsx) — h3-equivalent
@@ -174,7 +205,8 @@ resolution (`view-config.ts`), and the default seed (`database-defaults.ts`).
   level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's
   "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
   and Page icons switches (table views only — `showVerticalLines` / `showPageIcons` on the
-  active view's config, both absent = shown), Source section (local info, or the connector sync controls
+  active view, both absent = shown; **Row select** submenu sets `rowSelectDisplay`:
+  Always show / Show on hover / Show number), Source section (local info, or the connector sync controls
   below), a Row pages status item (a real menu item so it aligns with sibling rows;
   future template-editor entry point), two-step Delete database, stats footer (fields,
   rows, plus Size — the row shard's UTF-8 byte size — and "Loads in" — the shard's
@@ -228,8 +260,10 @@ UI surfaces:
 
 - **Creation** — the unlinked database block's placeholder opens a popover panel
   ([`database-create-panel.tsx`](../../src/components/database/database-create-panel.tsx)):
-  **New** (default local seed), **Linked** (existing workspace database — picker stub),
-  and **Synced** tabs. The synced tab lists
+  **New** (default local seed), **Linked** (existing workspace database via
+  [`database-link-picker.tsx`](../../src/components/database/database-link-picker.tsx)
+  — search-first single-select; links the block to an existing id without creating a
+  database), and **Synced** tabs. The synced tab lists
   connector cards (icon/title/description from the registry); picking one renders a form
   generated from `configFields` ("list" inputs parse comma/newline-separated values;
   empty text inputs are omitted so schema defaults apply), validated by the connector's
@@ -358,11 +392,44 @@ the next write (`updateDatabaseView`/`removeDatabaseField` JSON-flatten via `toP
 before rebuilding `views`; regression-tested with proxied drafts in
 [`database-collection-ops.test.ts`](../../src/db/queries/database-collection-ops.test.ts)).
 
+## Shipped content
+
+Databases ship as repo JSON — `content/databases/{databaseId}.json`
+([`database-document.ts`](../../src/lib/schemas/database-document.ts): definition minus
+local timestamps/baseline, rows minus `databaseId`/`pageId`/`externalId`/timestamps) —
+written by the dev **Save all** flow ([`exportDatabaseDocument`](../../src/lib/content/database-export.ts),
+[`saveDatabase`](../../src/lib/content/save-database.ts); connector-synced rows are
+excluded, and databases whose content hash already matches their baseline are skipped).
+Unlike pages, save-all keeps the local copy (every database surface reads the local
+collections) and just stamps `serverBaselineHash`.
+
+Because reads are local-only, shipped databases **seed eagerly at boot**:
+[`SeedShippedDatabasesEffect`](../../src/components/pages/seed-shipped-databases-effect.tsx)
+awaits both collections' `preload()`, fetches [`loadShippedDatabases`](../../src/lib/content/load-databases.ts)
+(bundled via the same `import.meta.glob` pattern as pages —
+[`database-store.server.ts`](../../src/lib/content/database-store.server.ts)), and runs
+[`seedShippedDatabases`](../../src/lib/databases/seed-shipped-databases.ts). Per database
+([`resolveShippedDatabaseAction`](../../src/lib/databases/resolve-shipped-database-action.ts)):
+no local copy → insert; unedited copy (current export hash still equals
+`serverBaselineHash`) + changed shipped content → replace
+([`replaceShippedDatabase`](../../src/db/queries/database-collection-ops.ts), one
+transaction, bypasses the delete-op tombstone); edited copy → local wins (no database
+merge yet); tombstoned → never resurrected. A shipped **connector** database seeds its
+definition (`source` config) and the sync engine adopts it and populates rows
+client-side. The settled signal
+([`shipped-databases-settled.ts`](../../src/lib/databases/shipped-databases-settled.ts))
+tells database blocks and `/db` deep links when the seed pass finished, so a first
+visit never flashes "not found" / "deleted" for a database that is about to appear.
+
 ## Block integration
 
 `database` is a **leaf** block (`inline-custom` strategy, media/embed capabilities). The
 edit wrapper only forwards structural keys when the event target is the wrapper itself —
-keystrokes inside grid cells must never delete the block. An unlinked block shows the
+keystrokes inside grid cells must never delete the block. A linked block mounts
+`DatabaseTableView` behind [`useDatabaseBlockReady`](../../src/components/blocks/types/database/database-block-gate.tsx)
+(a "Loading database…" placeholder until client + shipped-seed settled): the table's
+`useLiveQuery` reads have no server snapshot, so mounting it during SSR would abort the
+whole page render — and shipped pages DO server-render database blocks now. An unlinked block shows the
 shared placeholder trigger opening the creation popover (New / Linked / Synced —
 see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirroring the
 media/embed pickers. Deleting a database block does **not**
@@ -392,6 +459,42 @@ lock within ~5s so a visible tab polls; config/auth connector errors halt
 polling until the source or token changes; GitHub connectors follow Link
 pagination (3 pages, page-1 conditional GET); duplicated select fields
 regenerate option ids and remap copied row values.
+
+## Standalone database page
+
+Each workspace database has a dedicated route at `/db/$databaseId`
+([`db.$databaseId.tsx`](../../src/routes/db.$databaseId.tsx), client-only, noindex,
+neutral SSR shell like `/p/$`). [`DatabasePage`](../../src/components/database/database-page.tsx)
+resolves the database from `localDatabasesCollection`, renders the shared
+[`DatabaseTableView`](../../src/components/database/database-table-view.tsx) in edit mode
+inside the normal site shell (page sidebar + inset main panel), and shows a breadcrumb of
+**host-page ancestors / host page / database** (collapses to the database name on narrow
+viewports). The scroll body uses `pl-12` so the table's hover/number select-lane bleed
+(`-ml-12`) has room inside the panel's `overflow-hidden` clip — matching the canvas
+gutter lane. View switching on this surface is ephemeral per mount — there is no `database`
+block to persist `viewId` onto; view **definitions** remain on the one database entity
+(linked canvas blocks and the standalone page share them). A missing database renders an
+in-shell empty state with a home link.
+
+**Sidebar navigation:** two entry points open the same standalone page:
+
+| Surface | Component | Behavior |
+|---------|-----------|----------|
+| Per-host child row | [`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx) | One synthetic row per `database` block on a page (under that page in the tree) |
+| Workspace **Databases** section | [`databases-list.tsx`](../../src/components/pages/databases-list.tsx) | Collapsible section below **Pages** in [`page-sidebar.tsx`](../../src/components/pages/page-sidebar.tsx); every database alphabetically; gated by `useHasDatabases` |
+
+Both are client-only (local collections paint nothing during SSR) and read the
+collections through SSR-safe `useSyncExternalStore` snapshot hooks
+([`use-local-databases.ts`](../../src/hooks/use-local-databases.ts) plus the
+incremental database-block snapshot in `page-list-database-rows.tsx`) — **never
+`useLiveQuery`**: these components render on every SSR'd page, and `useLiveQuery`
+subscribes without a server snapshot, which makes React abort the entire server
+render ("Missing getServerSnapshot") and silently revert the whole site to a
+client-rendered empty shell (no crawler-visible content). Each row is a shared
+[`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx): click opens
+the standalone page; right-click and the row ⋯ menu offer Rename, Change icon, and
+Delete (with confirmation). No drag or chevron — the database entity is the navigation
+surface, not a sidebar page document.
 
 ## Row pages (virtual + copy-on-write)
 
@@ -430,12 +533,9 @@ sidebar tree entirely** — the database's own sidebar entry is the navigation s
 routing, search, and breadcrumbs. Subsequent opens of the row URL redirect to the
 page; a dangling `pageId` (page deleted) falls back to the virtual render.
 
-**Sidebar presence:** the sidebar shows a synthetic child row under each page hosting
-a `database` block — database icon (`IconDatabase` fallback) + name, navigating to
-the HOST page v1 (scroll-to-block later). Built by
-[`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx)
-(live block/database collection scan, client-only — rows appear after hydration);
-no context menu, drag, or chevron on the row itself.
+**Sidebar presence:** see [Standalone database page](#standalone-database-page) — hosted
+child rows and the workspace **Databases** section both navigate to `/db/$databaseId`.
+Materialized row pages stay hidden from the tree (`databaseRowSource`).
 
 **Row-page breadcrumb:** the row page header renders the full
 **host-page ancestors / host page / database / row** chain, mirroring the normal page
@@ -443,10 +543,9 @@ header. [`findDatabaseHostPageId`](../../src/lib/databases/resolve-database-host
 (the raw host page — the sibling of `resolveDatabaseHostParentId`'s depth-clamped
 create-parent) resolves the page whose canvas holds the `database` block; its
 ancestors and itself render as navigable [`PageBreadcrumbAncestorCrumb`](../../src/components/pages/page-breadcrumb-ancestor-crumb.tsx)
-crumbs (sibling/children hover menus included), then a database crumb linking back to
-the host page, then the current row title. Collapses to database / row on narrow
-viewports; falls back to a non-navigating database crumb only when no host page is
-resolvable.
+crumbs (sibling/children hover menus included), then a database crumb linking to
+`/db/$databaseId`, then the current row title. Collapses to database / row on narrow
+viewports.
 
 ## Deferred
 
@@ -454,9 +553,9 @@ Row drag-reorder UI (table grid — board card drag shipped),
 row-page template authoring UI and live tokens
 (virtual pages + copy-on-write with host-page nesting shipped — see
 [Row pages](#row-pages-virtual--copy-on-write)), sidebar database-row
-scroll-to-block navigation, the rollup template picker and reactive cross-database
-recompute (relation values in formulas shipped — see
-[formula-language — Relations](./formula-language.md#relations)),
+scroll-to-block navigation (relations, rollups — wizard included — and reactive
+cross-database recompute shipped — see
+[formula-language](./formula-language.md)),
 formula-aware typed filter operators (formula→formula references shipped with the
 v2 engine — see [formula-language](./formula-language.md)),
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views

@@ -74,6 +74,13 @@ const databaseFieldBaseSchema = z.object({
    * user-added columns survive every refresh.
    */
   sourceKey: z.string().optional(),
+  /**
+   * When true on a numeric synced field, each changed value is appended to a
+   * forward-only `{ t, v }` time series in the field-history store
+   * (`src/db/history/field-history-store.ts`) as ticks/polls arrive. Powers
+   * time-axis charts; ignored for non-numeric fields.
+   */
+  captureHistory: z.boolean().optional(),
 });
 
 /**
@@ -90,6 +97,8 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
     decimals: z.number().int().min(0).max(6).optional(),
     /** Thousands separators in plain/integer displays; absent = on. */
     useGrouping: z.boolean().optional(),
+    /** ISO 4217 code for the `currency` format's symbol; absent = USD. */
+    currencyCode: z.string().optional(),
   }),
   databaseFieldBaseSchema.extend({ type: z.literal("checkbox") }),
   databaseFieldBaseSchema.extend({
@@ -256,6 +265,18 @@ export const databaseViewTypeSchema = z.enum([
 
 export type DatabaseViewType = z.infer<typeof databaseViewTypeSchema>;
 
+/**
+ * Chart Y aggregates, in menu order — the single source for the `yAggregate`
+ * schema enum and the settings menu's option list (`CHART_Y_AGGREGATES`).
+ */
+export const DATABASE_CHART_Y_AGGREGATES = [
+  "count",
+  "sum",
+  "average",
+  "min",
+  "max",
+] as const;
+
 /** Per-view table configuration — all keyed by stable field id. */
 export const databaseTableViewConfigSchema = z.object({
   /** Column display order; fields absent from the list append after, in schema order. */
@@ -272,8 +293,16 @@ export const databaseTableViewConfigSchema = z.object({
   showVerticalLines: z.boolean().optional(),
   /** Page icon in the primary (title) column cells; absent means shown. */
   showPageIcons: z.boolean().optional(),
+  /**
+   * Row-selection checkbox column: `always` reserves a leading column;
+   * `hover` and `number` render controls in a left gutter (content stays
+   * flush). Absent defaults to `hover`.
+   */
+  rowSelectDisplay: z.enum(["always", "hover", "number"]).optional(),
   /** Collapsed group keys (groupBy value keys) for this view. */
   collapsedGroupKeys: z.array(z.string()).optional(),
+  /** Group buckets hidden from this grouped view (groupBy value keys). */
+  hiddenGroupKeys: z.array(z.string()).optional(),
   /** Board (kanban) settings — used when `view.type` is `board`. */
   board: z
     .object({
@@ -298,11 +327,37 @@ export const databaseTableViewConfigSchema = z.object({
   chart: z
     .object({
       mark: z.enum(["bar", "line", "area", "pie"]).optional(),
+      /**
+       * X axis mode. `category` (default) buckets by a groupable field;
+       * `time` plots a continuous time axis from captured field history
+       * (`timeSeries` below), one series per synced row.
+       */
+      xMode: z.enum(["category", "time"]).optional(),
+      /** Time-axis settings — used when `xMode` is `time`. */
+      timeSeries: z
+        .object({
+          /** Captured numeric field (`captureHistory`) to plot over time. */
+          fieldId: z.string(),
+          /**
+           * Y scale. `absolute` (default) plots raw values; `percent`
+           * normalizes each series to its % change from the first in-window
+           * point, so symbols of very different magnitude share one axis and
+           * their movement is visible/comparable.
+           */
+          scale: z.enum(["absolute", "percent"]).optional(),
+          /** Visible window in ms (e.g. 7d); absent = the default window. */
+          windowMs: z.number().positive().optional(),
+        })
+        .optional(),
       /** X axis / category field. */
       xFieldId: z.string().optional(),
       /** Y aggregate: count of rows, or an aggregate over a number field. */
-      yAggregate: z.enum(["count", "sum", "average", "min", "max"]).optional(),
+      yAggregate: z.enum(DATABASE_CHART_Y_AGGREGATES).optional(),
       yFieldId: z.string().optional(),
+      /** Optional X axis title rendered under the axis (cartesian marks). */
+      xAxisTitle: z.string().optional(),
+      /** Optional Y axis title rendered along the axis (cartesian marks). */
+      yAxisTitle: z.string().optional(),
       /** Optional series split (one line/bar-stack segment per value). */
       seriesFieldId: z.string().optional(),
       showLegend: z.boolean().optional(),
@@ -312,6 +367,10 @@ export const databaseTableViewConfigSchema = z.object({
       /** Per-series color overrides: series key → chart token index 1-5. */
       colorOverrides: z.record(z.string(), z.number()).optional(),
       showGrid: z.boolean().optional(),
+      /** Draw vertical grid lines too (absent = horizontal only). */
+      gridVertical: z.boolean().optional(),
+      /** Target number of horizontal grid lines (absent = auto). 2–12. */
+      gridCount: z.number().int().min(2).max(12).optional(),
       stacked: z.boolean().optional(),
     })
     .optional(),
@@ -345,12 +404,37 @@ export type DatabaseView = z.infer<typeof databaseViewSchema>;
  * engine; `config` is validated by the connector's own zod schema at use
  * sites. Synced databases are plain tables — rows never require pages.
  */
+/**
+ * Arbitrary JSON value. Connector configs use this instead of `z.unknown()`
+ * so documents containing a `source` stay type-level serializable — TanStack
+ * server fns reject `unknown` in return types even when the runtime value is
+ * plain JSON (shipped database documents travel through `loadShippedDatabases`).
+ */
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ])
+);
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 export const databaseSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("local") }),
   z.object({
     kind: z.literal("connector"),
     connectorId: z.string(),
-    config: z.record(z.string(), z.unknown()),
+    config: z.record(z.string(), jsonValueSchema),
     /** Poll interval override in ms; connectors clamp to their own minimum. */
     refreshMs: z.number().positive().optional(),
   }),
@@ -378,6 +462,13 @@ export const localDatabaseSchema = z.object({
   rowTemplate: z.array(blockSchema).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
+  /**
+   * `hashStableValue` of the shipped database document this local copy was
+   * seeded from (pages' `serverBaselineHash` pattern). Absent on user-created
+   * databases; the shipped-content seeder uses it to distinguish "unedited —
+   * safe to replace on deploy" from "locally edited — keep".
+   */
+  serverBaselineHash: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

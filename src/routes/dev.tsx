@@ -31,7 +31,7 @@ export const Route = createFileRoute("/dev")({
     }
   },
   head: () => ({
-    meta: buildNoIndexMeta(),
+    meta: buildNoIndexMeta("Dev"),
   }),
   component: DevPage,
 });

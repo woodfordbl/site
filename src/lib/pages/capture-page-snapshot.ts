@@ -108,10 +108,13 @@ export async function capturePageSnapshotNow(
 
     const index = await readSnapshotIndex(pageId);
     const newId = crypto.randomUUID();
+    // Forced checkpoints are pinned so the next same-bucket capture (e.g. the
+    // debounced post-merge capture) creates a new checkpoint instead of
+    // coalescing over this escape hatch.
     const action = options?.force
       ? ({
           kind: "create",
-          descriptor: { ...inputs.descriptor, id: newId },
+          descriptor: { ...inputs.descriptor, id: newId, pinned: true },
         } as const)
       : resolveSnapshotCaptureAction(index, inputs.descriptor, newId);
 

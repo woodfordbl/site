@@ -35,8 +35,36 @@ function tierWidthForAge(ageMs: number): number {
  * Tiered "coarsen over time" retention. Given the descriptor list and the
  * current clock, collapses each coarse window to its newest checkpoint, then
  * enforces a hard per-page cap (recency-biased). The single most-recent
- * checkpoint is always kept. Pure — no IndexedDB.
+ * checkpoint is always kept. Pinned checkpoints (pre-merge/pre-restore escape
+ * hatches) bypass window collapsing — a forced checkpoint shares its 10-minute
+ * window with the very next capture, which would otherwise immediately reclaim
+ * it — but still count toward (and can be dropped by) the hard cap, so they
+ * age out. Pure — no IndexedDB.
  */
+function collectWindowSurvivors(
+  sorted: PageSnapshotDescriptor[],
+  nowMs: number
+): Set<PageSnapshotDescriptor> {
+  // Newest checkpoint per coarse window wins (later entries overwrite).
+  const byWindow = new Map<string, PageSnapshotDescriptor>();
+  for (const descriptor of sorted) {
+    if (descriptor.pinned) {
+      continue; // kept unconditionally below, never occupies a window
+    }
+    const ts = Date.parse(descriptor.timestamp);
+    const width = tierWidthForAge(nowMs - ts);
+    byWindow.set(`${width}:${Math.floor(ts / width)}`, descriptor);
+  }
+
+  const keepSet = new Set(byWindow.values());
+  for (const descriptor of sorted) {
+    if (descriptor.pinned) {
+      keepSet.add(descriptor);
+    }
+  }
+  return keepSet;
+}
+
 export function thinSnapshotDescriptors(
   descriptors: PageSnapshotDescriptor[],
   nowMs: number
@@ -49,15 +77,7 @@ export function thinSnapshotDescriptors(
     (a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)
   );
 
-  // Newest checkpoint per coarse window wins (later entries overwrite).
-  const byWindow = new Map<string, PageSnapshotDescriptor>();
-  for (const descriptor of sorted) {
-    const ts = Date.parse(descriptor.timestamp);
-    const width = tierWidthForAge(nowMs - ts);
-    byWindow.set(`${width}:${Math.floor(ts / width)}`, descriptor);
-  }
-
-  const keepSet = new Set(byWindow.values());
+  const keepSet = collectWindowSurvivors(sorted, nowMs);
   const mostRecent = sorted.at(-1);
   if (mostRecent) {
     keepSet.add(mostRecent);

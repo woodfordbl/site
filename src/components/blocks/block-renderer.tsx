@@ -15,6 +15,7 @@ import type {
   LeafBlockSpec,
 } from "@/lib/canvas/block-spec.types.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
+import { cn } from "@/lib/utils.ts";
 
 interface BlockRendererProps {
   autoFocus?: boolean;
@@ -55,7 +56,11 @@ export function BlockRenderer({
 
   return (
     <BlockShell
-      className={blockColorClassName(block, parentType)}
+      className={cn(
+        blockColorClassName(block, parentType),
+        // Database owns its chrome — BlockShell rounding reads as a ring.
+        block.type === "database" && "rounded-none"
+      )}
       indent={isContainerChild ? 0 : indentLevel}
       spacingClassName={spacingClassName}
     >

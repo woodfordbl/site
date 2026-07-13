@@ -8,7 +8,7 @@ import { SettingsItemRow } from "@/components/settings/settings-item-card.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { ItemActions, ItemContent, ItemTitle } from "@/components/ui/item.tsx";
 import { Kbd, KbdGroup } from "@/components/ui/kbd.tsx";
-import { Shortcut } from "@/components/ui/shortcut.tsx";
+import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
 import { formatHotkeyTokens } from "@/lib/settings/format-hotkey.ts";
 import {
   getCommand,
@@ -66,12 +66,7 @@ export function KeyboardSequenceRow({
         <ItemTitle>{sequence.label}</ItemTitle>
       </ItemContent>
       <ItemActions>
-        <KbdGroup>
-          {sequence.sequence.map((step, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: positional chord steps
-            <Kbd key={index}>{formatHotkeyTokens(step)[0] ?? step}</Kbd>
-          ))}
-        </KbdGroup>
+        <SequenceShortcut sequence={sequence.sequence} />
       </ItemActions>
     </SettingsItemRow>
   );

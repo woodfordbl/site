@@ -1,12 +1,36 @@
+import { cva, type VariantProps } from "class-variance-authority";
+
 import { cn } from "@/lib/utils.ts";
 
-function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
+const kbdVariants = cva(
+  "pointer-events-none inline-flex select-none items-center justify-center gap-1 font-normal font-sans text-[11px] leading-none [&_svg:not([class*='size-'])]:size-2.5",
+  {
+    variants: {
+      variant: {
+        outline: cn(
+          "h-4 min-w-4 rounded-[3px] border border-border bg-background px-1 text-foreground",
+          "in-data-[slot=tooltip-content]:border-background/20 in-data-[slot=tooltip-content]:bg-background/10 in-data-[slot=tooltip-content]:text-background/90"
+        ),
+        default: cn(
+          "h-4 min-w-4 rounded-[3px] bg-muted px-1 text-muted-foreground",
+          "in-data-[slot=button]:bg-current/10 in-data-[slot=button]:text-inherit"
+        ),
+      },
+    },
+    defaultVariants: {
+      variant: "outline",
+    },
+  }
+);
+
+function Kbd({
+  className,
+  variant = "outline",
+  ...props
+}: React.ComponentProps<"kbd"> & VariantProps<typeof kbdVariants>) {
   return (
     <kbd
-      className={cn(
-        "pointer-events-none inline-flex h-5 in-data-[slot=tooltip-content]:h-auto in-data-[slot=tooltip-content]:min-h-0 w-fit in-data-[slot=tooltip-content]:min-w-0 min-w-5 select-none items-center justify-center gap-1 in-data-[slot=tooltip-content]:rounded-none rounded-sm bg-muted in-data-[slot=tooltip-content]:bg-transparent in-data-[slot=tooltip-content]:px-0 px-1 font-medium font-sans in-data-[slot=tooltip-content]:font-normal in-data-[slot=tooltip-content]:text-background/60 text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3",
-        className
-      )}
+      className={cn(kbdVariants({ variant }), className)}
       data-slot="kbd"
       {...props}
     />
@@ -15,12 +39,13 @@ function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
 
 function KbdGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <kbd
+    <div
       className={cn("inline-flex items-center gap-1", className)}
       data-slot="kbd-group"
+      role="group"
       {...props}
     />
   );
 }
 
-export { Kbd, KbdGroup };
+export { Kbd, KbdGroup, kbdVariants };

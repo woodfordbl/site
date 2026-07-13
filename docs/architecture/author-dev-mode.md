@@ -4,7 +4,7 @@
 
 1. Run `pnpm dev`
 2. Edit any page in the canvas (title, blocks, or both)
-3. **Save all** in site settings **Development** → writes every locally-edited page to `content/pages/{slug-path}.json` (nested paths supported) using the live title, slug, `parentId`, and optional `icon` from `localPagesCollection`. Asset-backed **media** blocks export blobs to `public/media/` first and rewrite props to site-relative URLs.
+3. **Save all** in site settings **Development** → writes every locally-edited page to `content/pages/{slug-path}.json` (nested paths supported) using the live title, slug, `parentId`, and optional `icon` from `localPagesCollection`. Asset-backed **media** blocks export blobs to `public/media/` first and rewrite props to site-relative URLs. Local databases export to `content/databases/{id}.json` (connector-synced rows excluded, unchanged databases skipped; the local copy is kept and its `serverBaselineHash` stamped — [databases — Shipped content](./databases.md#shipped-content)).
 4. `git commit` + push → Vercel deploy
 
 ## Save all
@@ -20,6 +20,7 @@
 ## After save
 
 - Delete the local page metadata and block shard for that `pageId` so server JSON is canonical again, and clear its `site-local-dirty` cookie entry (`markPageClean`)
+- Clear the page's version-history snapshots and its server-baseline content key ([`page-baseline-store.ts`](../../src/db/snapshots/page-baseline-store.ts))
 - Run [`sweepOrphanAssets`](../../src/db/assets/asset-gc.ts) to reclaim IndexedDB blobs no longer referenced by any local `media` block (a sweep also runs on idle at boot — see [local-first-persistence](./local-first-persistence.md#local-media-assets-indexeddb-not-tanstack-collections))
 - Reset author draft dirty state
 - Normal blank canvas rows are exported with the page blocks, matching the editor's persisted row model

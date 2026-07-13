@@ -20,7 +20,7 @@ export function DatabaseAddRow({
 }: DatabaseAddRowProps): ReactNode {
   return (
     <button
-      className="flex h-9 w-full items-center gap-1.5 px-2 text-muted-foreground/70 text-sm outline-none transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground"
+      className="flex h-9 w-full shrink-0 items-center gap-1.5 px-2 text-muted-foreground/70 text-sm outline-none transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground"
       onClick={() => {
         const row = insertDatabaseRow(databaseId);
         onRowInserted?.(row);

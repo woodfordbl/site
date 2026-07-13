@@ -21,6 +21,13 @@ export interface PageSnapshotDescriptor {
   id: string;
   /** `hashPageMetadata` of title/icon/settings — detects metadata-only edits. */
   metadataHash: string;
+  /**
+   * Force-captured escape hatch (e.g. the pre-merge checkpoint). Same-bucket
+   * coalescing must not overwrite it: later captures in the bucket create a
+   * new checkpoint instead of updating in place. Ages out through normal
+   * retention like any other checkpoint.
+   */
+  pinned?: boolean;
   /** ISO timestamp of the window end-state (advances when a bucket coalesces). */
   timestamp: string;
   /** Denormalized page title so the timeline can label rows without a content read. */

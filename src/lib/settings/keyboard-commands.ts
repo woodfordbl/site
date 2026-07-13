@@ -561,3 +561,12 @@ export const KEYBOARD_SEQUENCES: SequenceCommand[] = [
     sequence: ["G", "K"],
   },
 ];
+
+/** Lookup a fixed char + char chord command by id. */
+export function getSequenceCommand(id: SequenceCommandId): SequenceCommand {
+  const command = KEYBOARD_SEQUENCES.find((entry) => entry.id === id);
+  if (!command) {
+    throw new Error(`Unknown sequence command: ${id}`);
+  }
+  return command;
+}

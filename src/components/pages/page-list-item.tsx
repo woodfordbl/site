@@ -11,6 +11,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
+import type { ComponentProps } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -28,12 +29,13 @@ import {
 } from "@/components/pages/page-list-database-rows.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
 import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
-import { Button, iconSlotClassName } from "@/components/ui/button.tsx";
+import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.tsx";
+import { ConfirmDialogFooter } from "@/components/ui/confirm-dialog-footer.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -41,6 +43,7 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -50,15 +53,16 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
 } from "@/components/ui/sidebar.tsx";
+import type { TooltipContent } from "@/components/ui/tooltip.tsx";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
@@ -68,6 +72,7 @@ import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { usePageRowEditing } from "@/hooks/use-page-row-editing.ts";
 import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
@@ -87,6 +92,20 @@ interface PageListItemProps {
   onToggleExpand: (pageId: string) => void;
   pages: PageSummary[];
   row: PageRow;
+}
+
+function resolvePageListRowTooltip(
+  depth: number,
+  slug: string,
+  title: string
+): string | ComponentProps<typeof TooltipContent> | undefined {
+  if (depth !== 0) {
+    return;
+  }
+  if (slug === "home") {
+    return { children: title, sequence: "go-home" };
+  }
+  return title;
 }
 
 const PAGE_LIST_DRAG_HOLD_MS = 50;
@@ -267,7 +286,7 @@ function PageListRowLink({
         data-page-list-row-content=""
         isActive={active}
         render={menuButtonRender}
-        tooltip={depth === 0 ? title : undefined}
+        tooltip={resolvePageListRowTooltip(depth, row.page.slug, title)}
       >
         {menuButtonChildren}
       </SidebarMenuButton>
@@ -348,11 +367,7 @@ function PageListChildren({
           row={childRow}
         />
       ))}
-      <PageListDatabaseRows
-        depth={depth + 1}
-        hostPageId={row.page.id}
-        pages={pages}
-      />
+      <PageListDatabaseRows depth={depth + 1} hostPageId={row.page.id} />
     </SidebarMenuSub>
   );
 }
@@ -627,6 +642,9 @@ export function PageListItem({
               >
                 <IconCopy />
                 With content
+                <ContextMenuShortcut>
+                  <Shortcut command="duplicate-page" />
+                </ContextMenuShortcut>
               </ContextMenuItem>
               <ContextMenuItem
                 onClick={() => {
@@ -710,7 +728,13 @@ export function PageListItem({
             onOpenChange={saveAsTemplate.setConfirmOpen}
             open={saveAsTemplate.confirmOpen}
           >
-            <DialogContent showCloseButton={false}>
+            <DialogContent
+              onKeyDownCapture={createConfirmDialogKeyDownHandler({
+                onCancel: () => saveAsTemplate.setConfirmOpen(false),
+                onConfirm: saveAsTemplate.confirm,
+              })}
+              showCloseButton={false}
+            >
               <DialogHeader>
                 <DialogTitle>Replace existing template?</DialogTitle>
                 <DialogDescription>
@@ -719,18 +743,12 @@ export function PageListItem({
                   undone.
                 </DialogDescription>
               </DialogHeader>
-              <DialogFooter>
-                <Button
-                  onClick={() => saveAsTemplate.setConfirmOpen(false)}
-                  type="button"
-                  variant="outline"
-                >
-                  Cancel
-                </Button>
-                <Button onClick={saveAsTemplate.confirm} type="button">
-                  Replace template
-                </Button>
-              </DialogFooter>
+              <ConfirmDialogFooter
+                confirmLabel="Replace template"
+                confirmVariant="default"
+                onCancel={() => saveAsTemplate.setConfirmOpen(false)}
+                onConfirm={saveAsTemplate.confirm}
+              />
             </DialogContent>
           </Dialog>
 

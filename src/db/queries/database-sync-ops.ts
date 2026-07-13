@@ -4,6 +4,10 @@ import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
+import {
+  appendFieldHistory,
+  type FieldHistoryAppend,
+} from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
 import { connectorFieldToDatabaseField } from "@/lib/connectors/build-synced-database.ts";
@@ -139,13 +143,47 @@ export interface SyncSnapshotResult {
  *   bumps the row's consecutive-miss count (seeded from `priorMissingCounts`);
  *   the row is deleted only once it has been missing from
  *   {@link TOMBSTONE_MISSING_SYNCS} consecutive snapshots, and a reappearing
- *   row resets its count.
+ *   row resets its count. `options.pruneMissing` skips that grace and deletes
+ *   omitted rows on this snapshot — used for the refetch right after a source
+ *   edit, where a dropped symbol's absence is intentional, not a provider blip.
  */
+/**
+ * Decide the fate of rows absent from a snapshot: delete once missing from
+ * {@link TOMBSTONE_MISSING_SYNCS} consecutive snapshots (or immediately when
+ * `pruneMissing`), otherwise bump and return their consecutive-miss count.
+ */
+function computeTombstones(
+  rowsByExternalId: Map<string, LocalDatabaseRow>,
+  snapshotByExternalId: Map<string, ConnectorRow>,
+  priorMissingCounts: Record<string, number>,
+  pruneMissing: boolean
+): { deletes: string[]; missingCounts: Record<string, number> } {
+  const deletes: string[] = [];
+  const missingCounts: Record<string, number> = {};
+  for (const [externalId, row] of rowsByExternalId) {
+    if (snapshotByExternalId.has(externalId)) {
+      continue; // Present again — the grace count resets by omission.
+    }
+    const misses = (priorMissingCounts[externalId] ?? 0) + 1;
+    if (pruneMissing || misses >= TOMBSTONE_MISSING_SYNCS) {
+      deletes.push(row.id);
+    } else {
+      missingCounts[externalId] = misses;
+    }
+  }
+  return { deletes, missingCounts };
+}
+
 export function applySyncSnapshot(
   database: LocalDatabase,
   connectorRows: ConnectorRow[],
-  priorMissingCounts: Record<string, number> = {}
+  priorMissingCounts: Record<string, number> = {},
+  options: { pruneMissing?: boolean } = {}
 ): SyncSnapshotResult {
+  // Record captured values for polled `captureHistory` fields too (the store
+  // dedupes, so a static snapshot won't grow a flat series).
+  recordCapturedHistory(database, connectorRows);
+
   const fieldIdBySourceKey = new Map<string, string>();
   for (const field of database.fields) {
     if (field.sourceKey !== undefined) {
@@ -210,19 +248,12 @@ export function applySyncSnapshot(
     }
   }
 
-  const deletes: string[] = [];
-  const missingCounts: Record<string, number> = {};
-  for (const [externalId, row] of rowsByExternalId) {
-    if (snapshotByExternalId.has(externalId)) {
-      continue; // Present again — the grace count resets by omission.
-    }
-    const misses = (priorMissingCounts[externalId] ?? 0) + 1;
-    if (misses >= TOMBSTONE_MISSING_SYNCS) {
-      deletes.push(row.id);
-    } else {
-      missingCounts[externalId] = misses;
-    }
-  }
+  const { deletes, missingCounts } = computeTombstones(
+    rowsByExternalId,
+    snapshotByExternalId,
+    priorMissingCounts,
+    options.pruneMissing ?? false
+  );
 
   let persisted: Promise<void> = Promise.resolve();
   if (inserts.length > 0 || updates.length > 0 || deletes.length > 0) {
@@ -255,15 +286,220 @@ export function applySyncSnapshot(
 }
 
 /**
- * Add connector fields (defs carrying a `sourceKey`) that the connector has
- * grown since the database was created. Strictly add-only:
+ * Record captured numeric values into the field-history store for every field
+ * flagged `captureHistory`. Called after a tick or snapshot applies; the value
+ * timestamp is the apply time (intraday resolution the provider's day-granular
+ * date column can't give). Fire-and-forget — history is best-effort and must
+ * never block or fail a row write.
+ */
+function recordCapturedHistory(
+  database: LocalDatabase,
+  connectorRows: ConnectorRow[]
+): void {
+  const capturedFields = database.fields.filter(
+    (field) =>
+      field.captureHistory === true &&
+      field.type === "number" &&
+      field.sourceKey !== undefined
+  );
+  if (capturedFields.length === 0) {
+    return;
+  }
+  const t = Date.now();
+  const entries: FieldHistoryAppend[] = [];
+  for (const row of connectorRows) {
+    for (const field of capturedFields) {
+      const value = row.values[field.sourceKey as string];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        entries.push({
+          databaseId: database.id,
+          externalId: row.externalId,
+          fieldId: field.id,
+          t,
+          v: value,
+        });
+      }
+    }
+  }
+  if (entries.length > 0) {
+    appendFieldHistory(entries).catch(() => undefined);
+  }
+}
+
+/**
+ * Apply one streaming tick batch to a synced database's rows — a lighter
+ * partial-upsert counterpart to {@link applySyncSnapshot} for live feeds.
  *
- * - Never removes or retypes an existing field — users may have renamed,
- *   re-iconed, or reordered synced fields, and local fields are sacrosanct.
+ * Unlike a snapshot, a tick is NOT authoritative over the whole table: it
+ * carries only the rows that just changed, so there is NO tombstone pass —
+ * omitted rows are untouched, never deleted. Existing rows update only their
+ * synced field keys (local columns preserved, like the snapshot path); an
+ * unseen `externalId` inserts a new synced row so a symbol that ticks before
+ * its seed still appears. Writes are skipped when nothing actually changed
+ * (a common case — a `@ticker` frame can repeat the last price).
+ *
+ * Fire-and-forget: persistence failures surface via toast (there is no ETag
+ * bookkeeping to gate on, so no awaitable handle is returned).
+ */
+export function applyStreamTick(
+  database: LocalDatabase,
+  connectorRows: ConnectorRow[]
+): void {
+  if (connectorRows.length === 0) {
+    return;
+  }
+
+  // Capture history from the raw streamed values (deduped in the store), even
+  // when the row write below is skipped as an unchanged repeat.
+  recordCapturedHistory(database, connectorRows);
+
+  const fieldIdBySourceKey = new Map<string, string>();
+  for (const field of database.fields) {
+    if (field.sourceKey !== undefined) {
+      fieldIdBySourceKey.set(field.sourceKey, field.id);
+    }
+  }
+
+  const databaseRows = localDatabaseRowsCollection.toArray.filter(
+    (row) => row.databaseId === database.id
+  );
+  const rowsByExternalId = new Map<string, LocalDatabaseRow>();
+  for (const row of databaseRows) {
+    if (row.externalId !== undefined) {
+      rowsByExternalId.set(row.externalId, row);
+    }
+  }
+
+  const timestamp = nowIso();
+  let appendOrder = Math.max(
+    -ORDER_STEP,
+    ...databaseRows.map((row, index) => row.order ?? index * ORDER_STEP)
+  );
+
+  const inserts: LocalDatabaseRow[] = [];
+  const updates: {
+    rowId: string;
+    values: Record<string, DatabaseCellValue>;
+  }[] = [];
+
+  // Last-write-wins if a batch repeats an externalId.
+  const batchByExternalId = new Map(
+    connectorRows.map((row) => [row.externalId, row])
+  );
+  for (const [externalId, connectorRow] of batchByExternalId) {
+    const syncedValues = toSyncedValues(
+      connectorRow.values,
+      fieldIdBySourceKey
+    );
+    const existing = rowsByExternalId.get(externalId);
+    if (!existing) {
+      appendOrder += ORDER_STEP;
+      inserts.push({
+        id: crypto.randomUUID(),
+        databaseId: database.id,
+        externalId,
+        values: syncedValues,
+        order: appendOrder,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      continue;
+    }
+    const changed = Object.entries(syncedValues).some(
+      ([fieldId, value]) => !cellValuesEqual(existing.values[fieldId], value)
+    );
+    if (changed) {
+      updates.push({ rowId: existing.id, values: syncedValues });
+    }
+  }
+
+  if (inserts.length === 0 && updates.length === 0) {
+    return;
+  }
+
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const row of inserts) {
+      localDatabaseRowsCollection.insert(row);
+    }
+    for (const { rowId, values } of updates) {
+      localDatabaseRowsCollection.update(rowId, (draft) => {
+        draft.values = { ...toPlain(draft.values), ...values };
+        draft.updatedAt = timestamp;
+      });
+    }
+  });
+  commitDatabaseTransaction(tx);
+}
+
+/** Existing synced fields (by id) whose unset icon a connector def can fill. */
+function computeIconBackfills(
+  database: LocalDatabase,
+  connectorFieldDefs: ConnectorFieldDef[]
+): { fieldId: string; icon: string }[] {
+  const iconBySourceKey = new Map<string, string>();
+  for (const def of connectorFieldDefs) {
+    if (def.icon) {
+      iconBySourceKey.set(def.sourceKey, def.icon);
+    }
+  }
+  const backfills: { fieldId: string; icon: string }[] = [];
+  for (const field of database.fields) {
+    if (field.sourceKey === undefined || field.icon !== undefined) {
+      continue;
+    }
+    const icon = iconBySourceKey.get(field.sourceKey);
+    if (icon) {
+      backfills.push({ fieldId: field.id, icon });
+    }
+  }
+  return backfills;
+}
+
+/**
+ * Existing synced number fields (by id) whose `currencyCode` the connector def
+ * now sets differently — e.g. the source's display currency was changed. The
+ * connector, not the user, owns this, so it's overwritten (not fill-empty) to
+ * keep the Price column's symbol in sync with the setting.
+ */
+function computeCurrencyUpdates(
+  database: LocalDatabase,
+  connectorFieldDefs: ConnectorFieldDef[]
+): { currencyCode: string; fieldId: string }[] {
+  const currencyBySourceKey = new Map<string, string>();
+  for (const def of connectorFieldDefs) {
+    if (def.currencyCode) {
+      currencyBySourceKey.set(def.sourceKey, def.currencyCode);
+    }
+  }
+  const updates: { currencyCode: string; fieldId: string }[] = [];
+  for (const field of database.fields) {
+    if (field.sourceKey === undefined || field.type !== "number") {
+      continue;
+    }
+    const currencyCode = currencyBySourceKey.get(field.sourceKey);
+    if (currencyCode && field.currencyCode !== currencyCode) {
+      updates.push({ currencyCode, fieldId: field.id });
+    }
+  }
+  return updates;
+}
+
+/**
+ * Reconcile a synced database's schema against the connector's current field
+ * defs. Never removes or retypes an existing field (users may have renamed,
+ * re-iconed, or reordered synced fields, and local fields are sacrosanct):
+ *
+ * - Adds connector columns the connector has grown since creation.
+ * - Backfills a field-type icon onto existing synced fields that have **no**
+ *   icon set, so tables created before a connector defined icons pick them up.
+ *   Fields the user already re-iconed keep their glyph.
+ * - Syncs the `currencyCode` of synced number fields to the connector def
+ *   (connector-owned), so changing the source's display currency reformats the
+ *   Price column on the next pass.
  * - Columns removed upstream keep their field and simply stop updating.
  *
- * Matching is by `sourceKey` (the stable connector column identity), never by
- * name. Returns the number of fields added.
+ * Matching is by `sourceKey`, never by name. Returns the number of fields added.
  */
 export function reconcileSyncedFields(
   database: LocalDatabase,
@@ -279,15 +515,39 @@ export function reconcileSyncedFields(
   const added = connectorFieldDefs
     .filter((def) => !existingSourceKeys.has(def.sourceKey))
     .map((def) => connectorFieldToDatabaseField(def));
-  if (added.length === 0) {
+  const iconBackfills = computeIconBackfills(database, connectorFieldDefs);
+  const currencyUpdates = computeCurrencyUpdates(database, connectorFieldDefs);
+  if (
+    added.length === 0 &&
+    iconBackfills.length === 0 &&
+    currencyUpdates.length === 0
+  ) {
     return 0;
   }
 
+  const iconByFieldId = new Map(
+    iconBackfills.map((backfill) => [backfill.fieldId, backfill.icon])
+  );
+  const currencyByFieldId = new Map(
+    currencyUpdates.map((update) => [update.fieldId, update.currencyCode])
+  );
   const timestamp = nowIso();
   const tx = createDatabaseTransaction();
   tx.mutate(() => {
     localDatabasesCollection.update(database.id, (draft) => {
-      draft.fields = [...draft.fields, ...added];
+      for (const field of draft.fields) {
+        const icon = iconByFieldId.get(field.id);
+        if (icon) {
+          field.icon = icon;
+        }
+        const currencyCode = currencyByFieldId.get(field.id);
+        if (currencyCode && field.type === "number") {
+          field.currencyCode = currencyCode;
+        }
+      }
+      if (added.length > 0) {
+        draft.fields = [...draft.fields, ...added];
+      }
       draft.updatedAt = timestamp;
     });
   });

@@ -4,7 +4,7 @@ import {
   IconChartLine,
   IconChartPie,
 } from "@tabler/icons-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, KeyboardEvent, ReactNode } from "react";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
@@ -21,6 +21,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
 } from "@/components/ui/dropdown-menu.tsx";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import {
   CHART_PALETTE_IDS,
@@ -42,6 +43,11 @@ import {
   DEFAULT_CHART_Y_AGGREGATE,
   resolveChartPaletteId,
 } from "@/lib/databases/chart-data.ts";
+import {
+  DEFAULT_TIME_WINDOW_MS,
+  presetForWindow,
+  TIME_WINDOW_PRESETS,
+} from "@/lib/databases/time-series-chart-data.ts";
 import type {
   DatabaseField,
   DatabaseView,
@@ -131,6 +137,15 @@ function PaletteSwatch({ palette }: { palette: ChartPaletteId }): ReactNode {
   );
 }
 
+/** Grid-line count choices (horizontal gridlines / Y ticks); "auto" clears. */
+const GRID_COUNT_OPTIONS: RadioSubmenuOption[] = [
+  { value: "auto", label: "Auto" },
+  ...["2", "3", "4", "5", "6", "8", "10", "12"].map((n) => ({
+    value: n,
+    label: n,
+  })),
+];
+
 /** Field picker option with the field's (custom or type) icon. */
 function fieldOption(field: DatabaseField): RadioSubmenuOption {
   const FieldIcon = resolveFieldIcon(field);
@@ -141,17 +156,97 @@ function fieldOption(field: DatabaseField): RadioSubmenuOption {
   };
 }
 
-const LEGEND_POSITION_LABELS = {
-  top: "Top",
-  bottom: "Bottom",
-  right: "Right",
-} as const;
-
-type LegendPosition = keyof typeof LEGEND_POSITION_LABELS;
-
-const LEGEND_POSITIONS: LegendPosition[] = ["top", "bottom", "right"];
+/** Legend placement options, in menu order. */
+const LEGEND_POSITION_OPTIONS: RadioSubmenuOption[] = [
+  { value: "top", label: "Top" },
+  { value: "bottom", label: "Bottom" },
+  { value: "right", label: "Right" },
+];
 
 type WriteChartPatch = (patch: Partial<ChartViewConfig>) => void;
+
+/**
+ * Keep typing inside menu-embedded inputs from triggering the menu's
+ * typeahead/arrow navigation; Escape still propagates so it closes the menu.
+ */
+function stopMenuKeys(event: KeyboardEvent<HTMLInputElement>): void {
+  if (event.key !== "Escape") {
+    event.stopPropagation();
+  }
+}
+
+/** One axis-title input: commits on blur/Enter, an empty value clears. */
+function AxisTitleInput({
+  label,
+  onCommit,
+  value,
+}: {
+  label: string;
+  onCommit: (title: string | undefined) => void;
+  value: string | undefined;
+}): ReactNode {
+  const commit = (raw: string) => {
+    const trimmed = raw.trim();
+    const next = trimmed === "" ? undefined : trimmed;
+    if (next !== value) {
+      onCommit(next);
+    }
+  };
+  return (
+    <InputGroup className="h-8 pointer-coarse:h-10">
+      <InputGroupInput
+        aria-label={label}
+        autoComplete="off"
+        defaultValue={value ?? ""}
+        onBlur={(event) => {
+          commit(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          stopMenuKeys(event);
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit(event.currentTarget.value);
+          }
+        }}
+        placeholder={label}
+      />
+    </InputGroup>
+  );
+}
+
+/** X/Y axis title inputs — cartesian marks only (pie has no axes). */
+function AxisTitleInputs({
+  chart,
+  write,
+}: {
+  chart: ChartViewConfig;
+  write: WriteChartPatch;
+}): ReactNode {
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <p className="px-2 pt-1.5 pb-0.5 text-muted-foreground text-xs">
+        Axis titles
+      </p>
+      <div className="flex flex-col gap-1 p-1 pt-0">
+        <AxisTitleInput
+          label="X axis title"
+          onCommit={(title) => {
+            write({ xAxisTitle: title });
+          }}
+          value={chart.xAxisTitle}
+        />
+        <AxisTitleInput
+          label="Y axis title"
+          onCommit={(title) => {
+            write({ yAxisTitle: title });
+          }}
+          value={chart.yAxisTitle}
+        />
+      </div>
+    </>
+  );
+}
 
 /** Segmented mark control (bar / line / area / pie), embedded in the menu. */
 function MarkPicker({
@@ -213,7 +308,9 @@ function ChartToggleItems({
       {showLegend ? (
         <RadioSubmenu
           currentLabel={
-            LEGEND_POSITION_LABELS[chart.legendPosition ?? "bottom"]
+            LEGEND_POSITION_OPTIONS.find(
+              (option) => option.value === (chart.legendPosition ?? "bottom")
+            )?.label ?? "Bottom"
           }
           label="Legend position"
           onValueChange={(value) => {
@@ -221,10 +318,7 @@ function ChartToggleItems({
               legendPosition: value as ChartViewConfig["legendPosition"],
             });
           }}
-          options={LEGEND_POSITIONS.map((value) => ({
-            value,
-            label: LEGEND_POSITION_LABELS[value],
-          }))}
+          options={LEGEND_POSITION_OPTIONS}
           value={chart.legendPosition ?? "bottom"}
         />
       ) : null}
@@ -248,6 +342,29 @@ function ChartToggleItems({
           Grid lines
         </DropdownMenuSwitchItem>
       )}
+      {mark !== "pie" && chart.showGrid !== false ? (
+        <>
+          <DropdownMenuSwitchItem
+            checked={chart.gridVertical === true}
+            onCheckedChange={(next) => {
+              write({ gridVertical: next });
+            }}
+          >
+            Vertical grid
+          </DropdownMenuSwitchItem>
+          <RadioSubmenu
+            currentLabel={chart.gridCount ? String(chart.gridCount) : "Auto"}
+            label="Grid line count"
+            onValueChange={(value) => {
+              write({
+                gridCount: value === "auto" ? undefined : Number(value),
+              });
+            }}
+            options={GRID_COUNT_OPTIONS}
+            value={chart.gridCount ? String(chart.gridCount) : "auto"}
+          />
+        </>
+      ) : null}
     </>
   );
 }
@@ -323,6 +440,94 @@ function ChartColorRows({
   );
 }
 
+/**
+ * Time-axis chart controls (X-mode = Time): the captured number property, the
+ * visible window, and the Y scale (absolute vs % change). Extracted so the main
+ * options function stays under the complexity budget.
+ */
+function TimeAxisOptions({
+  chart,
+  fields,
+  write,
+}: {
+  chart: ChartViewConfig;
+  fields: readonly DatabaseField[];
+  write: WriteChartPatch;
+}): ReactNode {
+  // Only fields that actually record history over time (local capture +
+  // connector backfill) can plot a time series — offering a plain number field
+  // would draw the wrong data (the backfill is the captured field's, e.g.
+  // price) under that field's formatter.
+  const timeFieldCandidates = fields.filter(
+    (field) => field.type === "number" && field.captureHistory === true
+  );
+  const firstTimeFieldId = timeFieldCandidates[0]?.id;
+  const currentWindowMs = chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS;
+  const currentWindowId = presetForWindow(currentWindowMs).id;
+  const currentScale = chart.timeSeries?.scale ?? "absolute";
+  const fieldName = (fieldId: string | undefined): string =>
+    fields.find((field) => field.id === fieldId)?.name ?? "None";
+
+  return (
+    <>
+      <RadioSubmenu
+        currentLabel={fieldName(chart.timeSeries?.fieldId)}
+        label="Time property"
+        onValueChange={(value) => {
+          write({ timeSeries: { ...chart.timeSeries, fieldId: value } });
+        }}
+        options={timeFieldCandidates.map(fieldOption)}
+        value={chart.timeSeries?.fieldId ?? ""}
+      />
+      <RadioSubmenu
+        currentLabel={currentWindowId}
+        label="Window"
+        onValueChange={(value) => {
+          const preset = TIME_WINDOW_PRESETS.find(
+            (entry) => entry.id === value
+          );
+          const fieldId = chart.timeSeries?.fieldId ?? firstTimeFieldId;
+          if (preset && fieldId) {
+            write({
+              timeSeries: {
+                ...chart.timeSeries,
+                fieldId,
+                windowMs: preset.windowMs,
+              },
+            });
+          }
+        }}
+        options={TIME_WINDOW_PRESETS.map((preset) => ({
+          value: preset.id,
+          label: preset.label,
+        }))}
+        value={currentWindowId}
+      />
+      <RadioSubmenu
+        currentLabel={currentScale === "percent" ? "% change" : "Absolute"}
+        label="Scale"
+        onValueChange={(value) => {
+          const fieldId = chart.timeSeries?.fieldId ?? firstTimeFieldId;
+          if (fieldId) {
+            write({
+              timeSeries: {
+                ...chart.timeSeries,
+                fieldId,
+                scale: value === "percent" ? "percent" : "absolute",
+              },
+            });
+          }
+        }}
+        options={[
+          { value: "absolute", label: "Absolute" },
+          { value: "percent", label: "% change" },
+        ]}
+        value={currentScale}
+      />
+    </>
+  );
+}
+
 export interface ChartOptionsItemsProps {
   /** Current chart dataset — series/category color rows derive from it. */
   data: ChartData;
@@ -373,6 +578,14 @@ export function ChartOptionsItems({
   const fieldName = (fieldId: string | undefined): string =>
     fields.find((field) => field.id === fieldId)?.name ?? "None";
 
+  // Time-axis controls: plot a captured number field over a continuous time
+  // axis, one series per synced row.
+  const isTime = chart.xMode === "time";
+  const xModeOptions: RadioSubmenuOption[] = [
+    { value: "category", label: "Category" },
+    { value: "time", label: "Time" },
+  ];
+
   // Color override rows: pie recolors slices (keyed by category bucket key),
   // cartesian marks recolor series (keyed by series key).
   const colorTargets = isPie
@@ -393,46 +606,61 @@ export function ChartOptionsItems({
       </div>
       <DropdownMenuSeparator />
       <RadioSubmenu
-        currentLabel={fieldName(chart.xFieldId)}
-        label="X axis"
+        currentLabel={isTime ? "Time" : "Category"}
+        label="X axis mode"
         onValueChange={(value) => {
-          write({ xFieldId: value });
+          write({ xMode: value === "time" ? "time" : "category" });
         }}
-        options={xOptions}
-        value={chart.xFieldId ?? ""}
+        options={xModeOptions}
+        value={isTime ? "time" : "category"}
       />
-      <RadioSubmenu
-        currentLabel={CHART_Y_AGGREGATE_LABELS[aggregate]}
-        label="Y value"
-        onValueChange={(value) => {
-          write({ yAggregate: value as ChartViewConfig["yAggregate"] });
-        }}
-        options={aggregateOptions}
-        value={aggregate}
-      />
-      {aggregate === "count" ? null : (
-        <RadioSubmenu
-          currentLabel={fieldName(chart.yFieldId)}
-          label="Y property"
-          onValueChange={(value) => {
-            write({ yFieldId: value });
-          }}
-          options={yOptions}
-          value={chart.yFieldId ?? ""}
-        />
-      )}
-      {isPie ? null : (
-        <RadioSubmenu
-          currentLabel={fieldName(chart.seriesFieldId)}
-          label="Series"
-          onValueChange={(value) => {
-            write({
-              seriesFieldId: value === NONE_VALUE ? undefined : value,
-            });
-          }}
-          options={seriesOptions}
-          value={chart.seriesFieldId ?? NONE_VALUE}
-        />
+      {isTime ? (
+        <TimeAxisOptions chart={chart} fields={fields} write={write} />
+      ) : (
+        <>
+          <RadioSubmenu
+            currentLabel={fieldName(chart.xFieldId)}
+            label="X axis"
+            onValueChange={(value) => {
+              write({ xFieldId: value });
+            }}
+            options={xOptions}
+            value={chart.xFieldId ?? ""}
+          />
+          <RadioSubmenu
+            currentLabel={CHART_Y_AGGREGATE_LABELS[aggregate]}
+            label="Y value"
+            onValueChange={(value) => {
+              write({ yAggregate: value as ChartViewConfig["yAggregate"] });
+            }}
+            options={aggregateOptions}
+            value={aggregate}
+          />
+          {aggregate === "count" ? null : (
+            <RadioSubmenu
+              currentLabel={fieldName(chart.yFieldId)}
+              label="Y property"
+              onValueChange={(value) => {
+                write({ yFieldId: value });
+              }}
+              options={yOptions}
+              value={chart.yFieldId ?? ""}
+            />
+          )}
+          {isPie ? null : (
+            <RadioSubmenu
+              currentLabel={fieldName(chart.seriesFieldId)}
+              label="Series"
+              onValueChange={(value) => {
+                write({
+                  seriesFieldId: value === NONE_VALUE ? undefined : value,
+                });
+              }}
+              options={seriesOptions}
+              value={chart.seriesFieldId ?? NONE_VALUE}
+            />
+          )}
+        </>
       )}
       <DropdownMenuSeparator />
       <ChartToggleItems
@@ -441,6 +669,7 @@ export function ChartOptionsItems({
         showLegend={showLegend}
         write={write}
       />
+      {isPie ? null : <AxisTitleInputs chart={chart} write={write} />}
       <DropdownMenuSeparator />
       <RadioSubmenu
         currentLabel={paletteId ? CHART_PALETTES[paletteId].label : "Default"}
