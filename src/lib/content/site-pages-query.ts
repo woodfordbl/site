@@ -11,7 +11,7 @@ import type { Page } from "@/lib/schemas/page.ts";
  * catalog is a handful of pages.
  */
 export const loadSitePages = createServerFn({ method: "GET" }).handler(
-  (): Promise<Page[]> => Promise.resolve(getShippedPages())
+  (): Promise<Page[]> => getShippedPages()
 );
 
 export const sitePagesQueryOptions = queryOptions({

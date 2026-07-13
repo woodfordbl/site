@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { RawPageFile } from "@/lib/content/assemble-markdown-pages.ts";
@@ -40,4 +40,34 @@ export async function readPageFilesFromDisk(): Promise<RawPageFile[]> {
       raw: await readFile(join(root, relativePath), "utf-8"),
     }))
   );
+}
+
+export interface PageFilesWithStats {
+  files: RawPageFile[];
+  /** Catalog identity: sorted (path, mtime, size) tuples — the memo key. */
+  fingerprint: string;
+}
+
+/** Files plus a change fingerprint so dev reads can memoize assembly. */
+export async function readPageFilesWithStats(): Promise<PageFilesWithStats> {
+  const root = contentPagesRoot();
+  const relativePaths = await walkMarkdownFiles(root, root, []);
+  relativePaths.sort();
+  const entries = await Promise.all(
+    relativePaths.map(async (relativePath) => {
+      const full = join(root, relativePath);
+      const [raw, stats] = await Promise.all([
+        readFile(full, "utf-8"),
+        stat(full),
+      ]);
+      return {
+        file: { relativePath, raw },
+        stamp: `${relativePath}:${stats.mtimeMs}:${stats.size}`,
+      };
+    })
+  );
+  return {
+    files: entries.map((entry) => entry.file),
+    fingerprint: entries.map((entry) => entry.stamp).join("|"),
+  };
 }

@@ -2,6 +2,7 @@ import {
   assembleMarkdownPages,
   type RawPageFile,
 } from "@/lib/content/assemble-markdown-pages.ts";
+import { isDevDiskMode } from "@/lib/content/dev-disk/dev-disk-mode.ts";
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
@@ -9,8 +10,8 @@ import type { Page } from "@/lib/schemas/page.ts";
  * Shipped pages, bundled at build time as raw markdown. Runtime
  * `readFile(process.cwd(), …)` is not portable to deployed server functions
  * (the content directory is not traced into the bundle); the glob guarantees
- * inclusion and stays HMR-aware for author dev mode saves. Parsing happens
- * once per module instance and is memoized.
+ * inclusion. In dev disk mode reads come fresh from the filesystem instead —
+ * the Vite watcher ignores `content/`, so the glob would go stale there.
  */
 const pageModules = import.meta.glob("../../../content/pages/**/*.md", {
   eager: true,
@@ -22,7 +23,7 @@ const CONTENT_PREFIX = "content/pages/";
 
 let cachedPagesBySlug: Map<string, Page> | null = null;
 
-function getPagesBySlug(): Map<string, Page> {
+function getBundledPagesBySlug(): Map<string, Page> {
   if (cachedPagesBySlug) {
     return cachedPagesBySlug;
   }
@@ -42,16 +43,43 @@ function getPagesBySlug(): Map<string, Page> {
   return cachedPagesBySlug;
 }
 
-export function getShippedPages(): Page[] {
-  return [...getPagesBySlug().values()];
+/** Dev-only fs read, memoized on a (path, mtime, size) catalog fingerprint. */
+let devCache: { fingerprint: string; pages: Map<string, Page> } | null = null;
+
+async function getDevPagesBySlug(): Promise<Map<string, Page>> {
+  const { readPageFilesWithStats } = await import(
+    "@/lib/content/content-pages-fs.server.ts"
+  );
+  const { files, fingerprint } = await readPageFilesWithStats();
+  if (devCache && devCache.fingerprint === fingerprint) {
+    return devCache.pages;
+  }
+  const pages = new Map(
+    assembleMarkdownPages(files).map((page) => [page.slug, page])
+  );
+  devCache = { fingerprint, pages };
+  return pages;
+}
+
+function getPagesBySlug(): Promise<Map<string, Page>> {
+  if (isDevDiskMode()) {
+    return getDevPagesBySlug();
+  }
+  return Promise.resolve(getBundledPagesBySlug());
+}
+
+export async function getShippedPages(): Promise<Page[]> {
+  return [...(await getPagesBySlug()).values()];
 }
 
 /** Lookup by normalized metadata slug (e.g. `/`, `/previous-work/altitude`). */
-export function getShippedPageBySlug(slug: string): Page | undefined {
-  return getPagesBySlug().get(slug);
+export async function getShippedPageBySlug(
+  slug: string
+): Promise<Page | undefined> {
+  return (await getPagesBySlug()).get(slug);
 }
 
 /** Revision token for the shipped catalog; exposed to the client for deploy freshness. */
-export function getPagesCatalogRevision(): string {
-  return computePagesCatalogRevision(getShippedPages());
+export async function getPagesCatalogRevision(): Promise<string> {
+  return computePagesCatalogRevision(await getShippedPages());
 }

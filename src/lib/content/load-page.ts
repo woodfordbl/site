@@ -5,10 +5,10 @@ import { normalizePageSlug } from "@/lib/pages/slugify.ts";
 
 export const loadPage = createServerFn({ method: "GET" })
   .validator((data: { slug: string }) => data)
-  .handler(({ data }) => {
-    const page = getShippedPageBySlug(normalizePageSlug(data.slug));
+  .handler(async ({ data }) => {
+    const page = await getShippedPageBySlug(normalizePageSlug(data.slug));
     if (!page) {
       throw new Error(`Unknown page slug: ${data.slug}`);
     }
-    return Promise.resolve(page);
+    return page;
   });

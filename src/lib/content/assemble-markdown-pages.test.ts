@@ -37,7 +37,10 @@ describe("markdown page paths", () => {
   });
 });
 
-function file(relativePath: string, lines: string[]): {
+function file(
+  relativePath: string,
+  lines: string[]
+): {
   raw: string;
   relativePath: string;
 } {
@@ -92,7 +95,12 @@ describe("assembleMarkdownPages", () => {
         "",
         "[Altitude](./altitude.md)",
       ]),
-      file("work/altitude.md", ["---", "id: altitude", "title: Altitude", "---"]),
+      file("work/altitude.md", [
+        "---",
+        "id: altitude",
+        "title: Altitude",
+        "---",
+      ]),
     ]);
     const work = pages.find((page) => page.id === "work");
     expect(work?.blocks[0]).toMatchObject({

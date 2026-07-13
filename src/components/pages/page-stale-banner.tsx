@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
+import { isDevDiskMode } from "@/lib/content/dev-disk/dev-disk-mode.ts";
 import { keepLocalPageVersion } from "@/lib/pages/keep-local-page-version.ts";
 import { mergeStalePageFromServer } from "@/lib/pages/merge-stale-page-from-server.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
@@ -107,7 +108,9 @@ export function PageStaleBanner({
 
   const { isStale } = computePageStaleState(serverPage, localPage);
 
-  if (!(isClient && isStale)) {
+  // Dev disk mode has no shipped-vs-local split — disk is the source of
+  // truth and edits flush continuously, so staleness is never actionable.
+  if (isDevDiskMode() || !(isClient && isStale)) {
     return null;
   }
 

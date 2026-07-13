@@ -34,7 +34,16 @@ export interface SaveAllPagesResult {
   savedDatabases: number;
 }
 
-async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
+/**
+ * Export one local page and write it to `content/pages/` (media assets are
+ * exported to `public/media/` first). Shared by Save-all (which additionally
+ * clears the local working copy) and the dev-disk continuous flush (which
+ * keeps it). Returns the written file's `contentHash` — the dev-disk echo
+ * suppression token.
+ */
+export async function flushLocalPageToSource(
+  localPage: LocalPage
+): Promise<{ contentHash: string }> {
   const rows = buildBlockTree(readBootstrapPageBlocks(localPage.id).blocks);
   const exported = exportPageDocument(rows, {
     id: localPage.id,
@@ -45,13 +54,20 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
     font: localPage.font,
     fullWidth: localPage.fullWidth,
     textScale: localPage.textScale,
+    headerImage: localPage.headerImage,
+    sidebarOrder: localPage.sidebarOrder,
   });
 
   const { doc, assets } = await preparePageDocumentForAuthorSave(exported);
   if (assets.length > 0) {
     await saveMediaAssets({ data: { assets } });
   }
-  await savePage({ data: doc });
+  const result = await savePage({ data: doc });
+  return { contentHash: result.contentHash };
+}
+
+async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
+  await flushLocalPageToSource(localPage);
 
   localPagesCollection.delete(localPage.id);
   deleteAllBlocksForPage(readBlockShardForPage(localPage.id));
