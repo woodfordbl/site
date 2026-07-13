@@ -1,13 +1,14 @@
 /**
- * Single-page Markdown export: collect the effective page, serialize it, and
- * trigger a `.md` download. Complements the lossless `.zip` archive export.
+ * Single-page Markdown export: collect the effective page, serialize it with
+ * the canonical codec, and trigger a `.md` download. Complements the lossless
+ * `.zip` archive export. `pageLink` blocks export as `[title](slug)` links so
+ * the file reads well outside the workspace.
  */
 import { collectWorkspacePage } from "@/lib/content/collect-workspace-pages.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import {
-  type PageDirectoryEntry,
-  pageToMarkdown,
-} from "@/lib/markdown/page-to-markdown.ts";
+
+import { pageToFrontmatter } from "./frontmatter.ts";
+import { loadMarkdownCodec } from "./loader.ts";
 
 export interface MarkdownExportResult {
   fileName: string;
@@ -31,17 +32,9 @@ function downloadMarkdown(markdown: string, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
-function buildPageDirectory(
-  pages: PageSummary[]
-): Map<string, PageDirectoryEntry> {
-  return new Map(
-    pages.map((page) => [page.id, { title: page.title, slug: page.slug }])
-  );
-}
-
 /**
- * Serializes the page to Markdown and downloads it. `pages` (when provided)
- * resolves `pageLink` blocks to real `[title](slug)` links.
+ * Serializes the page to canonical Markdown and downloads it. `pages` (when
+ * provided) resolves `pageLink` blocks to real `[title](slug)` links.
  */
 export async function exportPageMarkdown(
   pageId: string,
@@ -53,9 +46,16 @@ export async function exportPageMarkdown(
     throw new Error("This page can't be exported.");
   }
 
-  const markdown = pageToMarkdown(page, {
-    pageDirectory: buildPageDirectory(pages),
-  });
+  const byId = new Map(pages.map((summary) => [summary.id, summary]));
+  const codec = await loadMarkdownCodec();
+  const markdown = codec.serializePageMarkdown(
+    page.blocks,
+    pageToFrontmatter(page),
+    {
+      resolvePathByPageId: (id) => byId.get(id)?.slug,
+      resolveLabelByPageId: (id) => byId.get(id)?.title,
+    }
+  );
   const fileName = `${fileSafeSlug(page.slug)}.md`;
   downloadMarkdown(markdown, fileName);
   return { fileName };

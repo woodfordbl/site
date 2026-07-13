@@ -2,7 +2,7 @@ import { useCallback } from "react";
 
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import { markdownToBlocks } from "@/lib/markdown/markdown-to-blocks.ts";
+import { loadMarkdownCodec } from "@/lib/markdown-canonical/loader.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 
 const FILE_EXTENSION_RE = /\.(md|markdown|mdown|txt)$/i;
@@ -26,15 +26,22 @@ export function useImportMarkdownPage() {
 
   return useCallback(
     async (file: File): Promise<void> => {
-      const markdown = await file.text();
-      const parsed = markdownToBlocks(markdown);
-      const title = parsed.title?.trim() || titleFromFileName(file.name);
+      const [markdown, codec] = await Promise.all([
+        file.text(),
+        loadMarkdownCodec(),
+      ]);
+      const parsed = codec.parsePageMarkdown(markdown, { lenient: true });
+      const title =
+        parsed.frontmatter?.title.trim() ||
+        parsed.title?.trim() ||
+        titleFromFileName(file.name);
+      const icon = parsed.frontmatter?.icon ?? parsed.icon;
 
       dispatch({
         type: "page.create",
         title,
         initialBlocks: parsed.blocks,
-        ...(parsed.icon ? { icon: parsed.icon } : {}),
+        ...(icon ? { icon } : {}),
       });
     },
     [dispatch]

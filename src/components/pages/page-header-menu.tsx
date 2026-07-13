@@ -55,7 +55,7 @@ import {
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import { exportPageArchive } from "@/lib/content/workspace-export.ts";
-import { exportPageMarkdown } from "@/lib/markdown/export-page-markdown.ts";
+import { exportPageMarkdown } from "@/lib/markdown-canonical/export-page-markdown.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
