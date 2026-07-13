@@ -208,6 +208,7 @@ function DitheredTimeSeries({
   database,
   mark,
   palette,
+  formatValue,
   seriesEntries,
   timeFormatter,
   view,
@@ -217,6 +218,7 @@ function DitheredTimeSeries({
   chart: ChartViewConfig;
   chartConfig: ChartConfig;
   database: LocalDatabase;
+  formatValue: (value: number) => string;
   mark: "area" | "line";
   palette: ReturnType<typeof resolveChartPaletteId>;
   seriesEntries: { key: string; points: Record<string, number>[] }[];
@@ -241,6 +243,7 @@ function DitheredTimeSeries({
           gradient={chart.gradient !== false}
           gridMinor={chart.gridMinor ?? 0}
           gridVertical={chart.gridVertical === true}
+          gridVerticalMaxTicks={8}
           legendPosition={chart.legendPosition ?? "bottom"}
           mark={mark}
           palette={palette}
@@ -249,6 +252,11 @@ function DitheredTimeSeries({
           showTooltip={chart.showTooltip !== false}
           smooth={chart.smoothing === true}
           tickCount={chart.gridCount}
+          tooltipLabelFormatter={(raw) => {
+            const t = Number(raw);
+            return Number.isFinite(t) ? TOOLTIP_LABEL_FORMAT.format(t) : raw;
+          }}
+          tooltipValueFormatter={(value) => formatValue(value)}
           xAxisTitle={chart.xAxisTitle}
           xKey="t"
           xTickFormatter={(value) =>
@@ -619,6 +627,7 @@ export function DatabaseTimeSeriesChart({
         chart={chart}
         chartConfig={chartConfig}
         database={database}
+        formatValue={formatValue}
         mark={mark}
         palette={palette}
         seriesEntries={seriesEntries}

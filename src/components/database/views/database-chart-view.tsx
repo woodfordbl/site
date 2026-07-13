@@ -281,6 +281,9 @@ function CartesianChart({
           smooth={smoothing}
           stacked={chart.stacked === true}
           tickCount={chart.gridCount}
+          tooltipValueFormatter={(value) =>
+            formatChartYValue(aggregate, yField, value, chart.yFormat)
+          }
           xAxisTitle={chart.xAxisTitle}
           xKey="category"
           yAxisTitle={chart.yAxisTitle}

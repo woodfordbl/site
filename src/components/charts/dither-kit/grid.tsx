@@ -7,6 +7,7 @@ export function Grid({
   vertical = false,
   count = 4,
   minorCount = 0,
+  verticalMaxTicks,
   strokeDasharray = "3 3",
 }: {
   horizontal?: boolean
@@ -15,11 +16,24 @@ export function Grid({
   count?: number
   /** Minor lines drawn between each pair of major lines (0 = none). */
   minorCount?: number
+  /**
+   * Cap the vertical lines to roughly this many, evenly strided across the
+   * data. Keeps a dense time series (hundreds of points) from drawing one line
+   * per point; absent = one per data point (fine for a few categories).
+   */
+  verticalMaxTicks?: number
   strokeDasharray?: string
 }) {
   const ctx = useChartPart("Grid")
   if (!ctx.ready) return null
   const { width } = ctx.plot
+
+  // Stride the vertical lines so a dense series aligns to a handful of ticks
+  // (matching the X-axis label cadence) instead of one line per point.
+  const vStep =
+    verticalMaxTicks && ctx.data.length > verticalMaxTicks
+      ? Math.ceil(ctx.data.length / verticalMaxTicks)
+      : 1
 
   const majors = ctx.y.ticks(count)
   // Subdivide each major gap into `minorCount` evenly-spaced minor values.
@@ -60,17 +74,19 @@ export function Grid({
           />
         ))}
       {vertical &&
-        ctx.data.map((_, i) => (
-          <line
-            // biome-ignore lint/suspicious/noArrayIndexKey: index is the stable x position
-            key={`v-${i}`}
-            strokeDasharray={strokeDasharray}
-            x1={ctx.xCenter(i) ?? 0}
-            x2={ctx.xCenter(i) ?? 0}
-            y1={0}
-            y2={ctx.plot.height}
-          />
-        ))}
+        ctx.data.map((_, i) =>
+          i % vStep === 0 ? (
+            <line
+              // biome-ignore lint/suspicious/noArrayIndexKey: index is the stable x position
+              key={`v-${i}`}
+              strokeDasharray={strokeDasharray}
+              x1={ctx.xCenter(i) ?? 0}
+              x2={ctx.xCenter(i) ?? 0}
+              y1={0}
+              y2={ctx.plot.height}
+            />
+          ) : null
+        )}
     </g>
   )
 }

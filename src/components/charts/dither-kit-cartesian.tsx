@@ -101,6 +101,8 @@ interface DitherKitCartesianProps {
   gridMinor?: number;
   /** Draw vertical grid lines (one per category). */
   gridVertical?: boolean;
+  /** Cap vertical grid lines to ~this many (for dense time series). */
+  gridVerticalMaxTicks?: number;
   legendPosition?: "top" | "bottom" | "right";
   mark: CartesianMark;
   /** Palette override for the seed-resolution scope. */
@@ -113,6 +115,10 @@ interface DitherKitCartesianProps {
   stacked?: boolean;
   /** Major horizontal grid lines / Y ticks (absent = auto ≈ 4). */
   tickCount?: number;
+  /** Formats the tooltip heading (e.g. a raw timestamp → readable date/time). */
+  tooltipLabelFormatter?: (rawLabel: string) => string;
+  /** Formats each tooltip value (field/percent format). */
+  tooltipValueFormatter?: (value: number, name: string) => string;
   /** Optional axis titles rendered around the plot. */
   xAxisTitle?: string;
   /** X-axis field key on each row. */
@@ -170,6 +176,7 @@ export function DitherKitCartesian({
   showTooltip = true,
   showGrid = true,
   gridVertical = false,
+  gridVerticalMaxTicks,
   gridMinor = 0,
   tickCount,
   gradient = true,
@@ -183,6 +190,8 @@ export function DitherKitCartesian({
   animate = true,
   bloom = "off",
   xTickFormatter,
+  tooltipLabelFormatter,
+  tooltipValueFormatter,
 }: DitherKitCartesianProps): ReactNode {
   const { chartPalette: workspacePalette } = useSiteAppearance();
   const { ref, seeds } = useDitherKitSeeds(config);
@@ -202,7 +211,12 @@ export function DitherKitCartesian({
     <Legend {...legendProps(legendPosition)} isClickable key="legend" />
   ) : null;
   const tooltip = showTooltip ? (
-    <Tooltip key="tooltip" labelKey={xKey} />
+    <Tooltip
+      key="tooltip"
+      labelFormatter={tooltipLabelFormatter}
+      labelKey={xKey}
+      valueFormatter={tooltipValueFormatter}
+    />
   ) : null;
   // Overlapping (non-stacked) area series get distinct dither textures on top of
   // their colour — gradient / hatched — so meshed layers read apart instead of
@@ -247,6 +261,7 @@ export function DitherKitCartesian({
         key="grid"
         minorCount={gridMinor}
         vertical={gridVertical}
+        verticalMaxTicks={gridVerticalMaxTicks}
       />
     ) : null,
     <XAxis dataKey={xKey} key="x-axis" tickFormatter={xTickFormatter} />,

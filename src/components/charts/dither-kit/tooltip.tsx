@@ -20,10 +20,13 @@ const VARIANT: Record<TooltipVariant, string> = {
  */
 export function Tooltip({
   labelKey,
+  labelFormatter,
   valueFormatter,
   variant = "default",
 }: {
   labelKey?: string
+  /** Format the heading (e.g. a raw timestamp → a readable date/time). */
+  labelFormatter?: (rawLabel: string) => string
   valueFormatter?: (value: number, name: string) => string
   variant?: TooltipVariant
 }) {
@@ -38,7 +41,11 @@ export function Tooltip({
   }
   const index = chart.hoverIndex ?? lastIndex
 
-  const heading = chart.heading(index, labelKey)
+  const rawHeading = chart.heading(index, labelKey)
+  const heading =
+    rawHeading != null && labelFormatter
+      ? labelFormatter(rawHeading)
+      : rawHeading
   const items = chart.itemsAt(index)
 
   return (
