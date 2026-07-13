@@ -77,12 +77,15 @@ export type CommandGroup =
  * Where a command is registered.
  * - `global`  → app root via {@link useCommandHotkeys} (e.g. toggle sidebar).
  * - `canvas`  → page canvas editor via {@link useCommandHotkeys}, scoped to the canvas.
+ * - `menu`    → only while a row/page action menu is open, via useMenuCommandKeys.
+ *               Bare single keys that act on that menu's target (see the sidebar
+ *               row menus and the page header menu); never registered globally.
  * - `field`   → matched natively inside the editor key handlers (caret-coupled or
  *               typing-driven; see field-keydown.ts / editable-surface.tsx); never
  *               dispatched by TanStack. Listed for display only, with the
  *               keyboard-commands.test.ts drift guard pinning the combos in sync.
  */
-export type CommandScope = "global" | "canvas" | "field";
+export type CommandScope = "global" | "canvas" | "menu" | "field";
 
 export interface KeyboardCommand {
   /** Additional combos that also trigger this command (e.g. Delete alongside Backspace). */
@@ -181,49 +184,49 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     customizable: true,
     scope: "global",
   },
-  // Page actions use standard Ctrl/Cmd chords and intentionally omit
-  // `ignoreInputs` so they fire even while the caret is in a canvas field — a
-  // modifier chord can't be typed as text, and forcing the field-guard on made
-  // every one of these dead while editing (their most common invocation point).
+  // Row/page actions are bare single keys because they are *menu-scoped*: the
+  // binding is only live while the row's action menu is open (see
+  // useMenuCommandKeys), so it acts on that menu's target and never competes
+  // with typing. Global commands keep modifier chords; these deliberately don't.
   {
     id: "duplicate-page",
     label: "Duplicate page",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+D",
+    defaultHotkey: "D",
     customizable: true,
-    scope: "global",
+    scope: "menu",
   },
   {
     id: "delete-page",
     label: "Delete page",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+Backspace",
+    defaultHotkey: "Backspace",
     customizable: true,
-    scope: "global",
+    scope: "menu",
   },
   {
     id: "edit-template",
     label: "Edit page template",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+E",
+    defaultHotkey: "E",
     customizable: true,
-    scope: "global",
+    scope: "menu",
   },
   {
     id: "save-as-template",
     label: "Save page as template",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+T",
+    defaultHotkey: "T",
     customizable: true,
-    scope: "global",
+    scope: "menu",
   },
   {
     id: "toggle-favorite",
     label: "Toggle favorite",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+S",
+    defaultHotkey: "F",
     customizable: true,
-    scope: "global",
+    scope: "menu",
   },
   {
     id: "copy-page-link",

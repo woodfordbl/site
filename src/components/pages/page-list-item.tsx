@@ -7,6 +7,7 @@ import {
   useDragState,
   useDropTarget,
 } from "@/components/dnd/use-dnd.ts";
+import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
@@ -15,7 +16,11 @@ import {
   useHostedDatabases,
 } from "@/components/pages/page-list-database-rows.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
-import { PageRowMenuContent } from "@/components/pages/page-row-menu-content.tsx";
+import {
+  PageRowMenuContent,
+  rowMenuCommandHandlers,
+} from "@/components/pages/page-row-menu-content.tsx";
+import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   Collapsible,
@@ -53,6 +58,7 @@ import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-k
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
+import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
 import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
@@ -420,6 +426,7 @@ export function PageListItem({
   const dispatch = usePageDispatch(pages);
   const reposition = usePageReposition(pages, dispatch);
   const navigate = useNavigate();
+  const { setTemplatePageId } = useTemplatePage();
   const activePage = useActivePageRef();
   const saveAsTemplate = useSavePageAsTemplate(page);
   const localPage = useLocalPageById(page.id);
@@ -556,6 +563,22 @@ export function PageListItem({
     }
   }, [activePage, dispatch, navigate, page.id, page.slug, pages]);
 
+  const handleEditTemplate = useCallback(() => {
+    openTemplateEditor(navigate, setTemplatePageId);
+  }, [navigate, setTemplatePageId]);
+
+  // Single-key shortcuts (F/D/Backspace/E/T) are live only while this right-click
+  // menu is open and act on this row.
+  const onMenuKeyDown = useMenuCommandKeys(
+    rowMenuCommandHandlers({
+      onDelete: () => setDeleteOpen(true),
+      onDuplicate: handleDuplicate,
+      onEditTemplate: handleEditTemplate,
+      onSaveAsTemplate: saveAsTemplate.request,
+      onToggleFavorite: handleToggleFavorite,
+    })
+  );
+
   const rowContent = isRenaming ? (
     <PageListRowRename
       depth={depth}
@@ -607,7 +630,7 @@ export function PageListItem({
       <ContextMenuTrigger className="block w-full">
         {rowContent}
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent onKeyDownCapture={onMenuKeyDown}>
         <PageRowMenuContent
           canDelete={canDeleteRow}
           canResetToRemote={canResetToRemote}
@@ -615,6 +638,7 @@ export function PageListItem({
           onChangeIcon={openChangeIcon}
           onDelete={() => setDeleteOpen(true)}
           onDuplicate={handleDuplicate}
+          onEditTemplate={handleEditTemplate}
           onMoveTo={handleMoveTo}
           onRename={() => {
             // Inline rename swaps the row out for the edit field, unmounting

@@ -12,12 +12,11 @@ import {
   IconStarOff,
   IconTrash,
 } from "@tabler/icons-react";
-import { useNavigate } from "@tanstack/react-router";
 import type { ComponentType, MouseEvent, ReactNode } from "react";
 
+import type { MenuCommandHandlers } from "@/components/keyboard/use-menu-command-keys.ts";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import {
   ContextMenuGroup,
   ContextMenuItem,
@@ -40,7 +39,6 @@ import {
 } from "@/components/ui/dropdown-menu.tsx";
 import { Shortcut } from "@/components/ui/shortcut.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 
 interface MenuNodeProps {
   children?: ReactNode;
@@ -93,6 +91,7 @@ export interface PageRowMenuContentProps {
   onChangeIcon: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
+  onEditTemplate: () => void;
   onMoveTo: (parentId: string | null) => void;
   onRename: () => void;
   onResetToRemote: () => void;
@@ -102,6 +101,28 @@ export interface PageRowMenuContentProps {
   pages: PageSummary[];
   /** Which Base UI menu primitive set to render within. */
   variant: "context" | "dropdown";
+}
+
+/**
+ * Maps a row menu's actions to its `scope: "menu"` command handlers, for
+ * {@link useMenuCommandKeys}. Keeps the single-key bindings (favorite/duplicate/
+ * delete/save-template/edit-template) firing against the same target as the
+ * clicked menu items.
+ */
+export function rowMenuCommandHandlers(actions: {
+  onDelete: () => void;
+  onDuplicate: (withContent: boolean) => void;
+  onEditTemplate: () => void;
+  onSaveAsTemplate: () => void;
+  onToggleFavorite: () => void;
+}): MenuCommandHandlers {
+  return {
+    "delete-page": actions.onDelete,
+    "duplicate-page": () => actions.onDuplicate(true),
+    "edit-template": actions.onEditTemplate,
+    "save-as-template": actions.onSaveAsTemplate,
+    "toggle-favorite": actions.onToggleFavorite,
+  };
 }
 
 /**
@@ -117,6 +138,7 @@ export function PageRowMenuContent({
   onChangeIcon,
   onDelete,
   onDuplicate,
+  onEditTemplate,
   onMoveTo,
   onRename,
   onResetToRemote,
@@ -126,8 +148,6 @@ export function PageRowMenuContent({
   pages,
   variant,
 }: PageRowMenuContentProps) {
-  const navigate = useNavigate();
-  const { setTemplatePageId } = useTemplatePage();
   const P = variant === "context" ? CONTEXT_PRIMITIVES : DROPDOWN_PRIMITIVES;
 
   return (
@@ -189,11 +209,7 @@ export function PageRowMenuContent({
             <Shortcut command="save-as-template" />
           </P.Shortcut>
         </P.Item>
-        <P.Item
-          onClick={() => {
-            openTemplateEditor(navigate, setTemplatePageId);
-          }}
-        >
+        <P.Item onClick={onEditTemplate}>
           <IconEdit />
           Edit template
           <P.Shortcut>
