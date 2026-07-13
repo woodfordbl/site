@@ -82,6 +82,9 @@ function useDitherKitSeeds(config: ChartConfig): {
 
 type CartesianMark = "area" | "bar" | "line";
 
+/** Dither textures cycled across overlapping area series to tell them apart. */
+const AREA_VARIANT_CYCLE = ["gradient", "hatched"] as const;
+
 interface DitherKitCartesianProps {
   /** Static charts animate + show sparkles; live charts should pass false. */
   animate?: boolean;
@@ -201,17 +204,36 @@ export function DitherKitCartesian({
   const tooltip = showTooltip ? (
     <Tooltip key="tooltip" labelKey={xKey} />
   ) : null;
-  // Gradient toggle only affects the area fill; bars/lines keep the dither fade.
-  const areaVariant = gradient ? "gradient" : "solid";
+  // Overlapping (non-stacked) area series get distinct dither textures on top of
+  // their colour — gradient / hatched — so meshed layers read apart instead of
+  // blending into one muddy fill. Stacked or single-series keep the plain
+  // gradient; gradient-off flattens every fill to solid.
+  const overlappingAreas = mark === "area" && !stacked && keys.length > 1;
+  const areaVariantAt = (index: number) => {
+    if (!gradient) {
+      return "solid" as const;
+    }
+    if (overlappingAreas) {
+      return AREA_VARIANT_CYCLE[index % AREA_VARIANT_CYCLE.length];
+    }
+    return "gradient" as const;
+  };
 
-  const series = keys.map((key) => {
+  const series = keys.map((key, index) => {
     if (mark === "bar") {
       return <Bar dataKey={key} isClickable key={key} variant="gradient" />;
     }
     if (mark === "line") {
       return <Line dataKey={key} isClickable key={key} variant="gradient" />;
     }
-    return <Area dataKey={key} isClickable key={key} variant={areaVariant} />;
+    return (
+      <Area
+        dataKey={key}
+        isClickable
+        key={key}
+        variant={areaVariantAt(index)}
+      />
+    );
   });
 
   // Pass the composed parts as a keyed array — NOT a fragment. CartesianRoot

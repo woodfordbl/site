@@ -59,19 +59,27 @@ export function paintColumn(
   seed: Seed,
   { variant, intensity, dim, stacked, sparse = 0 }: PaintOpts
 ) {
-  const t = Math.round(top)
-  const f = Math.round(floor)
-  const depth = f - t
-  if (depth <= 0) {
+  // `top` is the value line, `floor` the segment base (usually the zero line).
+  // For a value *below* the base (negative area), the value line sits under the
+  // base, so fill the band between them either way — dense at the base, thinning
+  // to the value line, with the outline always on the value line.
+  const valueY = Math.round(top)
+  const baseY = Math.round(floor)
+  const lo = Math.min(valueY, baseY)
+  const hi = Math.max(valueY, baseY)
+  const span = hi - lo
+  if (span <= 0) {
     octx.fillStyle = rgb(seed.fill, 1, BORDER_ALPHA * dim)
-    octx.fillRect(x, t, 1, 1)
+    octx.fillRect(x, valueY, 1, 1)
     return
   }
+  // Step from the value line toward the base — +1 when the base is below.
+  const toBase = baseY > valueY ? 1 : -1
   const bias = (variant === "dotted" ? 0.12 : 0) + (stacked ? 0.2 : 0) - sparse
-  for (let y = t; y < f; y++) {
-    // Inverted falloff: 0 at the top line, 1 at the floor — dense at the
-    // bottom, thinning as it rises toward the outline.
-    let density = (y - t) / depth
+  for (let y = lo; y < hi; y++) {
+    // Falloff: 0 at the value line, 1 at the base — dense at the base, thinning
+    // toward the outline, regardless of which side the value sits on.
+    let density = Math.abs(y - valueY) / span
     if (stacked) density = 0.5 + 0.5 * density
     if (variant === "hatched" && ((x + y) & 3) >= 2) continue
     const lit =
@@ -87,14 +95,14 @@ export function paintColumn(
     octx.fillStyle = rgb(seed.fill, 1, alpha)
     octx.fillRect(x, y, 1, 1)
   }
-  // Top border outline — the shape's edge now that the fill fades out here.
-  // Kept just under full opacity, with a faint feather row beneath, so it reads
-  // as a soft edge rather than a hard line floating over the fade.
+  // Value-line outline — the shape's edge now that the fill fades out here.
+  // Kept just under full opacity, with a faint feather row into the fill, so it
+  // reads as a soft edge rather than a hard line floating over the fade.
   octx.fillStyle = rgb(seed.fill, 1, BORDER_ALPHA * dim)
-  octx.fillRect(x, t, 1, 1)
-  if (depth > 1) {
+  octx.fillRect(x, valueY, 1, 1)
+  if (span > 1) {
     octx.fillStyle = rgb(seed.fill, 1, BORDER_ALPHA * 0.5 * dim)
-    octx.fillRect(x, t + 1, 1, 1)
+    octx.fillRect(x, valueY + toBase, 1, 1)
   }
 }
 
