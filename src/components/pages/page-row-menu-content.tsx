@@ -110,6 +110,7 @@ export interface PageRowMenuContentProps {
  * clicked menu items.
  */
 export function rowMenuCommandHandlers(actions: {
+  canDelete: boolean;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
   onEditTemplate: () => void;
@@ -117,7 +118,8 @@ export function rowMenuCommandHandlers(actions: {
   onToggleFavorite: () => void;
 }): MenuCommandHandlers {
   return {
-    "delete-page": actions.onDelete,
+    // Omit when delete is disabled so the shortcut matches the greyed-out item.
+    "delete-page": actions.canDelete ? actions.onDelete : undefined,
     "duplicate-page": () => actions.onDuplicate(true),
     "edit-template": actions.onEditTemplate,
     "save-as-template": actions.onSaveAsTemplate,

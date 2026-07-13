@@ -62,6 +62,7 @@ export function PageListRowDropdown({
   // is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
+      canDelete,
       onDelete,
       onDuplicate,
       onEditTemplate,

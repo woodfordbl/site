@@ -580,6 +580,7 @@ export function PageListItem({
   // menu is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
+      canDelete: canDeleteRow,
       onDelete: () => setDeleteOpen(true),
       onDuplicate: handleDuplicate,
       onEditTemplate: handleEditTemplate,

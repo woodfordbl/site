@@ -54,6 +54,12 @@ export function useMenuCommandKeys(
       ) {
         return;
       }
+      // Submenus (Duplicate / Move to) portal their own content that still
+      // propagates keydown to this capture handler. Only act on the top-level
+      // menu so e.g. Backspace inside an open submenu doesn't delete the row.
+      if (target?.closest('[data-slot$="sub-content"]')) {
+        return;
+      }
 
       for (const id of Object.keys(handlers) as CommandId[]) {
         const handler = handlers[id];
