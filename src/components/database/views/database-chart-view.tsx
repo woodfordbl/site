@@ -243,13 +243,23 @@ function CartesianChart({
           animate={!reduceMotion}
           config={chartConfig}
           data={chartRows}
-          legendAlign={chart.legendPosition === "right" ? "right" : "center"}
+          gradient={gradient}
+          gridMinor={chart.gridMinor ?? 0}
+          gridVertical={chart.gridVertical === true}
+          legendPosition={chart.legendPosition ?? "bottom"}
           mark={mark}
           palette={palette}
+          showGrid={chart.showGrid !== false}
           showLegend={chart.showLegend ?? data.series.length > 1}
           showTooltip={chart.showTooltip !== false}
+          smooth={smoothing}
           stacked={chart.stacked === true}
+          tickCount={chart.gridCount}
+          xAxisTitle={chart.xAxisTitle}
           xKey="category"
+          yAxisTitle={chart.yAxisTitle}
+          yMax={chart.yMax}
+          yMin={chart.yMin}
         />
       </div>
     );

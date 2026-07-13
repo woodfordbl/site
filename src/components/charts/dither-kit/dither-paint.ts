@@ -113,6 +113,49 @@ export function resample(src: number[], cols: number): number[] {
   return out
 }
 
+/**
+ * Monotone-cubic resample to `cols` columns — the smooth counterpart to
+ * {@link resample}. Fritsch–Carlson tangents keep the curve from overshooting
+ * between points (no phantom peaks/valleys), so a smoothed area/line still reads
+ * as its data. Falls back to linear for < 3 points.
+ */
+export function resampleSmooth(src: number[], cols: number): number[] {
+  const n = src.length
+  if (n < 3) return resample(src, cols)
+  // Secant slopes between consecutive points (unit x spacing).
+  const d = new Array<number>(n - 1)
+  for (let i = 0; i < n - 1; i++) d[i] = src[i + 1] - src[i]
+  // Fritsch–Carlson tangents m[i], clamped so the interpolant stays monotone.
+  const m = new Array<number>(n)
+  m[0] = d[0]
+  m[n - 1] = d[n - 2]
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) {
+      m[i] = 0
+    } else {
+      m[i] = (d[i - 1] + d[i]) / 2
+      const a = m[i] / d[i - 1]
+      const b = m[i] / d[i]
+      const s = a * a + b * b
+      if (s > 9) m[i] = ((3 / Math.sqrt(s)) * m[i])
+    }
+  }
+  const last = Math.max(n - 1, 1)
+  const out = new Array<number>(cols)
+  for (let c = 0; c < cols; c++) {
+    const t = (c / Math.max(cols - 1, 1)) * last
+    const i = Math.min(Math.floor(t), n - 2)
+    const h = t - i
+    // Hermite basis on the unit interval [i, i+1].
+    const h00 = 2 * h ** 3 - 3 * h ** 2 + 1
+    const h10 = h ** 3 - 2 * h ** 2 + h
+    const h01 = -2 * h ** 3 + 3 * h ** 2
+    const h11 = h ** 3 - h ** 2
+    out[c] = h00 * src[i] + h10 * m[i] + h01 * src[i + 1] + h11 * m[i + 1]
+  }
+  return out
+}
+
 /** Backing-canvas resolution for a plot rect — low-res, scaled up `pixelated`. */
 export function backingSize(width: number, height: number) {
   return {

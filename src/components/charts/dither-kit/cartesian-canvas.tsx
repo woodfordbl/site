@@ -9,6 +9,7 @@ import {
   paintColumn,
   prefersReducedMotion,
   resample,
+  resampleSmooth,
 } from "./dither-paint"
 import { rgb } from "./palette"
 
@@ -314,7 +315,8 @@ export function CartesianCanvas() {
           ? Math.min(rows - 1, top[i] + glow)
           : (ctx.y(b[0]) / h) * (rows - 1)
       )
-      out[key] = { top: resample(top, cols), floor: resample(floor, cols) }
+      const fit = ctx.smooth ? resampleSmooth : resample
+      out[key] = { top: fit(top, cols), floor: fit(floor, cols) }
     }
     return out
   })()

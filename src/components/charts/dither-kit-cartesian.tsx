@@ -92,17 +92,62 @@ interface DitherKitCartesianProps {
   config: ChartConfig;
   /** Rows keyed by the series keys plus the x field. */
   data: Record<string, number | string | null>[];
-  legendAlign?: "left" | "center" | "right";
+  /** Area fill fades to the baseline (true) or is a flat solid fill (false). */
+  gradient?: boolean;
+  /** Number of minor horizontal grid lines between each major line. */
+  gridMinor?: number;
+  /** Draw vertical grid lines (one per category). */
+  gridVertical?: boolean;
+  legendPosition?: "top" | "bottom" | "right";
   mark: CartesianMark;
   /** Palette override for the seed-resolution scope. */
   palette?: ChartPaletteId;
+  showGrid?: boolean;
   showLegend?: boolean;
   showTooltip?: boolean;
+  /** Monotone curve instead of the pixel staircase. */
+  smooth?: boolean;
   stacked?: boolean;
+  /** Major horizontal grid lines / Y ticks (absent = auto ≈ 4). */
+  tickCount?: number;
+  /** Optional axis titles rendered around the plot. */
+  xAxisTitle?: string;
   /** X-axis field key on each row. */
   xKey: string;
   /** Formats x tick values (e.g. timestamps for a time-series). */
   xTickFormatter?: (value: unknown, index: number) => string;
+  yAxisTitle?: string;
+  /** Fixed Y-axis bounds (absent = auto from data). */
+  yMax?: number;
+  yMin?: number;
+}
+
+/** Map our legend placement to the engine's (align + top/bottom) legend props. */
+function legendProps(position: "top" | "bottom" | "right"): {
+  align: "left" | "center" | "right";
+  position: "top" | "bottom";
+} {
+  if (position === "bottom") {
+    return { align: "center", position: "bottom" };
+  }
+  if (position === "right") {
+    return { align: "right", position: "top" };
+  }
+  return { align: "center", position: "top" };
+}
+
+/**
+ * Reserve space for the legend so it never collides with the axis ticks: a
+ * top/right legend pushes the plot down; a bottom legend lifts the x labels.
+ */
+function legendMarginFor(
+  showLegend: boolean,
+  position: "top" | "bottom" | "right"
+): { top?: number; bottom?: number } | undefined {
+  if (!showLegend) {
+    return;
+  }
+  return position === "bottom" ? { bottom: 44 } : { top: 26 };
 }
 
 /**
@@ -110,6 +155,7 @@ interface DitherKitCartesianProps {
  * counterpart to the Recharts renderer, fed by the same `buildChartData`
  * output. Series colours come from the workspace palette (resolved to seeds).
  */
+
 export function DitherKitCartesian({
   config,
   data,
@@ -117,8 +163,18 @@ export function DitherKitCartesian({
   xKey,
   stacked = false,
   showLegend = false,
-  legendAlign = "right",
+  legendPosition = "right",
   showTooltip = true,
+  showGrid = true,
+  gridVertical = false,
+  gridMinor = 0,
+  tickCount,
+  gradient = true,
+  smooth = false,
+  yMin,
+  yMax,
+  xAxisTitle,
+  yAxisTitle,
   palette,
   className,
   animate = true,
@@ -139,8 +195,14 @@ export function DitherKitCartesian({
   }, [keys, config, seeds]);
 
   const stackType = stacked ? ("stacked" as const) : ("default" as const);
-  const legend = showLegend ? <Legend align={legendAlign} isClickable /> : null;
-  const tooltip = showTooltip ? <Tooltip labelKey={xKey} /> : null;
+  const legend = showLegend ? (
+    <Legend {...legendProps(legendPosition)} isClickable key="legend" />
+  ) : null;
+  const tooltip = showTooltip ? (
+    <Tooltip key="tooltip" labelKey={xKey} />
+  ) : null;
+  // Gradient toggle only affects the area fill; bars/lines keep the dither fade.
+  const areaVariant = gradient ? "gradient" : "solid";
 
   const series = keys.map((key) => {
     if (mark === "bar") {
@@ -149,26 +211,41 @@ export function DitherKitCartesian({
     if (mark === "line") {
       return <Line dataKey={key} isClickable key={key} variant="gradient" />;
     }
-    return <Area dataKey={key} isClickable key={key} variant="gradient" />;
+    return <Area dataKey={key} isClickable key={key} variant={areaVariant} />;
   });
 
-  const inner = (
-    <>
-      <Grid />
-      <XAxis dataKey={xKey} tickFormatter={xTickFormatter} />
-      <YAxis />
-      {legend}
-      {tooltip}
-      {series}
-    </>
-  );
+  // Pass the composed parts as a keyed array — NOT a fragment. CartesianRoot
+  // reads each child's `chartLayer` to route it (grid → behind the canvas, axes
+  // → front SVG, legend/tooltip → DOM overlay). A wrapping fragment would hide
+  // those per-child layers, dropping the DOM legend into the SVG (zero-size).
+  const inner: ReactNode[] = [
+    showGrid ? (
+      <Grid
+        count={tickCount ?? 4}
+        key="grid"
+        minorCount={gridMinor}
+        vertical={gridVertical}
+      />
+    ) : null,
+    <XAxis dataKey={xKey} key="x-axis" tickFormatter={xTickFormatter} />,
+    <YAxis key="y-axis" tickCount={tickCount ?? 4} />,
+    legend,
+    tooltip,
+    ...series,
+  ];
+
+  const legendMargins = legendMarginFor(showLegend, legendPosition);
 
   const chartProps = {
     animate,
     bloom,
     config: dkConfig,
     data,
+    margins: legendMargins,
+    smooth,
     stackType,
+    yMax,
+    yMin,
   };
 
   let chart: ReactNode;
@@ -182,11 +259,25 @@ export function DitherKitCartesian({
 
   return (
     <div
-      className={cn("h-full w-full", className)}
+      className={cn("flex h-full w-full flex-col", className)}
       data-chart-palette={palette ?? workspacePalette}
       ref={ref}
     >
-      {chart}
+      <div className="flex min-h-0 flex-1">
+        {yAxisTitle ? (
+          <div className="flex w-5 shrink-0 items-center justify-center">
+            <span className="whitespace-nowrap font-medium text-[11px] text-muted-foreground [transform:rotate(180deg)] [writing-mode:vertical-rl]">
+              {yAxisTitle}
+            </span>
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1">{chart}</div>
+      </div>
+      {xAxisTitle ? (
+        <div className="pt-1 text-center font-medium text-[11px] text-muted-foreground">
+          {xAxisTitle}
+        </div>
+      ) : null}
     </div>
   );
 }

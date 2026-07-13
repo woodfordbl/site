@@ -227,14 +227,25 @@ function DitheredTimeSeries({
           animate={false}
           config={chartConfig}
           data={mergeTimeSeriesRows(seriesEntries)}
+          gradient={chart.gradient !== false}
+          gridMinor={chart.gridMinor ?? 0}
+          gridVertical={chart.gridVertical === true}
+          legendPosition={chart.legendPosition ?? "bottom"}
           mark={mark}
           palette={palette}
+          showGrid={chart.showGrid !== false}
           showLegend={chart.showLegend ?? seriesEntries.length > 1}
           showTooltip={chart.showTooltip !== false}
+          smooth={chart.smoothing === true}
+          tickCount={chart.gridCount}
+          xAxisTitle={chart.xAxisTitle}
           xKey="t"
           xTickFormatter={(value) =>
             typeof value === "number" ? timeFormatter(value) : ""
           }
+          yAxisTitle={chart.yAxisTitle}
+          yMax={chart.yMax}
+          yMin={chart.yMin}
         />
       </div>
     </div>

@@ -9,16 +9,20 @@ import { rgb } from "./palette"
 export function Legend({
   isClickable = false,
   align = "right",
+  position = "top",
 }: {
   isClickable?: boolean
   align?: "left" | "center" | "right"
+  position?: "top" | "bottom"
 }) {
   const chart = useCommonChart()
 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 top-0 flex flex-wrap gap-3 px-1",
+        "pointer-events-none absolute inset-x-0 flex flex-wrap gap-3 px-1",
+        position === "top" && "top-0",
+        position === "bottom" && "bottom-0",
         align === "right" && "justify-end",
         align === "center" && "justify-center",
         align === "left" && "justify-start"

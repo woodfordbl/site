@@ -54,6 +54,12 @@ export type CartesianChartProps<TData extends Row> = {
   onHoverChange?: (index: number | null) => void
   defaultSelectedDataKey?: string | null
   onSelectionChange?: (key: string | null) => void
+  /** Fixed Y-axis lower bound (absent = auto from data, floor 0). */
+  yMin?: number
+  /** Fixed Y-axis upper bound (absent = auto from data). */
+  yMax?: number
+  /** Smooth the area/line with a monotone curve instead of the staircase. */
+  smooth?: boolean
 }
 
 /** Which render layer a composed part targets — defaults to the front SVG. */
@@ -91,6 +97,9 @@ export function CartesianRoot<TData extends Row>({
   onHoverChange,
   defaultSelectedDataKey = null,
   onSelectionChange,
+  yMin,
+  yMax,
+  smooth = false,
 }: CartesianChartProps<TData> & {
   chartType: ChartType
   Canvas: ComponentType
@@ -114,6 +123,9 @@ export function CartesianRoot<TData extends Row>({
     bloomOnHover,
     defaultSelectedDataKey,
     onSelectionChange,
+    yMin,
+    yMax,
+    smooth,
   })
 
   const backChildren: ReactNode[] = []

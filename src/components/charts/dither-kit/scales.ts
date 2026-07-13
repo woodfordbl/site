@@ -76,9 +76,26 @@ export function indexAtBand(px: number, length: number, plotWidth: number) {
   return Math.min(length - 1, Math.floor(t * length))
 }
 
-/** value → vertical pixel, with the floor at the bottom of the plot. */
-export function buildYScale(max: number, plotHeight: number) {
-  return scaleLinear().domain([0, max]).nice().range([plotHeight, 0])
+/**
+ * value → vertical pixel, with the floor at the bottom of the plot. Pass a
+ * fixed `domain` (min and/or max) to override the auto `[0, max]` range; a fixed
+ * bound clamps so out-of-range values pin to the plot edge instead of painting
+ * off-canvas.
+ */
+export function buildYScale(
+  max: number,
+  plotHeight: number,
+  domain?: { min?: number; max?: number }
+) {
+  const lo = domain?.min ?? 0
+  const hi = domain?.max ?? max
+  const scale = scaleLinear()
+    .domain([lo, hi === lo ? lo + 1 : hi])
+    .range([plotHeight, 0])
+  if (domain?.min !== undefined || domain?.max !== undefined) {
+    return scale.clamp(true)
+  }
+  return scale.nice()
 }
 
 /** Index of the row nearest a horizontal pixel offset within the plot. */

@@ -71,6 +71,7 @@ export type ChartContextValue = {
   y: ScaleLinear<number, number> // value → px within the plot
   bands: Record<string, [number, number][]> // per-series [y0, y1] per row
   max: number
+  smooth: boolean // monotone-cubic curve instead of the pixel staircase
 
   // Interaction state, shared by every part.
   selectedDataKey: string | null
@@ -194,6 +195,9 @@ export function useChartController({
   bloomOnHover = false,
   defaultSelectedDataKey = null,
   onSelectionChange,
+  yMin,
+  yMax,
+  smooth = false,
 }: {
   chartType: ChartType
   data: Row[]
@@ -210,6 +214,9 @@ export function useChartController({
   bloomOnHover?: boolean
   defaultSelectedDataKey?: string | null
   onSelectionChange?: (key: string | null) => void
+  yMin?: number
+  yMax?: number
+  smooth?: boolean
 }): ChartContextValue {
   // React Compiler memoizes every render-scope value below — no manual
   // useMemo/useCallback wrappers needed.
@@ -297,7 +304,10 @@ export function useChartController({
       width: slot * 0.84,
     }
   }
-  const y = buildYScale(max, plotHeight)
+  const y =
+    yMin === undefined && yMax === undefined
+      ? buildYScale(max, plotHeight)
+      : buildYScale(max, plotHeight, { max: yMax, min: yMin })
 
   const seedOf = (key: string) =>
     config[key]?.seed ?? seedOfColor(config[key]?.color ?? "grey")
@@ -361,6 +371,7 @@ export function useChartController({
     y,
     bands,
     max,
+    smooth,
     selectedDataKey,
     selectDataKey,
     focusDataKey,
