@@ -426,9 +426,21 @@ per-database `FormulaOverlay` snapshots to React.
 
 The table view (`database-table-view.tsx`) and the row-page properties panel
 consume the hook (`withFormulaValues` still merges into row copies); the view's
-own display clock now ticks only for relative dates and relative filter windows.
-Cross-database reads are therefore **reactive for views**; the editor panel's
-draft preview and row templates remain one-shot pure-path evaluations.
+own display clock now ticks only for relative dates, relative filter windows,
+and volatile **advanced filters** (below). Cross-database reads are therefore
+**reactive for views**; the editor panel's draft preview and row templates
+remain one-shot pure-path evaluations.
+
+**Advanced filters** (proposal §8's "later option", shipped with P5.4): a view
+can carry ONE boolean formula (`view.advancedFilter.expression`, canonical
+text) filtering rows at VIEW time — never an engine column. Anything the
+language does works in it: rollups, `db()` references, user functions.
+Evaluation lives in `lib/databases/advanced-row-filter.ts`
+(`applyAdvancedFilter` — parse once per call, evaluate per row via
+`createFormulaRowScope`); formula-field references read the engine's
+already-computed overlay, never re-evaluated (so date/row-ref formula results
+arrive in their projected cell shapes). Pass contract and the filter-bar chip
+UI: [databases — filters](./databases.md#table-view).
 
 ## Editor panel
 

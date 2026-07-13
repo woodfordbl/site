@@ -20,6 +20,7 @@ import {
 import type { DateRange } from "react-day-picker";
 import { createPortal } from "react-dom";
 
+import { DatabaseAdvancedFilterChip } from "@/components/database/database-advanced-filter-chip.tsx";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   appendFilterCondition,
@@ -66,6 +67,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
+import { useAllDatabases } from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { toIsoDatePart } from "@/lib/databases/cell-values.ts";
 import {
   FIELD_TYPE_DEFS,
@@ -117,9 +120,11 @@ interface ChipStripProps {
 }
 
 /**
- * The filter half of the chip bar: one chip per root filter entry plus the
- * "+ Filter" type-ahead picker. Reused by the desktop inline bar and the
- * mobile funnel popover.
+ * The filter half of the chip bar: one chip per root filter entry, the
+ * "+ Filter" type-ahead picker, and the view's single ADVANCED filter chip
+ * (`database-advanced-filter-chip.tsx` — a boolean formula filtering rows;
+ * dashed "+ Advanced" trigger while unset, under the same `showAddTrigger`
+ * gate). Reused by the desktop inline bar and the mobile funnel popover.
  */
 export function DatabaseFilterChips({
   addFullWidth = false,
@@ -136,6 +141,10 @@ export function DatabaseFilterChips({
   // Condition whose value popover should open as soon as its chip mounts —
   // set when "+ Filter" appends a fresh condition.
   const [autoOpenId, setAutoOpenId] = useState<string | null>(null);
+  // The advanced chip's editor checks drafts against every workspace schema
+  // (member typing on relation rows) and the user-function registry.
+  const relatedDatabases = useAllDatabases();
+  const userFunctions = useFormulaUserFunctions();
 
   const fieldsById = useMemo(() => {
     const byId: Record<string, DatabaseField> = {};
@@ -204,6 +213,19 @@ export function DatabaseFilterChips({
           onPick={handleAddField}
         />
       ) : null}
+      <DatabaseAdvancedFilterChip
+        fields={fields}
+        onAdvancedFilterChange={(expression) => {
+          updateDatabaseView(databaseId, view.id, {
+            advancedFilter:
+              expression === undefined ? undefined : { expression },
+          });
+        }}
+        relatedDatabases={relatedDatabases}
+        showAddTrigger={showAddTrigger}
+        userFunctions={userFunctions}
+        view={view}
+      />
     </div>
   );
 }
@@ -911,15 +933,21 @@ function FieldPickerPopover({
   );
 }
 
-/** Plain field list dropdown for title-row filter/sort icon triggers. */
+/**
+ * Plain field list dropdown for title-row filter/sort icon triggers.
+ * `footer` renders after the field list — the mobile funnel appends its
+ * "Advanced filter" item there.
+ */
 export function FieldPickerDropdown({
   emptyLabel = "No properties",
   fields,
+  footer,
   onPick,
   trigger,
 }: {
   emptyLabel?: string;
   fields: readonly DatabaseField[];
+  footer?: ReactNode;
   onPick: (field: DatabaseField) => void;
   trigger: ReactElement;
 }): ReactNode {
@@ -941,6 +969,7 @@ export function FieldPickerDropdown({
             {emptyLabel}
           </div>
         ) : null}
+        {footer}
       </DropdownMenuContent>
     </DropdownMenu>
   );

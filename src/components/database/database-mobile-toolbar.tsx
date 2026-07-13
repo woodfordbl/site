@@ -1,8 +1,13 @@
-import { IconArrowsSort, IconFilter } from "@tabler/icons-react";
+import {
+  IconArrowsSort,
+  IconFilter,
+  IconMathFunction,
+} from "@tabler/icons-react";
 import type { ReactElement, ReactNode } from "react";
 import { FieldPickerDropdown } from "@/components/database/database-filter-bar.tsx";
 import { appendFilterCondition } from "@/components/database/database-filter-helpers.ts";
 import { Button } from "@/components/ui/button.tsx";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import { FIELD_TYPE_DEFS } from "@/lib/databases/field-defs.ts";
 import type { DatabaseField, DatabaseView } from "@/lib/schemas/database.ts";
@@ -65,6 +70,7 @@ function ToolbarToggleButton({
 interface ToolbarFieldDropdownButtonProps {
   emptyLabel?: string;
   fields: readonly DatabaseField[];
+  footer?: ReactNode;
   icon: ReactNode;
   label: string;
   onPick: (field: DatabaseField) => void;
@@ -74,6 +80,7 @@ interface ToolbarFieldDropdownButtonProps {
 function ToolbarFieldDropdownButton({
   emptyLabel,
   fields,
+  footer,
   icon,
   label,
   onPick,
@@ -94,6 +101,7 @@ function ToolbarFieldDropdownButton({
     <FieldPickerDropdown
       emptyLabel={emptyLabel}
       fields={fields}
+      footer={footer}
       onPick={onPick}
       trigger={trigger}
     />
@@ -117,7 +125,9 @@ export function DatabaseMobileToolbar({
   onFilterBarVisibleChange,
   view,
 }: DatabaseMobileToolbarProps): ReactNode {
-  const filterCount = view.filter?.conditions.length ?? 0;
+  const filterCount =
+    (view.filter?.conditions.length ?? 0) +
+    (view.advancedFilter === undefined ? 0 : 1);
   const sortCount = view.sorts?.length ?? 0;
   const isGrouped = view.groupBy !== undefined;
   const hasFilters = filterCount > 0;
@@ -148,6 +158,19 @@ export function DatabaseMobileToolbar({
     expandBar();
   };
 
+  /**
+   * "Advanced filter" from the funnel dropdown: write a BLANK advanced
+   * filter and expand the bar — the chip mounts, sees the blank expression,
+   * and auto-opens its editor (dismissing without applying clears it again;
+   * see database-advanced-filter-chip.tsx).
+   */
+  const handleAddAdvancedFilter = () => {
+    updateDatabaseView(databaseId, view.id, {
+      advancedFilter: { expression: "" },
+    });
+    expandBar();
+  };
+
   const handleAddSort = (field: DatabaseField) => {
     updateDatabaseView(databaseId, view.id, {
       sorts: [...sorts, { fieldId: field.id, direction: "asc" }],
@@ -168,6 +191,12 @@ export function DatabaseMobileToolbar({
   ) : (
     <ToolbarFieldDropdownButton
       fields={fields}
+      footer={
+        <DropdownMenuItem onClick={handleAddAdvancedFilter}>
+          <IconMathFunction className="size-4 stroke-[1.5px] text-muted-foreground" />
+          Advanced filter
+        </DropdownMenuItem>
+      }
       icon={<IconFilter aria-hidden />}
       label="Add filter"
       onPick={handleAddFilter}

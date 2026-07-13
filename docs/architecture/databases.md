@@ -18,7 +18,7 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`; default `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`, `formula` (`expression`), `relation` (`targetDatabaseId` — cells store target-row id arrays). All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, optional `icon` (light override; no seed), `externalId?` (connector row identity), timestamps |
-| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
+| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `advancedFilter?` (ONE boolean formula filtering rows — see the filter bar bullet under [Table view](#table-view)), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
@@ -198,6 +198,30 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   when multi-sort, remove); exports the chip strips (`DatabaseFilterChips`, `DatabaseSortChips`,
   `DatabaseFilterMatchOp`) reused by the mobile toolbar popovers; pure mutations in
   [`database-filter-helpers.ts`](../../src/components/database/database-filter-helpers.ts).
+- **Advanced filter** ([`database-advanced-filter-chip.tsx`](../../src/components/database/database-advanced-filter-chip.tsx),
+  evaluated by [`advanced-row-filter.ts`](../../src/lib/databases/advanced-row-filter.ts)) —
+  a view carries at most ONE `advancedFilter` — an arbitrary boolean formula
+  (canonical `prop("<id>")`/`db("<id>")` text) evaluated per row at view time;
+  rollups, `db()` references, and user functions all work. **Pass contract**: a
+  row stays visible only when the formula evaluates to exactly `true` — errors,
+  blank, and non-boolean results hide the row (fail closed) — EXCEPT an
+  unparseable expression, which disables the filter entirely (every row visible).
+  Coexists with the structured `filter`: structured runs first, the advanced
+  filter over its survivors (rows must pass BOTH); the hidden-rows notice counts
+  both kinds and its Clear drops both. The expression parses once per apply;
+  formula-field references read the ENGINE overlay (never re-evaluated);
+  volatile expressions (`now()`/`today()`) keep the display clock ticking so the
+  filter re-runs each minute. UI: a dashed "+ Advanced" chip (same gate as
+  "+ Filter") opens a mini formula editor — the lazy CM6 editor in a popover
+  (drawer/textarea on coarse pointers), a parse/type status line warning when
+  the checked type isn't boolean-compatible, Apply (blocked on parse errors and
+  checker diagnostics) + Clear. **Broken states** style the chip destructive
+  with a `title` naming the issue: unparseable text → "ignored" (filter
+  skipped); a checker diagnostic on saved text (e.g. a referenced field was
+  deleted) → "broken" (errored rows are hidden). Mobile: the title-row funnel's
+  field dropdown appends an "Advanced filter" item that writes a BLANK
+  expression and expands the bar — the chip auto-opens its editor, and
+  dismissing without applying clears the placeholder.
 - [`database-title.tsx`](../../src/components/database/database-title.tsx) — h3-equivalent
   title (shares `headingTypographyClassNames[3]`), rename-in-place, a database **icon**
   beside the name (edit mode opens the shared `GlyphIconPicker` — emoji or `tabler:` glyph
@@ -367,14 +391,17 @@ database's live rows for whole-database `db("…")` references:
   numbers right-aligned tabular-nums, booleans "Yes"/"No" text, strings plain.
 - **Filtering** — string operator set (`FIELD_TYPE_DEFS.formula`) over the computed
   value; **mixed-type formula columns filter as strings v1** (number results satisfy
-  emptiness operators but not text matches). Sorting compares same-type pairs natively,
+  emptiness operators but not text matches) — the advanced filter (see
+  [Table view](#table-view)) is the typed escape hatch, and its formula-field
+  references read the engine overlay's projected values rather than re-evaluating.
+  Sorting compares same-type pairs natively,
   mixed pairs by text collation. Numeric Calculate reducers (sum/average/…) work over a
   formula column's number-typed results; grouping stays excluded (`isGroupableField`).
 - **Volatile clocks** — when any expression uses `now()`/`today()`, the ENGINE
   re-evaluates volatile columns every 60s (subscribers present + tab visible,
   refreshing on visibility return) and pushes a fresh overlay snapshot; the table
-  view's own display clock ticks only for relative-format dates and relative
-  filter windows.
+  view's own display clock ticks only for relative-format dates, relative
+  filter windows, and volatile advanced filters.
 - **Editing** — the column menu's Edit property submenu becomes a formula **builder**
   ([`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx),
   width-fluid for the desktop submenu and the touch menu drawer alike): a monospace
@@ -568,7 +595,8 @@ page id. Breadcrumbs follow the normal page header once seeded.
 Row drag-reorder UI (table grid — board card drag shipped),
 live tokens inside already-seeded pages, duplicate-database template cloning,
 formula-aware typed filter operators (relations, rollups — wizard included —
-reactive cross-database recompute, and formula→formula references shipped with
+reactive cross-database recompute, formula→formula references, and
+boolean-formula ADVANCED filters shipped with
 the v2 engine — see [formula-language](./formula-language.md)),
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views
 shipped — see [Table view](#table-view)), workspace backup inclusion, SQLite scale tier, keyboard

@@ -20,9 +20,15 @@ import { Button } from "@/components/ui/button.tsx";
 import { useFormulaOverlay } from "@/db/formula-engine.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
+import {
+  advancedFilterIsVolatile,
+  applyAdvancedFilter,
+} from "@/lib/databases/advanced-row-filter.ts";
 import { buildChartData } from "@/lib/databases/chart-data.ts";
 import { recordDatabaseViewEditHistory } from "@/lib/databases/database-view-edit-history.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { withFormulaValues } from "@/lib/databases/formula-values.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import {
@@ -116,10 +122,12 @@ function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
 /**
  * The visible clock behind time-dependent DISPLAY and FILTERING of stored
  * cells: ticks every minute while any visible date column uses the
- * `relative` format ("3 days ago" must not go stale on screen) OR the active
+ * `relative` format ("3 days ago" must not go stale on screen), the active
  * view's filter contains a relative date operator (`pastDay`…`nextMonth`
- * windows shift as time passes — `applyFilter` re-runs on the tick).
- * Volatile (`now()`/`today()`) FORMULAS no longer tick here — the formula
+ * windows shift as time passes — `applyFilter` re-runs on the tick), OR the
+ * view's advanced filter is volatile (`advancedVolatile` — a `now()`/
+ * `today()` formula filter must re-run the same way). Volatile
+ * (`now()`/`today()`) FORMULA COLUMNS no longer tick here — the formula
  * engine owns its own 60s pass and pushes a fresh overlay snapshot. Pauses
  * entirely while the tab is hidden (refreshing immediately when it becomes
  * visible again). Non-clock-dependent schemas keep the mount-time instant —
@@ -127,12 +135,15 @@ function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
  */
 function useDisplayClock(
   visibleFields: readonly DatabaseField[],
-  filter: DatabaseFilterGroup | undefined
+  filter: DatabaseFilterGroup | undefined,
+  advancedVolatile: boolean
 ): Date {
   const ticking = useMemo(
     () =>
-      hasRelativeDateField(visibleFields) || filterHasRelativeOperator(filter),
-    [visibleFields, filter]
+      hasRelativeDateField(visibleFields) ||
+      filterHasRelativeOperator(filter) ||
+      advancedVolatile,
+    [visibleFields, filter, advancedVolatile]
   );
   const [now, setNow] = useState(() => new Date());
 
@@ -223,7 +234,10 @@ function HiddenRowsNotice({
     recordDatabaseViewEditHistory(databaseId, view);
     const patch: Partial<Omit<DatabaseView, "id">> = {};
     if (hiddenByFilter > 0) {
+      // `hiddenByFilter` counts rows hidden by EITHER filter kind (`rows`
+      // arrives post-structured-and-advanced), so Clear drops both.
       patch.filter = undefined;
+      patch.advancedFilter = undefined;
     }
     if (hiddenGroupRowCount > 0) {
       patch.config = { ...view.config, hiddenGroupKeys: undefined };
@@ -282,7 +296,9 @@ function resolveInlineFilterBarState(
   hasSortsOrGrouping: boolean;
   showInlineFilterBar: boolean;
 } {
-  const hasFilters = (view.filter?.conditions.length ?? 0) > 0;
+  const hasFilters =
+    (view.filter?.conditions.length ?? 0) > 0 ||
+    view.advancedFilter !== undefined;
   const hasSorts = (view.sorts?.length ?? 0) > 0;
   const hasGrouping = view.groupBy !== undefined;
   const hasSortsOrGrouping = hasSorts || hasGrouping;
@@ -422,7 +438,12 @@ export function DatabaseTableView({
     [database, view]
   );
 
-  const clockNow = useDisplayClock(columns, view?.filter);
+  const userFunctions = useFormulaUserFunctions();
+  const advancedVolatile = useMemo(
+    () => advancedFilterIsVolatile(view?.advancedFilter, userFunctions),
+    [view, userFunctions]
+  );
+  const clockNow = useDisplayClock(columns, view?.filter, advancedVolatile);
 
   // Watch mode: while ANY view of a synced database is mounted (edit mode
   // and published view mode alike), the sync engine polls at the connector's
@@ -455,11 +476,26 @@ export function DatabaseTableView({
     }
     // `clockNow` in the deps keeps relative-window filters live: each display
     // clock tick recomputes the filter against the fresh instant.
+    const now = () => clockNow;
     const filtered = applyFilter(mergedRows, database.fields, view.filter, {
-      now: () => clockNow,
+      now,
     });
-    return sortRowsForView(filtered, database.fields, view);
-  }, [mergedRows, database, view, clockNow]);
+    // The advanced filter runs over the structured filter's survivors (rows
+    // must pass BOTH). Formula-field references read the engine's overlay —
+    // never re-evaluated — while relation rollups and `db()` references get
+    // a fresh resolver per compute pass (formula-relations.ts contract).
+    const advanced =
+      view.advancedFilter === undefined
+        ? filtered
+        : applyAdvancedFilter(filtered, view.advancedFilter, {
+            fields: database.fields,
+            now,
+            overlay: formulaOverlay,
+            relations: localFormulaRelationResolver({ now }),
+            userFunctions,
+          });
+    return sortRowsForView(advanced, database.fields, view);
+  }, [mergedRows, database, view, clockNow, formulaOverlay, userFunctions]);
 
   // Row buckets for grouped TABLE views (the grid is the only consumer —
   // list/board/chart bodies bucket their own data or render flat), built

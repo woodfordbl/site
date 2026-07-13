@@ -227,6 +227,25 @@ export const databaseFilterGroupSchema = z.object({
 
 export type DatabaseFilterGroup = z.infer<typeof databaseFilterGroupSchema>;
 
+/**
+ * Advanced view filter: ONE arbitrary boolean formula evaluated per row
+ * (`lib/databases/advanced-row-filter.ts`). `expression` is CANONICAL formula
+ * text (`prop("<id>")` / `db("<id>")` references — exactly what formula
+ * fields store), so field renames never break it. Independent of the
+ * structured `filter`; when both exist a row must pass BOTH. Pass rule: a
+ * row stays visible only when the formula evaluates to exactly `true` —
+ * errors, blank, and non-boolean results hide the row (fail closed) — except
+ * an unparseable expression, which disables the filter entirely (every row
+ * visible) and surfaces as a broken chip in the filter bar.
+ */
+export const databaseAdvancedFilterSchema = z.object({
+  expression: z.string(),
+});
+
+export type DatabaseAdvancedFilter = z.infer<
+  typeof databaseAdvancedFilterSchema
+>;
+
 export const databaseSortSchema = z.object({
   fieldId: z.string(),
   direction: z.enum(["asc", "desc"]),
@@ -413,6 +432,8 @@ export const databaseViewSchema = z.object({
   name: z.string(),
   type: databaseViewTypeSchema,
   filter: databaseFilterGroupSchema.optional(),
+  /** One boolean-formula filter; rows must pass it AND `filter`. */
+  advancedFilter: databaseAdvancedFilterSchema.optional(),
   sorts: z.array(databaseSortSchema).optional(),
   /**
    * Row grouping: rows bucket by this field's value (select option order
