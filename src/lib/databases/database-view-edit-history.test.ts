@@ -83,7 +83,7 @@ describe("recordDatabaseViewEditHistory / popDatabaseViewUndoEntry", () => {
 
     const replayed = popDatabaseViewRedoEntry(
       `${DATABASE_ID}:${VIEW_ID}`,
-      before!
+      before
     );
     expect(replayed).toEqual(cleared);
   });

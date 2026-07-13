@@ -61,6 +61,7 @@ export function PageBreadcrumbCurrentCrumb({
 
   const displayTitle = localPage?.title ?? defaultTitle;
   const displayIcon = localPage?.icon ?? defaultIcon;
+  const previousSlug = previousSlugRef.current;
 
   const handleIconSelect = useCallback(
     (nextIcon: string) => {
@@ -68,12 +69,12 @@ export function PageBreadcrumbCurrentCrumb({
         pageId,
         icon: nextIcon,
         title: resolvedTitle,
-        previousSlug: previousSlugRef.current,
+        previousSlug,
         seed: localPage ? undefined : seed,
         pages,
       });
     },
-    [localPage, pageId, pages, resolvedTitle, seed]
+    [localPage, pageId, pages, previousSlug, resolvedTitle, seed]
   );
 
   return (
