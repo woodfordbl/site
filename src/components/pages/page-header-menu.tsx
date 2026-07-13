@@ -35,14 +35,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
@@ -414,9 +412,6 @@ export function PageHeaderMenu({
                   >
                     <IconCopy />
                     With content
-                    <DropdownMenuShortcut>
-                      <Shortcut command="duplicate-page" />
-                    </DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {

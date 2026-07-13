@@ -1,38 +1,20 @@
 "use client";
 
-import {
-  IconCopy,
-  IconCopyOff,
-  IconDots,
-  IconEdit,
-  IconLayoutGrid,
-  IconPencil,
-  IconPhoto,
-  IconRefresh,
-  IconStar,
-  IconStarOff,
-  IconTrash,
-} from "@tabler/icons-react";
+import { IconDots } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
 import type { RefObject } from "react";
 
-import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
-import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
+import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
+import {
+  PageRowMenuContent,
+  rowMenuCommandHandlers,
+} from "@/components/pages/page-row-menu-content.tsx";
 import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
@@ -74,6 +56,20 @@ export function PageListRowDropdown({
 }: PageListRowDropdownProps) {
   const navigate = useNavigate();
   const { setTemplatePageId } = useTemplatePage();
+  const onEditTemplate = () => openTemplateEditor(navigate, setTemplatePageId);
+
+  // Single-key shortcuts (F/D/Backspace/E/T) are live only while this dropdown
+  // is open and act on this row.
+  const onMenuKeyDown = useMenuCommandKeys(
+    rowMenuCommandHandlers({
+      canDelete,
+      onDelete,
+      onDuplicate,
+      onEditTemplate,
+      onSaveAsTemplate,
+      onToggleFavorite,
+    })
+  );
 
   return (
     <DropdownMenu
@@ -102,89 +98,28 @@ export function PageListRowDropdown({
           </SidebarMenuAction>
         }
       />
-      <DropdownMenuContent align="start" side="bottom">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Page</DropdownMenuLabel>
-          <DropdownMenuItem onClick={onToggleFavorite}>
-            {isFavorite ? <IconStarOff /> : <IconStar />}
-            {isFavorite ? "Remove from favorites" : "Add to favorites"}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onRename}>
-            <IconPencil />
-            Rename
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onChangeIcon}>
-            <IconPhoto />
-            Change icon
-          </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <IconCopy />
-              Duplicate page
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                onClick={() => {
-                  onDuplicate(true);
-                }}
-              >
-                <IconCopy />
-                With content
-                <DropdownMenuShortcut>
-                  <Shortcut command="duplicate-page" />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  onDuplicate(false);
-                }}
-              >
-                <IconCopyOff />
-                Without content
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <PageMenuMoveSubmenu
-            onMoveTo={onMoveTo}
-            pageId={pageId}
-            pages={pages}
-            variant="dropdown"
-          />
-          <DropdownMenuItem onClick={onSaveAsTemplate}>
-            <IconLayoutGrid />
-            Save as template
-            <DropdownMenuShortcut>
-              <Shortcut command="save-as-template" />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              openTemplateEditor(navigate, setTemplatePageId);
-            }}
-          >
-            <IconEdit />
-            Edit template
-            <DropdownMenuShortcut>
-              <Shortcut command="edit-template" />
-            </DropdownMenuShortcut>
-          </DropdownMenuItem>
-          {canResetToRemote ? (
-            <DropdownMenuItem onClick={onResetToRemote}>
-              <IconRefresh />
-              Reset to site version
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem
-            disabled={!canDelete}
-            onClick={onDelete}
-            variant="destructive"
-          >
-            <IconTrash />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <PageActivityPanel pageId={pageId} />
+      <DropdownMenuContent
+        align="start"
+        onKeyDownCapture={onMenuKeyDown}
+        side="bottom"
+      >
+        <PageRowMenuContent
+          canDelete={canDelete}
+          canResetToRemote={canResetToRemote}
+          isFavorite={isFavorite}
+          onChangeIcon={onChangeIcon}
+          onDelete={onDelete}
+          onDuplicate={onDuplicate}
+          onEditTemplate={onEditTemplate}
+          onMoveTo={onMoveTo}
+          onRename={onRename}
+          onResetToRemote={onResetToRemote}
+          onSaveAsTemplate={onSaveAsTemplate}
+          onToggleFavorite={onToggleFavorite}
+          pageId={pageId}
+          pages={pages}
+          variant="dropdown"
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

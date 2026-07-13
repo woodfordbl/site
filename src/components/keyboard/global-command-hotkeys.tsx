@@ -5,11 +5,9 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
 import { useCommandSequences } from "@/components/keyboard/use-command-sequences.ts";
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { useCreatePage } from "@/hooks/use-create-page.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 
 function GlobalCommandHotkeysLive() {
   const navigate = useNavigate();
@@ -19,7 +17,6 @@ function GlobalCommandHotkeysLive() {
   const { resolvedTheme, setTheme } = useSiteAppearance();
   const { pages } = useMergedPageListItems();
   const createPage = useCreatePage(pages);
-  const { setTemplatePageId } = useTemplatePage();
 
   const openSettings = () =>
     navigate({ search: { returnTo: pathname }, to: "/settings" });
@@ -30,10 +27,9 @@ function GlobalCommandHotkeysLive() {
       to: "/settings/$section",
     });
 
+  // `edit-template` moved to `scope: "menu"` (dispatched by the row/header action
+  // menus via useMenuCommandKeys), so it is no longer a global shortcut.
   useCommandHotkeys({
-    "edit-template": () => {
-      openTemplateEditor(navigate, setTemplatePageId);
-    },
     "new-page": () => createPage(),
     "open-settings": openSettings,
     "show-shortcuts": openShortcuts,
