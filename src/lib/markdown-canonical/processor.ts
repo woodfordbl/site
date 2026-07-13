@@ -1,7 +1,18 @@
 import type { Root } from "mdast";
+import {
+  gfmStrikethroughFromMarkdown,
+  gfmStrikethroughToMarkdown,
+} from "mdast-util-gfm-strikethrough";
+import { gfmTableFromMarkdown, gfmTableToMarkdown } from "mdast-util-gfm-table";
+import {
+  gfmTaskListItemFromMarkdown,
+  gfmTaskListItemToMarkdown,
+} from "mdast-util-gfm-task-list-item";
+import { gfmStrikethrough } from "micromark-extension-gfm-strikethrough";
+import { gfmTable } from "micromark-extension-gfm-table";
+import { gfmTaskListItem } from "micromark-extension-gfm-task-list-item";
 import remarkDirective from "remark-directive";
 import remarkFrontmatter from "remark-frontmatter";
-import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkStringify, {
   type Options as StringifyOptions,
@@ -14,6 +25,37 @@ import { type Processor, unified } from "unified";
  * pin the canonical surface so `serialize(parse(serialize(x)))` is
  * byte-identical.
  */
+
+/**
+ * The GFM subset the codec actually uses: strikethrough, tables, and task
+ * lists. Deliberately NOT `remark-gfm`: its autolink-literal feature re-links
+ * email/`www.` shaped prose via a text-node transform that runs AFTER escape
+ * resolution, so no amount of serializer escaping survives a reparse — it
+ * breaks `serialize(parse(serialize(x))) === serialize(x)` for any prose
+ * containing an email-shaped substring. Explicit `<url>` autolinks are core
+ * CommonMark and unaffected.
+ */
+function remarkGfmSubset(this: Processor): void {
+  const data = this.data();
+  data.micromarkExtensions ??= [];
+  data.fromMarkdownExtensions ??= [];
+  data.toMarkdownExtensions ??= [];
+  data.micromarkExtensions.push(
+    gfmStrikethrough(),
+    gfmTable(),
+    gfmTaskListItem()
+  );
+  data.fromMarkdownExtensions.push(
+    gfmStrikethroughFromMarkdown(),
+    gfmTableFromMarkdown(),
+    gfmTaskListItemFromMarkdown()
+  );
+  data.toMarkdownExtensions.push(
+    gfmStrikethroughToMarkdown(),
+    gfmTableToMarkdown(),
+    gfmTaskListItemToMarkdown()
+  );
+}
 
 const CANONICAL_STRINGIFY_OPTIONS: StringifyOptions = {
   bullet: "-",
@@ -38,7 +80,7 @@ export function getMarkdownProcessor(): Processor<
   if (!processor) {
     processor = unified()
       .use(remarkParse)
-      .use(remarkGfm)
+      .use(remarkGfmSubset)
       .use(remarkFrontmatter, ["yaml"])
       .use(remarkDirective)
       .use(remarkStringify, CANONICAL_STRINGIFY_OPTIONS);

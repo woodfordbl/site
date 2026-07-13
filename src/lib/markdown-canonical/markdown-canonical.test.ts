@@ -146,6 +146,38 @@ describe("golden round trips per block type", () => {
     expect((parsed[0] as { props: { text: string } }).props.text).toBe(nasty);
   });
 
+  it("email/www-shaped prose stays plain text (no autolink literals)", () => {
+    // CI seed 216668550: gfm autolink literals re-link email-shaped prose
+    // AFTER escape resolution, so no serializer escaping survives a reparse.
+    // The codec runs a GFM subset without them; explicit <url> autolinks
+    // (the embed form) still work.
+    const listId = id();
+    expectRoundTrip([
+      { id: listId, type: "list", props: { variant: "bullet" } },
+      { id: id(), parentId: listId, type: "text", props: { text: "!+@0.A" } },
+      {
+        id: id(),
+        parentId: listId,
+        type: "text",
+        props: { text: "mail user@example.com or visit www.example.com" },
+      },
+    ]);
+    const parsed = roundTrip([
+      {
+        id: id(),
+        type: "text",
+        props: { text: "reach me at user@example.com today" },
+      },
+    ]);
+    expect(parsed[0]).toMatchObject({
+      type: "text",
+      props: { text: "reach me at user@example.com today" },
+    });
+    expect(
+      (parsed[0] as { props: { marks?: unknown[] } }).props.marks
+    ).toBeUndefined();
+  });
+
   it("prose ending in an attr-group lookalike gets the sentinel", () => {
     const tricky = "set width via {width=60}";
     const markdown = serializeBlocksMarkdown([

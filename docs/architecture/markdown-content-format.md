@@ -11,7 +11,8 @@ visitors keep the localStorage local-first model unchanged
 ## The codec — `src/lib/markdown-canonical/`
 
 Lossless, deterministic `Block[] ↔ markdown` on unified/remark (`remark-parse`,
-`remark-gfm`, `remark-frontmatter`, `remark-directive`). Server code imports
+a GFM subset — strikethrough/table/task-list, no autolink literals —
+`remark-frontmatter`, `remark-directive`). Server code imports
 [`parse-page.ts`](../../src/lib/markdown-canonical/parse-page.ts) /
 [`serialize-page.ts`](../../src/lib/markdown-canonical/serialize-page.ts)
 directly; browser flows lazy-load one chunk via
@@ -155,6 +156,9 @@ use the same codec in lenient/strict modes.
 - Emphasis marks that cannot legally serialize (boundary whitespace, partial
   graphemes, flanking violations) drop the styling — never the text.
 - `pageLink.variant` and in-document block ids never ship (both derive).
+- Bare URLs and emails in prose stay plain text — the codec runs a GFM subset
+  WITHOUT autolink literals (their post-escape text transform breaks
+  serializer idempotence); only explicit `<url>` autolinks become embeds.
 - A toggle heading followed by a sibling DEEPER heading re-absorbs it as a
   child on parse — markdown's section semantics are the toggle's semantics.
 
