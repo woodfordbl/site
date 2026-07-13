@@ -268,8 +268,9 @@ function PropertyPickerDrawer({
 /**
  * Function browser drawer: the catalog with signatures and descriptions,
  * filtered like the panel's reference search (name, aliases, signature,
- * category, description). Tap inserts `name()` with the caret inside the
- * parens and closes the drawer.
+ * category, description). Tap inserts through the panel's per-surface
+ * function path — the argument-placeholder snippet on CM6 (proposal §7) —
+ * and closes the drawer.
  */
 function FunctionPickerDrawer({
   onOpenChange,
@@ -343,6 +344,11 @@ export interface FormulaEditorAccessoryRowProps {
   fields: readonly DatabaseField[];
   /** The panel's caret splice (CM6 handle when mounted, else textarea). */
   onInsertAtCaret: (text: string, caretOffset: number) => void;
+  /**
+   * The panel's per-surface function insertion (argument-placeholder
+   * snippet on CM6, plain `name()` on the textarea).
+   */
+  onInsertFunction: (entry: FormulaFunctionEntry) => void;
   /** The panel's per-surface property insertion (canonical on CM6). */
   onInsertProperty: (field: DatabaseField) => void;
 }
@@ -351,6 +357,7 @@ export interface FormulaEditorAccessoryRowProps {
 export function FormulaEditorAccessoryRow({
   fields,
   onInsertAtCaret,
+  onInsertFunction,
   onInsertProperty,
 }: FormulaEditorAccessoryRowProps): ReactNode {
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -437,9 +444,7 @@ export function FormulaEditorAccessoryRow({
         onOpenChange={(open) => {
           setPickerMode(open ? "function" : null);
         }}
-        onPick={(entry) => {
-          onInsertAtCaret(`${entry.name}()`, entry.name.length + 1);
-        }}
+        onPick={onInsertFunction}
         open={pickerMode === "function"}
       />
     </>

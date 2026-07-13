@@ -578,6 +578,33 @@ describe("FormulaEditorPanel", () => {
       expect(onSave).toHaveBeenLastCalledWith('average(prop("f-price"))');
     });
 
+    it("inserts reference-list functions as argument-placeholder snippets", async () => {
+      renderPanel();
+      await waitFor(() => {
+        expect(document.querySelector(".cm-content")).not.toBeNull();
+      });
+
+      const search = screen.getByLabelText(
+        "Search properties, functions, and operators"
+      );
+      fireEvent.change(search, { target: { value: "dateAdd" } });
+      fireEvent.click(screen.getByText("dateAdd"));
+
+      // The CM6 surface receives the snippet form — the catalog's param
+      // labels as PLAIN doc text, each wrapped in a placeholder pill, so the
+      // draft is honest text the parser sees directly.
+      await waitFor(() => {
+        expect(document.querySelector(".cm-content")?.textContent).toContain(
+          "dateAdd(date, amount, unit)"
+        );
+      });
+      expect(
+        [...document.querySelectorAll(".cm-formula-placeholder")].map(
+          (pill) => pill.textContent
+        )
+      ).toEqual(["date", "amount", "unit"]);
+    });
+
     it("relabels open chips when a field is renamed while editing", async () => {
       const expression = 'prop("f-price") * 2';
       const panelWith = (fields: DatabaseField[]) => (

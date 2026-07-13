@@ -626,16 +626,18 @@ describe("FormulaCodeEditor", () => {
       expect(onChange).toHaveBeenLastCalledWith('prop("f-price")');
     });
 
-    it("inserts functions with the caret inside the parens (after them for zero-arg)", async () => {
+    it("inserts functions as argument snippets (caret after the parens for zero-arg)", async () => {
       const onChange = renderEditor();
       typeText("roun");
       await waitForPopup();
       await settleInteractionDelay();
       fireEvent.keyDown(cmContent(), { key: "Enter" });
-      expect(onChange).toHaveBeenLastCalledWith("round()");
-      expect(editorView().state.selection.main.head).toBe("round(".length);
-
+      // Parameterized functions land the placeholder snippet form with the
+      // first placeholder selected — typing replaces it.
+      expect(onChange).toHaveBeenLastCalledWith("round(value, digits?)");
       typeText("1.5");
+      expect(onChange).toHaveBeenLastCalledWith("round(1.5, digits?)");
+
       // Move past the closing paren, then complete a zero-arg function.
       act(() => {
         const view = editorView();
@@ -645,10 +647,12 @@ describe("FormulaCodeEditor", () => {
       await waitForPopup();
       await settleInteractionDelay();
       fireEvent.keyDown(cmContent(), { key: "Enter" });
-      expect(onChange).toHaveBeenLastCalledWith("round(1.5) + today()");
+      expect(onChange).toHaveBeenLastCalledWith(
+        "round(1.5, digits?) + today()"
+      );
       // Zero-argument function: caret lands AFTER the parens.
       expect(editorView().state.selection.main.head).toBe(
-        "round(1.5) + today()".length
+        "round(1.5, digits?) + today()".length
       );
     });
 
@@ -658,7 +662,7 @@ describe("FormulaCodeEditor", () => {
       await waitForPopup();
       await settleInteractionDelay();
       fireEvent.keyDown(cmContent(), { key: "Tab" });
-      expect(onChange).toHaveBeenLastCalledWith("upper()");
+      expect(onChange).toHaveBeenLastCalledWith("upper(text)");
     });
 
     it("ranks type-fitting candidates first in an argument position", async () => {
@@ -722,6 +726,155 @@ describe("FormulaCodeEditor", () => {
       expect(andRows).toHaveLength(1);
       // The surviving row is the keyword form — no signature detail.
       expect(andRows[0]?.querySelector(".cm-completionDetail")).toBeNull();
+    });
+  });
+
+  describe("argument placeholders", () => {
+    function renderEditor() {
+      const editorRef = createRef<FormulaCodeEditorHandle>();
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          editorRef={editorRef}
+          fields={FIELDS}
+          onChange={onChange}
+          value=""
+        />
+      );
+      return { editorRef, onChange };
+    }
+
+    function placeholderPills(): HTMLElement[] {
+      return [...document.querySelectorAll(".cm-formula-placeholder")].filter(
+        (element): element is HTMLElement => element instanceof HTMLElement
+      );
+    }
+
+    function selectionRange(): { from: number; to: number } {
+      const { main } = editorView().state.selection;
+      return { from: main.from, to: main.to };
+    }
+
+    /** CM's post-open accept guard (see the autocomplete tests). */
+    async function settleInteractionDelay(): Promise<void> {
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 100);
+          })
+      );
+    }
+
+    const SNIPPET = "dateAdd(date, amount, unit)";
+    const DATE_RANGE = { from: "dateAdd(".length, to: "dateAdd(date".length };
+    const AMOUNT_RANGE = {
+      from: "dateAdd(date, ".length,
+      to: "dateAdd(date, amount".length,
+    };
+    const UNIT_RANGE = {
+      from: "dateAdd(date, amount, ".length,
+      to: "dateAdd(date, amount, unit".length,
+    };
+
+    it("insertSnippet inserts plain labeled text, marks each argument, and selects the first", () => {
+      const { editorRef, onChange } = renderEditor();
+      act(() => {
+        editorRef.current?.insertSnippet("dateAdd", ["date", "amount", "unit"]);
+      });
+
+      // The doc — and what onChange reports — is PLAIN text: the pills are
+      // styling only, so nothing placeholder-ish can persist into a save.
+      expect(onChange).toHaveBeenLastCalledWith(SNIPPET);
+      expect(editorView().state.doc.toString()).toBe(SNIPPET);
+
+      expect(placeholderPills().map((pill) => pill.textContent)).toEqual([
+        "date",
+        "amount",
+        "unit",
+      ]);
+      // The first placeholder is selected, so typing replaces it.
+      expect(selectionRange()).toEqual(DATE_RANGE);
+    });
+
+    it("typing over the selected placeholder replaces it and drops its mark", () => {
+      const { editorRef, onChange } = renderEditor();
+      act(() => {
+        editorRef.current?.insertSnippet("dateAdd", ["date", "amount", "unit"]);
+      });
+
+      typeText("now()");
+      expect(onChange).toHaveBeenLastCalledWith("dateAdd(now(), amount, unit)");
+      expect(placeholderPills().map((pill) => pill.textContent)).toEqual([
+        "amount",
+        "unit",
+      ]);
+    });
+
+    it("Tab selects the next placeholder and Shift-Tab the previous", () => {
+      const { editorRef } = renderEditor();
+      act(() => {
+        editorRef.current?.insertSnippet("dateAdd", ["date", "amount", "unit"]);
+      });
+
+      fireEvent.keyDown(cmContent(), { key: "Tab" });
+      expect(selectionRange()).toEqual(AMOUNT_RANGE);
+      fireEvent.keyDown(cmContent(), { key: "Tab" });
+      expect(selectionRange()).toEqual(UNIT_RANGE);
+      fireEvent.keyDown(cmContent(), { key: "Tab", shiftKey: true });
+      expect(selectionRange()).toEqual(AMOUNT_RANGE);
+    });
+
+    it("clicking a placeholder selects its whole range", () => {
+      const { editorRef } = renderEditor();
+      act(() => {
+        editorRef.current?.insertSnippet("dateAdd", ["date", "amount", "unit"]);
+      });
+
+      const unit = placeholderPills().at(-1);
+      if (unit === undefined) {
+        throw new Error("placeholder pills not rendered");
+      }
+      // fireEvent returns false when preventDefault ran — the press is
+      // consumed by the placeholder selection, not CM's caret placement.
+      expect(fireEvent.mouseDown(unit)).toBe(false);
+      expect(selectionRange()).toEqual(UNIT_RANGE);
+    });
+
+    it("accepting a parameterized completion lands the snippet with the first placeholder selected", async () => {
+      const { onChange } = renderEditor();
+      typeText("dateAd");
+      await waitFor(() => {
+        expect(
+          document.querySelector(".cm-tooltip-autocomplete")
+        ).not.toBeNull();
+      });
+      await settleInteractionDelay();
+
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith(SNIPPET);
+      expect(placeholderPills()).toHaveLength(3);
+      expect(selectionRange()).toEqual(DATE_RANGE);
+    });
+
+    it("zero-param completions keep the caret after the parens, with no placeholders", async () => {
+      const { onChange } = renderEditor();
+      typeText("toda");
+      await waitFor(() => {
+        expect(
+          document.querySelector(".cm-tooltip-autocomplete")
+        ).not.toBeNull();
+      });
+      await settleInteractionDelay();
+
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith("today()");
+      expect(placeholderPills()).toHaveLength(0);
+      expect(selectionRange()).toEqual({
+        from: "today()".length,
+        to: "today()".length,
+      });
     });
   });
 

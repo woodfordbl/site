@@ -45,6 +45,7 @@ import {
   type FormulaFunctionEntry,
   type FormulaOperatorCatalogEntry,
   formulaFunctionSignature,
+  formulaParamLabel,
   formulaPropertyReference,
 } from "@/lib/formula/catalog.ts";
 import {
@@ -467,6 +468,7 @@ function ReferenceList({
   className,
   entries,
   onInsertAtCaret,
+  onInsertFunction,
   onInsertProperty,
   onShowDetail,
 }: {
@@ -474,6 +476,7 @@ function ReferenceList({
   className?: string;
   entries: ReferenceListEntries;
   onInsertAtCaret: (text: string, caretOffset: number) => void;
+  onInsertFunction: (entry: FormulaFunctionEntry) => void;
   onInsertProperty: (propertyField: DatabaseField) => void;
   onShowDetail: (detail: ReferenceDetail) => void;
 }): ReactNode {
@@ -526,8 +529,7 @@ function ReferenceList({
             }}
             key={entry.name}
             onInsert={() => {
-              // Caret lands inside the parens, ready for arguments.
-              onInsertAtCaret(`${entry.name}()`, entry.name.length + 1);
+              onInsertFunction(entry);
             }}
             onShowDetail={onShowDetail}
           >
@@ -938,6 +940,23 @@ export function FormulaEditorPanel({
   };
 
   /**
+   * Function rows insert per surface: the CM6 editor takes the
+   * argument-placeholder snippet — `round(value, digits?)` with the first
+   * placeholder selected, Tab walking the rest (proposal §7, the Numbers
+   * trick) — via the handle's `insertSnippet`; the textarea keeps the plain
+   * `name()` insert with the caret inside the parens (placeholders are a
+   * CM6 affordance).
+   */
+  const insertFunctionEntry = (entry: FormulaFunctionEntry) => {
+    const editor = codeEditorRef.current;
+    if (editor !== null) {
+      editor.insertSnippet(entry.name, entry.params.map(formulaParamLabel));
+      return;
+    }
+    insertAtCaret(`${entry.name}()`, entry.name.length + 1);
+  };
+
+  /**
    * Chip menu dismissed without an action (Escape/outside-click): hand focus
    * back to the editor so typing can continue where the tap interrupted it.
    */
@@ -1257,6 +1276,7 @@ export function FormulaEditorPanel({
         className={wide ? "max-h-none min-h-0 flex-1" : undefined}
         entries={{ functionEntries, operatorEntries, propertyFields }}
         onInsertAtCaret={insertAtCaret}
+        onInsertFunction={insertFunctionEntry}
         onInsertProperty={insertPropertyReference}
         onShowDetail={setDetail}
       />
@@ -1299,6 +1319,7 @@ export function FormulaEditorPanel({
         <FormulaEditorAccessoryRow
           fields={fields}
           onInsertAtCaret={insertAtCaret}
+          onInsertFunction={insertFunctionEntry}
           onInsertProperty={insertPropertyReference}
         />
       </>

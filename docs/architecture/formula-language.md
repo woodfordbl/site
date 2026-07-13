@@ -430,6 +430,28 @@ pointers it renders as a vaul bottom drawer (`variant="menu"`) automatically, ma
 the accessory row's picker drawers. Escape/outside-click dismissal refocuses the
 editor.
 
+**Argument placeholder tokens** (proposal §7, the Numbers trick): inserting a
+function with parameters — from the fused autocomplete, the reference list, or
+the mobile function picker (both via the editor handle's `insertSnippet`) —
+lands the snippet form `dateAdd(date, amount, unit)`. The doc text IS the
+parameter labels (`formulaParamLabel`, so optional params read `digits?` and a
+variadic tail `…`) — plain text the parser sees directly, so diagnostics flag
+unfilled placeholders and Save stays gated until they're replaced. A state
+field tracks each label's span (mapped through every edit) and styles it as a
+muted dashed pill via `Decoration.mark` — never `Decoration.replace`, nothing
+is hidden, so nothing placeholder-ish *can* persist into a saved expression.
+The first placeholder is **selected** on insert so typing replaces it;
+Tab/Shift-Tab select the next/previous placeholder (Tab still accepts an open
+completion first, and falls through once no placeholder remains ahead);
+pressing a pill selects its whole range — the touch affordance that makes
+argument filling tap-and-type instead of caret gymnastics. A placeholder
+leaves the set the moment its text stops matching its label (typing over the
+selection), and Mod+Enter sweeps the set before submitting. Zero-parameter
+functions keep the plain `name()` insert with the caret after the parens; the
+textarea path keeps the caret-inside-parens `name()` insert (placeholders are
+a CM6 affordance). Type-driven picker sheets for closed-type placeholders
+(unit enums, select options) are deferred.
+
 ### Mobile sheet
 
 On coarse pointers the "Edit property" submenu drawer hosts the panel's
@@ -496,5 +518,7 @@ errors inline as "⚠ message". Never throws.
 ## Deferred
 
 `db()` whole-database references, member canonicalization, member autocomplete
-after `r.`, and save-time cross-database cycle rejection are planned later phases —
+after `r.`, save-time cross-database cycle rejection, and type-driven picker
+sheets for closed-type argument placeholders (a `unit` enum or select option
+opening a picker instead of the keyboard) are planned later phases —
 see the [proposal](../proposals/formula-language-v2.md) §4.4–§7.

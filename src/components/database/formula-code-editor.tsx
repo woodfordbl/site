@@ -16,6 +16,7 @@ import {
   RangeSetBuilder,
   StateEffect,
   StateField,
+  type Transaction,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -126,6 +127,22 @@ import { cn } from "@/lib/utils.ts";
  * caret-at-boundary behavior, and caret placement AROUND chips plus
  * whole-chip backspace are untouched either way.
  *
+ * ARGUMENT PLACEHOLDERS (proposal §7, the Numbers trick): inserting a
+ * function with parameters — via the handle's `insertSnippet` (reference
+ * list, mobile function picker) or the fused autocomplete — lands the
+ * snippet form `dateAdd(date, amount, unit)`. The doc text IS the parameter
+ * labels ({@link insertSnippetAt}) — plain text, so parse/diagnostics treat
+ * them as ordinary tokens and Save stays gated until they're replaced —
+ * while a state field ({@link placeholderField}) tracks each label's span
+ * and styles it as a muted pill via `Decoration.mark` (never
+ * `Decoration.replace`: nothing is hidden, nothing can persist). The first
+ * placeholder is SELECTED on insert so typing replaces it; Tab/Shift-Tab
+ * select the next/previous placeholder (after the completion popup's own
+ * Tab-accept, and falling through when none remains); pressing a pill
+ * selects its whole range ({@link selectPlaceholderPress}). A placeholder
+ * leaves the set the moment its text stops matching its label (typing over
+ * the selection), and Mod+Enter clears the set before submitting.
+ *
  * ARGUMENT INFO CARD (proposal §6.2): while the caret sits inside a function
  * call's argument list, a small tooltip anchored at the callee shows the
  * signature with the CURRENT parameter emphasized plus the one-line
@@ -146,6 +163,13 @@ import { cn } from "@/lib/utils.ts";
 export interface FormulaCodeEditorHandle {
   /** Focus the editor without moving the caret. */
   focus: () => void;
+  /**
+   * Splice `name(p1, p2, …)` at the caret with an argument-placeholder pill
+   * over each param label and the FIRST placeholder selected, so typing
+   * replaces it (proposal §7; see the ARGUMENT PLACEHOLDERS module docs).
+   * Zero params insert `name()` with the caret after the parens.
+   */
+  insertSnippet: (name: string, params: readonly string[]) => void;
   /**
    * Splice `text` at the caret (replacing any selection), then place the
    * caret `caretOffset` characters into the inserted text and refocus.
@@ -897,6 +921,193 @@ const functionInfoCard = StateField.define<Tooltip | null>({
   provide: (field) => showTooltip.from(field),
 });
 
+// --- argument placeholders -----------------------------------------------------
+
+/**
+ * One live placeholder: the span its label currently occupies. The label is
+ * stored so mapping can tell "the span drifted with an edit elsewhere"
+ * (text still equals the label — keep) from "the user typed over it"
+ * (text diverged — drop).
+ */
+interface ArgumentPlaceholder {
+  /** Span start (inclusive) in the doc. */
+  from: number;
+  /** The param label the span was inserted as (`date`, `digits?`, `…`). */
+  label: string;
+  /** Span end (exclusive) in the doc. */
+  to: number;
+}
+
+/** Registers freshly inserted placeholders (positions in the NEW doc). */
+const addPlaceholders = StateEffect.define<readonly ArgumentPlaceholder[]>();
+
+/** Drops every placeholder — the pre-submit sweep (Mod+Enter). */
+const clearPlaceholders = StateEffect.define<null>();
+
+/**
+ * Map placeholders through a doc change, dropping any whose text no longer
+ * equals its label. Start maps with assoc 1 and end with assoc -1 so an
+ * insertion at either boundary stays OUTSIDE the span; typing over the
+ * selected placeholder collapses/diverges its span, which the label-equality
+ * check turns into removal.
+ */
+function mapPlaceholders(
+  value: readonly ArgumentPlaceholder[],
+  transaction: Transaction
+): ArgumentPlaceholder[] {
+  const mapped: ArgumentPlaceholder[] = [];
+  for (const range of value) {
+    const from = transaction.changes.mapPos(range.from, 1);
+    const to = transaction.changes.mapPos(range.to, -1);
+    if (from < to && transaction.newDoc.sliceString(from, to) === range.label) {
+      mapped.push({ from, label: range.label, to });
+    }
+  }
+  return mapped;
+}
+
+const placeholderMark = Decoration.mark({ class: "cm-formula-placeholder" });
+
+/** The pill marks for the current placeholder set (kept sorted by start). */
+function placeholderDecorations(
+  ranges: readonly ArgumentPlaceholder[]
+): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const range of ranges) {
+    builder.add(range.from, range.to, placeholderMark);
+  }
+  return builder.finish();
+}
+
+/**
+ * The live placeholder set (see the ARGUMENT PLACEHOLDERS module docs):
+ * spans map through every edit and self-remove once their text diverges
+ * from the label, so the pills are pure styling over honest doc text —
+ * a saved formula can only ever contain the literal text.
+ */
+const placeholderField = StateField.define<readonly ArgumentPlaceholder[]>({
+  create: () => [],
+  update(value, transaction) {
+    let next = transaction.docChanged
+      ? mapPlaceholders(value, transaction)
+      : value;
+    for (const effect of transaction.effects) {
+      if (effect.is(addPlaceholders)) {
+        next = [...next, ...effect.value].sort((a, b) => a.from - b.from);
+      } else if (effect.is(clearPlaceholders)) {
+        next = [];
+      }
+    }
+    return next;
+  },
+  provide: (field) =>
+    EditorView.decorations.from(field, placeholderDecorations),
+});
+
+/**
+ * Splice the snippet form `name(label1, label2)` over `range`, register a
+ * placeholder over each label, and select the FIRST placeholder so typing
+ * replaces it. Zero labels insert `name()` with the caret after the parens
+ * (the zero-argument completion convention). Shared by the autocomplete
+ * apply and the handle's `insertSnippet`.
+ */
+function insertSnippetAt(
+  view: EditorView,
+  range: { from: number; to: number },
+  name: string,
+  labels: readonly string[]
+): void {
+  const insert = `${name}(${labels.join(", ")})`;
+  const ranges: ArgumentPlaceholder[] = [];
+  let cursor = range.from + name.length + 1;
+  for (const label of labels) {
+    ranges.push({ from: cursor, label, to: cursor + label.length });
+    cursor += label.length + 2; // past the ", " separator
+  }
+  const first = ranges[0];
+  view.dispatch({
+    changes: { from: range.from, insert, to: range.to },
+    effects: addPlaceholders.of(ranges),
+    selection:
+      first === undefined
+        ? { anchor: range.from + insert.length }
+        : { anchor: first.from, head: first.to },
+    userEvent: "input.complete",
+  });
+}
+
+/**
+ * Tab: select the next placeholder at or past the selection. Declines (Tab
+ * falls through — accept-completion runs earlier in the keymap, focus moves
+ * on) when no placeholder remains ahead.
+ */
+function selectNextPlaceholder(view: EditorView): boolean {
+  const { main } = view.state.selection;
+  // `from >= main.to` naturally skips the currently selected placeholder
+  // (its start precedes its own end) while catching a caret sitting at a
+  // placeholder's left edge.
+  const next = view.state
+    .field(placeholderField)
+    .find((range) => range.from >= main.to);
+  if (next === undefined) {
+    return false;
+  }
+  view.dispatch({
+    scrollIntoView: true,
+    selection: { anchor: next.from, head: next.to },
+  });
+  return true;
+}
+
+/** Shift-Tab: select the previous placeholder before the selection. */
+function selectPreviousPlaceholder(view: EditorView): boolean {
+  const { main } = view.state.selection;
+  // The set is kept sorted by start, so the last match wins (no findLast in
+  // the compile target's lib).
+  let previous: ArgumentPlaceholder | undefined;
+  for (const range of view.state.field(placeholderField)) {
+    if (range.to <= main.from) {
+      previous = range;
+    }
+  }
+  if (previous === undefined) {
+    return false;
+  }
+  view.dispatch({
+    scrollIntoView: true,
+    selection: { anchor: previous.from, head: previous.to },
+  });
+  return true;
+}
+
+/**
+ * Press on a placeholder pill: select its WHOLE span so typing replaces it
+ * (the touch affordance — no caret gymnastics). Mirrors the chip press
+ * interception, but selecting rather than menuing; off-pill presses fall
+ * through to CM untouched.
+ */
+function selectPlaceholderPress(event: MouseEvent, view: EditorView): boolean {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  const pill = target.closest(".cm-formula-placeholder");
+  if (!(pill instanceof HTMLElement)) {
+    return false;
+  }
+  const pos = view.posAtDOM(pill, 0);
+  const range = view.state
+    .field(placeholderField)
+    .find((candidate) => candidate.from <= pos && pos <= candidate.to);
+  if (range === undefined) {
+    return false;
+  }
+  event.preventDefault();
+  view.dispatch({ selection: { anchor: range.from, head: range.to } });
+  view.focus();
+  return true;
+}
+
 // --- fused autocomplete ------------------------------------------------------
 
 /** Identifier being typed at the caret (completion trigger + filter range). */
@@ -1070,8 +1281,10 @@ function propertyCompletion(
 
 /**
  * A catalog-function option: signature as detail, description as the info
- * card, applied as `name()` with the caret inside the parens — after them
- * for zero-argument functions (`now()`/`today()`).
+ * card, applied as the argument-placeholder snippet form with the first
+ * placeholder selected ({@link insertSnippetAt}); zero-argument functions
+ * (`now()`/`today()`) keep the plain `name()` insert with the caret after
+ * the parens.
  */
 function functionCompletion(
   entry: FormulaFunctionEntry,
@@ -1079,10 +1292,12 @@ function functionCompletion(
 ): Completion {
   return {
     apply: (view, _completion, from, to) => {
-      const insert = `${entry.name}()`;
-      const caret =
-        from + entry.name.length + (entry.params.length === 0 ? 2 : 1);
-      applyInsert(view, { from, to }, insert, caret);
+      insertSnippetAt(
+        view,
+        { from, to },
+        entry.name,
+        entry.params.map(formulaParamLabel)
+      );
     },
     boost: typeMatchBoost(entry.returns, expected),
     detail: formulaFunctionSignature(entry).slice(entry.name.length),
@@ -1303,6 +1518,17 @@ const formulaEditorTheme = EditorView.theme({
     maxWidth: "16rem",
     padding: "6px 8px",
   },
+  // Argument placeholder pills: muted, dashed — deliberately quieter than
+  // the blue property chips and unlike the destructive squiggles, since a
+  // placeholder is an invitation, not an error. Tapping one selects it.
+  ".cm-formula-placeholder": {
+    backgroundColor: "var(--color-muted)",
+    border: "1px dashed var(--color-border)",
+    borderRadius: "0.25rem",
+    color: "var(--color-muted-foreground)",
+    cursor: "pointer",
+    padding: "0 3px",
+  },
   // Squiggles: destructive wavy underline; a diagnosed atomic chip gets a
   // destructive ring instead (an underline under a bg-filled chip is mud).
   ".cm-formula-diagnostic": {
@@ -1429,23 +1655,33 @@ export function FormulaCodeEditor({
           EditorView.domEventHandlers({
             click: (event, view) =>
               emitChipTap(event, view, callbacksRef.current.onChipTap),
-            mousedown: (event) =>
+            // Chip suppression first (its menu owns the press), then the
+            // placeholder pill press (select the whole span).
+            mousedown: (event, view) =>
               suppressChipPress(
                 event,
                 callbacksRef.current.onChipTap !== undefined
-              ),
+              ) || selectPlaceholderPress(event, view),
           }),
           keymap.of([
             {
               key: "Mod-Enter",
-              run: () => {
+              run: (view) => {
+                // Placeholders are a transient authoring aid: sweep them
+                // before submitting so none outlives a save attempt.
+                if (view.state.field(placeholderField).length > 0) {
+                  view.dispatch({ effects: clearPlaceholders.of(null) });
+                }
                 callbacksRef.current.onSubmit?.();
                 return true;
               },
             },
-            // Tab accepts like Enter while the popup is open; when it's
-            // closed the binding declines and Tab keeps moving focus.
+            // Tab accepts like Enter while the popup is open, then jumps to
+            // the next argument placeholder; with neither, both decline and
+            // Tab keeps moving focus. Shift-Tab walks placeholders back.
             { key: "Tab", run: acceptCompletion },
+            { key: "Tab", run: selectNextPlaceholder },
+            { key: "Shift-Tab", run: selectPreviousPlaceholder },
             ...historyKeymap,
             ...defaultKeymap,
           ]),
@@ -1484,6 +1720,7 @@ export function FormulaCodeEditor({
           chipFields.init(() => fieldsRef.current),
           checkContextState.init(() => checkContextRef.current),
           propertyChips,
+          placeholderField,
           typedReferenceCanonicalizer,
           diagnosticsField,
           diagnosticsScheduler,
@@ -1547,6 +1784,14 @@ export function FormulaCodeEditor({
           changes: { from, to, insert: text },
           selection: { anchor: from + caretOffset },
         });
+        view.focus();
+      },
+      insertSnippet: (name, params) => {
+        const view = viewRef.current;
+        if (view === null) {
+          return;
+        }
+        insertSnippetAt(view, view.state.selection.main, name, params);
         view.focus();
       },
       replaceRange: (from, to, text) => {
