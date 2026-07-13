@@ -15,7 +15,7 @@ function hasClassToken(el: Element, token: string): boolean {
  */
 export function flattenDatabaseGridClone(grid: HTMLElement): void {
   for (const el of grid.querySelectorAll(
-    '[data-slot="scroll-area-scrollbar"], .database-grid-pinned-shadow, .hover-reveal'
+    '[data-slot="scroll-area-scrollbar"], .hover-reveal'
   )) {
     el.remove();
   }

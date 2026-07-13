@@ -416,7 +416,12 @@ export function useChartGradientDither(
   // thinning to the baseline) rather than vanishing where the curve sits low.
   // `gamma = 0` (gradient toggle off) still yields a flat fill — nullish
   // coalescing preserves it.
-  const { matrix = 8, pixelSize = 4, peak = 0.95, gamma = 0.55 } = options ?? {};
+  const {
+    matrix = 8,
+    pixelSize = 4,
+    peak = 0.95,
+    gamma = 0.55,
+  } = options ?? {};
   const { chartDitherEnabled } = useSiteAppearance();
   const enabled = options?.enabled ?? chartDitherEnabled;
   const ref = React.useRef<HTMLDivElement | null>(null);

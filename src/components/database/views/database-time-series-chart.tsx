@@ -4,10 +4,15 @@ import { Area, AreaChart, Line, LineChart, XAxis, YAxis } from "recharts";
 import { DitherKitCartesian } from "@/components/charts/dither-kit-cartesian.tsx";
 import { chartConfigPatch } from "@/components/database/views/database-chart-config-helpers.ts";
 import {
+  ChartLegendSlot,
+  chartXAxisLabel,
+  chartYAxisLabel,
+  X_AXIS_TITLE_HEIGHT_PX,
+  Y_AXIS_TITLE_WIDTH_PX,
+} from "@/components/database/views/database-chart-parts.tsx";
+import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   renderCartesianGrids,
@@ -178,37 +183,6 @@ function makeTimeSeriesTooltipFormatter(
   };
 }
 
-/**
- * Config-aware legend for the time-series chart (mirrors the categorical one).
- * Previously hardcoded to "shown for >1 series, bottom", so the legend toggle
- * and position controls did nothing on time charts.
- */
-function renderTimeSeriesLegend(
-  chart: ChartViewConfig,
-  seriesCount: number
-): ReactNode {
-  const show = chart.showLegend ?? seriesCount > 1;
-  if (!show) {
-    return null;
-  }
-  const position = chart.legendPosition ?? "bottom";
-  if (position === "right") {
-    return (
-      <ChartLegend
-        align="right"
-        content={
-          <ChartLegendContent className="flex-col items-start gap-2 pt-0 pl-4" />
-        }
-        layout="vertical"
-        verticalAlign="middle"
-      />
-    );
-  }
-  return (
-    <ChartLegend content={<ChartLegendContent />} verticalAlign={position} />
-  );
-}
-
 /** Tooltip header: the hovered point's timestamp, formatted. */
 function timeSeriesLabelFormatter(
   _label: unknown,
@@ -280,6 +254,75 @@ function mergeTimeSeriesRows(
     }
   }
   return [...byT.values()].sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Grids + X/Y axes + tooltip + legend for the Recharts time series. Extracted so
+ * `DatabaseTimeSeriesChart` stays under the cognitive-complexity budget.
+ */
+function renderTimeSeriesAxes({
+  chart,
+  chartConfig,
+  data,
+  formatValue,
+  seriesCount,
+  timeFormatter,
+  xAxisLabel,
+  yAxisLabel,
+}: {
+  chart: ChartViewConfig;
+  chartConfig: ChartConfig;
+  data: ReturnType<typeof useTimeSeriesChartData>["data"];
+  formatValue: (value: number) => string;
+  seriesCount: number;
+  timeFormatter: (t: number) => string;
+  xAxisLabel: ReturnType<typeof chartXAxisLabel>;
+  yAxisLabel: ReturnType<typeof chartYAxisLabel>;
+}): ReactNode {
+  const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
+  return (
+    <>
+      {renderCartesianGrids(chart)}
+      <XAxis
+        allowDataOverflow
+        axisLine={false}
+        dataKey="t"
+        domain={data ? [data.from, data.to] : ["dataMin", "dataMax"]}
+        height={xAxisLabel ? X_AXIS_TITLE_HEIGHT_PX : undefined}
+        label={xAxisLabel}
+        minTickGap={32}
+        scale="time"
+        tickFormatter={timeFormatter}
+        tickLine={false}
+        tickMargin={8}
+        type="number"
+      />
+      <YAxis
+        allowDataOverflow={hasYBound}
+        axisLine={false}
+        domain={[chart.yMin ?? "auto", chart.yMax ?? "auto"]}
+        label={yAxisLabel}
+        tickCount={chart.gridCount}
+        tickFormatter={formatValue}
+        tickLine={false}
+        width={yAxisLabel ? Y_AXIS_TITLE_WIDTH_PX : "auto"}
+      />
+      {chart.showTooltip === false ? null : (
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={makeTimeSeriesTooltipFormatter(
+                chartConfig,
+                formatValue
+              )}
+              labelFormatter={timeSeriesLabelFormatter}
+            />
+          }
+        />
+      )}
+      <ChartLegendSlot chart={chart} seriesCount={seriesCount} />
+    </>
+  );
 }
 
 type MarkStyle = ReturnType<typeof useTimeSeriesMarkStyle>;
@@ -475,6 +518,8 @@ export function DatabaseTimeSeriesChart({
   const { curveType, dither, glow, pixelated, reveal, softGradient } =
     useTimeSeriesMarkStyle(chart, chartConfig, mark);
   const timeFormatter = makeTimeFormatter(windowMs);
+  const xAxisLabel = chartXAxisLabel(chart.xAxisTitle);
+  const yAxisLabel = chartYAxisLabel(chart.yAxisTitle);
   const formatValue = (value: number) => {
     if (percent) {
       return formatPercentChange(value);
@@ -548,48 +593,16 @@ export function DatabaseTimeSeriesChart({
     );
   }
 
-  const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
-
-  const axes = (
-    <>
-      {renderCartesianGrids(chart)}
-      <XAxis
-        allowDataOverflow
-        axisLine={false}
-        dataKey="t"
-        domain={data ? [data.from, data.to] : ["dataMin", "dataMax"]}
-        minTickGap={32}
-        scale="time"
-        tickFormatter={timeFormatter}
-        tickLine={false}
-        tickMargin={8}
-        type="number"
-      />
-      <YAxis
-        allowDataOverflow={hasYBound}
-        axisLine={false}
-        domain={[chart.yMin ?? "auto", chart.yMax ?? "auto"]}
-        tickCount={chart.gridCount}
-        tickFormatter={formatValue}
-        tickLine={false}
-        width="auto"
-      />
-      {chart.showTooltip === false ? null : (
-        <ChartTooltip
-          content={
-            <ChartTooltipContent
-              formatter={makeTimeSeriesTooltipFormatter(
-                chartConfig,
-                formatValue
-              )}
-              labelFormatter={timeSeriesLabelFormatter}
-            />
-          }
-        />
-      )}
-      {renderTimeSeriesLegend(chart, seriesEntries.length)}
-    </>
-  );
+  const axes = renderTimeSeriesAxes({
+    chart,
+    chartConfig,
+    data,
+    formatValue,
+    seriesCount: seriesEntries.length,
+    timeFormatter,
+    xAxisLabel,
+    yAxisLabel,
+  });
 
   const plot = renderTimeSeriesPlot({
     axes,
