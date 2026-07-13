@@ -616,7 +616,13 @@ export function PageListItem({
           onDelete={() => setDeleteOpen(true)}
           onDuplicate={handleDuplicate}
           onMoveTo={handleMoveTo}
-          onRename={startRenaming}
+          onRename={() => {
+            // Inline rename swaps the row out for the edit field, unmounting
+            // this controlled ContextMenu. Force `open` false first so it does
+            // not remount still-open (and pop back up) when rename finishes.
+            setContextMenuOpen(false);
+            startRenaming();
+          }}
           onResetToRemote={handleResetToRemote}
           onSaveAsTemplate={saveAsTemplate.request}
           onToggleFavorite={handleToggleFavorite}
