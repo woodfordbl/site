@@ -8,15 +8,9 @@ import {
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
-import {
-  buildDatabaseHubSlug,
-  resolveDatabaseSlug,
-} from "@/lib/databases/database-page-paths.ts";
 import { resolveRowDefaultValues } from "@/lib/databases/row-defaults.ts";
 import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
 import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
-import { replacePageSlugPrefix } from "@/lib/pages/build-page-tree.ts";
-import { slugifyPageSegment } from "@/lib/pages/slugify.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -59,6 +53,33 @@ function createDatabaseTransaction(): DatabaseTransaction {
 /** Commit a database transaction; surface persistence failures via toast. */
 function commitDatabaseTransaction(tx: DatabaseTransaction): void {
   tx.commit().catch(reportPersistenceError);
+}
+
+/**
+ * Sparse in-place patch of a database definition (bumps `updatedAt`).
+ */
+function patchDatabase(
+  databaseId: string,
+  patch: (draft: {
+    icon?: string | undefined;
+    rowDefaults?: LocalDatabase["rowDefaults"];
+    rowPropertiesPlacement?: LocalDatabase["rowPropertiesPlacement"];
+    rowPropertiesVisibleFieldIds?: string[] | undefined;
+    updatedAt: string;
+  }) => void
+): void {
+  if (!localDatabasesCollection.get(databaseId)) {
+    return;
+  }
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      patch(draft);
+      draft.updatedAt = timestamp;
+    });
+  });
+  commitDatabaseTransaction(tx);
 }
 
 function compareRowsByOrder(
@@ -930,89 +951,6 @@ export function duplicateDatabaseField(
   commitDatabaseTransaction(tx);
 }
 
-function dedupeDatabaseSlug(
-  databaseId: string,
-  segment: string,
-  hostParentId: string | null | undefined
-): string {
-  const hubParentIdByDatabaseId = new Map(
-    localPagesCollection.toArray.flatMap((page) =>
-      page.databaseSource
-        ? [[page.databaseSource.databaseId, page.parentId] as const]
-        : []
-    )
-  );
-  const taken = new Set(
-    localDatabasesCollection.toArray
-      .filter(
-        (database) =>
-          database.id !== databaseId &&
-          hubParentIdByDatabaseId.get(database.id) === hostParentId
-      )
-      .map(resolveDatabaseSlug)
-  );
-  if (!taken.has(segment)) {
-    return segment;
-  }
-
-  let index = 2;
-  while (taken.has(`${segment}-${index}`)) {
-    index += 1;
-  }
-  return `${segment}-${index}`;
-}
-
-/** Rename a database, update its route segment, and cascade its hub subtree. */
-export function renameDatabase(databaseId: string, name: string): void {
-  const database = localDatabasesCollection.get(databaseId);
-  if (!database) {
-    return;
-  }
-
-  const timestamp = nowIso();
-  const hub = localPagesCollection.toArray.find(
-    (page) => page.databaseSource?.databaseId === databaseId
-  );
-  const slug = dedupeDatabaseSlug(
-    databaseId,
-    slugifyPageSegment(name),
-    hub?.parentId
-  );
-  const tx = createDatabaseTransaction();
-
-  tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      draft.name = name;
-      draft.slug = slug;
-      draft.updatedAt = timestamp;
-    });
-  });
-
-  commitDatabaseTransaction(tx);
-
-  if (!hub) {
-    return;
-  }
-
-  const parent = hub.parentId
-    ? localPagesCollection.get(hub.parentId)
-    : undefined;
-  const nextHubSlug = buildDatabaseHubSlug(parent?.slug ?? "/", slug);
-  for (const page of localPagesCollection.toArray) {
-    if (
-      page.id === hub.id ||
-      page.slug.startsWith(
-        `${hub.slug.endsWith("/") ? hub.slug : `${hub.slug}/`}`
-      )
-    ) {
-      localPagesCollection.update(page.id, (draft) => {
-        draft.slug = replacePageSlugPrefix(hub.slug, nextHubSlug, draft.slug);
-        draft.updatedAt = timestamp;
-      });
-    }
-  }
-}
-
 /** Set or clear a row's standalone icon; mirrors onto a linked page when present. */
 export function setDatabaseRowIcon(
   rowId: string,
@@ -1050,26 +988,15 @@ export function setDatabaseRowDefault(
   fieldId: string,
   value: DatabaseCellValue | null | undefined
 ): void {
-  if (!localDatabasesCollection.get(databaseId)) {
-    return;
-  }
-  const timestamp = nowIso();
-  const tx = createDatabaseTransaction();
-
-  tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      const next = { ...draft.rowDefaults };
-      if (value === null || value === undefined || value === "") {
-        delete next[fieldId];
-      } else {
-        next[fieldId] = value;
-      }
-      draft.rowDefaults = Object.keys(next).length > 0 ? next : undefined;
-      draft.updatedAt = timestamp;
-    });
+  patchDatabase(databaseId, (draft) => {
+    const next = { ...draft.rowDefaults };
+    if (value === null || value === undefined || value === "") {
+      delete next[fieldId];
+    } else {
+      next[fieldId] = value;
+    }
+    draft.rowDefaults = Object.keys(next).length > 0 ? next : undefined;
   });
-
-  commitDatabaseTransaction(tx);
 }
 
 /**
@@ -1081,21 +1008,9 @@ export function setDatabaseRowPropertiesPlacement(
   databaseId: string,
   placement: "panel" | "top"
 ): void {
-  if (!localDatabasesCollection.get(databaseId)) {
-    return;
-  }
-  const timestamp = nowIso();
-  const tx = createDatabaseTransaction();
-
-  tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      draft.rowPropertiesPlacement =
-        placement === "top" ? undefined : placement;
-      draft.updatedAt = timestamp;
-    });
+  patchDatabase(databaseId, (draft) => {
+    draft.rowPropertiesPlacement = placement === "top" ? undefined : placement;
   });
-
-  commitDatabaseTransaction(tx);
 }
 
 /**
@@ -1108,21 +1023,10 @@ export function setDatabaseRowPropertiesVisibleFieldIds(
   databaseId: string,
   visibleFieldIds: readonly string[] | undefined
 ): void {
-  if (!localDatabasesCollection.get(databaseId)) {
-    return;
-  }
-  const timestamp = nowIso();
-  const tx = createDatabaseTransaction();
-
-  tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      draft.rowPropertiesVisibleFieldIds =
-        visibleFieldIds === undefined ? undefined : [...visibleFieldIds];
-      draft.updatedAt = timestamp;
-    });
+  patchDatabase(databaseId, (draft) => {
+    draft.rowPropertiesVisibleFieldIds =
+      visibleFieldIds === undefined ? undefined : [...visibleFieldIds];
   });
-
-  commitDatabaseTransaction(tx);
 }
 
 /**
@@ -1133,17 +1037,9 @@ export function setDatabaseIcon(
   databaseId: string,
   icon: string | undefined
 ): void {
-  const timestamp = nowIso();
-  const tx = createDatabaseTransaction();
-
-  tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      draft.icon = icon;
-      draft.updatedAt = timestamp;
-    });
+  patchDatabase(databaseId, (draft) => {
+    draft.icon = icon;
   });
-
-  commitDatabaseTransaction(tx);
 }
 
 /**

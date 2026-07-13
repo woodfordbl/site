@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
   RowPropertiesOptionsMenu,
+  RowPropertiesUnderTitleBand,
   useRowPropertiesRail,
 } from "@/components/database/row-page/row-properties-rail.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
@@ -39,18 +40,16 @@ export function RowPageTitleSlot({
         title={page.title}
       />
       {rail.panelMode ? null : (
-        <div
-          className="relative mt-6 mb-4 border-border border-b pb-3"
-          data-reveal-group=""
-        >
-          <div className="absolute top-0 right-0 z-10">
+        <RowPropertiesUnderTitleBand
+          propertiesExtra={
             <RowPropertiesOptionsMenu
               className="hover-reveal"
               database={database}
             />
-          </div>
+          }
+        >
           <RowPropertiesPanel database={database} row={row} />
-        </div>
+        </RowPropertiesUnderTitleBand>
       )}
     </div>
   );

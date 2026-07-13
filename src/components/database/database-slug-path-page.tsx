@@ -2,14 +2,17 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { type ReactNode, useMemo } from "react";
 import { DatabaseHubPage } from "@/components/database/database-hub-page.tsx";
 import { DatabaseRowPage } from "@/components/database/row-page/database-row-page.tsx";
+import { DatabaseTemplateEditorClient } from "@/components/database/row-page/database-template-editor.tsx";
 import {
   localBlocksCollection,
   localDatabaseRowsCollection,
 } from "@/db/collections/local-collections.ts";
 import { useLocalDatabasesSnapshot } from "@/hooks/use-local-databases.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import { resolveDatabasePathFromSplat } from "@/lib/databases/database-page-paths.ts";
-import { DatabaseTemplateEditorClient } from "@/routes/db.$databaseId_.template.tsx";
+import {
+  type ResolvedDatabasePath,
+  resolveDatabasePathFromSplat,
+} from "@/lib/databases/database-page-paths.ts";
 
 /**
  * Client-side renderer for a database path after normal page-slug resolution
@@ -41,23 +44,28 @@ export function useDatabaseSlugPath(splat: string) {
   return resolved;
 }
 
-export function DatabaseSlugPathPage({ splat }: { splat: string }): ReactNode {
-  const resolved = useDatabaseSlugPath(splat);
-
-  if (!resolved) {
-    return null;
-  }
+/** Single kind→component matrix for hub / row / template slug paths. */
+export function renderResolvedDatabasePath(
+  resolved: ResolvedDatabasePath
+): ReactNode {
   if (resolved.kind === "hub") {
     return <DatabaseHubPage databaseId={resolved.database.id} />;
   }
-  if (resolved.kind === "row" && resolved.row) {
-    return (
+  if (resolved.kind === "row") {
+    return resolved.row ? (
       <DatabaseRowPage
         databaseId={resolved.database.id}
         rowId={resolved.row.id}
       />
-    );
+    ) : null;
   }
+  if (resolved.kind === "template") {
+    return <DatabaseTemplateEditorClient databaseId={resolved.database.id} />;
+  }
+  return null;
+}
 
-  return <DatabaseTemplateEditorClient databaseId={resolved.database.id} />;
+export function DatabaseSlugPathPage({ splat }: { splat: string }): ReactNode {
+  const resolved = useDatabaseSlugPath(splat);
+  return resolved ? renderResolvedDatabasePath(resolved) : null;
 }

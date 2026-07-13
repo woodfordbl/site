@@ -73,6 +73,58 @@ export function useRowPropertiesRail(
   };
 }
 
+/**
+ * Shared PageWorkspace chrome for the row-page family: side-panel
+ * `contentWrapper` when placement is panel, otherwise title hosts own the
+ * under-title band via `RowPropertiesUnderTitleBand`.
+ */
+export function useRowPageWorkspaceChrome(
+  database: LocalDatabase | undefined,
+  options: {
+    propertiesPanel: ReactNode;
+  }
+): RowPropertiesRailState & {
+  contentWrapper?: (canvasRegion: ReactNode) => ReactNode;
+} {
+  const rail = useRowPropertiesRail(database);
+  if (!(database && rail.panelMode)) {
+    return rail;
+  }
+
+  return {
+    ...rail,
+    contentWrapper: (canvasRegion) => (
+      <RowPropertiesRailLayout
+        database={database}
+        panel={options.propertiesPanel}
+      >
+        {canvasRegion}
+      </RowPropertiesRailLayout>
+    ),
+  };
+}
+
+/** Under-title properties band shared by row / template / preview titles. */
+export function RowPropertiesUnderTitleBand({
+  children,
+  propertiesExtra,
+}: {
+  children: ReactNode;
+  propertiesExtra?: ReactNode;
+}): ReactNode {
+  return (
+    <div
+      className="relative mt-6 mb-4 border-border border-b pb-3"
+      data-reveal-group=""
+    >
+      {propertiesExtra ? (
+        <div className="absolute top-0 right-0 z-10">{propertiesExtra}</div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
 /** Wait before showing rail hints so quick passes do not flash tooltips. */
 const RAIL_TOOLTIP_DELAY_MS = 300;
 

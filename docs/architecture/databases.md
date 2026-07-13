@@ -484,7 +484,11 @@ record + block shard managed by
 [`row-template-store.ts`](../../src/lib/databases/row-template-store.ts) — mirroring the
 site page template: excluded from the merged page list, slug resolution, id resolution,
 and `saveAllLocalPages`. Edited as a NORMAL page at
-`{hostSlug}/{dbSlug}/template` (legacy `/db/$databaseId/template` redirects),
+`{hostSlug}/{dbSlug}/template` (legacy `/db/$databaseId/template` redirects;
+editor UI in
+[`database-template-editor.tsx`](../../src/components/database/row-page/database-template-editor.tsx),
+mounted via
+[`DatabaseSlugPathPage`](../../src/components/database/database-slug-path-page.tsx)),
 entered from the database ⋯ menu's **Row pages** item. Authors can leave the
 body blank or insert `{{ thisPage.Field }}` property tokens (`{{` autocomplete +
 an empty-template hint). Preview-as-row demonstrates live evaluation.
@@ -492,11 +496,15 @@ Rendering uses [`useRowTemplate`](../../src/hooks/use-row-template.ts);
 materialization uses `readRowTemplateSnapshot`. Row pages inherit the
 template's **icon** (overridden by `row.icon` when set) and **font** when
 explicitly set. The editor header edits **row defaults**
-(`database.rowDefaults`). The whole row-page family shares the properties
-rail; placement is `database.rowPropertiesPlacement` (`top` under the title
+(`database.rowDefaults`). The whole row-page family shares properties chrome via
+`useRowPageWorkspaceChrome` /
+[`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx);
+placement is `database.rowPropertiesPlacement` (`top` under the title
 by default, or `panel` side rail). Row-page show/hide writes
 `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of per-view
-`visibleFieldIds`). Table primary cells and row pages share
+`visibleFieldIds`). Database rename + hub subtree slug cascade live in
+[`database-page-ops.ts`](../../src/db/queries/database-page-ops.ts) (re-exported
+from collection ops). Table primary cells and row pages share
 `resolveDatabaseRowIcon` (`row.icon` → template icon → `DEFAULT_PAGE_ICON`).
 Hub + row pages stay hidden from the Pages sidebar tree
 (`databaseSource` / `databaseRowSource`); favorites and move-to use the seeded

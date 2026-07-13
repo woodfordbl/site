@@ -292,17 +292,21 @@
         "src/lib/schemas/database.ts",
         "src/db/collections/database-sharded-row-storage.ts",
         "src/db/queries/database-collection-ops.ts",
+        "src/db/queries/database-page-ops.ts",
         "src/db/queries/use-database.ts"
       ],
       "docs": ["docs/architecture/databases.md"],
       "majorGlobs": [
         "src/lib/schemas/database.ts",
         "src/db/queries/database-collection-ops.ts",
+        "src/db/queries/database-page-ops.ts",
         "src/lib/databases/materialize-row-page.ts",
         "src/components/database/database-table-grid.tsx",
         "src/components/database/database-filter-bar.tsx",
         "src/components/database/database-column-menu.tsx",
-        "src/components/database/database-row-menu.tsx"
+        "src/components/database/database-row-menu.tsx",
+        "src/components/database/row-page/**",
+        "src/components/database/database-slug-path-page.tsx"
       ]
     }
   ]

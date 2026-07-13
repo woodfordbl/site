@@ -4,12 +4,8 @@ import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef } from "react";
 import { RowPageTitleSlot } from "@/components/database/row-page/row-page-title-slot.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
-import {
-  RowPropertiesRailLayout,
-  useRowPropertiesRail,
-} from "@/components/database/row-page/row-properties-rail.tsx";
+import { useRowPageWorkspaceChrome } from "@/components/database/row-page/row-properties-rail.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
-import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -29,21 +25,7 @@ import {
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import {
-  headingSurfaceClassName,
-  headingTypographyClassNames,
-} from "@/lib/blocks/heading-typography.ts";
-import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { ensureDatabaseRowPage } from "@/lib/databases/materialize-row-page.ts";
-import {
-  pageTitleEditorLayoutClassName,
-  pageTitleIconSlotClassName,
-} from "@/lib/pages/page-title-layout.ts";
-import type {
-  LocalDatabase,
-  LocalDatabaseRow,
-} from "@/lib/schemas/database.ts";
-import { cn } from "@/lib/utils.ts";
 
 export interface DatabaseRowPageProps {
   databaseId: string;
@@ -146,7 +128,12 @@ export function DatabaseRowPageWorkspace({
   );
   const database = databases[0];
   const row = rows.find((entry) => entry.databaseId === source?.databaseId);
-  const rail = useRowPropertiesRail(database);
+  const chrome = useRowPageWorkspaceChrome(database, {
+    propertiesPanel:
+      database && row ? (
+        <RowPropertiesPanel database={database} row={row} />
+      ) : null,
+  });
 
   if (!(page && source && database && row)) {
     return null;
@@ -154,18 +141,7 @@ export function DatabaseRowPageWorkspace({
 
   return (
     <PageWorkspace
-      contentWrapper={
-        rail.panelMode
-          ? (canvasRegion) => (
-              <RowPropertiesRailLayout
-                database={database}
-                panel={<RowPropertiesPanel database={database} row={row} />}
-              >
-                {canvasRegion}
-              </RowPropertiesRailLayout>
-            )
-          : undefined
-      }
+      contentWrapper={chrome.contentWrapper}
       kind="user"
       page={page}
       pageHasLocalDraft
@@ -199,57 +175,5 @@ function RowPageNotFound(): ReactNode {
         </div>
       </PageSidebarChromeProvider>
     </SiteShell>
-  );
-}
-
-/** Shared read-only title used by template previews. */
-export function RowPageTitleSection({
-  database,
-  displayTitle,
-  icon,
-  propertiesExtra,
-  row,
-  showProperties = true,
-}: {
-  database: LocalDatabase;
-  displayTitle: string;
-  icon?: string;
-  propertiesExtra?: ReactNode;
-  row: LocalDatabaseRow;
-  showProperties?: boolean;
-}): ReactNode {
-  return (
-    <div>
-      <div className={pageTitleEditorLayoutClassName}>
-        <div className={pageTitleIconSlotClassName}>
-          <span className="inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground sm:size-9">
-            <PageIconDisplay
-              className="text-[26px] [&_svg]:size-7"
-              icon={resolveDatabaseRowIcon(row, icon)}
-            />
-          </span>
-        </div>
-        <h1
-          className={cn(
-            "w-full min-w-0",
-            headingSurfaceClassName,
-            headingTypographyClassNames[1]
-          )}
-        >
-          {displayTitle}
-        </h1>
-      </div>
-      {showProperties ? (
-        <div
-          className="relative mt-6 mb-4 border-border border-b pb-3"
-          data-reveal-group=""
-        >
-          {propertiesExtra ? (
-            <div className="absolute top-0 right-0 z-10">{propertiesExtra}</div>
-          ) : null}
-          <RowPropertiesPanel database={database} row={row} />
-        </div>
-      ) : null}
-    </div>
   );
 }

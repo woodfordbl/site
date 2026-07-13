@@ -28,9 +28,9 @@ import {
 import { localBlocksCollection } from "@/db/collections/local-collections.ts";
 import {
   deleteDatabase,
-  renameDatabase,
   setDatabaseIcon,
 } from "@/db/queries/database-collection-ops.ts";
+import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalDatabasesSnapshot } from "@/hooks/use-local-databases.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";

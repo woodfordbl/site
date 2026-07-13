@@ -1,12 +1,11 @@
 import { IconEye } from "@tabler/icons-react";
 import { type ReactNode, useMemo } from "react";
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
-import { RowPageTitleSection } from "@/components/database/row-page/database-row-page.tsx";
+import { RowPageTitleSection } from "@/components/database/row-page/row-page-title-section.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
   RowPropertiesOptionsMenu,
-  RowPropertiesRailLayout,
-  useRowPropertiesRail,
+  useRowPageWorkspaceChrome,
 } from "@/components/database/row-page/row-properties-rail.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
@@ -40,7 +39,9 @@ export function RowTemplatePreviewBody({
   const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed);
-  const rail = useRowPropertiesRail(database);
+  const chrome = useRowPageWorkspaceChrome(database, {
+    propertiesPanel: <RowPropertiesPanel database={database} row={row} />,
+  });
 
   const template = useRowTemplate(database.id);
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
@@ -77,7 +78,7 @@ export function RowTemplatePreviewBody({
               />
             }
             row={row}
-            showProperties={!rail.panelMode}
+            showProperties={!chrome.panelMode}
           />
         }
       />
@@ -99,16 +100,9 @@ export function RowTemplatePreviewBody({
               <span className="text-foreground">{displayTitle}</span>
             </span>
           </div>
-          {rail.panelMode ? (
-            <RowPropertiesRailLayout
-              database={database}
-              panel={<RowPropertiesPanel database={database} row={row} />}
-            >
-              {canvasRegion}
-            </RowPropertiesRailLayout>
-          ) : (
-            canvasRegion
-          )}
+          {chrome.contentWrapper
+            ? chrome.contentWrapper(canvasRegion)
+            : canvasRegion}
         </div>
       </div>
     </div>

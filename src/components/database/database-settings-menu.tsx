@@ -82,12 +82,12 @@ import {
   duplicateDatabaseView,
   removeDatabaseField,
   removeDatabaseView,
-  renameDatabase,
   reorderDatabaseFields,
   setDatabaseIcon,
   updateDatabaseSource,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
+import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { requestImmediateSync } from "@/db/sync/database-sync-engine.ts";
 import { useSyncStatus } from "@/hooks/use-sync-status.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";

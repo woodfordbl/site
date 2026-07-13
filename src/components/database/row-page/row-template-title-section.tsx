@@ -3,6 +3,7 @@ import { type ReactNode, useMemo } from "react";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { RowDefaultValueEditor } from "@/components/database/row-page/row-default-value-editor.tsx";
+import { RowPropertiesUnderTitleBand } from "@/components/database/row-page/row-properties-rail.tsx";
 import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { setDatabaseRowDefault } from "@/db/queries/database-collection-ops.ts";
@@ -195,15 +196,9 @@ export function RowTemplateTitleSection({
         Type {"{{"} in the template body to insert property tokens.
       </p>
       {showProperties && hasPanelFields ? (
-        <div
-          className="relative mt-6 mb-4 border-border border-b pb-3"
-          data-reveal-group=""
-        >
-          {propertiesExtra ? (
-            <div className="absolute top-0 right-0 z-10">{propertiesExtra}</div>
-          ) : null}
+        <RowPropertiesUnderTitleBand propertiesExtra={propertiesExtra}>
           <RowTemplateDefaultsList database={database} />
-        </div>
+        </RowPropertiesUnderTitleBand>
       ) : null}
     </div>
   );

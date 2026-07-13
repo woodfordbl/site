@@ -17,10 +17,8 @@ import {
   shouldCancelMenuCloseForIconPicker,
 } from "@/components/ui/menu-icon-rename-input.tsx";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
-import {
-  renameDatabase,
-  setDatabaseIcon,
-} from "@/db/queries/database-collection-ops.ts";
+import { setDatabaseIcon } from "@/db/queries/database-collection-ops.ts";
+import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 
 interface DatabaseSidebarRowMenuProps {
   databaseId: string;

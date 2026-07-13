@@ -8,10 +8,8 @@ import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import {
-  renameDatabase,
-  setDatabaseIcon,
-} from "@/db/queries/database-collection-ops.ts";
+import { setDatabaseIcon } from "@/db/queries/database-collection-ops.ts";
+import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
