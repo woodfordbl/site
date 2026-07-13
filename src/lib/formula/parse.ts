@@ -370,17 +370,58 @@ class Parser {
   }
 
   /**
-   * Postfix dot-chaining. `expr.fn(a)` parses as `fn(expr, a)` flagged
-   * `method`; `expr.Name` without a call parses to a member node. Chains
-   * compose left-to-right: `prop("x").owner.Name`, `r.Estimate.round()`.
+   * Postfix dot-chaining and bracket member access. `expr.fn(a)` parses as
+   * `fn(expr, a)` flagged `method`; `expr.Name` without a call parses to a
+   * member node, and `expr["Any Name"]` parses to the SAME member node shape
+   * for names that can't be written as identifiers (spaces, punctuation).
+   * Chains compose left-to-right: `prop("x").owner.Name`,
+   * `r["Story Points"].round()`.
    */
   private parsePostfix(): FormulaNode {
     const start = this.peek().position;
     let node = this.parsePrimary();
-    while (this.matchPunct(".") !== null) {
-      node = this.parseMemberOrMethodCall(node, start);
+    for (;;) {
+      if (this.matchPunct(".") !== null) {
+        node = this.parseMemberOrMethodCall(node, start);
+        continue;
+      }
+      const bracket = this.tryParseBracketMember(node, start);
+      if (bracket === null) {
+        return node;
+      }
+      node = bracket;
     }
-    return node;
+  }
+
+  /**
+   * Postfix `["name"]` member access — only when the `[` is immediately
+   * followed by a string literal, so a `[` that would previously have been a
+   * trailing-token error (`f()[0]`) keeps its original diagnostic and list
+   * literals in argument position are untouched (they sit at primary
+   * position, never postfix).
+   */
+  private tryParseBracketMember(
+    receiver: FormulaNode,
+    start: number
+  ): FormulaNode | null {
+    if (!this.peekIsPunct("[")) {
+      return null;
+    }
+    const name = this.tokens[this.index + 1];
+    if (name?.type !== "string") {
+      return null;
+    }
+    this.advance();
+    this.advance();
+    const close = this.expectPunct("]", "to close the member access");
+    return {
+      kind: "member",
+      receiver,
+      name: name.value,
+      namePosition: name.position,
+      position: start,
+      end: close.end,
+    };
   }
 
   private parseMemberOrMethodCall(

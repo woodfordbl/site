@@ -44,6 +44,7 @@ const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
 const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
 const PARSE_ERROR_AT_8_RE = /Unexpected end of expression.*\(at character 8\)/;
 const NOT_A_TASKS_PROPERTY_RE = /isn't a property of Tasks/;
+const ROLLUP_TITLE_RE = /Rollup: /;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
 function flushFrames(): Promise<void> {
@@ -308,6 +309,134 @@ describe("FormulaEditorPanel", () => {
       expect(
         screen.getAllByText(NOT_A_TASKS_PROPERTY_RE).length
       ).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("rollup wizard", () => {
+    const relationFields: DatabaseField[] = [
+      { id: "f-rel", name: "Rel", targetDatabaseId: "db-t", type: "relation" },
+    ];
+    const relatedDatabases: FormulaRelatedDatabase[] = [
+      {
+        fields: [
+          { id: "t-name", name: "Name", type: "text" },
+          { id: "t-est", name: "Estimate", type: "number" },
+        ],
+        id: "db-t",
+        name: "Tasks",
+      },
+    ];
+
+    it("hides the Rollup affordance without a resolvable relation", async () => {
+      renderPanel();
+      await flushFrames();
+      expect(screen.queryByText("Rollup")).toBeNull();
+
+      cleanup();
+      // A relation field whose target isn't in relatedDatabases doesn't
+      // count either — the wizard would open onto an empty step.
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={relationFields}
+          onSave={vi.fn()}
+          previewRows={[]}
+        />
+      );
+      await flushFrames();
+      expect(screen.queryByText("Rollup")).toBeNull();
+    });
+
+    it("walks relation → property → aggregation and inserts the humanized formula", async () => {
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={relationFields}
+          onSave={vi.fn()}
+          previewRows={[
+            { id: "row-1", label: "First row", values: { "f-rel": [] } },
+          ]}
+          relatedDatabases={relatedDatabases}
+        />
+      );
+      await flushFrames();
+
+      fireEvent.click(screen.getByText("Rollup"));
+      expect(screen.getByText("Rollup: Which relation?")).toBeDefined();
+      // The wizard replaces the search + reference list while open.
+      expect(
+        screen.queryByLabelText("Search properties, functions, and operators")
+      ).toBeNull();
+
+      fireEvent.click(screen.getByText("Rel"));
+      expect(screen.getByText("Rollup: Which property?")).toBeDefined();
+      expect(screen.getByText("All rows")).toBeDefined();
+
+      fireEvent.click(screen.getByText("Estimate"));
+      expect(screen.getByText("Rollup: How to roll up?")).toBeDefined();
+
+      fireEvent.click(screen.getByText("Sum"));
+      await flushFrames();
+
+      // Textarea drafts live in display coordinates: the generated canonical
+      // text lands humanized, and the wizard closes back to the reference UI.
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe("thisPage.Rel.map(r => r.Estimate).sum()");
+      expect(textarea.selectionStart).toBe(textarea.value.length);
+      expect(screen.getByText("✓ Valid")).toBeDefined();
+      expect(screen.queryByText(ROLLUP_TITLE_RE)).toBeNull();
+    });
+
+    it("counts rows when aggregating without a property", async () => {
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={relationFields}
+          onSave={vi.fn()}
+          previewRows={[]}
+          relatedDatabases={relatedDatabases}
+        />
+      );
+      await flushFrames();
+
+      fireEvent.click(screen.getByText("Rollup"));
+      fireEvent.click(screen.getByText("Rel"));
+      fireEvent.click(screen.getByText("All rows"));
+      fireEvent.click(screen.getByText("Count rows"));
+      await flushFrames();
+
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe("thisPage.Rel.length()");
+    });
+
+    it("steps back through the wizard and closes from the first step", async () => {
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={relationFields}
+          onSave={vi.fn()}
+          previewRows={[]}
+          relatedDatabases={relatedDatabases}
+        />
+      );
+      await flushFrames();
+
+      fireEvent.click(screen.getByText("Rollup"));
+      fireEvent.click(screen.getByText("Rel"));
+      expect(screen.getByText("Rollup: Which property?")).toBeDefined();
+
+      fireEvent.click(screen.getByLabelText("Back"));
+      expect(screen.getByText("Rollup: Which relation?")).toBeDefined();
+
+      fireEvent.click(screen.getByLabelText("Back"));
+      expect(screen.queryByText(ROLLUP_TITLE_RE)).toBeNull();
+      expect(
+        screen.getByLabelText("Search properties, functions, and operators")
+      ).toBeDefined();
     });
   });
 

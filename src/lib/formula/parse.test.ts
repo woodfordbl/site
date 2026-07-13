@@ -449,6 +449,45 @@ describe("parse member access", () => {
   });
 });
 
+describe("parse bracket member access", () => {
+  it("parses to the same member node shape as the dot form", () => {
+    const source = 'r["Story Points"]';
+    expect(astOf(source)).toEqual({
+      kind: "member",
+      receiver: { kind: "name", name: "r", position: 0, end: 1 },
+      name: "Story Points",
+      namePosition: source.indexOf('"Story Points"'),
+      position: 0,
+      end: source.length,
+    });
+  });
+
+  it("chains with dot members and method calls", () => {
+    expect(sexpr(astOf('r["Story Points"].round()'))).toBe(
+      "(.round (member name:r Story Points))"
+    );
+    expect(sexpr(astOf('prop("Rel").map(r => r["Unit Count"]).sum()'))).toBe(
+      "(.sum (.map prop:Rel (lambda (r) (member name:r Unit Count))))"
+    );
+  });
+
+  it("reports a missing closing bracket at the right spot", () => {
+    const error = errorOf('r["Story Points"');
+    expect(error.message).toContain("to close the member access");
+  });
+
+  it("keeps non-string brackets on their original diagnostics", () => {
+    // `f()[0]` was a trailing-token error before bracket members existed and
+    // must stay one — only `[` + string literal parses as member access.
+    expect(() => errorOf("f()[0]")).not.toThrow();
+  });
+
+  it("leaves list literals in argument and primary position untouched", () => {
+    expect(sexpr(astOf("[1, 2].sum()"))).toBe("(.sum [1 2])");
+    expect(sexpr(astOf("f([1])"))).toBe("(f [1])");
+  });
+});
+
 describe("parse list literals", () => {
   it("parses items with the full source span", () => {
     const ast = astOf("[1, 2, 3]");

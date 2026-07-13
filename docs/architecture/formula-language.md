@@ -60,7 +60,12 @@ equivalent shapes, guarded by the frozen
 - **Dot-chaining desugar** — `expr.fn(a)` parses to the same call node as
   `fn(expr, a)` with the receiver prepended and `method: true`, so rewriters can print
   the chain back in its original shape. Bare member access (`r.Estimate`) is a
-  `member` node; whether it exists is the checker's concern.
+  `member` node; whether it exists is the checker's concern. **Bracket member
+  access** — `r["Story Points"]` parses to the exact same `member` node as the dot
+  form, for names that aren't identifiers or that the grammar reads specially
+  (`r.not` would lex as the keyword). Deliberately conservative: only `[` immediately
+  followed by a string literal is member access; everything else (`[1, 2]`, `f()[0]`)
+  keeps its list-literal meaning or original diagnostic.
 - **`let(name, value, body)` / `lets(…)`** — named intermediates. Evaluator special
   forms (they bind names from raw AST nodes), not catalog entries; same for `prop`,
   which is syntax parsing straight to a property node.
@@ -399,6 +404,25 @@ theme-styled via CSS variables and parents to `document.body` so the enclosing m
 popup can't clip it; while it's open, Escape closes only the popup (its bubble is
 consumed so the menu stays open), and bubbles to close the menu otherwise. The chip
 option menu and diagnostics-in-editor (squiggles) are later stages (proposal §6).
+
+### Rollup wizard
+
+Rollups are ordinary formulas — one engine, one mental model; the sugar teaches the
+language. The **Rollup** button (shown only when a relation field with a resolvable
+target exists) swaps the reference list for a three-step wizard
+([`formula-rollup-wizard.tsx`](../../src/components/database/formula-rollup-wizard.tsx)):
+pick a relation, a target property (or "All rows"), and an aggregation, and the
+generated canonical expression lands in the active surface (CM6 takes canonical text
+directly and chips it; the textarea takes the humanized display form; an
+empty/whitespace draft is replaced outright). The generator
+([`rollup-template.ts`](../../src/lib/formula/rollup-template.ts)) offers aggregations
+by the member's type kind — number → sum/average/min/max, date → earliest/latest
+(blank-safe: `latest` filters empties before sorting), checkbox → count checked,
+anything → count non-empty / show all, no member → count rows — and every emitted
+expression is guaranteed to parse: member names that aren't identifier-safe (checked
+by running the real tokenizer, plus the keyword/reserved list) emit the bracket form
+with escaped quotes. It lives inside the Base UI menu popup, so it's plain buttons
+only — no nested menus.
 
 ## Templates
 

@@ -270,6 +270,20 @@ describe("formulaEnclosingCallAt", () => {
     expect(at("sum([1, ")).toBeNull();
   });
 
+  it("steps back out of closed bracket members to the governing call", () => {
+    // `r["Story Points"]` opens and closes its bracket frame; the argument
+    // count of the enclosing call is untouched.
+    expect(at('dateDiff(r["Story Points"], ')).toEqual({
+      argIndex: 1,
+      method: false,
+      name: "dateDiff",
+      position: 0,
+    });
+    // An open bracket member is indistinguishable from a list mid-typing,
+    // so it stays a boundary until closed.
+    expect(at("sum(r[")).toBeNull();
+  });
+
   it("does not count commas of nested closed contexts", () => {
     expect(at('dateDiff(parseDate("a"), ')).toEqual({
       argIndex: 1,

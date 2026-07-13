@@ -852,6 +852,24 @@ describe("member access", () => {
     );
   });
 
+  it("resolves bracket members through the same path as the dot form", () => {
+    const scope: FormulaScope = {
+      getProperty: () => new FormulaRowRef("db-t", "r1"),
+      relations: {
+        database: () => ({
+          fields: [{ id: "f-pts", name: "Story Points", type: "number" }],
+          name: "Tasks",
+          primaryFieldId: "f-pts",
+          row: (rowId) => (rowId === "r1" ? { "f-pts": 13 } : null),
+        }),
+      },
+    };
+    expect(run('prop("row")["Story Points"]', scope)).toBe(13);
+    expect(errorMessage(run('prop("row")["Nope"]', scope))).toBe(
+      '"Nope" isn\'t a property of Tasks'
+    );
+  });
+
   it("errors when a row ref reaches a scope without a resolver", () => {
     const scope = scopeOf({ row: new FormulaRowRef("db-t", "r1") });
     expect(errorMessage(run('prop("row").Estimate', scope))).toBe(

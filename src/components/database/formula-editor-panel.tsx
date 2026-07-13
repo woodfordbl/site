@@ -1,9 +1,10 @@
-import { IconMathFunction, IconSearch } from "@tabler/icons-react";
+import { IconMathFunction, IconSearch, IconSum } from "@tabler/icons-react";
 import {
   Component,
   type KeyboardEvent,
   lazy,
   type ReactNode,
+  type RefObject,
   // biome-ignore lint/correctness/noUnresolvedImports: React 19 exports Suspense; Biome types lag
   Suspense,
   useEffect,
@@ -13,6 +14,10 @@ import {
 } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import type { FormulaCodeEditorHandle } from "@/components/database/formula-code-editor.tsx";
+import {
+  FormulaRollupWizard,
+  formulaRollupRelationFields,
+} from "@/components/database/formula-rollup-wizard.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { TokenChip } from "@/components/ui/chip.tsx";
 import {
@@ -32,6 +37,8 @@ import {
 import {
   FORMULA_FUNCTION_CATALOG,
   FORMULA_OPERATOR_CATALOG,
+  type FormulaFunctionEntry,
+  type FormulaOperatorCatalogEntry,
   formulaFunctionSignature,
   formulaPropertyReference,
 } from "@/lib/formula/catalog.ts";
@@ -143,6 +150,62 @@ function stopMenuKeys(
   if (event.key !== "Escape") {
     event.stopPropagation();
   }
+}
+
+/** The panel state one {@link spliceGeneratedExpression} call works against. */
+interface SpliceGeneratedTarget {
+  codeEditorRef: RefObject<FormulaCodeEditorHandle | null>;
+  draft: string;
+  fields: readonly DatabaseField[];
+  insertAtCaret: (text: string, caretOffset: number) => void;
+  setDraft: (draft: string) => void;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
+}
+
+/**
+ * Land a rollup-wizard-generated CANONICAL expression in the active editing
+ * surface, per surface like property references: the CM6 editor takes the
+ * canonical text directly (its relation ref chips immediately), the textarea
+ * takes the humanized display form through the same caret splice. An
+ * empty/whitespace draft is REPLACED outright (the generated formula is
+ * complete on its own), caret at the end; otherwise the text splices at the
+ * caret. Module-level (not a closure) purely to keep the panel component
+ * under the complexity cap.
+ */
+function spliceGeneratedExpression(
+  generated: string,
+  target: SpliceGeneratedTarget
+): void {
+  const { codeEditorRef, draft, fields, textareaRef } = target;
+  const blank = draft.trim() === "";
+  const editor = codeEditorRef.current;
+  if (editor !== null) {
+    if (blank && draft !== "") {
+      // Whitespace-only doc: replace via the controlled value (the sync
+      // effect swaps the CM6 doc), then refocus.
+      target.setDraft(generated);
+      requestAnimationFrame(() => {
+        codeEditorRef.current?.focus();
+      });
+      return;
+    }
+    // On an empty doc a caret splice IS a replace, caret landing at the end.
+    editor.insertText(generated, generated.length);
+    return;
+  }
+  const display = humanizeExpression(generated, fields);
+  if (!blank) {
+    target.insertAtCaret(display, display.length);
+    return;
+  }
+  target.setDraft(display);
+  requestAnimationFrame(() => {
+    const element = textareaRef.current;
+    if (element) {
+      element.focus();
+      element.setSelectionRange(display.length, display.length);
+    }
+  });
 }
 
 /** Docs shown in the detail strip for the focused/last-inserted entry. */
@@ -322,6 +385,144 @@ export interface FormulaEditorPanelProps {
   relations?: FormulaRelationResolver;
 }
 
+interface ReferenceListEntries {
+  functionEntries: (FormulaFunctionEntry & { signature: string })[];
+  operatorEntries: FormulaOperatorCatalogEntry[];
+  propertyFields: DatabaseField[];
+}
+
+/** The searchable Properties / Functions / Operators reference list. */
+function ReferenceList({
+  entries,
+  onInsertAtCaret,
+  onInsertProperty,
+  onShowDetail,
+}: {
+  entries: ReferenceListEntries;
+  onInsertAtCaret: (text: string, caretOffset: number) => void;
+  onInsertProperty: (propertyField: DatabaseField) => void;
+  onShowDetail: (detail: ReferenceDetail) => void;
+}): ReactNode {
+  const { functionEntries, operatorEntries, propertyFields } = entries;
+  const nothingMatches =
+    propertyFields.length === 0 &&
+    functionEntries.length === 0 &&
+    operatorEntries.length === 0;
+  return (
+    <ScrollArea className="max-h-52 overflow-hidden rounded-md border border-border">
+      <div className="flex flex-col p-1">
+        {propertyFields.length > 0 ? (
+          <SectionLabel>Properties</SectionLabel>
+        ) : null}
+        {propertyFields.map((propertyField) => {
+          const FieldIcon = resolveFieldIcon(propertyField);
+          const reference = formulaPropertyReference(propertyField.name);
+          return (
+            <ReferenceRow
+              detail={{
+                title: reference,
+                description: `Inserts this row's ${propertyField.name} value.`,
+                example: reference,
+              }}
+              key={propertyField.id}
+              onInsert={() => {
+                onInsertProperty(propertyField);
+              }}
+              onShowDetail={onShowDetail}
+            >
+              <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+              <span className="truncate">{propertyField.name}</span>
+            </ReferenceRow>
+          );
+        })}
+        {functionEntries.length > 0 ? (
+          <SectionLabel>Functions</SectionLabel>
+        ) : null}
+        {functionEntries.map((entry) => (
+          <ReferenceRow
+            detail={{
+              title: entry.signature,
+              description: entry.description,
+              example: entry.examples[0],
+            }}
+            key={entry.name}
+            onInsert={() => {
+              // Caret lands inside the parens, ready for arguments.
+              onInsertAtCaret(`${entry.name}()`, entry.name.length + 1);
+            }}
+            onShowDetail={onShowDetail}
+          >
+            <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+            <span className="shrink-0 font-mono text-xs">{entry.name}</span>
+            <span className="truncate text-muted-foreground text-xs">
+              {entry.signature.slice(entry.name.length)}
+            </span>
+          </ReferenceRow>
+        ))}
+        {operatorEntries.length > 0 ? (
+          <SectionLabel>Operators</SectionLabel>
+        ) : null}
+        {operatorEntries.map((entry) => (
+          <ReferenceRow
+            detail={{
+              title: entry.symbol,
+              description: entry.description,
+            }}
+            key={entry.symbol}
+            onInsert={() => {
+              onInsertAtCaret(` ${entry.symbol} `, entry.symbol.length + 2);
+            }}
+            onShowDetail={onShowDetail}
+          >
+            <span className="w-8 shrink-0 text-center font-mono text-xs">
+              {entry.symbol}
+            </span>
+            <span className="truncate text-muted-foreground text-xs">
+              {entry.description}
+            </span>
+          </ReferenceRow>
+        ))}
+        {nothingMatches ? (
+          <div className="px-1.5 py-3 text-center text-muted-foreground text-xs">
+            No matches
+          </div>
+        ) : null}
+      </div>
+    </ScrollArea>
+  );
+}
+
+/** The fixed-height docs strip fed by hover/focus on reference rows. */
+function DetailStrip({
+  detail,
+}: {
+  detail: ReferenceDetail | null;
+}): ReactNode {
+  return (
+    <div className="flex h-20 flex-col gap-0.5 overflow-hidden rounded-md border border-border px-2 py-1.5">
+      {detail === null ? (
+        <span className="text-muted-foreground text-xs">
+          Select an item to see how it works.
+        </span>
+      ) : (
+        <>
+          <span className="truncate font-mono text-foreground text-xs">
+            {detail.title}
+          </span>
+          <span className="line-clamp-2 text-muted-foreground text-xs">
+            {detail.description}
+          </span>
+          {detail.example ? (
+            <span className="truncate font-mono text-muted-foreground text-xs">
+              {detail.example}
+            </span>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** The formula builder panel (see module docs). */
 export function FormulaEditorPanel({
   expression,
@@ -336,6 +537,8 @@ export function FormulaEditorPanel({
   const [draft, setDraft] = useState(expression);
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<ReferenceDetail | null>(null);
+  /** Rollup template wizard swapped in for the reference list. */
+  const [rollupOpen, setRollupOpen] = useState(false);
   /** Picked preview row; `null` (or a since-deleted id) falls back to first. */
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
   const coarsePointer = useIsCoarsePrimaryPointer();
@@ -412,6 +615,19 @@ export function FormulaEditorPanel({
     insertAtCaret(display, display.length);
   };
 
+  /** Wizard output lands like property references do (see the helper). */
+  const insertGeneratedExpression = (generated: string) => {
+    setRollupOpen(false);
+    spliceGeneratedExpression(generated, {
+      codeEditorRef,
+      draft,
+      fields,
+      insertAtCaret,
+      setDraft,
+      textareaRef,
+    });
+  };
+
   const trimmed = draft.trim();
   const parsed = trimmed === "" ? null : parseFormula(draft);
 
@@ -486,6 +702,13 @@ export function FormulaEditorPanel({
     return (offset: number) => formulaDisplayOffset(draft, offset, labelLength);
   }, [draft, fields, coarsePointer]);
 
+  // The Rollup template affordance shows only when a rollup is buildable: a
+  // relation field whose target database the caller resolved.
+  const rollupAvailable = useMemo(
+    () => formulaRollupRelationFields(fields, relatedDatabases).length > 0,
+    [fields, relatedDatabases]
+  );
+
   const normalizedQuery = query.trim().toLowerCase();
 
   // Formula fields are insertable references too (formulas may reference
@@ -527,11 +750,6 @@ export function FormulaEditorPanel({
       ),
     [normalizedQuery]
   );
-
-  const nothingMatches =
-    propertyFields.length === 0 &&
-    functionEntries.length === 0 &&
-    operatorEntries.length === 0;
 
   const statusRow =
     parsed === null ? null : (
@@ -600,124 +818,60 @@ export function FormulaEditorPanel({
           rows={previewRows}
         />
       )}
-      <InputGroup className="h-8">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <IconSearch />
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label="Search properties, functions, and operators"
-          autoComplete="off"
-          onChange={(event) => {
-            setQuery(event.target.value);
+      {rollupOpen && relatedDatabases !== undefined ? (
+        <FormulaRollupWizard
+          checkContext={checkContext}
+          fields={fields}
+          onClose={() => {
+            setRollupOpen(false);
           }}
-          onKeyDown={stopMenuKeys}
-          placeholder="Search reference…"
-          value={query}
+          onInsert={insertGeneratedExpression}
+          onShowDetail={setDetail}
+          relatedDatabases={relatedDatabases}
         />
-      </InputGroup>
-      <ScrollArea className="max-h-52 overflow-hidden rounded-md border border-border">
-        <div className="flex flex-col p-1">
-          {propertyFields.length > 0 ? (
-            <SectionLabel>Properties</SectionLabel>
-          ) : null}
-          {propertyFields.map((propertyField) => {
-            const FieldIcon = resolveFieldIcon(propertyField);
-            const reference = formulaPropertyReference(propertyField.name);
-            return (
-              <ReferenceRow
-                detail={{
-                  title: reference,
-                  description: `Inserts this row's ${propertyField.name} value.`,
-                  example: reference,
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5">
+            <InputGroup className="h-8 flex-1">
+              <InputGroupAddon align="inline-start">
+                <InputGroupText>
+                  <IconSearch />
+                </InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-label="Search properties, functions, and operators"
+                autoComplete="off"
+                onChange={(event) => {
+                  setQuery(event.target.value);
                 }}
-                key={propertyField.id}
-                onInsert={() => {
-                  insertPropertyReference(propertyField);
+                onKeyDown={stopMenuKeys}
+                placeholder="Search reference…"
+                value={query}
+              />
+            </InputGroup>
+            {rollupAvailable ? (
+              <Button
+                className="shrink-0"
+                onClick={() => {
+                  setRollupOpen(true);
                 }}
-                onShowDetail={setDetail}
+                size="xs"
+                variant="outline"
               >
-                <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-                <span className="truncate">{propertyField.name}</span>
-              </ReferenceRow>
-            );
-          })}
-          {functionEntries.length > 0 ? (
-            <SectionLabel>Functions</SectionLabel>
-          ) : null}
-          {functionEntries.map((entry) => (
-            <ReferenceRow
-              detail={{
-                title: entry.signature,
-                description: entry.description,
-                example: entry.examples[0],
-              }}
-              key={entry.name}
-              onInsert={() => {
-                // Caret lands inside the parens, ready for arguments.
-                insertAtCaret(`${entry.name}()`, entry.name.length + 1);
-              }}
-              onShowDetail={setDetail}
-            >
-              <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-              <span className="shrink-0 font-mono text-xs">{entry.name}</span>
-              <span className="truncate text-muted-foreground text-xs">
-                {entry.signature.slice(entry.name.length)}
-              </span>
-            </ReferenceRow>
-          ))}
-          {operatorEntries.length > 0 ? (
-            <SectionLabel>Operators</SectionLabel>
-          ) : null}
-          {operatorEntries.map((entry) => (
-            <ReferenceRow
-              detail={{
-                title: entry.symbol,
-                description: entry.description,
-              }}
-              key={entry.symbol}
-              onInsert={() => {
-                insertAtCaret(` ${entry.symbol} `, entry.symbol.length + 2);
-              }}
-              onShowDetail={setDetail}
-            >
-              <span className="w-8 shrink-0 text-center font-mono text-xs">
-                {entry.symbol}
-              </span>
-              <span className="truncate text-muted-foreground text-xs">
-                {entry.description}
-              </span>
-            </ReferenceRow>
-          ))}
-          {nothingMatches ? (
-            <div className="px-1.5 py-3 text-center text-muted-foreground text-xs">
-              No matches
-            </div>
-          ) : null}
-        </div>
-      </ScrollArea>
-      <div className="flex h-20 flex-col gap-0.5 overflow-hidden rounded-md border border-border px-2 py-1.5">
-        {detail === null ? (
-          <span className="text-muted-foreground text-xs">
-            Select an item to see how it works.
-          </span>
-        ) : (
-          <>
-            <span className="truncate font-mono text-foreground text-xs">
-              {detail.title}
-            </span>
-            <span className="line-clamp-2 text-muted-foreground text-xs">
-              {detail.description}
-            </span>
-            {detail.example ? (
-              <span className="truncate font-mono text-muted-foreground text-xs">
-                {detail.example}
-              </span>
+                <IconSum />
+                Rollup
+              </Button>
             ) : null}
-          </>
-        )}
-      </div>
+          </div>
+          <ReferenceList
+            entries={{ functionEntries, operatorEntries, propertyFields }}
+            onInsertAtCaret={insertAtCaret}
+            onInsertProperty={insertPropertyReference}
+            onShowDetail={setDetail}
+          />
+        </>
+      )}
+      <DetailStrip detail={detail} />
       <Button
         className="self-end"
         disabled={saveDisabled}

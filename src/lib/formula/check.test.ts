@@ -828,6 +828,24 @@ describe("relation typing", () => {
     expectTypesEqual(relationTypeOf('first(prop("f_rel")).Total'), NUMBER_TYPE);
   });
 
+  it("types bracket member access identically to the dot form", () => {
+    expectTypesEqual(
+      relationTypeOf('prop("f_rel").map(r => r["Estimate"]).sum()'),
+      NUMBER_TYPE
+    );
+    // Unknown bracket members diagnose at the string literal's span.
+    const source = 'first(prop("f_rel"))["Nope"]';
+    const result = relationResultOf(source);
+    expect(result.diagnostics).toEqual([
+      {
+        end: source.length,
+        message: '"Nope" isn\'t a property of Tasks',
+        severity: "error",
+        start: source.indexOf('"Nope"'),
+      },
+    ]);
+  });
+
   it("types nested relation members recursively", () => {
     expectTypesEqual(
       relationTypeOf('first(prop("f_rel")).Subtasks'),
