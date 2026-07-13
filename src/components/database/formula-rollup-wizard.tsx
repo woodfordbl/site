@@ -305,19 +305,17 @@ export function FormulaRollupWizard({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex h-8 items-center gap-1 px-0.5">
-        <button
-          aria-label="Back"
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
-          onClick={back}
-          type="button"
-        >
-          <IconArrowLeft className="size-4 stroke-[1.5px]" />
-        </button>
-        <span className="truncate font-medium text-muted-foreground text-xs">
-          Rollup: {title}
-        </span>
-      </div>
+      {/* The whole header is the Back control — a bigger target than the
+          arrow alone, and the step title doubles as its label. */}
+      <button
+        aria-label="Back"
+        className="flex h-8 w-full items-center gap-1.5 rounded-md px-1.5 text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
+        onClick={back}
+        type="button"
+      >
+        <IconArrowLeft className="size-4 shrink-0 stroke-[1.5px]" />
+        <span className="truncate font-medium text-xs">Rollup: {title}</span>
+      </button>
       <ScrollArea className="max-h-52 overflow-hidden rounded-md border border-border">
         <div className="flex flex-col p-1">{step}</div>
       </ScrollArea>
