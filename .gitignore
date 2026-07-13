@@ -29,3 +29,9 @@ public/emojibase
 public/tabler
 public/sitemap.xml
 src/generated
+
+# Local chart dev harness (browser visual iteration) — not product code
+/chart-harness.html
+/vite.harness.config.ts
+/src/__harness__/
+/__shot.mjs

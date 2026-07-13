@@ -16,6 +16,14 @@
       "assist": { "enabled": false }
     },
     {
+      // Vendored dither-kit canvas engine (MIT, Boring-Software-Inc/dither-kit)
+      // — kept close to upstream so it stays updatable; not our house style.
+      "includes": ["src/components/charts/dither-kit/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    },
+    {
       "includes": ["src/components/ui/**"],
       "linter": {
         "rules": {
