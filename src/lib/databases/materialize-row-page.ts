@@ -61,10 +61,11 @@ function linkRowOncePageExistsAsync(
  * Resolve or create a materialized page for a database row.
  *
  * - Returns an existing `row.pageId` when the page still exists in `pages`
- * - Synced rows (`externalId`) return `null` (never materialize)
  * - Creates via `page.create` with optional navigation (`navigate` defaults
  *   false for seed-on-demand; routes already own navigation)
- * @see docs/architecture/databases.md#row-pages-virtual--copy-on-write
+ * - Local and connector-synced rows both seed — synced rows still need a real
+ *   page for header/cover/menu; property sync continues on the row entity
+ * @see docs/architecture/databases.md#row-pages-slug-paths--seed-on-open
  */
 export async function ensureDatabaseRowPage(options: {
   database: LocalDatabase;
@@ -75,10 +76,6 @@ export async function ensureDatabaseRowPage(options: {
 }): Promise<string | null> {
   const { database, dispatch, pages, row } = options;
   const navigate = options.navigate === true;
-
-  if (row.externalId) {
-    return null;
-  }
 
   if (row.pageId) {
     const existing =

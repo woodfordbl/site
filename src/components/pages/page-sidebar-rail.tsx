@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
-import { Kbd } from "@/components/ui/kbd.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import {
   Tooltip,
   TooltipContent,
@@ -179,20 +179,19 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
           }
         />
         <TooltipContent
-          className="flex-col items-start gap-1 py-2"
+          className="flex-col items-start gap-0.5 px-2 py-1"
           showArrow={false}
           side="right"
           sideOffset={8}
         >
           <span className="inline-flex items-center gap-1">
-            Close
-            <Kbd>Click or</Kbd>
-            <Kbd>⌘</Kbd>
-            <Kbd>B</Kbd>
+            <span className="font-semibold">Drag</span>
+            to resize
           </span>
           <span className="inline-flex items-center gap-1">
-            Resize
-            <Kbd>Drag</Kbd>
+            <span className="font-semibold">Click</span>
+            to collapse
+            <Shortcut command="toggle-sidebar" />
           </span>
         </TooltipContent>
       </Tooltip>

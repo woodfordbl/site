@@ -139,12 +139,7 @@ export function SelectColumnPeekLayer({
                     checked={isSelected}
                     className={cn(
                       "swap-reveal absolute inset-0 m-auto",
-                      showSelectControl &&
-                        rowSelectDisplay !== "always" &&
-                        "opacity-100",
-                      rowSelectDisplay === "number" &&
-                        showSelectControl &&
-                        "swap-reveal opacity-100"
+                      showSelectControl && "opacity-100"
                     )}
                     onCheckedChange={(checked, eventDetails) => {
                       const shiftKey =

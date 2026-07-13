@@ -1,9 +1,8 @@
-import { IconDatabaseOff, IconFileText, IconHome } from "@tabler/icons-react";
+import { IconDatabaseOff, IconHome } from "@tabler/icons-react";
 import { eq, useLiveQuery } from "@tanstack/react-db";
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useMemo, useRef } from "react";
-
-import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
+import { type ReactNode, useEffect, useRef } from "react";
+import { RowPageTitleSlot } from "@/components/database/row-page/row-page-title-slot.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
   RowPropertiesRailLayout,
@@ -11,7 +10,6 @@ import {
 } from "@/components/database/row-page/row-properties-rail.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
-import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -28,19 +26,15 @@ import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import { useRowTemplate } from "@/hooks/use-row-template.ts";
 import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
-import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
+import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { ensureDatabaseRowPage } from "@/lib/databases/materialize-row-page.ts";
-import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
-import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import {
   pageTitleEditorLayoutClassName,
   pageTitleIconSlotClassName,
@@ -49,7 +43,6 @@ import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
-import { resolvePageFont } from "@/lib/schemas/page-settings.ts";
 import { cn } from "@/lib/utils.ts";
 
 export interface DatabaseRowPageProps {
@@ -58,9 +51,9 @@ export interface DatabaseRowPageProps {
 }
 
 /**
- * Resolves a row URL into either its materialized `PageWorkspace` or, for
- * synced rows, the immutable template-backed view. Local rows seed once on
- * open so the normal page menu is available before the user interacts.
+ * Resolves a row URL into a seeded `PageWorkspace` (local and connector-synced
+ * rows). Seeds once on open so cover, breadcrumb, and the page menu match
+ * ordinary pages; the properties rail is the only database-specific chrome.
  */
 export function DatabaseRowPage({
   databaseId,
@@ -88,12 +81,7 @@ export function DatabaseRowPage({
   const seededRowRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (
-      !(database && row) ||
-      row.externalId ||
-      row.pageId ||
-      seededRowRef.current === row.id
-    ) {
+    if (!(database && row) || row.pageId || seededRowRef.current === row.id) {
       return;
     }
 
@@ -104,7 +92,9 @@ export function DatabaseRowPage({
       navigate: false,
       pages,
       row,
-    }).catch(() => undefined);
+    }).catch(() => {
+      seededRowRef.current = null;
+    });
   }, [database, dispatch, pages, row]);
 
   if (!(databasesReady && rowsReady)) {
@@ -121,10 +111,6 @@ export function DatabaseRowPage({
         <DatabaseRowPageWorkspace pageId={linkedPage.id} />
       </SiteShell>
     );
-  }
-
-  if (row.externalId) {
-    return <SyncedDatabaseRowPage database={database} row={row} />;
   }
 
   // Wait for the optimistic page.create + row link to reach both local
@@ -183,91 +169,8 @@ export function DatabaseRowPageWorkspace({
       kind="user"
       page={page}
       pageHasLocalDraft
+      titleSlot={<RowPageTitleSlot database={database} page={page} row={row} />}
     />
-  );
-}
-
-function SyncedDatabaseRowPage({
-  database,
-  row,
-}: {
-  database: LocalDatabase;
-  row: LocalDatabaseRow;
-}): ReactNode {
-  return (
-    <SiteShell>
-      <PageSidebarChromeProvider sidebar={<PageSidebar />}>
-        <SyncedDatabaseRowPageBody database={database} row={row} />
-      </PageSidebarChromeProvider>
-    </SiteShell>
-  );
-}
-
-function SyncedDatabaseRowPageBody({
-  database,
-  row,
-}: {
-  database: LocalDatabase;
-  row: LocalDatabaseRow;
-}): ReactNode {
-  const isNarrowViewport = useIsNarrowViewport();
-  const rail = useRowPropertiesRail(database);
-  const template = useRowTemplate(database.id);
-  const title = resolveDatabaseRowPageTitle(database, row);
-  const templateBlocks = useMemo(
-    () =>
-      instantiateTemplateBlocks(template?.blocks, database.fields, row.values, {
-        now: () => new Date(),
-      }),
-    [database.fields, row.values, template?.blocks]
-  );
-  const canvasRegion = (
-    <div
-      {...pageContentTypographyProps({
-        font: resolvePageFont(template?.font),
-        textScale: undefined,
-      })}
-      className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
-    >
-      <CanvasBlocksReadOnly
-        blocks={templateBlocks}
-        isNarrowViewport={isNarrowViewport}
-        mode="view"
-        pageId={`db-row:${row.id}`}
-        titleSlot={
-          <RowPageTitleSection
-            database={database}
-            displayTitle={title}
-            icon={template?.icon}
-            row={row}
-            showProperties={!rail.panelMode}
-          />
-        }
-      />
-    </div>
-  );
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:h-auto md:h-full">
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <div
-          className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
-          data-page-main-panel=""
-        >
-          {rail.panelMode ? (
-            <RowPropertiesRailLayout
-              database={database}
-              panel={<RowPropertiesPanel database={database} row={row} />}
-            >
-              {canvasRegion}
-            </RowPropertiesRailLayout>
-          ) : (
-            canvasRegion
-          )}
-        </div>
-      </div>
-      <PageInsetFooter />
-    </div>
   );
 }
 
@@ -299,7 +202,7 @@ function RowPageNotFound(): ReactNode {
   );
 }
 
-/** Shared read-only title used by synced rows and template previews. */
+/** Shared read-only title used by template previews. */
 export function RowPageTitleSection({
   database,
   displayTitle,
@@ -320,14 +223,10 @@ export function RowPageTitleSection({
       <div className={pageTitleEditorLayoutClassName}>
         <div className={pageTitleIconSlotClassName}>
           <span className="inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground sm:size-9">
-            {icon ? (
-              <PageIconDisplay
-                className="text-[26px] [&_svg]:size-7"
-                icon={icon}
-              />
-            ) : (
-              <IconFileText aria-hidden className="size-7 stroke-[1.5px]" />
-            )}
+            <PageIconDisplay
+              className="text-[26px] [&_svg]:size-7"
+              icon={resolveDatabaseRowIcon(row, icon)}
+            />
           </span>
         </div>
         <h1

@@ -19,6 +19,9 @@ export type CommandId =
   | "new-subpage"
   | "duplicate-page"
   | "delete-page"
+  | "edit-template"
+  | "save-as-template"
+  | "toggle-favorite"
   | "copy-page-link"
   | "next-page"
   | "prev-page"
@@ -191,10 +194,35 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "delete-page",
     label: "Delete page",
     group: "Pages",
-    defaultHotkey: "Mod+Backspace",
+    defaultHotkey: "D",
     customizable: true,
     scope: "global",
-    // Mod+Backspace deletes-to-line-start inside fields — must not fire there.
+    ignoreInputs: true,
+  },
+  {
+    id: "edit-template",
+    label: "Edit page template",
+    group: "Pages",
+    defaultHotkey: "S",
+    customizable: true,
+    scope: "global",
+  },
+  {
+    id: "save-as-template",
+    label: "Save page as template",
+    group: "Pages",
+    defaultHotkey: "Mod+Shift+T",
+    customizable: true,
+    scope: "global",
+    ignoreInputs: true,
+  },
+  {
+    id: "toggle-favorite",
+    label: "Toggle favorite",
+    group: "Pages",
+    defaultHotkey: "F",
+    customizable: true,
+    scope: "global",
     ignoreInputs: true,
   },
   {

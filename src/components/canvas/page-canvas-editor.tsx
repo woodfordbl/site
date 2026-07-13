@@ -58,6 +58,7 @@ import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { publishCanvasDevtoolsState } from "@/lib/canvas/canvas-devtools-store.ts";
 import { isNonCanvasEditableFocused } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import { resolveDuplicateRowTargetFromFocus } from "@/lib/canvas/duplicate-row-target.ts";
+import { getPageLastEditRecordedAt } from "@/lib/canvas/page-edit-history.ts";
 import {
   CANVAS_ROW_ATTRIBUTE,
   collectCanvasRowRects,
@@ -65,6 +66,13 @@ import {
   resolveDropTargetFromPointer,
   resolveTopLevelInsertEdge,
 } from "@/lib/canvas/resolve-drop-target.ts";
+import {
+  getLastDatabaseViewEditRecordedAt,
+  getLastSessionUndoKind,
+  markSessionUndoKind,
+  tryRedoDatabaseViewEdit,
+  tryUndoDatabaseViewEdit,
+} from "@/lib/databases/database-view-edit-history.ts";
 import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import { cloneNodeWithFieldValues } from "@/lib/dnd/drag-image.ts";
@@ -315,11 +323,26 @@ function PageCanvasEditorBody({
       if (isNonCanvasEditableFocused()) {
         return;
       }
+      const databaseEditAt = getLastDatabaseViewEditRecordedAt();
+      const pageEditAt = getPageLastEditRecordedAt(currentPageId);
+      if (databaseEditAt >= pageEditAt && tryUndoDatabaseViewEdit()) {
+        event.preventDefault();
+        return;
+      }
       event.preventDefault();
-      editor.undoEdit();
+      if (editor.undoEdit()) {
+        markSessionUndoKind("page-blocks");
+      }
     },
     "redo-edit": (event) => {
       if (isNonCanvasEditableFocused()) {
+        return;
+      }
+      if (
+        getLastSessionUndoKind() === "database-view" &&
+        tryRedoDatabaseViewEdit()
+      ) {
+        event.preventDefault();
         return;
       }
       event.preventDefault();

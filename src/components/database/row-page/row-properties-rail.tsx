@@ -46,10 +46,10 @@ import { cn } from "@/lib/utils.ts";
 
 /**
  * Right properties rail for the row-page family (virtual row page, template
- * editor, preview-as-row). The side panel is the DEFAULT; where properties
- * show is a per-database setting (`database.rowPropertiesPlacement`) switched
- * from the Properties ⋯ menu (also on the in-page section when set to top).
- * Narrow viewports always use the in-page section.
+ * editor, preview-as-row). Properties under the title are the DEFAULT; where
+ * they show is a per-database setting (`database.rowPropertiesPlacement`)
+ * switched from the Properties ⋯ menu (also on the in-page section). Narrow
+ * viewports always use the in-page section.
  */
 
 export type RowPropertiesPlacement = "panel" | "top";
@@ -65,7 +65,8 @@ export function useRowPropertiesRail(
   database: LocalDatabase | undefined
 ): RowPropertiesRailState {
   const isNarrowViewport = useIsNarrowViewport();
-  const placement = database?.rowPropertiesPlacement ?? "panel";
+  // Default under the title (Notion-style); side panel is opt-in per database.
+  const placement = database?.rowPropertiesPlacement ?? "top";
   return {
     panelMode: placement === "panel" && !isNarrowViewport,
     placement,
@@ -106,7 +107,7 @@ export function RowPropertiesOptionsMenu({
   database: LocalDatabase;
 }): ReactNode {
   const isNarrowViewport = useIsNarrowViewport();
-  const placement = database.rowPropertiesPlacement ?? "panel";
+  const placement = database.rowPropertiesPlacement ?? "top";
 
   const isVisible = (fieldId: string): boolean =>
     !database.rowPropertiesVisibleFieldIds ||

@@ -2,6 +2,7 @@ import {
   IconCaretRightFilled,
   IconCopy,
   IconCopyOff,
+  IconEdit,
   IconLayoutGrid,
   IconRefresh,
   IconStar,
@@ -25,6 +26,7 @@ import {
 } from "@/components/pages/page-list-database-rows.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
 import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
+import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   Collapsible,
@@ -75,6 +77,7 @@ import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-k
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
+import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
 import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
@@ -130,7 +133,6 @@ interface PageListRowLinkProps {
   canResetToRemote: boolean;
   depth: number;
   dropIndicator: "before" | "after" | null;
-  ensureSeed: () => Promise<PageMetadataSeed | null>;
   expandedIds: Set<string>;
   hasChildren: boolean;
   icon?: string;
@@ -139,18 +141,18 @@ interface PageListRowLinkProps {
   isNestTarget: boolean;
   menuActionRef: React.RefObject<HTMLButtonElement | null>;
   navTarget: PageNavTarget;
+  onChangeIcon: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
   onMoveTo: (parentId: string | null) => void;
+  onRename: () => void;
   onResetToRemote: () => void;
   onSaveAsTemplate: () => void;
   onToggleExpand: (pageId: string) => void;
   onToggleFavorite: () => void;
   pageId: string;
   pages: PageSummary[];
-  previousSlug: string;
   row: PageRow;
-  seed: PageMetadataSeed | null;
   title: string;
 }
 
@@ -160,7 +162,6 @@ function PageListRowLink({
   canResetToRemote,
   depth,
   dropIndicator,
-  ensureSeed,
   expandedIds,
   hasChildren,
   icon,
@@ -169,18 +170,18 @@ function PageListRowLink({
   isNestTarget,
   menuActionRef,
   navTarget,
+  onChangeIcon,
   onDelete,
   onDuplicate,
   onMoveTo,
+  onRename,
   onResetToRemote,
   onSaveAsTemplate,
   onToggleExpand,
   onToggleFavorite,
   pageId,
   pages,
-  previousSlug,
   row,
-  seed,
   title,
 }: PageListRowLinkProps) {
   const navigate = useNavigate();
@@ -287,20 +288,18 @@ function PageListRowLink({
         <PageListRowDropdown
           canDelete={canDelete}
           canResetToRemote={canResetToRemote}
-          ensureSeed={ensureSeed}
-          icon={icon}
           isFavorite={isFavorite}
           menuActionRef={menuActionRef}
+          onChangeIcon={onChangeIcon}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
           onMoveTo={onMoveTo}
+          onRename={onRename}
           onResetToRemote={onResetToRemote}
           onSaveAsTemplate={onSaveAsTemplate}
           onToggleFavorite={onToggleFavorite}
           pageId={pageId}
           pages={pages}
-          previousSlug={previousSlug}
-          seed={seed}
           title={title}
         />
       )}
@@ -450,6 +449,7 @@ export function PageListItem({
   const dispatch = usePageDispatch(pages);
   const reposition = usePageReposition(pages, dispatch);
   const navigate = useNavigate();
+  const { setTemplatePageId } = useTemplatePage();
   const activePage = useActivePageRef();
   const saveAsTemplate = useSavePageAsTemplate(page);
   const localPage = useLocalPageById(page.id);
@@ -475,9 +475,11 @@ export function PageListItem({
     handleTitleChange,
     iconPickerSeed,
     isRenaming,
+    openChangeIcon,
     previousSlugRef,
     renameInputRef,
     seedRef,
+    startRenaming,
     stopRenaming,
     title,
   } = usePageRowEditing({ localPage, page, pages });
@@ -662,7 +664,6 @@ export function PageListItem({
       canResetToRemote={canResetToRemote}
       depth={depth}
       dropIndicator={dropIndicator}
-      ensureSeed={ensureSeed}
       expandedIds={expandedIds}
       hasChildren={hasChildren}
       icon={pageIcon}
@@ -671,18 +672,18 @@ export function PageListItem({
       isNestTarget={isNestTarget}
       menuActionRef={menuActionRef}
       navTarget={navTarget}
+      onChangeIcon={openChangeIcon}
       onDelete={() => setDeleteOpen(true)}
       onDuplicate={handleDuplicate}
       onMoveTo={handleMoveTo}
+      onRename={startRenaming}
       onResetToRemote={handleResetToRemote}
       onSaveAsTemplate={saveAsTemplate.request}
       onToggleExpand={onToggleExpand}
       onToggleFavorite={handleToggleFavorite}
       pageId={page.id}
       pages={pages}
-      previousSlug={previousSlug}
       row={row}
-      seed={seedRef.current}
       title={title}
     />
   );
@@ -729,6 +730,9 @@ export function PageListItem({
           <ContextMenuItem onClick={handleToggleFavorite}>
             {isFavorite ? <IconStarOff /> : <IconStar />}
             {isFavorite ? "Remove from favorites" : "Add to favorites"}
+            <ContextMenuShortcut>
+              <Shortcut command="toggle-favorite" />
+            </ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuSub>
             <ContextMenuSubTrigger>
@@ -766,6 +770,20 @@ export function PageListItem({
           <ContextMenuItem onClick={saveAsTemplate.request}>
             <IconLayoutGrid />
             Save as template
+            <ContextMenuShortcut>
+              <Shortcut command="save-as-template" />
+            </ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              openTemplateEditor(navigate, setTemplatePageId);
+            }}
+          >
+            <IconEdit />
+            Edit template
+            <ContextMenuShortcut>
+              <Shortcut command="edit-template" />
+            </ContextMenuShortcut>
           </ContextMenuItem>
           {canResetToRemote ? (
             <ContextMenuItem onClick={handleResetToRemote}>
@@ -780,6 +798,9 @@ export function PageListItem({
           >
             <IconTrash />
             Delete
+            <ContextMenuShortcut>
+              <Shortcut command="delete-page" />
+            </ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuGroup>
         <ContextMenuSeparator />

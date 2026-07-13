@@ -133,8 +133,8 @@ export interface SyncSnapshotResult {
 /**
  * Diff a connector snapshot into the database's rows, in one transaction.
  *
- * - New `externalId` → insert a synced row (no `pageId` — synced rows are
- *   never pages), appended after the current max order.
+ * - New `externalId` → insert a synced row (pageId unset until the row URL
+ *   seeds a normal page on open), appended after the current max order.
  * - Existing `externalId` → update ONLY synced field keys in `row.values`.
  *   Local field values and row `order` are preserved untouched (hard product
  *   requirement: users add their own columns to synced tables). Writes are

@@ -809,6 +809,7 @@ export function DatabasePropertyEditItems({
         field={field}
         onCommit={commitRename}
         onDraftNameChange={setDraftName}
+        onIconClick={() => undefined}
         onSubmit={() => {
           commitRename();
           onRequestClose();

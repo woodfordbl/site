@@ -483,6 +483,29 @@ export function updateDatabaseView(
   commitDatabaseTransaction(tx);
 }
 
+/**
+ * Replace one saved view wholesale (undo/redo restore). Does not record edit
+ * history — callers push the pre-restore snapshot themselves.
+ */
+export function restoreDatabaseView(
+  databaseId: string,
+  view: DatabaseView
+): void {
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.views = toPlain(draft.views).map((entry) =>
+        entry.id === view.id ? toPlain(view) : entry
+      );
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
 /** Default view names per type; deduped with a numeric suffix on collision. */
 const VIEW_TYPE_DEFAULT_NAMES: Record<DatabaseViewType, string> = {
   table: "Table",
@@ -990,12 +1013,13 @@ export function renameDatabase(databaseId: string, name: string): void {
   }
 }
 
-/** Set or clear a row's standalone icon without materializing a page. */
+/** Set or clear a row's standalone icon; mirrors onto a linked page when present. */
 export function setDatabaseRowIcon(
   rowId: string,
   icon: string | undefined
 ): void {
-  if (!localDatabaseRowsCollection.get(rowId)) {
+  const row = localDatabaseRowsCollection.get(rowId);
+  if (!row) {
     return;
   }
 
@@ -1006,6 +1030,12 @@ export function setDatabaseRowIcon(
       draft.icon = icon;
       draft.updatedAt = timestamp;
     });
+    if (row.pageId && localPagesCollection.get(row.pageId)) {
+      localPagesCollection.update(row.pageId, (draft) => {
+        draft.icon = icon;
+        draft.updatedAt = timestamp;
+      });
+    }
   });
   commitDatabaseTransaction(tx);
 }
@@ -1043,9 +1073,9 @@ export function setDatabaseRowDefault(
 }
 
 /**
- * Set where the database's row pages show their properties — the side panel
- * (default) or a section at the top of the page — bumping `updatedAt`. The
- * default ("panel") is stored as an absent field so records stay sparse.
+ * Set where the database's row pages show their properties — a section under
+ * the title (default) or the side panel — bumping `updatedAt`. The default
+ * ("top") is stored as an absent field so records stay sparse.
  */
 export function setDatabaseRowPropertiesPlacement(
   databaseId: string,
@@ -1060,7 +1090,7 @@ export function setDatabaseRowPropertiesPlacement(
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.rowPropertiesPlacement =
-        placement === "panel" ? undefined : placement;
+        placement === "top" ? undefined : placement;
       draft.updatedAt = timestamp;
     });
   });
@@ -1217,17 +1247,13 @@ export function updateDatabaseSource(
  * Unlink/cascade semantics land with the page-delete integration
  * (databases proposal §2.5).
  *
- * Synced rows (carrying an `externalId`) are refused as a no-op: "synced
- * rows never get pages" is a schema invariant (`schemas/database.ts`) — the
- * sync engine tombstones such rows when they leave the provider snapshot,
- * which would strand the linked page with no back-link, and a reappearing
- * record gets a brand-new row id, silently severing the association. The
- * row-page UI hides page materialization for synced rows; this guard is the
- * op-level enforcement.
+ * Applies to local and connector-synced rows alike — synced rows still seed
+ * a normal page on open so header/cover/menu match ordinary pages; property
+ * values continue to sync onto the row.
  */
 export function setDatabaseRowPageId(rowId: string, pageId: string): void {
   const row = localDatabaseRowsCollection.get(rowId);
-  if (!row || row.externalId !== undefined) {
+  if (!row) {
     return;
   }
 

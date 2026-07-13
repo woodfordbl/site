@@ -32,6 +32,9 @@ export const CHECKBOX_COLUMN_WIDTH_PX = 48;
  */
 export const SELECTION_COLUMN_WIDTH_PX = 32;
 
+/** Synthetic TanStack column id for the leading row-select column (index 0). */
+export const ROW_SELECT_COLUMN_ID = "__rowSelect__";
+
 /** Per-view row checkbox gutter/column display mode. */
 export type RowSelectDisplay = "always" | "hover" | "number";
 
@@ -43,36 +46,113 @@ export function resolveRowSelectDisplay(
 }
 
 /**
- * Gutter modes (`hover` / `number`) keep the select control in a leading
- * lane that bleeds into the canvas gutter (`-ml-8`) so the first data
- * column stays flush with the filter bar — not an overlay on cell content.
+ * Gutter modes (`hover` / `number`) use hover-reveal or number/checkbox swap
+ * in the leading lane; `always` shows checkboxes at rest. Layout (bleed,
+ * peek, borders) is shared across all three modes.
  */
-export function usesRowSelectGutter(display: RowSelectDisplay): boolean {
-  return display !== "always";
+
+/** True when column index 0 is clipped on the left by the scroll viewport. */
+export function isSelectColumnCoveredByClip(
+  sentinelRect: Pick<DOMRect, "left" | "right">,
+  viewportRect: Pick<DOMRect, "left">
+): boolean {
+  return sentinelRect.left < viewportRect.left;
+}
+
+/** Whether the floating peek overlay should show over scrolled data. */
+export function shouldShowSelectColumnPeek(
+  covered: boolean,
+  pointerInLaneZone: boolean,
+  hasAnyRowSelection: boolean
+): boolean {
+  return covered && (pointerInLaneZone || hasAnyRowSelection);
+}
+
+/** True when the pointer is in the leading select lane (viewport or peek overlay). */
+export function isPointerInSelectLaneZone(
+  pointerX: number | null,
+  zoneRect: Pick<DOMRect, "left">,
+  laneWidthPx: number = SELECTION_COLUMN_WIDTH_PX
+): boolean {
+  return pointerX !== null && pointerX <= zoneRect.left + laneWidthPx;
+}
+
+/** Select pins with data columns — never alone. */
+export function isSelectColumnPinned(
+  effectivePinnedFieldCount: number
+): boolean {
+  return effectivePinnedFieldCount > 0;
+}
+
+/** Inputs for scrollport bleed against a page panel or column boundary. */
+export interface GridBleedLayoutInput {
+  boundaryLeft: number;
+  boundaryRight: number;
+  gridWidth: number;
+  hostLeft: number;
+  hostWidthPx: number;
+  selectionColumnWidth?: number;
+}
+
+/** Derived bleed metrics for gutter offset and horizontal overhang. */
+export interface GridBleedLayoutMetrics {
+  extraBleed: number;
+  gutterBleed: number;
+  leftBleedPx: number;
+  paddedGridWidth: number;
+  rightAvailPx: number;
+  rightBleed: number;
 }
 
 /**
- * Gutter select-lane cells across the grid (header, rows, group spacers,
- * Calculate footer) share one scroll behavior, keyed off the scrollport's
- * `data-lane` attribute (see `useGutterLaneState`):
- *
- *   absent (rest)      — transparent gutter cell, controls hover-reveal.
- *   `"scrolled"`       — the lane is pushed off with the content: cells go
- *                        transparent, slide slightly left, and become
- *                        click-through so they never cover scrolled cells.
- *   `"peek"`           — pointer over the covered lane region: the lane
- *                        slides back in as a solid column over the content.
- *
- * The two states are mutually exclusive on the attribute, so no variant
- * ordering games are needed.
+ * Pure bleed math for the database table scrollport: at least the select
+ * lane width pulls left so the first data column aligns with the block edge;
+ * extra bleed extends the clip boundary to the page/column container.
  */
-export const GUTTER_LANE_SCROLL_CLASS =
-  "transition-[opacity,translate] duration-150 in-data-[lane=scrolled]:pointer-events-none in-data-[lane=scrolled]:-translate-x-1.5 in-data-[lane=scrolled]:opacity-0 in-data-[lane=peek]:border-border in-data-[lane=peek]:border-r in-data-[lane=peek]:bg-background";
+export function resolveGridBleedMetrics(
+  input: GridBleedLayoutInput
+): GridBleedLayoutMetrics {
+  const selectionColumnWidth =
+    input.selectionColumnWidth ?? SELECTION_COLUMN_WIDTH_PX;
+  const leftBleedPx = Math.max(
+    selectionColumnWidth,
+    Math.round(input.hostLeft - input.boundaryLeft)
+  );
+  const rightAvailPx = Math.max(
+    0,
+    Math.round(input.boundaryRight - (input.hostLeft + input.hostWidthPx))
+  );
+  const gutterBleed = leftBleedPx;
+  const extraBleed = Math.max(0, gutterBleed - selectionColumnWidth);
+  const paddedGridWidth = input.gridWidth + extraBleed;
+  const rightBleed = Math.min(
+    Math.max(0, paddedGridWidth - input.hostWidthPx - gutterBleed),
+    rightAvailPx
+  );
+  return {
+    extraBleed,
+    gutterBleed,
+    leftBleedPx,
+    paddedGridWidth,
+    rightAvailPx,
+    rightBleed,
+  };
+}
+
+/**
+ * Sticky classes for the row-select column when it is pinned with data
+ * columns. The lane stays transparent at rest; peek supplies the surface.
+ */
+export function selectColumnPinnedClass(selectColumnPinned: boolean): string {
+  if (!selectColumnPinned) {
+    return "";
+  }
+  return "sticky left-(--grid-bleed) z-10 border-r border-r-border";
+}
 
 /**
  * Layout width reserved for the leading select lane. Always
- * {@link SELECTION_COLUMN_WIDTH_PX} — gutter modes pull the grid left by the
- * same amount so data columns still align with filters / page content.
+ * {@link SELECTION_COLUMN_WIDTH_PX}.
  */
 export function rowSelectLeadingWidthPx(): number {
   return SELECTION_COLUMN_WIDTH_PX;

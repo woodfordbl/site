@@ -15,7 +15,7 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 
 | Entity | Shape |
 |--------|-------|
-| `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
+| `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`; default `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`. All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, optional `icon` (light override; no seed), `externalId?` (connector row identity), timestamps |
 | `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
@@ -108,16 +108,25 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   phones can always reach unfrozen columns); grid ARIA roles; memoized rows (stable
   callbacks via a latest-values ref; row identity from the collection layer's
   structural sharing).
-  **Row selection:** per-view `config.rowSelectDisplay` — `always` (leading
-  sticky select column, `SELECTION_COLUMN_WIDTH_PX`, not a `DatabaseField`),
-  `hover` (default when absent: same in-flow select lane, but the grid bleeds
-  `-ml-8` so the lane sits in the canvas gutter and the first data column
-  stays flush with the filter bar; `.hover-reveal` on the select-header /
-  row hover groups, forced
-  visible while any row is selected; horizontal row/header rules start at the
-  first data column so the gutter stays borderless), or `number` (1-based visible row numbers
-  in that lane, swapping to the checkbox on row hover or when selected). Header
-  select-all follows the same reveal rules. Shift+click ranges from the last
+  **Row selection:** per-view `config.rowSelectDisplay` — `always` (checkboxes
+  always visible in the leading lane), `hover` (default when absent:
+  `.hover-reveal` on row checkboxes, forced visible while any row is selected),
+  or `number` (1-based row numbers swapping to the checkbox on row hover or when
+  selected). The select column is synthetic index 0 ({@link ROW_SELECT_COLUMN_ID}
+  `ColumnDef`, `SELECTION_COLUMN_WIDTH_PX`, not a `DatabaseField`). Layout is
+  shared across all three modes: the scrollport pulls left by at least
+  `SELECTION_COLUMN_WIDTH_PX` (32px) so the first data column aligns with the
+  block edge; `useGridBleedMetrics` extends that bleed to the nearest
+  `[data-column-content]` or `[data-page-main-panel]` boundary so scrolled
+  content clips at the page/column inset (compensating `paddingLeft` /
+  `--grid-bleed` on the grid keeps layout at rest). Horizontal row/header rules
+  start at the first data column so the select lane stays borderless. The select
+  column scrolls horizontally with the grid by default (no sticky). When any data
+  column is pinned, `columnPinning.left` includes the select id first so it
+  freezes at `left: var(--grid-bleed)` with the data pins. When the select column
+  is geometrically clipped by horizontal scroll, a floating peek overlay
+  (`SelectColumnPeekLayer` — popover surface) appears on lane hover or while any
+  row is selected; header select-all is always visible in the peek. Shift+click
   toggled visible row; selection is session state on the grid mount (cleared on
   database/view change). Selected rows use `bg-muted/40`. Right-click opens
   [`database-row-menu.tsx`](../../src/components/database/database-row-menu.tsx)
@@ -459,9 +468,10 @@ template snapshot ([`instantiateTemplateBlocks`](../../src/lib/databases/row-tem
 
 **Light vs seed:** optional `row.icon` (and title / field cells) persist on the
 row without creating a page — grid **Change icon** uses
-`setDatabaseRowIcon`. Opening the row URL seeds the page. Synced rows
-(`externalId`) never seed; they keep a read-only template body + editable
-local properties where allowed.
+`setDatabaseRowIcon`. Opening the row URL seeds the page for **local and
+connector-synced** rows alike so cover, breadcrumb, and the page menu match
+ordinary pages; property values on synced rows continue to refresh from the
+connector.
 
 Legacy `/db/$databaseId/$rowId` client-redirects to the slug path. The grid's
 primary cells show a Page icon plus a hover-revealed **Open** pill navigating
@@ -483,9 +493,12 @@ materialization uses `readRowTemplateSnapshot`. Row pages inherit the
 template's **icon** (overridden by `row.icon` when set) and **font** when
 explicitly set. The editor header edits **row defaults**
 (`database.rowDefaults`). The whole row-page family shares the properties
-rail; placement is `database.rowPropertiesPlacement`. Row-page show/hide writes
+rail; placement is `database.rowPropertiesPlacement` (`top` under the title
+by default, or `panel` side rail). Row-page show/hide writes
 `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of per-view
-`visibleFieldIds`). Hub + row pages stay hidden from the Pages sidebar tree
+`visibleFieldIds`). Table primary cells and row pages share
+`resolveDatabaseRowIcon` (`row.icon` → template icon → `DEFAULT_PAGE_ICON`).
+Hub + row pages stay hidden from the Pages sidebar tree
 (`databaseSource` / `databaseRowSource`); favorites and move-to use the seeded
 page id. Breadcrumbs follow the normal page header once seeded.
 

@@ -1,4 +1,7 @@
-import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import {
+  localDatabaseRowsCollection,
+  localPagesCollection,
+} from "@/db/collections/local-collections.ts";
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
 import { seedPageBlocks } from "@/db/queries/block-collection-ops.ts";
 import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
@@ -61,6 +64,88 @@ function cascadeDescendantSlugs(
 }
 
 /**
+ * Keep a linked database row's `icon` in lockstep with its page so the table
+ * grid and title slot share the same glyph (empty string clears → default).
+ */
+function syncLinkedDatabaseRowIcon(
+  pageId: string,
+  icon: string,
+  updatedAt: string
+): void {
+  const page = localPagesCollection.get(pageId);
+  const rowId = page?.databaseRowSource?.rowId;
+  if (!(rowId && localDatabaseRowsCollection.get(rowId))) {
+    return;
+  }
+  const nextIcon = icon.length > 0 ? icon : undefined;
+  localDatabaseRowsCollection.update(rowId, (draft) => {
+    draft.icon = nextIcon;
+    draft.updatedAt = updatedAt;
+  });
+}
+
+function updateExistingPageMetadata(options: {
+  icon?: string;
+  now: string;
+  pageId: string;
+  slug: string;
+  title: string;
+}): void {
+  localPagesCollection.update(options.pageId, (draft) => {
+    draft.slug = options.slug;
+    draft.title = options.title;
+    if (options.icon !== undefined) {
+      draft.icon = options.icon;
+    }
+    draft.updatedAt = options.now;
+  });
+  if (options.icon !== undefined) {
+    syncLinkedDatabaseRowIcon(options.pageId, options.icon, options.now);
+  }
+  markPageDirty(options.pageId);
+}
+
+function insertSeededPageMetadata(options: {
+  existingPage: PageSummary | undefined;
+  icon?: string;
+  now: string;
+  pageId: string;
+  seed: PageMetadataSeed;
+  slug: string;
+  title: string;
+}): void {
+  const serverMetadataBaseline = options.existingPage
+    ? hashPageMetadata({
+        icon: options.existingPage.icon,
+        parentId: options.existingPage.parentId,
+        sidebarOrder: options.existingPage.sidebarOrder,
+        slug: options.existingPage.slug,
+        title: options.existingPage.title,
+      })
+    : undefined;
+
+  localPagesCollection.insert({
+    id: options.pageId,
+    slug: options.slug,
+    title: options.title,
+    icon: options.icon ?? options.existingPage?.icon,
+    parentId: options.existingPage?.parentId ?? null,
+    serverBaselineHash: options.seed.serverBaselineHash,
+    serverMetadataBaseline,
+    createdAt: options.now,
+    updatedAt: options.now,
+  });
+  seedPageBlocks(options.pageId, options.seed.blocks);
+  capturePageBaseline(
+    options.pageId,
+    options.seed.blocks,
+    options.seed.serverBaselineHash
+  );
+  seededPageIds.add(options.pageId);
+  markPageDirty(options.pageId);
+}
+
+/**
  * Persists title, slug, and optional icon to `localPagesCollection` (lazy-seeds when needed).
  * Cascades descendant slug prefixes; `syncPageUrl` uses `{ userPage: true }` when `routeBy === "id"`.
  * @see docs/architecture/pages.md#title-editing
@@ -92,46 +177,24 @@ export function persistPageMetadata(options: {
   let didPersist = false;
 
   if (hasLocalPageDocument(options.pageId)) {
-    localPagesCollection.update(options.pageId, (draft) => {
-      draft.slug = slug;
-      draft.title = title;
-      if (options.icon !== undefined) {
-        draft.icon = options.icon;
-      }
-      draft.updatedAt = now;
-    });
-    markPageDirty(options.pageId);
-    didPersist = true;
-  } else if (options.seed) {
-    const serverMetadataBaseline = existingPage
-      ? hashPageMetadata({
-          icon: existingPage.icon,
-          parentId: existingPage.parentId,
-          sidebarOrder: existingPage.sidebarOrder,
-          slug: existingPage.slug,
-          title: existingPage.title,
-        })
-      : undefined;
-
-    localPagesCollection.insert({
-      id: options.pageId,
+    updateExistingPageMetadata({
+      icon: options.icon,
+      now,
+      pageId: options.pageId,
       slug,
       title,
-      icon: options.icon ?? existingPage?.icon,
-      parentId: existingPage?.parentId ?? null,
-      serverBaselineHash: options.seed.serverBaselineHash,
-      serverMetadataBaseline,
-      createdAt: now,
-      updatedAt: now,
     });
-    seedPageBlocks(options.pageId, options.seed.blocks);
-    capturePageBaseline(
-      options.pageId,
-      options.seed.blocks,
-      options.seed.serverBaselineHash
-    );
-    seededPageIds.add(options.pageId);
-    markPageDirty(options.pageId);
+    didPersist = true;
+  } else if (options.seed) {
+    insertSeededPageMetadata({
+      existingPage,
+      icon: options.icon,
+      now,
+      pageId: options.pageId,
+      seed: options.seed,
+      slug,
+      title,
+    });
     didPersist = true;
   }
 

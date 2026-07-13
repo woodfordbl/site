@@ -1,3 +1,4 @@
+import { clearSessionUndoKind } from "@/lib/databases/database-view-edit-history.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 /**
@@ -85,6 +86,12 @@ export function recordPageEditHistory(
   }
   history.lastCoalesceKey = coalesceKey;
   history.lastRecordedAt = now;
+  clearSessionUndoKind();
+}
+
+/** Timestamp of the most recent canvas block edit on this page. */
+export function getPageLastEditRecordedAt(pageId: string): number {
+  return getHistory(pageId).lastRecordedAt;
 }
 
 /**

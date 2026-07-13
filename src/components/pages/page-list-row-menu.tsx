@@ -4,6 +4,7 @@ import {
   IconCopy,
   IconCopyOff,
   IconDots,
+  IconEdit,
   IconLayoutGrid,
   IconPencil,
   IconPhoto,
@@ -12,10 +13,12 @@ import {
   IconStarOff,
   IconTrash,
 } from "@tabler/icons-react";
+import { useNavigate } from "@tanstack/react-router";
 import type { RefObject } from "react";
 
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
+import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +35,7 @@ import {
 import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 
 interface PageListRowDropdownProps {
   canDelete: boolean;
@@ -68,6 +72,9 @@ export function PageListRowDropdown({
   pages,
   title,
 }: PageListRowDropdownProps) {
+  const navigate = useNavigate();
+  const { setTemplatePageId } = useTemplatePage();
+
   return (
     <DropdownMenu
       onOpenChange={(open) => {
@@ -146,6 +153,20 @@ export function PageListRowDropdown({
           <DropdownMenuItem onClick={onSaveAsTemplate}>
             <IconLayoutGrid />
             Save as template
+            <DropdownMenuShortcut>
+              <Shortcut command="save-as-template" />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              openTemplateEditor(navigate, setTemplatePageId);
+            }}
+          >
+            <IconEdit />
+            Edit template
+            <DropdownMenuShortcut>
+              <Shortcut command="edit-template" />
+            </DropdownMenuShortcut>
           </DropdownMenuItem>
           {canResetToRemote ? (
             <DropdownMenuItem onClick={onResetToRemote}>

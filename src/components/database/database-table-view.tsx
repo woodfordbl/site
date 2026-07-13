@@ -21,6 +21,7 @@ import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { buildChartData } from "@/lib/databases/chart-data.ts";
+import { recordDatabaseViewEditHistory } from "@/lib/databases/database-view-edit-history.ts";
 import {
   computeFormulaOverlay,
   hasVolatileFormula,
@@ -198,7 +199,7 @@ interface HiddenRowsNoticeProps {
 /**
  * Linear-style bottom notice when view options hide rows (edit mode,
  * table/list views): a muted count plus direct actions — reveal the filter
- * chip bar, or clear `hiddenGroupKeys`.
+ * chip bar, clear hidden options (undoable), or clear `hiddenGroupKeys`.
  */
 function HiddenRowsNotice({
   allRowCount,
@@ -223,9 +224,22 @@ function HiddenRowsNotice({
   if (total === 0) {
     return null;
   }
+
+  const clearHiddenViewOptions = () => {
+    recordDatabaseViewEditHistory(databaseId, view);
+    const patch: Partial<Omit<DatabaseView, "id">> = {};
+    if (hiddenByFilter > 0) {
+      patch.filter = undefined;
+    }
+    if (hiddenGroupRowCount > 0) {
+      patch.config = { ...view.config, hiddenGroupKeys: undefined };
+    }
+    updateDatabaseView(databaseId, view.id, patch);
+  };
+
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-muted-foreground/70 text-xs">
-      <span>
+      <span className="pl-2">
         {total === 1 ? "1 row" : `${total} rows`} hidden by view options
       </span>
       {hiddenByFilter > 0 && !filterBarVisible ? (
@@ -252,6 +266,14 @@ function HiddenRowsNotice({
           Show hidden groups
         </Button>
       ) : null}
+      <Button
+        className="ml-auto h-5 px-1.5 text-muted-foreground text-xs"
+        onClick={clearHiddenViewOptions}
+        size="xs"
+        variant="ghost"
+      >
+        Clear
+      </Button>
     </div>
   );
 }

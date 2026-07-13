@@ -312,17 +312,17 @@ describe("database collection ops", () => {
     expect(drafts[0]?.rowDefaults).toBeUndefined();
   });
 
-  it("setDatabaseRowPropertiesPlacement stores top and clears the default panel", async () => {
+  it("setDatabaseRowPropertiesPlacement stores panel and clears the default top", async () => {
     const database = makeDatabase();
     mocks.databaseGet.mockReturnValue(database);
     const drafts = captureDatabaseDrafts(database);
 
-    ops.setDatabaseRowPropertiesPlacement(databaseId, "top");
+    ops.setDatabaseRowPropertiesPlacement(databaseId, "panel");
     await flushAsync();
 
-    expect(drafts[0]?.rowPropertiesPlacement).toBe("top");
+    expect(drafts[0]?.rowPropertiesPlacement).toBe("panel");
 
-    ops.setDatabaseRowPropertiesPlacement(databaseId, "panel");
+    ops.setDatabaseRowPropertiesPlacement(databaseId, "top");
     await flushAsync();
 
     expect(drafts[1]?.rowPropertiesPlacement).toBeUndefined();
@@ -819,19 +819,20 @@ describe("database collection ops", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("setDatabaseRowPageId refuses synced rows (externalId present)", async () => {
-    // Invariant: synced rows never get pages — the sync engine tombstones
-    // them, which would orphan the linked page.
-    mocks.rowGet.mockReturnValue({
+  it("setDatabaseRowPageId links synced rows so they can seed a normal page", async () => {
+    const row = {
       ...makeRow("row-synced"),
       externalId: "ext-1",
-    });
+    };
+    mocks.rowGet.mockReturnValue(row);
+    const drafts = captureRowDrafts([row]);
 
     ops.setDatabaseRowPageId("row-synced", "page-9");
     await flushAsync();
 
-    expect(mocks.rowUpdate).not.toHaveBeenCalled();
-    expect(mocks.commit).not.toHaveBeenCalled();
+    const draft = drafts.get("row-synced");
+    expect(draft?.pageId).toBe("page-9");
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
 
   it("duplicateDatabaseField regenerates select option ids and remaps row values", async () => {
