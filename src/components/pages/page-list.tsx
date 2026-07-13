@@ -23,12 +23,17 @@ import {
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.tsx";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
+import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { loadPage } from "@/lib/content/load-page.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
+import {
+  dragHasFiles,
+  extractMarkdownFiles,
+} from "@/lib/markdown-canonical/detect.ts";
 import {
   buildPageTree,
   getAncestorPageIds,
@@ -76,6 +81,7 @@ function PageListTree({
   pages,
   expandedIds,
   navRef,
+  onDropMarkdownFiles,
   onToggleExpand,
   renderItem,
 }: {
@@ -83,6 +89,8 @@ function PageListTree({
   pages: PageSummary[];
   expandedIds: Set<string>;
   navRef?: React.RefObject<HTMLElement | null>;
+  /** Dropping `.md` files onto the sidebar imports each as a new page. */
+  onDropMarkdownFiles?: (files: File[]) => void;
   onToggleExpand: (pageId: string) => void;
   renderItem: (props: {
     depth: number;
@@ -93,13 +101,39 @@ function PageListTree({
   }) => ReactNode;
 }) {
   const { getDropZoneProps } = useDropZone();
+  const zone = getDropZoneProps();
+
+  // Native OS file drags carry "Files" and no internal drag payload — they
+  // must not fall through to the page-reposition drop zone.
+  const dropZoneProps = {
+    ...zone,
+    onDragOver: (event: React.DragEvent<HTMLElement>) => {
+      if (onDropMarkdownFiles && dragHasFiles(event.dataTransfer.types)) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        return;
+      }
+      zone.onDragOver(event);
+    },
+    onDrop: (event: React.DragEvent<HTMLElement>) => {
+      if (onDropMarkdownFiles && dragHasFiles(event.dataTransfer.types)) {
+        event.preventDefault();
+        const files = extractMarkdownFiles(event.dataTransfer.files);
+        if (files.length > 0) {
+          onDropMarkdownFiles(files);
+        }
+        return;
+      }
+      zone.onDrop(event);
+    },
+  };
 
   return (
     <nav
       aria-label="Pages"
       className="space-y-1"
       ref={navRef}
-      {...getDropZoneProps()}
+      {...dropZoneProps}
     >
       <SidebarMenu className="gap-y-px">
         {tree.map((row) => {
@@ -130,6 +164,15 @@ function PageListContent({
 }) {
   const activePage = useActivePageRef();
   const dispatch = usePageDispatch(pages);
+  const importMarkdownPages = useImportMarkdownPage();
+  const importMarkdownFiles = useCallback(
+    (files: File[]) => {
+      importMarkdownPages(files).catch((error) => {
+        console.error("Markdown import failed", error);
+      });
+    },
+    [importMarkdownPages]
+  );
   // The template snapshot is excluded from `pages` upstream (mergePageList).
   // Materialized row pages (`databaseRowSource`) are filtered HERE — the
   // lowest sidebar-only point — so routing, search, breadcrumbs, and
@@ -353,6 +396,7 @@ function PageListContent({
     <PageListTree
       expandedIds={effectiveExpandedIds}
       navRef={navRef}
+      onDropMarkdownFiles={importMarkdownFiles}
       onToggleExpand={handleToggleExpand}
       pages={pages}
       renderItem={({

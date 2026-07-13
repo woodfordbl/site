@@ -12,6 +12,7 @@ import {
   type PageCanvasFooterActionsInput,
   usePageCanvasFooterActions,
 } from "@/hooks/use-page-canvas-footer-actions.ts";
+import { isDevDiskMode } from "@/lib/content/dev-disk/dev-disk-mode.ts";
 
 type DevelopmentPanelProps = PageCanvasFooterActionsInput;
 
@@ -44,7 +45,7 @@ export function DevelopmentPanel({
     <SettingsPanelShell
       description={
         isDev
-          ? "Save local edits to source files, refresh from the site, or reset local changes."
+          ? "Save local edits to source files, refresh from the site, or reset local changes. In dev disk mode edits flush to content/ continuously; Save all also compacts local state."
           : "Refresh from the site or reset local changes."
       }
       section={section}
@@ -54,7 +55,7 @@ export function DevelopmentPanel({
       ) : null}
 
       <SettingsItemCard>
-        {hasUpdates ? (
+        {hasUpdates && !isDevDiskMode() ? (
           <SettingsItemField
             action={
               <SettingsItemButton
@@ -84,7 +85,7 @@ export function DevelopmentPanel({
             title="Save all"
           />
         ) : null}
-        {hasLocalChanges ? (
+        {hasLocalChanges && !isDevDiskMode() ? (
           <>
             <SettingsItemField
               action={

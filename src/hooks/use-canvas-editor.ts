@@ -432,8 +432,8 @@ export function useCanvasEditor(
   }, [clearSelection, resolvePasteTargetRowId, rowActions]);
 
   const insertMediaFiles = useCallback(
-    (files: File[]) => {
-      const targetRowId = resolvePasteTargetRowId();
+    (files: File[], targetRow?: string) => {
+      const targetRowId = targetRow ?? resolvePasteTargetRowId();
       if (!targetRowId) {
         return;
       }
@@ -454,8 +454,8 @@ export function useCanvasEditor(
   );
 
   const insertMarkdownText = useCallback(
-    (text: string) => {
-      const targetRowId = resolvePasteTargetRowId();
+    (text: string, targetRow?: string) => {
+      const targetRowId = targetRow ?? resolvePasteTargetRowId();
       if (!targetRowId) {
         return;
       }
@@ -543,6 +543,8 @@ export function useCanvasEditor(
       pasteClipboard,
       clipboard,
       handleCanvasPaste,
+      insertMarkdownText,
+      insertMediaFiles,
       moveSelectedRowAdjacent,
       extendSelectionAdjacent,
       saveRow,
@@ -557,6 +559,8 @@ export function useCanvasEditor(
       canvas.rows,
       saveRow,
       insertRow,
+      insertMarkdownText,
+      insertMediaFiles,
       canvas.hasLocalChanges,
       canvas.isStale,
       canvas.resetToServer,

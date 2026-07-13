@@ -136,7 +136,7 @@ Client wiring mounts in
 (AppProviders). Serialization always happens server-side — remark never runs
 on the typing path.
 
-## Clipboard
+## Clipboard & file drops
 
 Canvas copy writes canonical markdown to the system clipboard
 (`copyBlocksToClipboard` in
@@ -148,6 +148,21 @@ The in-memory block payload wins for internal copies. `.md` file import
 ([`use-import-markdown-page.ts`](../../src/hooks/use-import-markdown-page.ts))
 and **Export page** ([`export-page-markdown.ts`](../../src/lib/markdown-canonical/export-page-markdown.ts))
 use the same codec in lenient/strict modes.
+
+**File drops**: dropping `.md`/`.markdown`/`.txt` files onto the SIDEBAR
+imports each as a new page (multi-file drops create pages in drop order and
+navigate to the last); dropping them onto an open CANVAS inserts their parsed
+blocks at the drop position via `parseBlocksMarkdown` (body-only — a dropped
+H1 stays an H1 block, never a retitle). Image/video file drops on the canvas
+insert media blocks through the same path as paste. File drags are detected
+by the `Files` drag type and never collide with internal block/page drags
+(`extractMarkdownFiles`/`dragHasFiles` in
+[`detect.ts`](../../src/lib/markdown-canonical/detect.ts); drop composition in
+[`page-list.tsx`](../../src/components/pages/page-list.tsx) and
+[`page-canvas-editor.tsx`](../../src/components/canvas/page-canvas-editor.tsx)).
+In dev disk mode the Development panel hides the baseline-flow actions
+(Reset/Refresh) whose machinery is gated off; Save all stays as the manual
+flush-and-compact action.
 
 ## Known losses (by design)
 

@@ -16,33 +16,37 @@ function titleFromFileName(fileName: string): string {
 }
 
 /**
- * Returns an action that imports a Markdown `File` as a new page. The first H1
- * (or, failing that, the filename) becomes the title; a leading emoji on that
- * H1 becomes the page icon. `page.create` auto-navigates to the new page.
+ * Returns an action that imports Markdown `File`s as new pages (used by the
+ * header-menu file input and the sidebar drag-drop). Frontmatter title/icon
+ * win; otherwise the first H1 (or the filename) becomes the title and a
+ * leading emoji on that H1 the icon. `page.create` auto-navigates per page.
  */
 export function useImportMarkdownPage() {
   const { pages } = useMergedPageListItems();
   const dispatch = usePageDispatch(pages);
 
   return useCallback(
-    async (file: File): Promise<void> => {
-      const [markdown, codec] = await Promise.all([
-        file.text(),
-        loadMarkdownCodec(),
-      ]);
-      const parsed = codec.parsePageMarkdown(markdown, { lenient: true });
-      const title =
-        parsed.frontmatter?.title.trim() ||
-        parsed.title?.trim() ||
-        titleFromFileName(file.name);
-      const icon = parsed.frontmatter?.icon ?? parsed.icon;
+    async (files: File | readonly File[]): Promise<void> => {
+      const list = Array.isArray(files) ? files : [files as File];
+      const codec = await loadMarkdownCodec();
+      // Sequential so multi-file drops create pages in drop order; page.create
+      // navigates on each insert, landing on the last imported page.
+      for (const file of list) {
+        const markdown = await file.text();
+        const parsed = codec.parsePageMarkdown(markdown, { lenient: true });
+        const title =
+          parsed.frontmatter?.title.trim() ||
+          parsed.title?.trim() ||
+          titleFromFileName(file.name);
+        const icon = parsed.frontmatter?.icon ?? parsed.icon;
 
-      dispatch({
-        type: "page.create",
-        title,
-        initialBlocks: parsed.blocks,
-        ...(icon ? { icon } : {}),
-      });
+        dispatch({
+          type: "page.create",
+          title,
+          initialBlocks: parsed.blocks,
+          ...(icon ? { icon } : {}),
+        });
+      }
     },
     [dispatch]
   );

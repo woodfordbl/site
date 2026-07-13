@@ -69,6 +69,10 @@ import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import { cloneNodeWithFieldValues } from "@/lib/dnd/drag-image.ts";
 import {
+  dragHasFiles,
+  extractMarkdownFiles,
+} from "@/lib/markdown-canonical/detect.ts";
+import {
   canDropPageIntoCanvas,
   PAGE_DRAG_MIME_TYPE,
 } from "@/lib/pages/page-canvas-drop.ts";
@@ -241,6 +245,38 @@ function PageCanvasEditorBody({
       });
     },
     [currentPageId, editor, pages, repositionPage]
+  );
+
+  const handleDropFilesIntoCanvas = useCallback(
+    (files: File[], _clientX: number, clientY: number) => {
+      const target = resolveTopLevelInsertEdge(
+        editor.getRows(),
+        clientY,
+        collectCanvasRowRects()
+      );
+      const targetRowId = target?.rowId;
+
+      const mediaFiles = files.filter((file) =>
+        MEDIA_FILE_TYPE_RE.test(file.type)
+      );
+      if (mediaFiles.length > 0) {
+        editor.insertMediaFiles(mediaFiles, targetRowId);
+      }
+
+      const markdownFiles = extractMarkdownFiles(files);
+      if (markdownFiles.length === 0) {
+        return;
+      }
+      // Sequential reads keep multi-file drops in drop order; a dropped H1
+      // stays an H1 block — dropping into a page never retitles it.
+      (async () => {
+        for (const file of markdownFiles) {
+          const text = await file.text();
+          editor.insertMarkdownText(text, targetRowId);
+        }
+      })().catch(() => undefined);
+    },
+    [editor]
   );
 
   // Deleting a `pageLink` block that points at a nested subpage (its target's
@@ -604,6 +640,7 @@ function PageCanvasEditorBody({
                             >
                               {titleSlot}
                               <CanvasDropZone
+                                onDropFiles={handleDropFilesIntoCanvas}
                                 onDropPage={handleDropPageIntoCanvas}
                               >
                                 <div className="flex flex-col gap-px overflow-visible [&>[data-canvas-row-shell]:first-child_.group/block]:pt-0 [&>[data-canvas-row-shell]:first-child_.group/list]:pt-0 [&>[data-canvas-row-shell]:first-child_[data-canvas-row-layout]]:pt-0">
@@ -643,11 +680,20 @@ function isPageDrag(event: React.DragEvent<HTMLDivElement>): boolean {
   return Array.from(event.dataTransfer.types).includes(PAGE_DRAG_MIME_TYPE);
 }
 
+const MEDIA_FILE_TYPE_RE = /^(?:image|video)\//;
+
+function isFileDrag(event: React.DragEvent<HTMLDivElement>): boolean {
+  return !isPageDrag(event) && dragHasFiles(event.dataTransfer.types);
+}
+
 function CanvasDropZone({
   children,
+  onDropFiles,
   onDropPage,
 }: {
   children: ReactNode;
+  /** OS file drops: `.md` files insert blocks, image/video files insert media. */
+  onDropFiles: (files: File[], clientX: number, clientY: number) => void;
   onDropPage: (pageId: string, clientY: number) => void;
 }) {
   const { getDropZoneProps } = useDropZone();
@@ -660,7 +706,7 @@ function CanvasDropZone({
   // the bare drop zone already opts out of via spreading — stays satisfied.
   const dropZoneProps = {
     onDragLeave: (event: React.DragEvent<HTMLDivElement>) => {
-      if (!isPageDrag(event)) {
+      if (!(isPageDrag(event) || isFileDrag(event))) {
         zone.onDragLeave(event);
         return;
       }
@@ -671,11 +717,11 @@ function CanvasDropZone({
       setPageDragOver(false);
     },
     onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
-      if (!isPageDrag(event)) {
+      if (!(isPageDrag(event) || isFileDrag(event))) {
         zone.onDragOver(event);
         return;
       }
-      // A sidebar page is being dragged in — accept it as a child-page drop.
+      // A sidebar page or OS file is being dragged in — accept the drop.
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       if (!pageDragOver) {
@@ -683,6 +729,15 @@ function CanvasDropZone({
       }
     },
     onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+      if (isFileDrag(event)) {
+        event.preventDefault();
+        setPageDragOver(false);
+        const files = Array.from(event.dataTransfer.files);
+        if (files.length > 0) {
+          onDropFiles(files, event.clientX, event.clientY);
+        }
+        return;
+      }
       if (!isPageDrag(event)) {
         zone.onDrop(event);
         return;

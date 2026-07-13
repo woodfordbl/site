@@ -252,3 +252,7 @@ conservative so plain prose pastes keep their existing behavior; the handler
 order in
 [`canvas-keyboard-shortcuts.ts`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts)
 is media files → field-focus guard → internal payload → markdown text.
+OS file DROPS follow the same taxonomy in `CanvasDropZone`: `.md` files parse
+to blocks at the drop position (`resolveTopLevelInsertEdge`), image/video
+files insert media blocks — see
+[markdown-content-format](./markdown-content-format.md#clipboard--file-drops).

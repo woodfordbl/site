@@ -13,3 +13,22 @@ export function looksLikeMarkdownBlocks(text: string): boolean {
   }
   return BLOCK_TOKEN_RE.test(text);
 }
+
+const MARKDOWN_FILE_RE = /\.(md|markdown|mdown|txt)$/i;
+
+/** True when a native drag carries OS files (not an internal block/page drag). */
+export function dragHasFiles(
+  types: readonly string[] | DOMStringList
+): boolean {
+  return Array.from(types).includes("Files");
+}
+
+/** The markdown-importable files from a drop, in drop order. */
+export function extractMarkdownFiles(
+  files: FileList | readonly File[] | null
+): File[] {
+  if (!files) {
+    return [];
+  }
+  return Array.from(files).filter((file) => MARKDOWN_FILE_RE.test(file.name));
+}

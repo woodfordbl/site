@@ -46,3 +46,8 @@ IndexedDB store [`page-activity-store.ts`](../../src/db/activity/page-activity-s
 
 - **Colors** — accent presets, global chart palette default.
 - **Sidebar** — default width, pin state, tree expansion reset.
+
+In dev disk mode the Development panel hides the baseline-flow actions
+(Refresh site content, Reset page, Reset all) — their machinery (stale
+banner, baselines, local overlays) is gated off there; **Save all** stays as
+the manual flush-and-compact action.
