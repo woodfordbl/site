@@ -18,6 +18,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { DitherKitCartesian } from "@/components/charts/dither-kit-cartesian.tsx";
 import { DatabaseTimeSeriesChart } from "@/components/database/views/database-time-series-chart.tsx";
 import {
   type ChartConfig,
@@ -270,6 +271,29 @@ function CartesianChart({
   const glow = useChartGlow({ enabled: wantsPolish });
   const reveal = useChartReveal({ enabled: wantsPolish });
   const introAnimation = !(reduceMotion || reveal.enabled);
+
+  // Dithered mode renders through the vendored dither-kit canvas engine, fed by
+  // the same chartConfig/chartRows. Non-dithered mode falls through to the
+  // Recharts renderer below. The workspace "Chart dither" setting is the switch.
+  if (dither.enabled) {
+    return (
+      <div className={cn("aspect-auto w-full", CHART_HEIGHT_CLASS)}>
+        <DitherKitCartesian
+          animate={!reduceMotion}
+          config={chartConfig}
+          data={chartRows}
+          legendAlign={chart.legendPosition === "right" ? "right" : "center"}
+          mark={mark}
+          palette={palette}
+          showLegend={chart.showLegend ?? data.series.length > 1}
+          showTooltip={chart.showTooltip !== false}
+          stacked={chart.stacked === true}
+          xKey="category"
+        />
+      </div>
+    );
+  }
+
   const formatValue = (value: number) =>
     formatChartYValue(aggregate, yField, value);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
