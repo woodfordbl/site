@@ -129,6 +129,8 @@ interface DitherKitCartesianProps {
   /** Fixed Y-axis bounds (absent = auto from data). */
   yMax?: number;
   yMin?: number;
+  /** Formats Y-axis tick values (field/percent format). */
+  yTickFormatter?: (value: number) => string;
 }
 
 /** Map our legend placement to the engine's (align + top/bottom) legend props. */
@@ -190,6 +192,7 @@ export function DitherKitCartesian({
   animate = true,
   bloom = "off",
   xTickFormatter,
+  yTickFormatter,
   tooltipLabelFormatter,
   tooltipValueFormatter,
 }: DitherKitCartesianProps): ReactNode {
@@ -265,7 +268,11 @@ export function DitherKitCartesian({
       />
     ) : null,
     <XAxis dataKey={xKey} key="x-axis" tickFormatter={xTickFormatter} />,
-    <YAxis key="y-axis" tickCount={tickCount ?? 4} />,
+    <YAxis
+      key="y-axis"
+      tickCount={tickCount ?? 4}
+      tickFormatter={yTickFormatter}
+    />,
     legend,
     tooltip,
     ...series,

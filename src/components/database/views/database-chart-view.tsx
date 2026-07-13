@@ -293,6 +293,9 @@ function CartesianChart({
           yAxisTitle={chart.yAxisTitle}
           yMax={yDomain.max}
           yMin={yDomain.min}
+          yTickFormatter={(value) =>
+            formatChartYValue(aggregate, yField, value, chart.yFormat)
+          }
         />
       </div>
     );

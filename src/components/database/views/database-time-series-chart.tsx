@@ -267,6 +267,7 @@ function DitheredTimeSeries({
           yAxisTitle={chart.yAxisTitle}
           yMax={yDomain.max}
           yMin={yDomain.min}
+          yTickFormatter={formatValue}
         />
       </div>
     </div>
