@@ -1,7 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { eq, useLiveQuery } from "@tanstack/react-db";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 
-import { DatabaseRowPage } from "@/components/database/row-page/database-row-page.tsx";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
+import { localDatabaseRowsCollection } from "@/db/collections/local-collections.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
 
@@ -27,5 +30,32 @@ function DatabaseRowPageRoute() {
     return <SiteShell>{null}</SiteShell>;
   }
 
-  return <DatabaseRowPage databaseId={databaseId} rowId={rowId} />;
+  return <DatabaseLegacyRowRedirect databaseId={databaseId} rowId={rowId} />;
+}
+
+function DatabaseLegacyRowRedirect({
+  databaseId,
+  rowId,
+}: {
+  databaseId: string;
+  rowId: string;
+}) {
+  const navigate = useNavigate();
+  const { data: rows = [] } = useLiveQuery(
+    (query) =>
+      query
+        .from({ row: localDatabaseRowsCollection })
+        .where(({ row }) => eq(row.id, rowId)),
+    [rowId]
+  );
+  const row = rows.find((entry) => entry.databaseId === databaseId);
+  const { row: target } = useDatabasePathTargets(databaseId, row);
+
+  useEffect(() => {
+    if (target) {
+      navigate({ ...target, replace: true });
+    }
+  }, [navigate, target]);
+
+  return <SiteShell>{null}</SiteShell>;
 }

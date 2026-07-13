@@ -435,6 +435,8 @@ export type DatabaseSource = z.infer<typeof databaseSourceSchema>;
 export const localDatabaseSchema = z.object({
   id: z.string(),
   name: z.string(),
+  /** Stable path segment for the database beneath its host page. */
+  slug: z.string().optional(),
   /** Emoji or `tabler:IconName`, matching page icons. */
   icon: z.string().optional(),
   /** The title-like field; every database has exactly one. Names row pages. */
@@ -478,6 +480,8 @@ export type LocalDatabase = z.infer<typeof localDatabaseSchema>;
 export const localDatabaseRowSchema = z.object({
   id: z.string(),
   databaseId: z.string(),
+  /** Optional row glyph, used by the database path and virtual row page. */
+  icon: z.string().optional(),
   /** Sparse per-field values keyed by field id; missing/null = empty. */
   values: z.record(z.string(), databaseCellValueSchema),
   /**

@@ -26,10 +26,11 @@ export const MIN_COLUMN_WIDTH_PX = 96;
 export const CHECKBOX_COLUMN_WIDTH_PX = 48;
 
 /**
- * Leading row-selection checkbox column (not a DatabaseField). Matches the
- * checkbox field column's footprint so the select control + header fit.
+ * Leading row-selection checkbox / number lane (not a DatabaseField). Sized
+ * to the `size-4` checkbox with modest centering — narrower than checkbox
+ * field columns, which also need a header icon footprint.
  */
-export const SELECTION_COLUMN_WIDTH_PX = CHECKBOX_COLUMN_WIDTH_PX;
+export const SELECTION_COLUMN_WIDTH_PX = 32;
 
 /** Per-view row checkbox gutter/column display mode. */
 export type RowSelectDisplay = "always" | "hover" | "number";
@@ -43,8 +44,8 @@ export function resolveRowSelectDisplay(
 
 /**
  * Gutter modes (`hover` / `number`) keep the select control in a leading
- * lane that bleeds into the canvas gutter so the first data column stays
- * flush with the filter bar — not an overlay on cell content.
+ * lane that bleeds into the canvas gutter (`-ml-8`) so the first data
+ * column stays flush with the filter bar — not an overlay on cell content.
  */
 export function usesRowSelectGutter(display: RowSelectDisplay): boolean {
   return display !== "always";

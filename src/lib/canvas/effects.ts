@@ -7,7 +7,10 @@ import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
 import type { Block } from "@/lib/schemas/block.ts";
-import type { DatabaseRowSource } from "@/lib/schemas/local-page.ts";
+import type {
+  DatabaseRowSource,
+  DatabaseSource,
+} from "@/lib/schemas/local-page.ts";
 import type {
   PageFont,
   PageHeaderImage,
@@ -65,6 +68,8 @@ export type PageEffect =
       parentId?: string | null;
       /** Row-page materialization marker persisted onto the created page. */
       databaseRowSource?: DatabaseRowSource;
+      /** Database hub marker persisted onto the created page. */
+      databaseSource?: DatabaseSource;
       sidebarOrder?: number;
       create: boolean;
       previousSlug?: string;

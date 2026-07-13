@@ -52,9 +52,13 @@ describe("pageListRowPadding", () => {
     expect(pageListRowPadding(0)).toBe("px-2");
     expect(pageListRowPadding(1)).toBe("pr-2 pl-5");
     expect(pageListRowPadding(2)).toBe("pr-2 pl-8");
+    expect(pageListRowPadding(3)).toBe("pr-2 pl-[2.75rem]");
+    expect(pageListRowPadding(4)).toBe("pr-2 pl-[3.5rem]");
     expect(pageListRowPaddingLeft(0)).toBe("pl-2");
     expect(pageListRowPaddingLeft(1)).toBe("pl-5");
     expect(pageListRowPaddingLeft(2)).toBe("pl-8");
+    expect(pageListRowPaddingLeft(3)).toBe("pl-[2.75rem]");
+    expect(pageListRowPaddingLeft(4)).toBe("pl-[3.5rem]");
   });
 });
 

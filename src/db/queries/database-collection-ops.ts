@@ -3,14 +3,20 @@ import { createTransaction } from "@tanstack/react-db";
 import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
+  localPagesCollection,
 } from "@/db/collections/local-collections.ts";
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
-
-import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
+import {
+  buildDatabaseHubSlug,
+  resolveDatabaseSlug,
+} from "@/lib/databases/database-page-paths.ts";
 import { resolveRowDefaultValues } from "@/lib/databases/row-defaults.ts";
 import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
+import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
+import { replacePageSlugPrefix } from "@/lib/pages/build-page-tree.ts";
+import { slugifyPageSegment } from "@/lib/pages/slugify.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -901,18 +907,106 @@ export function duplicateDatabaseField(
   commitDatabaseTransaction(tx);
 }
 
-/** Rename a database and bump its `updatedAt`. */
+function dedupeDatabaseSlug(
+  databaseId: string,
+  segment: string,
+  hostParentId: string | null | undefined
+): string {
+  const hubParentIdByDatabaseId = new Map(
+    localPagesCollection.toArray.flatMap((page) =>
+      page.databaseSource
+        ? [[page.databaseSource.databaseId, page.parentId] as const]
+        : []
+    )
+  );
+  const taken = new Set(
+    localDatabasesCollection.toArray
+      .filter(
+        (database) =>
+          database.id !== databaseId &&
+          hubParentIdByDatabaseId.get(database.id) === hostParentId
+      )
+      .map(resolveDatabaseSlug)
+  );
+  if (!taken.has(segment)) {
+    return segment;
+  }
+
+  let index = 2;
+  while (taken.has(`${segment}-${index}`)) {
+    index += 1;
+  }
+  return `${segment}-${index}`;
+}
+
+/** Rename a database, update its route segment, and cascade its hub subtree. */
 export function renameDatabase(databaseId: string, name: string): void {
+  const database = localDatabasesCollection.get(databaseId);
+  if (!database) {
+    return;
+  }
+
   const timestamp = nowIso();
+  const hub = localPagesCollection.toArray.find(
+    (page) => page.databaseSource?.databaseId === databaseId
+  );
+  const slug = dedupeDatabaseSlug(
+    databaseId,
+    slugifyPageSegment(name),
+    hub?.parentId
+  );
   const tx = createDatabaseTransaction();
 
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.name = name;
+      draft.slug = slug;
       draft.updatedAt = timestamp;
     });
   });
 
+  commitDatabaseTransaction(tx);
+
+  if (!hub) {
+    return;
+  }
+
+  const parent = hub.parentId
+    ? localPagesCollection.get(hub.parentId)
+    : undefined;
+  const nextHubSlug = buildDatabaseHubSlug(parent?.slug ?? "/", slug);
+  for (const page of localPagesCollection.toArray) {
+    if (
+      page.id === hub.id ||
+      page.slug.startsWith(
+        `${hub.slug.endsWith("/") ? hub.slug : `${hub.slug}/`}`
+      )
+    ) {
+      localPagesCollection.update(page.id, (draft) => {
+        draft.slug = replacePageSlugPrefix(hub.slug, nextHubSlug, draft.slug);
+        draft.updatedAt = timestamp;
+      });
+    }
+  }
+}
+
+/** Set or clear a row's standalone icon without materializing a page. */
+export function setDatabaseRowIcon(
+  rowId: string,
+  icon: string | undefined
+): void {
+  if (!localDatabaseRowsCollection.get(rowId)) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    localDatabaseRowsCollection.update(rowId, (draft) => {
+      draft.icon = icon;
+      draft.updatedAt = timestamp;
+    });
+  });
   commitDatabaseTransaction(tx);
 }
 

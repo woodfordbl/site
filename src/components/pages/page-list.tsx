@@ -131,11 +131,16 @@ function PageListContent({
   const activePage = useActivePageRef();
   const dispatch = usePageDispatch(pages);
   // The template snapshot is excluded from `pages` upstream (mergePageList).
-  // Materialized row pages (`databaseRowSource`) are filtered HERE — the
+  // Materialized row pages and database hubs are filtered HERE — the
   // lowest sidebar-only point — so routing, search, breadcrumbs, and
   // reposition planning (sibling `sidebarOrder` scopes) still see them.
   const sidebarTreePages = useMemo(
-    () => pages.filter((page) => page.databaseRowSource === undefined),
+    () =>
+      pages.filter(
+        (page) =>
+          page.databaseRowSource === undefined &&
+          page.databaseSource === undefined
+      ),
     [pages]
   );
   const tree = useMemo(

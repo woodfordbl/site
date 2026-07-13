@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
-
+import { DatabaseHubPage } from "@/components/database/database-hub-page.tsx";
+import { useDatabaseSlugPath } from "@/components/database/database-slug-path-page.tsx";
+import { DatabaseRowPage } from "@/components/database/row-page/database-row-page.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
 import { useIsClient } from "@/hooks/use-is-client.ts";
@@ -28,11 +30,13 @@ import { loadPageListLocalPreview } from "@/lib/pages/load-page-list-local-previ
 import {
   pageNavTargetForUserPage,
   pagePathFromParam,
+  pageSlugsEqual,
 } from "@/lib/pages/slugify.ts";
 import {
   isLocallyDeletedPage,
   isUserCreatedPage,
 } from "@/lib/schemas/local-page.ts";
+import { DatabaseTemplateEditorClient } from "@/routes/db.$databaseId_.template.tsx";
 
 export const Route = createFileRoute("/$")({
   loader: async ({ context, params }) => {
@@ -103,13 +107,40 @@ function PendingSlugPage({ slug }: { slug: string }) {
   return <PendingSlugPageClient slug={slug} />;
 }
 
+function renderDatabasePath(
+  databasePath: ReturnType<typeof useDatabaseSlugPath>
+) {
+  if (databasePath?.kind === "hub") {
+    return <DatabaseHubPage databaseId={databasePath.database.id} />;
+  }
+  if (databasePath?.kind === "row" && databasePath.row) {
+    return (
+      <DatabaseRowPage
+        databaseId={databasePath.database.id}
+        rowId={databasePath.row.id}
+      />
+    );
+  }
+  if (databasePath?.kind === "template") {
+    return (
+      <DatabaseTemplateEditorClient databaseId={databasePath.database.id} />
+    );
+  }
+  return null;
+}
+
 function PendingSlugPageClient({ slug }: { slug: string }) {
   const localPageBySlug = useResolvedLocalPageBySlug(slug);
-  const localPage = useSlugPageResolution(slug, localPageBySlug);
+  const localPageResolved = useSlugPageResolution(slug, localPageBySlug);
+  const localPage =
+    localPageResolved && pageSlugsEqual(localPageResolved.slug, slug)
+      ? localPageResolved
+      : null;
   const userPageBySlug = useResolvedUserPage(slug);
   const isLocalPagesSettling = useLocalPagesSettling();
   const { pages: serverPages } = usePageListItems();
   const navigate = useNavigate();
+  const databasePath = useDatabaseSlugPath(slug);
 
   useSyncPageUrl(
     localPage &&
@@ -185,6 +216,10 @@ function PendingSlugPageClient({ slug }: { slug: string }) {
   }
 
   if (!localPage) {
+    const databasePage = renderDatabasePath(databasePath);
+    if (databasePage) {
+      return databasePage;
+    }
     if (isLocalPagesSettling) {
       return null;
     }

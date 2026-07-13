@@ -1,7 +1,6 @@
 import {
   IconArrowsDiagonal,
   IconCaretRightFilled,
-  IconFileText,
   IconPlus,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
@@ -24,8 +23,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
-
 import { DatabaseAddRow } from "@/components/database/database-add-row.tsx";
 import { DatabaseCalculateRow } from "@/components/database/database-calculate-row.tsx";
 import { DatabaseCellValueView } from "@/components/database/database-cell.tsx";
@@ -71,6 +68,8 @@ import { DatabaseGroupMenu } from "@/components/database/database-group-menu.tsx
 import { DatabaseRowMenu } from "@/components/database/database-row-menu.tsx";
 import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
 import { useDatabaseColumnResize } from "@/components/database/use-database-column-resize.ts";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area.tsx";
@@ -81,6 +80,7 @@ import {
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
 import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
+import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
@@ -89,6 +89,8 @@ import type {
   DatabaseView,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import { TOAST_ID_ROW_HIDDEN_BY_FILTER } from "@/lib/toast/toast-ids.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
@@ -689,7 +691,9 @@ export function DatabaseTableGrid({
         applyFilter([{ ...row, values }], columns, view.filter).length === 0
       ) {
         setEditing(null);
-        toast.info("New row is hidden by the current filter");
+        appToast.info("New row is hidden by the current filter", {
+          id: TOAST_ID_ROW_HIDDEN_BY_FILTER,
+        });
         return;
       }
       if (editStateRef.current.editableFieldIds.includes(primaryFieldId)) {
@@ -1646,11 +1650,15 @@ interface GridCellProps {
  */
 function GridCellOpenPill({
   databaseId,
-  rowId,
+  row,
 }: {
   databaseId: string;
-  rowId: string;
+  row: LocalDatabaseRow;
 }) {
+  const { row: rowTarget } = useDatabasePathTargets(databaseId, row);
+  if (!rowTarget) {
+    return null;
+  }
   return (
     <Button
       className="hover-reveal absolute inset-y-0 right-1 z-10 my-auto h-6 border border-border bg-background text-muted-foreground shadow-xs"
@@ -1658,9 +1666,7 @@ function GridCellOpenPill({
       onClick={(event) => {
         event.stopPropagation();
       }}
-      render={
-        <Link params={{ databaseId, rowId }} to="/db/$databaseId/$rowId" />
-      }
+      render={<Link {...rowTarget} />}
       size="xs"
       variant="ghost"
     >
@@ -1710,13 +1716,12 @@ function renderGridCellContent({
     );
   }
 
-  // The default document glyph — rows carry no per-row icon; the whole cell
-  // still opens the row page via the hover "Open" pill.
+  // Same icon resolver as the row page (per-row → template → DEFAULT_PAGE_ICON).
   const label = showPageIcon ? (
     <span className="flex min-w-0 items-center gap-1.5">
-      <IconFileText
-        aria-hidden
-        className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground/70"
+      <PageIconDisplay
+        className="size-4 shrink-0 text-muted-foreground/70 [&_svg]:size-4"
+        icon={resolveDatabaseRowIcon(row)}
       />
       {valueView}
     </span>
@@ -1823,7 +1828,7 @@ function GridCell({
         content
       )}
       {isPrimary ? (
-        <GridCellOpenPill databaseId={databaseId} rowId={row.id} />
+        <GridCellOpenPill databaseId={databaseId} row={row} />
       ) : null}
       {isEditing && inlineEditable ? (
         <DatabaseCellInlineEditor

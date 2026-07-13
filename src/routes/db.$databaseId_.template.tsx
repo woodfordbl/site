@@ -1,7 +1,6 @@
 import { eq, useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-
 import {
   DatabaseTemplateEditorSidebar,
   PREVIEW_ROW_LIMIT,
@@ -17,6 +16,7 @@ import {
   RowTemplateTitleSection,
 } from "@/components/database/row-page/row-template-title-section.tsx";
 import { RowTemplateTokenAutocomplete } from "@/components/database/row-page/row-template-token-autocomplete.tsx";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -57,7 +57,24 @@ function DatabaseTemplateEditorRoute() {
     return <SiteShell>{null}</SiteShell>;
   }
 
-  return <DatabaseTemplateEditorClient databaseId={databaseId} />;
+  return <DatabaseLegacyTemplateRedirect databaseId={databaseId} />;
+}
+
+function DatabaseLegacyTemplateRedirect({
+  databaseId,
+}: {
+  databaseId: string;
+}) {
+  const navigate = useNavigate();
+  const { template } = useDatabasePathTargets(databaseId);
+
+  useEffect(() => {
+    if (template) {
+      navigate({ ...template, replace: true });
+    }
+  }, [navigate, template]);
+
+  return <SiteShell>{null}</SiteShell>;
 }
 
 /** First rows in manual order — the preview picker's sample. */
@@ -72,7 +89,11 @@ function pickPreviewRows(rows: LocalDatabaseRow[]): LocalDatabaseRow[] {
     .slice(0, PREVIEW_ROW_LIMIT);
 }
 
-function DatabaseTemplateEditorClient({ databaseId }: { databaseId: string }) {
+export function DatabaseTemplateEditorClient({
+  databaseId,
+}: {
+  databaseId: string;
+}) {
   const navigate = useNavigate();
   const { data: databases = [], isReady } = useLiveQuery(
     (query) =>

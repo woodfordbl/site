@@ -1,7 +1,11 @@
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 interface PageContentLayoutContextValue {
-  /** True when canvas content may bleed to panel edges (full-width page or mobile). */
+  /**
+   * True when the content column fills the padded scroll area (full-width page
+   * or mobile) instead of the centered reading column. Tables may bleed into
+   * horizontal padding; top-level blocks align with the page icon (no title-text indent).
+   */
   useFullPanelWidth: boolean;
 }
 

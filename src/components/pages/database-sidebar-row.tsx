@@ -1,24 +1,11 @@
 "use client";
 
-import {
-  IconDatabase,
-  IconPencil,
-  IconPhoto,
-  IconTrash,
-} from "@tabler/icons-react";
-import { useNavigate, useParams } from "@tanstack/react-router";
-import {
-  type ReactNode,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { IconDatabase, IconTrash } from "@tabler/icons-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 
 import { DatabaseSidebarRowMenu } from "@/components/pages/database-sidebar-row-menu.tsx";
 import { DeleteDatabaseConfirmDialog } from "@/components/pages/delete-database-confirm-dialog.tsx";
-import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
@@ -27,18 +14,27 @@ import {
   ContextMenuGroup,
   ContextMenuItem,
   ContextMenuLabel,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
+import {
+  MenuIconRenameInput,
+  shouldCancelMenuCloseForIconPicker,
+} from "@/components/ui/menu-icon-rename-input.tsx";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
+import { localBlocksCollection } from "@/db/collections/local-collections.ts";
 import {
   deleteDatabase,
   renameDatabase,
   setDatabaseIcon,
 } from "@/db/queries/database-collection-ops.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
+import { useLocalDatabasesSnapshot } from "@/hooks/use-local-databases.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { databaseHubNavTarget } from "@/lib/databases/database-page-paths.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -65,101 +61,39 @@ function DatabaseSidebarRowIcon({ icon }: { icon?: string }): ReactNode {
   );
 }
 
-function DatabaseSidebarRowRename({
-  database,
-  depth,
-  draftName,
-  onDraftNameChange,
-  onStopRenaming,
-  renameInputRef,
-}: {
-  database: DatabaseSidebarRowEntry;
-  depth: number;
-  draftName: string;
-  onDraftNameChange: (nextName: string) => void;
-  onStopRenaming: () => void;
-  renameInputRef: RefObject<HTMLInputElement | null>;
-}) {
-  return (
-    <SidebarMenuItem>
-      <div
-        className={cn(
-          "flex h-8 w-full items-center gap-2 rounded-md p-2",
-          pageListRowPaddingLeft(depth)
-        )}
-      >
-        <DatabaseSidebarRowIcon icon={database.icon} />
-        <input
-          aria-label={`Rename ${database.name}`}
-          className="min-h-0 min-w-0 flex-1 border-0 bg-transparent p-0 font-normal text-sidebar-foreground text-sm outline-none"
-          onBlur={onStopRenaming}
-          onChange={(event) => {
-            onDraftNameChange(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              onStopRenaming();
-            }
-
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onStopRenaming();
-            }
-          }}
-          ref={renameInputRef}
-          type="text"
-          value={draftName}
-        />
-      </div>
-    </SidebarMenuItem>
-  );
-}
-
 /**
  * Shared sidebar row for a workspace database. Used by the workspace
  * **Databases** section and hosted-database child rows under pages. Click
- * opens `/db/$databaseId`; right-click and the row ⋯ menu share Rename,
- * Change icon, and Delete.
+ * opens its host-page slug path; right-click and the row ⋯ menu share rename +
+ * icon (InputGroup) and Delete.
  */
 export function DatabaseSidebarRow({
   database,
   depth = 0,
 }: DatabaseSidebarRowProps): ReactNode {
   const navigate = useNavigate();
-  const routeParams = useParams({ strict: false });
+  const location = useLocation();
   const isClient = useIsClient();
-  const active = routeParams.databaseId === database.id;
+  const databases = useLocalDatabasesSnapshot();
+  const { pages } = useMergedPageListItems();
+  const currentDatabase = databases.find((entry) => entry.id === database.id);
+  const navTarget = currentDatabase
+    ? databaseHubNavTarget(
+        currentDatabase,
+        pages,
+        localBlocksCollection.toArray
+      )
+    : null;
+  const active =
+    navTarget !== null &&
+    (location.pathname === navTarget.to ||
+      location.pathname.startsWith(`${navTarget.to}/`));
 
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [draftName, setDraftName] = useState(database.name);
-  const [prevPersistedName, setPrevPersistedName] = useState(database.name);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [draftName, setDraftName] = useState(database.name);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const menuActionRef = useRef<HTMLButtonElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const isRenamingRef = useRef(false);
-
-  if (!isRenamingRef.current && database.name !== prevPersistedName) {
-    setPrevPersistedName(database.name);
-    setDraftName(database.name);
-  }
-
-  useEffect(() => {
-    if (!isRenaming) {
-      return;
-    }
-
-    const frame = requestAnimationFrame(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    });
-
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [isRenaming]);
 
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
@@ -170,51 +104,59 @@ export function DatabaseSidebarRow({
     }
   }, [database.id, database.name, draftName]);
 
-  const startRenaming = useCallback(() => {
-    isRenamingRef.current = true;
-    setDraftName(database.name);
-    setIsRenaming(true);
-  }, [database.name]);
+  const handleContextMenuOpenChange = useCallback(
+    (
+      nextOpen: boolean,
+      eventDetails?: {
+        cancel: () => void;
+        event: Event;
+        reason: string;
+      }
+    ) => {
+      if (
+        shouldCancelMenuCloseForIconPicker(
+          nextOpen,
+          iconPickerOpen,
+          eventDetails
+        )
+      ) {
+        return;
+      }
 
-  const stopRenaming = useCallback(() => {
-    isRenamingRef.current = false;
-    commitRename();
-    setIsRenaming(false);
-  }, [commitRename]);
-
-  const openChangeIcon = useCallback(() => {
-    setIconPickerOpen(true);
-  }, []);
+      if (nextOpen) {
+        setDraftName(database.name);
+        setIconPickerOpen(false);
+      } else {
+        commitRename();
+        setIconPickerOpen(false);
+      }
+      setContextMenuOpen(nextOpen);
+    },
+    [commitRename, database.name, iconPickerOpen]
+  );
 
   const handleDelete = useCallback(() => {
     deleteDatabase(database.id);
     setDeleteOpen(false);
 
-    if (routeParams.databaseId === database.id) {
+    if (active) {
       navigate({ to: "/" });
     }
-  }, [database.id, navigate, routeParams.databaseId]);
+  }, [active, database.id, navigate]);
 
   const navigateToDatabase = useCallback(() => {
-    navigate({
-      params: { databaseId: database.id },
-      to: "/db/$databaseId",
-    });
+    if (navTarget) {
+      navigate(navTarget);
+    }
     (document.activeElement as HTMLElement | null)?.blur();
-  }, [database.id, navigate]);
+  }, [navigate, navTarget]);
 
-  if (isRenaming) {
-    return (
-      <DatabaseSidebarRowRename
-        database={database}
-        depth={depth}
-        draftName={draftName}
-        onDraftNameChange={setDraftName}
-        onStopRenaming={stopRenaming}
-        renameInputRef={renameInputRef}
-      />
-    );
-  }
+  const writeIcon = useCallback(
+    (icon: string | undefined) => {
+      setDatabaseIcon(database.id, icon);
+    },
+    [database.id]
+  );
 
   const rowBody = (
     <div
@@ -237,13 +179,13 @@ export function DatabaseSidebarRow({
         </span>
       </SidebarMenuButton>
       <DatabaseSidebarRowMenu
+        databaseId={database.id}
+        icon={database.icon}
         menuActionRef={menuActionRef}
-        onChangeIcon={openChangeIcon}
+        name={database.name}
         onDelete={() => {
           setDeleteOpen(true);
         }}
-        onRename={startRenaming}
-        title={database.name}
       />
     </div>
   );
@@ -251,21 +193,37 @@ export function DatabaseSidebarRow({
   return (
     <>
       <SidebarMenuItem>
-        <ContextMenu onOpenChange={setContextMenuOpen} open={contextMenuOpen}>
+        <ContextMenu
+          onOpenChange={handleContextMenuOpenChange}
+          open={contextMenuOpen}
+        >
           <ContextMenuTrigger className="block w-full">
             {rowBody}
           </ContextMenuTrigger>
-          <ContextMenuContent>
+          <ContextMenuContent className="w-64 min-w-64">
+            <MenuIconRenameInput
+              ariaLabelIcon="Change database icon"
+              ariaLabelName="Database name"
+              draftName={draftName}
+              fallbackIcon={<IconDatabase className="size-4 stroke-[1.5px]" />}
+              icon={database.icon}
+              iconPickerOpen={iconPickerOpen}
+              onCommit={commitRename}
+              onDraftNameChange={setDraftName}
+              onIconPickerOpenChange={setIconPickerOpen}
+              onIconRemove={() => {
+                writeIcon(undefined);
+              }}
+              onIconSelect={writeIcon}
+              onSubmit={() => {
+                commitRename();
+                setContextMenuOpen(false);
+              }}
+              placeholder="Database name"
+            />
+            <ContextMenuSeparator />
             <ContextMenuGroup>
               <ContextMenuLabel>Database</ContextMenuLabel>
-              <ContextMenuItem onClick={startRenaming}>
-                <IconPencil />
-                Rename
-              </ContextMenuItem>
-              <ContextMenuItem onClick={openChangeIcon}>
-                <IconPhoto />
-                Change icon
-              </ContextMenuItem>
               <ContextMenuItem
                 onClick={() => {
                   setDeleteOpen(true);
@@ -279,25 +237,6 @@ export function DatabaseSidebarRow({
           </ContextMenuContent>
         </ContextMenu>
       </SidebarMenuItem>
-
-      {isClient ? (
-        <GlyphIconPicker
-          anchor={menuActionRef}
-          ariaLabel="Change database icon"
-          contentAlign="start"
-          contentSide="right"
-          hideTrigger
-          icon={database.icon}
-          onOpenChange={setIconPickerOpen}
-          onRemove={() => {
-            setDatabaseIcon(database.id, undefined);
-          }}
-          onSelect={(icon) => {
-            setDatabaseIcon(database.id, icon);
-          }}
-          open={iconPickerOpen}
-        />
-      ) : null}
 
       {isClient ? (
         <DeleteDatabaseConfirmDialog

@@ -1,6 +1,7 @@
 import { IconChevronLeft, IconEye, IconPencil } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
   SidebarContent,
   SidebarGroup,
@@ -10,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
-import { resolveDatabaseRowPageTitle } from "@/lib/databases/materialize-row-page.ts";
+import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
 import type {
   LocalDatabase,
   LocalDatabaseRow,
@@ -40,6 +41,8 @@ export function DatabaseTemplateEditorSidebar({
   previewRows = [],
   setPreviewRowId,
 }: DatabaseTemplateEditorSidebarProps) {
+  const { hub: hubTarget } = useDatabasePathTargets(database.id);
+
   return (
     <div
       className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
@@ -54,12 +57,7 @@ export function DatabaseTemplateEditorSidebar({
             <SidebarMenuItem className="w-fit">
               <SidebarMenuButton
                 className="w-fit"
-                render={
-                  <Link
-                    params={{ databaseId: database.id }}
-                    to="/db/$databaseId"
-                  />
-                }
+                render={hubTarget ? <Link {...hubTarget} /> : <span />}
               >
                 <IconChevronLeft />
                 <span className="min-w-0 truncate">

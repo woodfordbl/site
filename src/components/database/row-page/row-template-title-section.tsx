@@ -181,6 +181,9 @@ export function RowTemplateTitleSection({
           type="text"
         />
       </div>
+      <p className="mt-2 text-muted-foreground text-sm">
+        Type {"{{"} in the template body to insert property tokens.
+      </p>
       {showProperties && hasPanelFields ? (
         <div
           className="relative mt-6 mb-4 border-border border-b pb-3"

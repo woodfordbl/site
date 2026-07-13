@@ -8,7 +8,11 @@ export const pageTitleEditorLayoutClassName =
 /** Icon slot beside (sm+) or above (mobile) the page title. */
 export const pageTitleIconSlotClassName = "w-auto shrink-0 sm:w-9";
 
-/** View-mode top-level block indent — aligns with title text column from `md` only. */
+/**
+ * Constrained-column (not full-width) top-level block indent — aligns with the
+ * title *text* column from `md` only (`sm:w-9` icon slot). Full-width pages
+ * omit this so blocks share the page-icon left edge inside scroll padding.
+ */
 export const pageTitleBlockAlignClassName = "max-md:pl-0 md:pl-9";
 
 /** Page icon picker alignment with stacked (mobile) vs inline (sm+) title. */
@@ -118,8 +122,12 @@ export const pageCoverTouchClassName =
 /** Absolute gutter position on mobile (sits in the scroll padding lane). */
 export const pageCanvasGutterMobileClassName = "-left-7";
 
-/** Desktop gutter negative margin pull into scroll padding. */
-export const pageCanvasGutterPullClassName = "-ml-8 md:-ml-12";
+/**
+ * Desktop gutter negative margin pull into scroll padding. Matches the
+ * `icon-xs` grip (`size-6` / 1.5rem) so block content stays flush with the
+ * page title icon; larger pulls overshoot into the padding lane.
+ */
+export const pageCanvasGutterPullClassName = "-ml-6";
 
 /** Responsive trigger sizing for {@link PageIconPicker} beside H1 (`text-2xl` / `sm:text-3xl`). */
 export const pageTitleIconButtonClassName = cn(

@@ -39,6 +39,7 @@ export function mergePageList(
         sidebarOrder: local.sidebarOrder,
         icon: local.icon ?? serverPage.icon,
         databaseRowSource: local.databaseRowSource,
+        databaseSource: local.databaseSource,
         routeBy: "slug",
       });
       continue;
@@ -68,6 +69,7 @@ export function mergePageList(
         sidebarOrder: localPage.sidebarOrder,
         icon: localPage.icon,
         databaseRowSource: localPage.databaseRowSource,
+        databaseSource: localPage.databaseSource,
         routeBy: "id",
       });
     }

@@ -613,7 +613,7 @@ function DatePropertyEditor({ databaseId, field }: DatePropertyEditorProps) {
         {DATE_FORMATS.map((dateFormat) => (
           <DropdownMenuRadioItem key={dateFormat} value={dateFormat}>
             {DATE_FORMAT_LABELS[dateFormat]}
-            <span className="ml-auto pl-3 text-muted-foreground text-xs">
+            <span className="ml-auto whitespace-nowrap pl-3 text-muted-foreground text-xs">
               {formatCellValue({ ...field, format: dateFormat }, todayIso)}
             </span>
           </DropdownMenuRadioItem>

@@ -68,7 +68,7 @@ describe("resolveCanvasRowDragPreviewNode", () => {
 
     const grid = document.createElement("div");
     grid.setAttribute("role", "grid");
-    grid.className = "-ml-12";
+    grid.className = "-ml-8";
     grid.style.width = "320px";
 
     const header = document.createElement("div");
@@ -112,7 +112,7 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     expect(preview?.textContent).toContain("Currency");
     expect(preview?.textContent).toContain("CAD");
     expect(preview?.querySelector(".hover-reveal")).toBeNull();
-    expect(preview?.querySelector(".-ml-12")).toBeNull();
+    expect(preview?.querySelector(".-ml-8")).toBeNull();
 
     const clonedBody = preview?.querySelector('[role="rowgroup"] [role="row"]');
     expect(clonedBody).not.toBeNull();

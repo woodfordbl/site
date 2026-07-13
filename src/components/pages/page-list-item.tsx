@@ -3,15 +3,12 @@ import {
   IconCopy,
   IconCopyOff,
   IconLayoutGrid,
-  IconPencil,
-  IconPhoto,
   IconRefresh,
   IconStar,
   IconStarOff,
   IconTrash,
 } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
-import type { ComponentProps } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -22,7 +19,6 @@ import {
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
-import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import {
   PageListDatabaseRows,
   useHostedDatabases,
@@ -56,13 +52,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import {
+  MenuIconRenameInput,
+  shouldCancelMenuCloseForIconPicker,
+} from "@/components/ui/menu-icon-rename-input.tsx";
 import { Shortcut } from "@/components/ui/shortcut.tsx";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
 } from "@/components/ui/sidebar.tsx";
-import type { TooltipContent } from "@/components/ui/tooltip.tsx";
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
@@ -74,9 +73,15 @@ import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
+import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
+import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
+import {
+  type PageMetadataSeed,
+  persistPageMetadata,
+} from "@/lib/pages/persist-page-metadata.ts";
 import type { PageListDropTarget } from "@/lib/pages/resolve-page-list-drop-target.ts";
 import {
   resolveDeleteRedirectTarget,
@@ -92,20 +97,6 @@ interface PageListItemProps {
   onToggleExpand: (pageId: string) => void;
   pages: PageSummary[];
   row: PageRow;
-}
-
-function resolvePageListRowTooltip(
-  depth: number,
-  slug: string,
-  title: string
-): string | ComponentProps<typeof TooltipContent> | undefined {
-  if (depth !== 0) {
-    return;
-  }
-  if (slug === "home") {
-    return { children: title, sequence: "go-home" };
-  }
-  return title;
 }
 
 const PAGE_LIST_DRAG_HOLD_MS = 50;
@@ -139,6 +130,7 @@ interface PageListRowLinkProps {
   canResetToRemote: boolean;
   depth: number;
   dropIndicator: "before" | "after" | null;
+  ensureSeed: () => Promise<PageMetadataSeed | null>;
   expandedIds: Set<string>;
   hasChildren: boolean;
   icon?: string;
@@ -147,18 +139,18 @@ interface PageListRowLinkProps {
   isNestTarget: boolean;
   menuActionRef: React.RefObject<HTMLButtonElement | null>;
   navTarget: PageNavTarget;
-  onChangeIcon: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
   onMoveTo: (parentId: string | null) => void;
-  onRename: () => void;
   onResetToRemote: () => void;
   onSaveAsTemplate: () => void;
   onToggleExpand: (pageId: string) => void;
   onToggleFavorite: () => void;
   pageId: string;
   pages: PageSummary[];
+  previousSlug: string;
   row: PageRow;
+  seed: PageMetadataSeed | null;
   title: string;
 }
 
@@ -168,6 +160,7 @@ function PageListRowLink({
   canResetToRemote,
   depth,
   dropIndicator,
+  ensureSeed,
   expandedIds,
   hasChildren,
   icon,
@@ -176,18 +169,18 @@ function PageListRowLink({
   isNestTarget,
   menuActionRef,
   navTarget,
-  onChangeIcon,
   onDelete,
   onDuplicate,
   onMoveTo,
-  onRename,
   onResetToRemote,
   onSaveAsTemplate,
   onToggleExpand,
   onToggleFavorite,
   pageId,
   pages,
+  previousSlug,
   row,
+  seed,
   title,
 }: PageListRowLinkProps) {
   const navigate = useNavigate();
@@ -286,7 +279,7 @@ function PageListRowLink({
         data-page-list-row-content=""
         isActive={active}
         render={menuButtonRender}
-        tooltip={resolvePageListRowTooltip(depth, row.page.slug, title)}
+        tooltip={depth === 0 ? title : undefined}
       >
         {menuButtonChildren}
       </SidebarMenuButton>
@@ -294,18 +287,20 @@ function PageListRowLink({
         <PageListRowDropdown
           canDelete={canDelete}
           canResetToRemote={canResetToRemote}
+          ensureSeed={ensureSeed}
+          icon={icon}
           isFavorite={isFavorite}
           menuActionRef={menuActionRef}
-          onChangeIcon={onChangeIcon}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
           onMoveTo={onMoveTo}
-          onRename={onRename}
           onResetToRemote={onResetToRemote}
           onSaveAsTemplate={onSaveAsTemplate}
           onToggleFavorite={onToggleFavorite}
           pageId={pageId}
           pages={pages}
+          previousSlug={previousSlug}
+          seed={seed}
           title={title}
         />
       )}
@@ -468,19 +463,21 @@ export function PageListItem({
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextDraftName, setContextDraftName] = useState(page.title);
+  const [contextIconPickerOpen, setContextIconPickerOpen] = useState(false);
+  const [contextPickerSeed, setContextPickerSeed] = useState<
+    PageMetadataSeed | undefined
+  >();
   const menuActionRef = useRef<HTMLButtonElement>(null);
 
   const {
+    ensureSeed,
     handleTitleChange,
-    iconPickerOpen,
     iconPickerSeed,
     isRenaming,
-    openChangeIcon,
     previousSlugRef,
     renameInputRef,
     seedRef,
-    setIconPickerOpen,
-    startRenaming,
     stopRenaming,
     title,
   } = usePageRowEditing({ localPage, page, pages });
@@ -492,6 +489,10 @@ export function PageListItem({
     !isLocallyDeletedPage(localPage);
   const navTarget = resolvePageNavTarget(page.id, pages);
   const active = isActivePage(page.id, page.slug, activePage);
+  const pageIcon = localPage?.icon ?? page.icon;
+  const previousSlug = previousSlugRef.current;
+  const activeSeed =
+    contextPickerSeed ?? iconPickerSeed ?? seedRef.current ?? undefined;
 
   const dropIndicator = useDropTarget((target: PageListDropTarget | null) =>
     target?.kind === "sibling" && target.anchorPageId === page.id
@@ -522,15 +523,88 @@ export function PageListItem({
     }
   }, [isAnyDragging]);
 
-  const handleContextMenuOpenChange = useCallback((next: boolean) => {
-    if (
-      next &&
-      (wasDraggingRef.current || Date.now() - dragEndedAtRef.current < 400)
-    ) {
+  const commitContextRename = useCallback(() => {
+    const nextTitle =
+      contextDraftName.trim() === "" ? DEFAULT_PAGE_TITLE : contextDraftName;
+    if (nextTitle === title && contextDraftName.trim() !== "") {
       return;
     }
-    setContextMenuOpen(next);
-  }, []);
+    persistPageMetadata({
+      pageId: page.id,
+      previousSlug,
+      title: nextTitle,
+      pages,
+      seed: activeSeed,
+      syncUrl: true,
+    });
+  }, [activeSeed, contextDraftName, page.id, pages, previousSlug, title]);
+
+  const handleContextMenuOpenChange = useCallback(
+    (
+      next: boolean,
+      eventDetails?: {
+        cancel: () => void;
+        event: Event;
+        reason: string;
+      }
+    ) => {
+      if (
+        next &&
+        (wasDraggingRef.current || Date.now() - dragEndedAtRef.current < 400)
+      ) {
+        return;
+      }
+      if (
+        shouldCancelMenuCloseForIconPicker(
+          next,
+          contextIconPickerOpen,
+          eventDetails
+        )
+      ) {
+        return;
+      }
+      if (next) {
+        setContextDraftName(title);
+        setContextIconPickerOpen(false);
+      } else {
+        commitContextRename();
+        setContextIconPickerOpen(false);
+      }
+      setContextMenuOpen(next);
+    },
+    [commitContextRename, contextIconPickerOpen, title]
+  );
+
+  const openContextIconPicker = useCallback(() => {
+    const openPicker = (nextSeed?: PageMetadataSeed) => {
+      if (nextSeed) {
+        setContextPickerSeed(nextSeed);
+      }
+      setContextIconPickerOpen(true);
+    };
+
+    ensureSeed()
+      .then((nextSeed) => {
+        openPicker(nextSeed ?? undefined);
+      })
+      .catch(() => openPicker());
+  }, [ensureSeed]);
+
+  const writeContextIcon = useCallback(
+    (nextIcon: string) => {
+      const resolvedTitle =
+        contextDraftName.trim() === "" ? DEFAULT_PAGE_TITLE : contextDraftName;
+      persistPageIcon({
+        pageId: page.id,
+        icon: nextIcon,
+        title: resolvedTitle,
+        previousSlug,
+        seed: activeSeed,
+        pages,
+      });
+    },
+    [activeSeed, contextDraftName, page.id, pages, previousSlug]
+  );
 
   const handleResetToRemote = useCallback(() => {
     dispatch({ type: "page.resetToRemote", pageId: page.id });
@@ -574,7 +648,7 @@ export function PageListItem({
   const rowContent = isRenaming ? (
     <PageListRowRename
       depth={depth}
-      icon={page.icon}
+      icon={pageIcon}
       onStopRenaming={stopRenaming}
       onTitleChange={handleTitleChange}
       renameInputRef={renameInputRef}
@@ -588,27 +662,28 @@ export function PageListItem({
       canResetToRemote={canResetToRemote}
       depth={depth}
       dropIndicator={dropIndicator}
+      ensureSeed={ensureSeed}
       expandedIds={expandedIds}
       hasChildren={hasChildren}
-      icon={page.icon}
+      icon={pageIcon}
       isExpanded={isExpanded}
       isFavorite={isFavorite}
       isNestTarget={isNestTarget}
       menuActionRef={menuActionRef}
       navTarget={navTarget}
-      onChangeIcon={openChangeIcon}
       onDelete={() => setDeleteOpen(true)}
       onDuplicate={handleDuplicate}
       onMoveTo={handleMoveTo}
-      onRename={startRenaming}
       onResetToRemote={handleResetToRemote}
       onSaveAsTemplate={saveAsTemplate.request}
       onToggleExpand={onToggleExpand}
       onToggleFavorite={handleToggleFavorite}
       pageId={page.id}
       pages={pages}
+      previousSlug={previousSlug}
       row={row}
-      title={page.title}
+      seed={seedRef.current}
+      title={title}
     />
   );
 
@@ -622,7 +697,33 @@ export function PageListItem({
       <ContextMenuTrigger className="block w-full">
         {rowContent}
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="w-64 min-w-64">
+        <MenuIconRenameInput
+          ariaLabelIcon="Change page icon"
+          ariaLabelName="Page name"
+          draftName={contextDraftName}
+          fallbackIcon={
+            <PageIconDisplay className="[&_svg]:size-4" icon={undefined} />
+          }
+          icon={pageIcon}
+          iconPickerOpen={contextIconPickerOpen}
+          onCommit={commitContextRename}
+          onDraftNameChange={setContextDraftName}
+          onIconPickerOpenChange={(next) => {
+            if (next) {
+              openContextIconPicker();
+            } else {
+              setContextIconPickerOpen(false);
+            }
+          }}
+          onIconSelect={writeContextIcon}
+          onSubmit={() => {
+            commitContextRename();
+            setContextMenuOpen(false);
+          }}
+          placeholder="Page name"
+        />
+        <ContextMenuSeparator />
         <ContextMenuGroup>
           <ContextMenuLabel>Page</ContextMenuLabel>
           <ContextMenuItem onClick={handleToggleFavorite}>
@@ -656,14 +757,6 @@ export function PageListItem({
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuItem onClick={startRenaming}>
-            <IconPencil />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuItem onClick={openChangeIcon}>
-            <IconPhoto />
-            Change icon
-          </ContextMenuItem>
           <PageMenuMoveSubmenu
             onMoveTo={handleMoveTo}
             pageId={page.id}
@@ -695,32 +788,9 @@ export function PageListItem({
     </ContextMenu>
   );
 
-  const iconPickerTitle = title.trim() === "" ? page.title : title;
-
   return (
     <>
       {menu}
-
-      {isClient && !isRenaming ? (
-        <PageIconPicker
-          anchor={menuActionRef}
-          contentAlign="start"
-          contentSide="right"
-          hideTrigger
-          icon={page.icon}
-          onOpenChange={setIconPickerOpen}
-          open={iconPickerOpen}
-          pageId={page.id}
-          pages={pages}
-          previousSlug={previousSlugRef.current}
-          seed={
-            localPage
-              ? undefined
-              : (iconPickerSeed ?? seedRef.current ?? undefined)
-          }
-          title={iconPickerTitle}
-        />
-      ) : null}
 
       {isClient ? (
         <>

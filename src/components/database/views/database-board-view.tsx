@@ -6,6 +6,7 @@ import { DatabaseCellValueView } from "@/components/database/database-cell.tsx";
 import { DatabaseColumnDragAutoScroll } from "@/components/database/database-column-dnd.tsx";
 import { isSyncedField } from "@/components/database/database-grid-helpers.ts";
 import { useDatabaseColumnHeaderDrag } from "@/components/database/use-database-column-drag.ts";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
   type BoardCardRect,
   type BoardColumn,
@@ -343,8 +344,12 @@ function BoardCard({
   row,
 }: BoardCardProps) {
   const { headerProps, showGrabbing } = useDatabaseColumnHeaderDrag(row.id);
+  const { row: rowTarget } = useDatabasePathTargets(databaseId, row);
   const dragProps = canDrag ? headerProps : null;
 
+  if (!rowTarget) {
+    return null;
+  }
   return (
     <div className="relative shrink-0">
       <BoardCardDropLine cardId={row.id} columnKey={columnKey} />
@@ -353,8 +358,7 @@ function BoardCard({
           "flex flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5 shadow-xs outline-none transition-shadow hover:shadow-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
           canDrag && (showGrabbing ? "cursor-grabbing" : "cursor-pointer")
         )}
-        params={{ databaseId, rowId: row.id }}
-        to="/db/$databaseId/$rowId"
+        {...rowTarget}
         {...(dragProps ?? {})}
         data-board-card-id={row.id}
       >

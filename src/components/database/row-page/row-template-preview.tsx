@@ -12,7 +12,7 @@ import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useRowTemplate } from "@/hooks/use-row-template.ts";
-import { resolveDatabaseRowPageTitle } from "@/lib/databases/materialize-row-page.ts";
+import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
 import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import type {
