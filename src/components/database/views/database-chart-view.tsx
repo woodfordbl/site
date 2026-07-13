@@ -292,7 +292,7 @@ function CartesianChart({
   }
 
   const formatValue = (value: number) =>
-    formatChartYValue(aggregate, yField, value);
+    formatChartYValue(aggregate, yField, value, chart.yFormat);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
   const stacked = chart.stacked === true;
   // Horizontal (value-axis) gridlines carry the major/minor ruler; vertical
@@ -470,7 +470,7 @@ function PieMarkChart({
 
   const dither = useChartDither(chartConfig);
   const formatValue = (value: number) =>
-    formatChartYValue(aggregate, yField, value);
+    formatChartYValue(aggregate, yField, value, chart.yFormat);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
   const slices = pieRows.map((entry) => ({
     ...entry,

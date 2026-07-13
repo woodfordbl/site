@@ -416,13 +416,33 @@ function YRangeSubmenu({
   );
 }
 
+/** Y-axis number format choices. */
+const Y_FORMAT_OPTIONS: RadioSubmenuOption[] = [
+  { value: "number", label: "Number" },
+  { value: "percent", label: "Percent" },
+];
+
+/**
+ * Stacking only means something with 2+ overlaid series on a bar/area mark;
+ * it's hidden for single-series, line, pie, and the time axis (not stackable).
+ */
+function stackingApplies(
+  mark: DatabaseChartMark,
+  isTime: boolean,
+  seriesCount: number
+): boolean {
+  return !isTime && (mark === "bar" || mark === "area") && seriesCount > 1;
+}
+
 /** Legend switch + position, stacked (bar/area), and grid (cartesian) rows. */
 function ChartToggleItems({
+  canStack,
   chart,
   mark,
   showLegend,
   write,
 }: {
+  canStack: boolean;
   chart: ChartViewConfig;
   mark: DatabaseChartMark;
   showLegend: boolean;
@@ -463,7 +483,7 @@ function ChartToggleItems({
       >
         Tooltip
       </DropdownMenuSwitchItem>
-      {mark === "bar" || mark === "area" ? (
+      {canStack ? (
         <DropdownMenuSwitchItem
           checked={chart.stacked === true}
           onCheckedChange={(next) => {
@@ -483,18 +503,17 @@ function ChartToggleItems({
           Smoothing
         </DropdownMenuSwitchItem>
       ) : null}
-      {mark === "area" ? (
-        <DropdownMenuSwitchItem
-          checked={chart.gradient !== false}
-          onCheckedChange={(next) => {
-            write({ gradient: next });
-          }}
-        >
-          Gradient fill
-        </DropdownMenuSwitchItem>
-      ) : null}
       {mark === "pie" ? null : (
         <>
+          <RadioSubmenu
+            currentLabel={chart.yFormat === "percent" ? "Percent" : "Number"}
+            label="Y axis format"
+            onValueChange={(value) => {
+              write({ yFormat: value === "percent" ? "percent" : "number" });
+            }}
+            options={Y_FORMAT_OPTIONS}
+            value={chart.yFormat ?? "number"}
+          />
           <GridSubmenu chart={chart} write={write} />
           <YRangeSubmenu chart={chart} write={write} />
         </>
@@ -733,6 +752,7 @@ export function ChartOptionsItems({
     ? data.categories.length > 1
     : data.series.length > 1;
   const showLegend = chart.showLegend ?? legendDefault;
+  const canStack = stackingApplies(mark, isTime, data.series.length);
 
   return (
     <>
@@ -799,6 +819,7 @@ export function ChartOptionsItems({
       )}
       <DropdownMenuSeparator />
       <ChartToggleItems
+        canStack={canStack}
         chart={chart}
         mark={mark}
         showLegend={showLegend}

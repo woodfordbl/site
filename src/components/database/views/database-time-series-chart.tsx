@@ -83,6 +83,11 @@ function makeTimeFormatter(windowMs: number): (t: number) => string {
   return (t) => fmt.format(t);
 }
 
+const PERCENT_TICK_FORMATTER = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+  style: "percent",
+});
+
 const TOOLTIP_LABEL_FORMAT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -539,6 +544,9 @@ export function DatabaseTimeSeriesChart({
   const xAxisLabel = chartXAxisLabel(chart.xAxisTitle);
   const yAxisLabel = chartYAxisLabel(chart.yAxisTitle);
   const formatValue = (value: number) => {
+    if (chart.yFormat === "percent") {
+      return PERCENT_TICK_FORMATTER.format(value);
+    }
     if (percent) {
       return formatPercentChange(value);
     }

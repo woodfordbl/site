@@ -368,6 +368,12 @@ export const databaseTableViewConfigSchema = z.object({
        * major lines (absent/0 = none). Rendered fainter and dashed.
        */
       gridMinor: z.number().int().min(0).max(8).optional(),
+      /**
+       * Y-axis number format for ticks + tooltips. `percent` shows values as
+       * percentages (×100 with a % suffix); absent/`number` uses the Y field's
+       * own display format (or a plain grouped number).
+       */
+      yFormat: z.enum(["number", "percent"]).optional(),
       /** Fixed Y-axis lower bound (absent = auto from the data). */
       yMin: z.number().optional(),
       /** Fixed Y-axis upper bound (absent = auto from the data). */

@@ -204,18 +204,30 @@ export function chartValueLabel(
 }
 
 const PLAIN_NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+const PERCENT_FORMATTER = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+  style: "percent",
+});
+
+/** Y-axis number format: the field's own format, or forced percent. */
+export type ChartYFormat = "number" | "percent";
 
 /**
- * Display formatting for a Y value (tooltips, axis ticks): non-count
- * aggregates over a number field render via the field's full display config
+ * Display formatting for a Y value (tooltips, axis ticks). `percent` shows the
+ * value as a percentage (×100 with a % suffix). Otherwise non-count aggregates
+ * over a number field render via the field's full display config
  * (`formatCellValue` — format/decimals/grouping), everything else (counts,
  * formula aggregates) as a plain grouped en-US number.
  */
 export function formatChartYValue(
   aggregate: DatabaseChartYAggregate,
   yField: DatabaseField | null,
-  value: number
+  value: number,
+  format?: ChartYFormat
 ): string {
+  if (format === "percent") {
+    return PERCENT_FORMATTER.format(value);
+  }
   if (aggregate !== "count" && yField?.type === "number") {
     return formatCellValue(yField, value);
   }
