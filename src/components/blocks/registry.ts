@@ -1,7 +1,7 @@
 import {
   IconBlockquote,
+  IconCaretRightFilled,
   IconCheckbox,
-  IconChevronRight,
   IconCode,
   IconDatabase,
   IconH1,
@@ -124,7 +124,7 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     type: "toggleHeading",
     label: "Toggle heading",
     slashAliases: ["toggle heading", "toggle"],
-    icon: IconChevronRight,
+    icon: IconCaretRightFilled,
     createDefault: () => createEmptyBlock("toggleHeading"),
     behavior: {
       editStrategy: "container",

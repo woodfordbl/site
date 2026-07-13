@@ -13,7 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import { Kbd } from "@/components/ui/kbd.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
+import { createPreviewResolutionKeyDownHandler } from "@/lib/dialog/preview-resolution-keys.ts";
 import { keepLocalPageVersion } from "@/lib/pages/keep-local-page-version.ts";
 import type { PageSnapshotContent } from "@/lib/pages/page-snapshot-types.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
@@ -38,6 +41,8 @@ export function ServerVersionPreview({
   serverPage,
 }: ServerVersionPreviewProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const isCoarsePointer = useIsCoarsePrimaryPointer();
+  const showShortcuts = !isCoarsePointer;
 
   const content = useMemo<PageSnapshotContent>(
     () => ({
@@ -70,7 +75,16 @@ export function ServerVersionPreview({
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      onKeyDownCapture={createPreviewResolutionKeyDownHandler({
+        disabled: confirmOpen,
+        onKeep: handleKeepMine,
+        onUseSiteVersion: () => {
+          setConfirmOpen(true);
+        },
+      })}
+    >
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3">
         <Button onClick={onExit} size="sm" type="button" variant="ghost">
           <IconX aria-hidden />
@@ -87,6 +101,11 @@ export function ServerVersionPreview({
             variant="ghost"
           >
             Keep my edits
+            {showShortcuts ? (
+              <Kbd data-icon="inline-end" variant="inherit">
+                K
+              </Kbd>
+            ) : null}
           </Button>
           <Button
             onClick={() => {
@@ -97,6 +116,11 @@ export function ServerVersionPreview({
           >
             <IconCheck aria-hidden />
             Use site version
+            {showShortcuts ? (
+              <Kbd data-icon="inline-end" variant="inherit">
+                U
+              </Kbd>
+            ) : null}
           </Button>
         </span>
       </div>

@@ -1,0 +1,205 @@
+import { IconCopy } from "@tabler/icons-react";
+import { type ReactNode, useMemo } from "react";
+
+import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import { RowDefaultValueEditor } from "@/components/database/row-page/row-default-value-editor.tsx";
+import { RowPropertiesUnderTitleBand } from "@/components/database/row-page/row-properties-rail.tsx";
+import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { setDatabaseRowDefault } from "@/db/queries/database-collection-ops.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import {
+  headingSurfaceClassName,
+  headingTypographyClassNames,
+} from "@/lib/blocks/heading-typography.ts";
+import { rowPropertyToken } from "@/lib/databases/row-template.ts";
+import {
+  pageTitleEditorLayoutClassName,
+  pageTitleIconButtonClassName,
+  pageTitleIconPickerClassName,
+  pageTitleIconSlotClassName,
+} from "@/lib/pages/page-title-layout.ts";
+import type { DatabaseField, LocalDatabase } from "@/lib/schemas/database.ts";
+import type { LocalPage } from "@/lib/schemas/local-page.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_COPY_TEMPLATE_TOKEN,
+  TOAST_ID_COPY_TEMPLATE_TOKEN_ERROR,
+} from "@/lib/toast/toast-ids.ts";
+import { cn } from "@/lib/utils.ts";
+
+/**
+ * The row-template editor's pinned header, styled like a real row page: an
+ * icon picker (row pages inherit the template icon), an editable DEFAULT
+ * name (what "New row" titles rows; placeholder = the primary field's name),
+ * and one row per non-primary field editing that field's default value
+ * (`database.rowDefaults`), with a hover-revealed copy-token icon.
+ */
+
+function copyToken(fieldName: string): void {
+  const token = rowPropertyToken(fieldName);
+  navigator.clipboard
+    .writeText(token)
+    .then(() =>
+      appToast(`Copied ${token}`, { id: TOAST_ID_COPY_TEMPLATE_TOKEN })
+    )
+    .catch(() =>
+      appToast("Couldn't copy the token", {
+        id: TOAST_ID_COPY_TEMPLATE_TOKEN_ERROR,
+      })
+    );
+}
+
+function RowTemplatePropertyRow({
+  database,
+  field,
+}: {
+  database: LocalDatabase;
+  field: DatabaseField;
+}) {
+  const FieldIcon = resolveFieldIcon(field);
+  const token = rowPropertyToken(field.name);
+
+  return (
+    <div
+      className="flex min-h-8 items-center justify-between gap-2 text-sm"
+      data-reveal-group=""
+    >
+      <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+        <FieldIcon className="size-4 shrink-0 stroke-[1.5px]" />
+        <span className="truncate">{field.name}</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-1">
+        <RowDefaultValueEditor database={database} field={field} />
+        {field.type === "formula" ? null : (
+          <Button
+            aria-label={`Copy ${token}`}
+            className="hover-reveal shrink-0 text-muted-foreground"
+            onClick={() => {
+              copyToken(field.name);
+            }}
+            size="icon-sm"
+            title={`Copy ${token}`}
+            type="button"
+            variant="ghost"
+          >
+            <IconCopy />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The non-primary fields' default-value rows — title-slot block or rail panel. */
+export function RowTemplateDefaultsList({
+  database,
+}: {
+  database: LocalDatabase;
+}): ReactNode {
+  const panelFields = useMemo(
+    () =>
+      database.fields.filter((field) => field.id !== database.primaryFieldId),
+    [database.fields, database.primaryFieldId]
+  );
+
+  if (panelFields.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {panelFields.map((field) => (
+        <RowTemplatePropertyRow
+          database={database}
+          field={field}
+          key={field.id}
+        />
+      ))}
+    </div>
+  );
+}
+
+export interface RowTemplateTitleSectionProps {
+  database: LocalDatabase;
+  /** Trailing affordance in the properties block (rail expand button). */
+  propertiesExtra?: ReactNode;
+  /** False while the properties rail owns the defaults (title only). */
+  showProperties?: boolean;
+  templatePage: LocalPage;
+}
+
+/** Icon + default-name title + default-value rows for the editor's title slot. */
+export function RowTemplateTitleSection({
+  database,
+  propertiesExtra,
+  showProperties = true,
+  templatePage,
+}: RowTemplateTitleSectionProps): ReactNode {
+  const { pages } = useMergedPageListItems();
+
+  const primaryField = database.fields.find(
+    (field) => field.id === database.primaryFieldId
+  );
+  const hasPanelFields = database.fields.some(
+    (field) => field.id !== database.primaryFieldId
+  );
+
+  const defaultName = database.rowDefaults?.[database.primaryFieldId];
+
+  return (
+    <div>
+      <div className={pageTitleEditorLayoutClassName}>
+        <div className={pageTitleIconSlotClassName}>
+          <PageIconPicker
+            className={pageTitleIconPickerClassName}
+            icon={templatePage.icon}
+            pageId={templatePage.id}
+            pages={pages}
+            previousSlug={templatePage.slug}
+            title={templatePage.title}
+            triggerButtonSize="icon"
+            triggerClassName={pageTitleIconButtonClassName}
+          />
+        </div>
+        <input
+          aria-label="Default row name"
+          className={cn(
+            "w-full min-w-0 bg-transparent outline-none placeholder:text-muted-foreground/50",
+            headingSurfaceClassName,
+            headingTypographyClassNames[1]
+          )}
+          defaultValue={typeof defaultName === "string" ? defaultName : ""}
+          key={`${database.id}:${typeof defaultName === "string" ? defaultName : ""}`}
+          onBlur={(event) => {
+            setDatabaseRowDefault(
+              database.id,
+              database.primaryFieldId,
+              event.target.value.trim() || null
+            );
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              setDatabaseRowDefault(
+                database.id,
+                database.primaryFieldId,
+                event.currentTarget.value.trim() || null
+              );
+              event.currentTarget.blur();
+            }
+          }}
+          placeholder={primaryField?.name ?? "Name"}
+          type="text"
+        />
+      </div>
+      <p className="mt-2 text-muted-foreground text-sm">
+        Type {"{{"} in the template body to insert property tokens.
+      </p>
+      {showProperties && hasPanelFields ? (
+        <RowPropertiesUnderTitleBand propertiesExtra={propertiesExtra}>
+          <RowTemplateDefaultsList database={database} />
+        </RowPropertiesUnderTitleBand>
+      ) : null}
+    </div>
+  );
+}

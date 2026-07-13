@@ -49,10 +49,7 @@ export function ToggleHeadingView({ row, mode }: BlockContainerProps) {
 
   return (
     <div className={cn(topSpacing)}>
-      <div
-        className="flex w-fit max-w-full items-center gap-1"
-        data-reveal-group=""
-      >
+      <div className="flex w-fit max-w-full items-center gap-2">
         {mode === "edit" ? (
           <EditableSurface
             ariaLabel="Toggle heading"

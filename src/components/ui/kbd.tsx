@@ -7,14 +7,13 @@ const kbdVariants = cva(
   {
     variants: {
       variant: {
-        outline: cn(
+        outline:
           "h-4 min-w-4 rounded-[3px] border border-border bg-background px-1 text-foreground",
-          "in-data-[slot=tooltip-content]:border-background/20 in-data-[slot=tooltip-content]:bg-background/10 in-data-[slot=tooltip-content]:text-background/90"
-        ),
         default: cn(
           "h-4 min-w-4 rounded-[3px] bg-muted px-1 text-muted-foreground",
           "in-data-[slot=button]:bg-current/10 in-data-[slot=button]:text-inherit"
         ),
+        inherit: "text-inherit opacity-50",
       },
     },
     defaultVariants: {

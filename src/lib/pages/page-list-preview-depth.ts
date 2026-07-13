@@ -1,5 +1,6 @@
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import type { FlatVisiblePageRow } from "@/lib/pages/flatten-visible-page-rows.ts";
+import { MAX_PAGE_DEPTH } from "@/lib/pages/page-depth.ts";
 import type { PageListDropTarget } from "@/lib/pages/resolve-page-list-drop-target.ts";
 
 /** Matches `pageListRowPadding` base (`px-2`). */
@@ -8,33 +9,45 @@ export const PAGE_LIST_INDENT_BASE_PX = 8;
 /** Horizontal pixels per sidebar indent level (`pl-5` / `pl-8` steps). */
 export const PAGE_LIST_INDENT_STEP_PX = 12;
 
-/** Sidebar UI depth is 0-based; three levels use `px-2`, `pl-5`, `pl-8`. */
-export const PAGE_LIST_MAX_UI_DEPTH = 2;
+/**
+ * Sidebar UI depth is 0-based. Matches {@link MAX_PAGE_DEPTH} path segments
+ * minus one (a depth-5 page is UI depth 4).
+ */
+export const PAGE_LIST_MAX_UI_DEPTH = MAX_PAGE_DEPTH - 1;
+
+/**
+ * Static left-padding classes per UI depth — must be literal strings so
+ * Tailwind emits CSS (dynamic `pl-[Npx]` templates are purged).
+ */
+const PAGE_LIST_PADDING_LEFT = [
+  "pl-2",
+  "pl-5",
+  "pl-8",
+  "pl-[2.75rem]",
+  "pl-[3.5rem]",
+] as const;
+
+function pageListPaddingLeftClass(depth: number): string {
+  const clamped = Math.min(PAGE_LIST_MAX_UI_DEPTH, Math.max(0, depth)) as
+    | 0
+    | 1
+    | 2
+    | 3
+    | 4;
+  return PAGE_LIST_PADDING_LEFT[clamped];
+}
 
 /** Tailwind horizontal padding for a sidebar page row at `depth` (0-based). */
 export function pageListRowPadding(depth: number): string {
   if (depth <= 0) {
     return "px-2";
   }
-
-  if (depth === 1) {
-    return "pr-2 pl-5";
-  }
-
-  return "pr-2 pl-8";
+  return `pr-2 ${pageListPaddingLeftClass(depth)}`;
 }
 
 /** Left padding only — when right padding is set separately (e.g. `pr-8` menu action). */
 export function pageListRowPaddingLeft(depth: number): string {
-  if (depth <= 0) {
-    return "pl-2";
-  }
-
-  if (depth === 1) {
-    return "pl-5";
-  }
-
-  return "pl-8";
+  return pageListPaddingLeftClass(depth);
 }
 
 export function computePageListPreviewDepthFromPointer(

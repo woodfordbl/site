@@ -210,15 +210,15 @@ export function BlockGutter({
               }
             />
             <TooltipContent
-              className="flex-col items-start gap-1 py-2"
+              className="flex-col items-start gap-0.5 px-2 py-1"
               side="top"
             >
               <span className="inline-flex items-center gap-1">
-                <Kbd>Click</Kbd>
+                <span className="font-semibold">Click</span>
                 to select
               </span>
               <span className="inline-flex items-center gap-1">
-                <Kbd>Drag</Kbd>
+                <span className="font-semibold">Drag</span>
                 to move
               </span>
             </TooltipContent>

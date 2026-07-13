@@ -22,7 +22,7 @@ import { blockColorClassName } from "@/lib/blocks/block-colors.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
-import { handleContainerGutterInsert } from "@/lib/canvas/container-gutter-insert.ts";
+import { usePageContentLayout } from "@/lib/pages/page-content-layout-context.tsx";
 import { pageTitleBlockAlignClassName } from "@/lib/pages/page-title-layout.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
 import { cn } from "@/lib/utils.ts";
@@ -33,7 +33,8 @@ const topLevelPageTitleGutterAlignClassName = "pl-1";
 function getTopLevelContentClassName(
   alignWithPageTitle: boolean,
   showGutter: boolean,
-  isMobile: boolean
+  isMobile: boolean,
+  useFullPanelWidth: boolean
 ): string | undefined {
   if (!alignWithPageTitle) {
     return;
@@ -41,6 +42,12 @@ function getTopLevelContentClassName(
 
   if (showGutter && !isMobile) {
     return topLevelPageTitleGutterAlignClassName;
+  }
+
+  // Full-width / mobile: share the page-icon left edge inside scroll padding.
+  // Constrained column only: indent to the title text column (`md:pl-9`).
+  if (useFullPanelWidth) {
+    return;
   }
 
   return pageTitleBlockAlignClassName;
@@ -60,6 +67,7 @@ interface RowChromeProps {
   enableTouchGesture: boolean;
   isMobile: boolean;
   showGutter: boolean;
+  useFullPanelWidth: boolean;
 }
 
 function ContainerRowNode({
@@ -71,6 +79,7 @@ function ContainerRowNode({
   parentType,
   row,
   showGutter,
+  useFullPanelWidth,
 }: RowChromeProps & {
   Container: ComponentType<{ mode: BlockMode; row: CanvasRow }>;
   gutterPullClassName?: string;
@@ -78,8 +87,6 @@ function ContainerRowNode({
   parentType?: BlockType;
   row: CanvasRow;
 }) {
-  const { insertAfter, insertAtScopeStart, insertBefore } =
-    useCanvasEditorContext();
   const isCallout = row.effectiveBlock.type === "callout";
   const isTopLevel = !row.effectiveBlock.parentId;
   const alignWithPageTitle = isTopLevel;
@@ -87,24 +94,16 @@ function ContainerRowNode({
   return (
     <CanvasRowShell
       contentClassName={cn(
-        getTopLevelContentClassName(alignWithPageTitle, showGutter, isMobile),
+        getTopLevelContentClassName(
+          alignWithPageTitle,
+          showGutter,
+          isMobile,
+          useFullPanelWidth
+        ),
         blockColorClassName(row.effectiveBlock, parentType)
       )}
       enableTouchGesture={enableTouchGesture}
-      gutter={
-        showGutter ? (
-          <RowGutter
-            onInsert={(edge) => {
-              handleContainerGutterInsert(row, edge, {
-                insertAfter,
-                insertAtScopeStart,
-                insertBefore,
-              });
-            }}
-            row={row}
-          />
-        ) : null
-      }
+      gutter={showGutter ? <RowGutter row={row} /> : null}
       gutterPullClassName={gutterPullClassName}
       keepGutterOnNestedHover={isCallout}
       row={row}
@@ -122,6 +121,7 @@ function LeafRowNode({
   parentType,
   row,
   showGutter,
+  useFullPanelWidth,
 }: RowChromeProps & {
   gutterPullClassName?: string;
   mode: BlockMode;
@@ -151,7 +151,8 @@ function LeafRowNode({
       contentClassName={getTopLevelContentClassName(
         alignWithPageTitle,
         showGutter,
-        isMobile
+        isMobile,
+        useFullPanelWidth
       )}
       contentSpacingClassName={contentSpacingClassName}
       enableTouchGesture={enableTouchGesture}
@@ -182,6 +183,7 @@ function BlockTreeNodeImpl({
 }: BlockTreeNodeProps) {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const isNarrowViewport = useIsNarrowViewport();
+  const { useFullPanelWidth } = usePageContentLayout();
 
   // On coarse pointers the gutter is removed; block actions and reordering move
   // to a long-press drawer / touch drag on the block body instead.
@@ -190,6 +192,7 @@ function BlockTreeNodeImpl({
     enableTouchGesture: editable && isCoarsePrimaryPointer,
     isMobile: isNarrowViewport,
     showGutter: editable && !isCoarsePrimaryPointer,
+    useFullPanelWidth,
   };
 
   const spec = getBlockSpec(row.effectiveBlock.type);

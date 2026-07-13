@@ -30,7 +30,7 @@ export function ConfirmDialogFooter({
       <Button onClick={onCancel} size="sm" type="button" variant="ghost">
         Cancel
         {showShortcuts ? (
-          <Kbd data-icon="inline-end" variant="default">
+          <Kbd data-icon="inline-end" variant="inherit">
             Esc
           </Kbd>
         ) : null}
@@ -44,7 +44,7 @@ export function ConfirmDialogFooter({
       >
         {confirmLabel}
         {showShortcuts ? (
-          <Kbd data-icon="inline-end" variant="default">
+          <Kbd data-icon="inline-end" variant="inherit">
             ↵
           </Kbd>
         ) : null}

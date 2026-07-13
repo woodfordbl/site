@@ -1,4 +1,5 @@
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { normalizePageSlug } from "@/lib/pages/slugify.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
@@ -24,6 +25,7 @@ export function resolveActiveUserPageBySlug(
         page.slug === normalized &&
         isUserCreatedPage(page) &&
         !isTemplatePageId(page.id) &&
+        !isDatabaseTemplatePageId(page.id) &&
         !isLocallyDeletedPage(page)
     ) ?? null
   );

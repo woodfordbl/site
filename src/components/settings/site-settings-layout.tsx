@@ -3,6 +3,7 @@
 import { Outlet } from "@tanstack/react-router";
 
 import { SiteShell } from "@/components/layout/site-shell.tsx";
+import { PageMainPanelFooterLane } from "@/components/pages/page-main-panel-footer-lane.tsx";
 import {
   PageSidebarChromeProvider,
   useOptionalPageSidebarChrome,
@@ -53,7 +54,7 @@ function SettingsMainInset() {
       {/* Matches PageWorkspaceBody footer lane height so the inset card aligns
           with pages. Desktop only — on mobile the document scrolls and this lane
           would just add dead space below the content. */}
-      <div aria-hidden className="h-9 shrink-0 max-md:hidden" />
+      <PageMainPanelFooterLane />
     </div>
   );
 }

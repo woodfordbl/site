@@ -42,7 +42,7 @@ export function toLocalPagePreviewEntry(
 
 /**
  * Dirty overlays, user-created pages, and delete tombstones for SSR sidebar
- * merge. Materialized row pages (`databaseRowSource`) are excluded: they are
+ * merge. Materialized row pages and database hubs are excluded: they are
  * never sidebar-visible, so mirroring them would only spend cookie budget
  * and leak unmarked stubs into the SSR tree.
  */
@@ -55,6 +55,7 @@ export function localPagePreviewEntriesFromPages(
     .filter(
       (page) =>
         page.databaseRowSource === undefined &&
+        page.databaseSource === undefined &&
         (isLocallyDeletedPage(page) ||
           isUserCreatedPage(page) ||
           dirtyPageIds.has(page.id))

@@ -11,6 +11,8 @@ export interface PageSummary {
    * everywhere else (routing, search, breadcrumbs).
    */
   databaseRowSource?: { databaseId: string; rowId: string };
+  /** Present on a database hub page, which is not sidebar-visible. */
+  databaseSource?: { databaseId: string };
   icon?: string;
   id: string;
   parentId: string | null;

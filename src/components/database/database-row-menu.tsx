@@ -15,7 +15,7 @@ import {
   useState,
 } from "react";
 
-import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
+import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,24 +25,25 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
-import { localDatabaseRowsCollection } from "@/db/collections/local-collections.ts";
+import {
+  localBlocksCollection,
+  localDatabaseRowsCollection,
+} from "@/db/collections/local-collections.ts";
 import {
   deleteDatabaseRows,
   duplicateDatabaseRows,
+  setDatabaseRowIcon,
 } from "@/db/queries/database-collection-ops.ts";
 import { useDatabase } from "@/db/queries/use-database.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
-import {
-  ensureDatabaseRowPage,
-  resolveDatabaseRowPageTitle,
-} from "@/lib/databases/materialize-row-page.ts";
+import { databaseRowNavTarget } from "@/lib/databases/database-page-paths.ts";
+import { ensureDatabaseRowPage } from "@/lib/databases/materialize-row-page.ts";
 import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
 
 interface DatabaseRowIconSession {
-  pageId: string;
-  title: string;
+  rowId: string;
 }
 
 interface DatabaseRowMenuProps {
@@ -67,8 +68,7 @@ interface DatabaseRowMenuProps {
 
 /**
  * Right-click menu for a database table row. Opens the shared Base UI
- * context menu; favorites / change-icon materialize a row page when needed
- * (without navigating away — `navigate: false`).
+ * context menu; favorites materialize a row page only when needed.
  */
 export function DatabaseRowMenu({
   children,
@@ -124,11 +124,19 @@ export function DatabaseRowMenu({
   );
 
   const handleOpen = useCallback(() => {
-    navigate({
-      params: { databaseId, rowId: contextRow.id },
-      to: "/db/$databaseId/$rowId",
-    });
-  }, [contextRow.id, databaseId, navigate]);
+    if (!database) {
+      return;
+    }
+    const target = databaseRowNavTarget(
+      database,
+      contextRow,
+      pages,
+      localBlocksCollection.toArray
+    );
+    if (target) {
+      navigate(target);
+    }
+  }, [contextRow, database, navigate, pages]);
 
   const ensureContextPage = useCallback(
     (withNavigation: boolean): Promise<string | null> => {
@@ -160,21 +168,11 @@ export function DatabaseRowMenu({
   }, [ensureContextPage, isSyncedContext, toggleFavorite]);
 
   const handleChangeIcon = useCallback(() => {
-    if (isSyncedContext || !database) {
+    if (isSyncedContext) {
       return;
     }
-    ensureContextPage(false)
-      .then((pageId) => {
-        if (!pageId) {
-          return;
-        }
-        setIconSession({
-          pageId,
-          title: resolveDatabaseRowPageTitle(database, contextRow),
-        });
-      })
-      .catch(() => undefined);
-  }, [contextRow, database, ensureContextPage, isSyncedContext]);
+    setIconSession({ rowId: contextRow.id });
+  }, [contextRow.id, isSyncedContext]);
 
   const handleDuplicate = useCallback(() => {
     if (mode !== "edit") {
@@ -196,10 +194,6 @@ export function DatabaseRowMenu({
   const favoriteLabel = isFavorite
     ? "Remove from favorites"
     : "Add to favorites";
-
-  const linkedPage = iconSession
-    ? pages.find((page) => page.id === iconSession.pageId)
-    : undefined;
 
   return (
     <>
@@ -262,21 +256,21 @@ export function DatabaseRowMenu({
         </ContextMenuContent>
       </ContextMenu>
       {iconSession ? (
-        <PageIconPicker
+        <GlyphIconPicker
           anchor={rowAnchorRef}
+          ariaLabel="Change row icon"
           contentAlign="start"
           contentSide="bottom"
           hideTrigger
-          icon={linkedPage?.icon}
+          icon={contextRow.icon}
           onOpenChange={(next) => {
             if (!next) {
               setIconSession(null);
             }
           }}
+          onRemove={() => setDatabaseRowIcon(iconSession.rowId, undefined)}
+          onSelect={(icon) => setDatabaseRowIcon(iconSession.rowId, icon)}
           open
-          pageId={iconSession.pageId}
-          pages={pages}
-          title={iconSession.title}
         />
       ) : null}
     </>

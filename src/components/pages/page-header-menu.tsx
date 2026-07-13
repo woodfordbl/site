@@ -17,7 +17,6 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
@@ -58,6 +57,15 @@ import { exportPageArchive } from "@/lib/content/workspace-export.ts";
 import { exportPageMarkdown } from "@/lib/markdown/export-page-markdown.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_EXPORT_MARKDOWN,
+  TOAST_ID_EXPORT_MARKDOWN_ERROR,
+  TOAST_ID_EXPORT_PAGE,
+  TOAST_ID_EXPORT_PAGE_ERROR,
+  TOAST_ID_IMPORT_MARKDOWN,
+  TOAST_ID_IMPORT_MARKDOWN_ERROR,
+} from "@/lib/toast/toast-ids.ts";
 
 interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   pageId: string;
@@ -96,24 +104,37 @@ export function PageHeaderMenu({
   const runExportPage = useCallback(() => {
     exportPageArchive(pageId)
       .then((result) => {
-        toast.success(
+        appToast.success(
           result.assetCount > 0
             ? `Page exported with ${result.assetCount} media file${result.assetCount === 1 ? "" : "s"}.`
-            : "Page exported."
+            : "Page exported.",
+          { id: TOAST_ID_EXPORT_PAGE }
         );
       })
       .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Export failed.");
+        appToast.error(
+          error instanceof Error ? error.message : "Export failed.",
+          {
+            id: TOAST_ID_EXPORT_PAGE_ERROR,
+          }
+        );
       });
   }, [pageId]);
 
   const runExportMarkdown = useCallback(() => {
     exportPageMarkdown(pageId, pages)
       .then(() => {
-        toast.success("Page exported as Markdown.");
+        appToast.success("Page exported as Markdown.", {
+          id: TOAST_ID_EXPORT_MARKDOWN,
+        });
       })
       .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Export failed.");
+        appToast.error(
+          error instanceof Error ? error.message : "Export failed.",
+          {
+            id: TOAST_ID_EXPORT_MARKDOWN_ERROR,
+          }
+        );
       });
   }, [pageId, pages]);
 
@@ -130,11 +151,14 @@ export function PageHeaderMenu({
       }
       importMarkdownPage(file)
         .then(() => {
-          toast.success(`Imported “${file.name}”.`);
+          appToast.success(`Imported “${file.name}”.`, {
+            id: TOAST_ID_IMPORT_MARKDOWN,
+          });
         })
         .catch((error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Import failed."
+          appToast.error(
+            error instanceof Error ? error.message : "Import failed.",
+            { id: TOAST_ID_IMPORT_MARKDOWN_ERROR }
           );
         });
     },

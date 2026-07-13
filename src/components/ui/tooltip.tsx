@@ -84,7 +84,7 @@ function TooltipContent({
       >
         <TooltipPrimitive.Popup
           className={cn(
-            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-background text-xs has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50",
+            "overlay-popover-surface z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-popover px-3 py-1.5 font-normal text-popover-foreground text-xs shadow-md ring-1 ring-foreground/10 has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:border **:data-[slot=kbd]:border-border **:data-[slot=kbd]:bg-background **:data-[slot=kbd]:text-muted-foreground",
             // Interruptible enter/exit from the trigger; instant for adjacent tooltips.
             "transition-[opacity,scale] duration-[125ms] ease-[var(--ease-out-strong)]",
             "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
@@ -100,7 +100,7 @@ function TooltipContent({
           {command ? <Shortcut command={command} /> : null}
           {sequence ? <SequenceShortcut sequenceId={sequence} /> : null}
           {showArrow ? (
-            <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=right]:top-1/2! data-[side=inline-start]:-right-1 data-[side=left]:-right-1 data-[side=top]:-bottom-2.5 data-[side=inline-end]:-left-1 data-[side=right]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2" />
+            <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-popover fill-popover data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=right]:top-1/2! data-[side=inline-start]:-right-1 data-[side=left]:-right-1 data-[side=top]:-bottom-2.5 data-[side=inline-end]:-left-1 data-[side=right]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2" />
           ) : null}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>

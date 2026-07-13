@@ -1,9 +1,9 @@
 # Motion — hover-reveal & swap
 
 One opacity primitive backs every "secondary control that appears on hover/focus"
-in the app: sidebar row actions, the page-row icon↔chevron swap, the media
+in the app: sidebar row actions, the page-row icon↔caret swap, the media
 toolbar and resize handles, table structure handles, table add-row/column
-controls, and column-divider grips. Before this, each site re-implemented the
+controls, column-divider grips, and table row-number ↔ checkbox swaps. Before this, each site re-implemented the
 same idea ~10 different ways (durations of 0/100/150ms, a 300ms delay, three
 easings, `@media (hover:hover)` gating and reduced-motion handling on only one
 site). The primitive is pure CSS — it lives entirely in
@@ -14,7 +14,8 @@ with class names and a `data-reveal-group` attribute, no helper module.
 
 - `.hover-reveal` — control hidden at rest, fades in when revealed.
 - `.swap-reveal` / `.swap-conceal` — two elements crossfading in the **same
-  slot** (the page-row icon `.swap-conceal` ↔ expand chevron `.swap-reveal`).
+  slot** (the page-row icon `.swap-conceal` ↔ expand caret `.swap-reveal`; also
+  table row-number ↔ row-select checkbox in the grid gutter).
 
 ## Trigger
 
@@ -66,10 +67,10 @@ On `@media (hover: none)` pointers (`MEDIA_HOVER_NONE` in
 simple `.hover-reveal` controls stay at full opacity so they remain reachable
 (there is no hover to reveal them). Swaps rest on the **revealed** element
 (`.swap-reveal` shown, `.swap-conceal` hidden) so the slot's affordance stays
-visible — for the page-row swap that means the expand chevron, the only way to
+visible — for the page-row swap that means the expand caret, the only way to
 toggle a row on touch, is shown instead of the icon, and its
 `CollapsibleTrigger` opts back into pointer events with the `hover-none:` Tailwind
-variant. This axis is **hover capability**, not viewport width and not
+variant. Table row-select uses the same swap pattern. This axis is **hover capability**, not viewport width and not
 `(pointer: coarse)` — canvas touch UX uses
 [`useIsCoarsePrimaryPointer`](../../src/hooks/device-layout.ts) separately; see
 [canvas-editor — Device signals](./canvas-editor.md#device-signals).

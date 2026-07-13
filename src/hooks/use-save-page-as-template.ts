@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { toast } from "sonner";
 
 import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
@@ -9,6 +8,11 @@ import {
   saveSnapshotAsTemplate,
   templateExists,
 } from "@/lib/pages/template-store.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_SAVE_TEMPLATE,
+  TOAST_ID_SAVE_TEMPLATE_ERROR,
+} from "@/lib/toast/toast-ids.ts";
 
 /**
  * Snapshots a page into the standalone template store. Requesting a save while a
@@ -24,9 +28,13 @@ export function useSavePageAsTemplate(page: PageSummary) {
       .then((snapshot) => {
         saveSnapshotAsTemplate(snapshot);
         setTemplatePageId(TEMPLATE_PAGE_ID);
-        toast.success("Saved as template");
+        appToast.success("Saved as template", { id: TOAST_ID_SAVE_TEMPLATE });
       })
-      .catch(() => toast.error("Could not save template"));
+      .catch(() =>
+        appToast.error("Could not save template", {
+          id: TOAST_ID_SAVE_TEMPLATE_ERROR,
+        })
+      );
   }, [page, setTemplatePageId]);
 
   const request = useCallback(() => {

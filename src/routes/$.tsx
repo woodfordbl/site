@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
-
+import {
+  renderResolvedDatabasePath,
+  useDatabaseSlugPath,
+} from "@/components/database/database-slug-path-page.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
 import { useIsClient } from "@/hooks/use-is-client.ts";
@@ -28,6 +31,7 @@ import { loadPageListLocalPreview } from "@/lib/pages/load-page-list-local-previ
 import {
   pageNavTargetForUserPage,
   pagePathFromParam,
+  pageSlugsEqual,
 } from "@/lib/pages/slugify.ts";
 import {
   isLocallyDeletedPage,
@@ -105,11 +109,16 @@ function PendingSlugPage({ slug }: { slug: string }) {
 
 function PendingSlugPageClient({ slug }: { slug: string }) {
   const localPageBySlug = useResolvedLocalPageBySlug(slug);
-  const localPage = useSlugPageResolution(slug, localPageBySlug);
+  const localPageResolved = useSlugPageResolution(slug, localPageBySlug);
+  const localPage =
+    localPageResolved && pageSlugsEqual(localPageResolved.slug, slug)
+      ? localPageResolved
+      : null;
   const userPageBySlug = useResolvedUserPage(slug);
   const isLocalPagesSettling = useLocalPagesSettling();
   const { pages: serverPages } = usePageListItems();
   const navigate = useNavigate();
+  const databasePath = useDatabaseSlugPath(slug);
 
   useSyncPageUrl(
     localPage &&
@@ -185,6 +194,9 @@ function PendingSlugPageClient({ slug }: { slug: string }) {
   }
 
   if (!localPage) {
+    if (databasePath) {
+      return renderResolvedDatabasePath(databasePath);
+    }
     if (isLocalPagesSettling) {
       return null;
     }

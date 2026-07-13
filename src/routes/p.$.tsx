@@ -1,4 +1,10 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
+import { DatabaseHubPageWorkspace } from "@/components/database/database-hub-page.tsx";
+import {
+  DatabaseSlugPathPage,
+  useDatabaseSlugPath,
+} from "@/components/database/database-slug-path-page.tsx";
+import { DatabaseRowPageWorkspace } from "@/components/database/row-page/database-row-page.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
 import { useIsClient } from "@/hooks/use-is-client.ts";
@@ -7,7 +13,7 @@ import { useResolvedUserPage } from "@/hooks/use-resolved-page.ts";
 import { useSlugPageResolution } from "@/hooks/use-slug-page-resolution.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
-import { pagePathFromParam } from "@/lib/pages/slugify.ts";
+import { pagePathFromParam, pageSlugsEqual } from "@/lib/pages/slugify.ts";
 import {
   isLocallyDeletedPage,
   isUserCreatedPage,
@@ -35,18 +41,54 @@ function UserPageBySlugClient({ slug }: { slug: string }) {
   const userPageBySlug = useResolvedUserPage(slug);
   const userPage = useSlugPageResolution(slug, userPageBySlug);
   const isLocalPagesSettling = useLocalPagesSettling();
+  const databasePath = useDatabaseSlugPath(slug);
 
-  useSyncPageUrl(userPage?.id, { urlSlug: slug, userPage: true });
+  const slugMatchesResolvedPage =
+    userPage != null && pageSlugsEqual(userPage.slug, slug);
+  const isValidUserPage =
+    Boolean(userPage && isUserCreatedPage(userPage)) &&
+    !(userPage && isLocallyDeletedPage(userPage)) &&
+    slugMatchesResolvedPage;
 
-  if (
-    !(userPage && isUserCreatedPage(userPage)) ||
-    isLocallyDeletedPage(userPage)
-  ) {
+  // Prefer an exact database slug path over a stale slug→id fallback from a
+  // previous `/p/$` navigation (see useSlugPageResolution).
+  const useDatabasePath = Boolean(databasePath) && !isValidUserPage;
+
+  useSyncPageUrl(isValidUserPage ? userPage?.id : undefined, {
+    urlSlug: slug,
+    userPage: true,
+  });
+
+  if (!isValidUserPage) {
     if (isLocalPagesSettling) {
       return null;
     }
 
+    if (useDatabasePath && databasePath) {
+      return (
+        <SiteShell>
+          <DatabaseSlugPathPage splat={slug} />
+        </SiteShell>
+      );
+    }
+
     throw notFound();
+  }
+
+  // Hub/row marker pages are normal workspaces (+ properties rail for rows).
+  if (userPage.databaseSource) {
+    return (
+      <SiteShell>
+        <DatabaseHubPageWorkspace pageId={userPage.id} />
+      </SiteShell>
+    );
+  }
+  if (userPage.databaseRowSource) {
+    return (
+      <SiteShell>
+        <DatabaseRowPageWorkspace pageId={userPage.id} />
+      </SiteShell>
+    );
   }
 
   return (

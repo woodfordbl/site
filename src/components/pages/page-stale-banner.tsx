@@ -2,7 +2,6 @@
 
 import { IconInfoCircle } from "@tabler/icons-react";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
-import { toast } from "sonner";
 
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -15,6 +14,11 @@ import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
 import { computePageStaleState } from "@/lib/pages/resolve-page-state.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_MERGE_STALE,
+  TOAST_ID_MERGE_STALE_NO_BASELINE,
+} from "@/lib/toast/toast-ids.ts";
 
 /**
  * Live-collection read of one local page. Deliberately NOT `useLocalPageById`:
@@ -116,8 +120,9 @@ export function PageStaleBanner({
     try {
       const outcome = await mergeStalePageFromServer(serverPage);
       if (outcome.status === "no-baseline") {
-        toast.info(
-          "No merge base is stored for this page — use Preview to compare, then keep or replace your edits."
+        appToast.info(
+          "No merge base is stored for this page — use Preview to compare, then keep or replace your edits.",
+          { id: TOAST_ID_MERGE_STALE_NO_BASELINE }
         );
         return;
       }
@@ -127,7 +132,9 @@ export function PageStaleBanner({
       if (outcome.changed) {
         onAfterReset();
       }
-      toast.success(mergeSuccessMessage(outcome));
+      appToast.success(mergeSuccessMessage(outcome), {
+        id: TOAST_ID_MERGE_STALE,
+      });
     } catch (error) {
       reportPersistenceError(error);
     } finally {

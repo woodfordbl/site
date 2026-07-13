@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { resolveActiveLocalPageBySlug } from "@/lib/pages/resolve-active-local-page-by-slug.ts";
 import { resolveActiveUserPageBySlug } from "@/lib/pages/resolve-user-page-by-slug.ts";
 import { normalizePageSlug } from "@/lib/pages/slugify.ts";
@@ -24,7 +25,11 @@ export function useResolvedUserPageById(
   const localPages = useLocalPages();
 
   return useMemo(() => {
-    if (!pageId || isTemplatePageId(pageId)) {
+    if (
+      !pageId ||
+      isTemplatePageId(pageId) ||
+      isDatabaseTemplatePageId(pageId)
+    ) {
       return null;
     }
 
@@ -68,7 +73,10 @@ export function useUserPages(): LocalPage[] {
   return useMemo(
     () =>
       localPages.filter(
-        (page) => isUserCreatedPage(page) && !isTemplatePageId(page.id)
+        (page) =>
+          isUserCreatedPage(page) &&
+          !isTemplatePageId(page.id) &&
+          !isDatabaseTemplatePageId(page.id)
       ),
     [localPages]
   );

@@ -16,7 +16,6 @@ import {
   useEffect,
   useState,
 } from "react";
-import { toast } from "sonner";
 
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -50,6 +49,11 @@ import {
   DEFAULT_HEADER_FOCAL_Y,
   type PageHeaderImage,
 } from "@/lib/schemas/page-settings.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_COPY_IMAGE,
+  TOAST_ID_COPY_IMAGE_ERROR,
+} from "@/lib/toast/toast-ids.ts";
 import { cn } from "@/lib/utils.ts";
 
 async function copyCoverImage(
@@ -58,10 +62,10 @@ async function copyCoverImage(
 ): Promise<void> {
   const copied = await copyMediaImage(mediaProps, renderUrl);
   if (copied) {
-    toast.success("Image copied to clipboard");
+    appToast.success("Image copied to clipboard", { id: TOAST_ID_COPY_IMAGE });
     return;
   }
-  toast.error("Could not copy image");
+  appToast.error("Could not copy image", { id: TOAST_ID_COPY_IMAGE_ERROR });
 }
 
 interface PageCoverProps {

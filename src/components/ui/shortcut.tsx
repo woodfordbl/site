@@ -43,11 +43,7 @@ type SequenceShortcutProps = {
 );
 
 function SequenceThenLabel() {
-  return (
-    <span className="in-data-[slot=tooltip-content]:text-background/60 text-muted-foreground text-xs">
-      then
-    </span>
-  );
+  return <span className="text-muted-foreground text-xs">then</span>;
 }
 
 function formatSequenceStep(step: Hotkey): string {
@@ -78,7 +74,9 @@ export function SequenceShortcut({
   const elements = steps.flatMap((step, index) => {
     const keycap = (
       // biome-ignore lint/suspicious/noArrayIndexKey: positional chord steps
-      <Kbd key={`step-${index}`}>{formatSequenceStep(step)}</Kbd>
+      <Kbd key={`step-${index}`} variant="outline">
+        {formatSequenceStep(step)}
+      </Kbd>
     );
     if (index === 0) {
       return [keycap];
@@ -104,8 +102,7 @@ export function SequenceShortcut({
 /**
  * Renders a keyboard shortcut as platform-aware `<Kbd>` tokens. Pass `command`
  * to render the user's current binding (reactive, DB-synced) or `keys` for a
- * one-off combo. Drops straight into tooltips — `Kbd` already styles itself for
- * `data-slot="tooltip-content"`.
+ * one-off combo. Drops straight into tooltips with outline `Kbd` keycaps.
  *
  * @example
  * Toggle sidebar <Shortcut command="toggle-sidebar" />
@@ -131,7 +128,9 @@ export function Shortcut({ command, keys, className }: ShortcutProps) {
         // Tokens can repeat (e.g. duplicate modifiers never occur, but keys may);
         // index keying is stable for a static combo string.
         // biome-ignore lint/suspicious/noArrayIndexKey: tokens are positional
-        <Kbd key={index}>{token}</Kbd>
+        <Kbd key={index} variant="outline">
+          {token}
+        </Kbd>
       ))}
     </KbdGroup>
   );

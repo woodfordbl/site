@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { blockSchema } from "./block.ts";
 import { blockColorSchema } from "./rich-text.ts";
 
 /**
@@ -465,6 +464,8 @@ export type DatabaseSource = z.infer<typeof databaseSourceSchema>;
 export const localDatabaseSchema = z.object({
   id: z.string(),
   name: z.string(),
+  /** Stable path segment for the database beneath its host page. */
+  slug: z.string().optional(),
   /** Emoji or `tabler:IconName`, matching page icons. */
   icon: z.string().optional(),
   /** The title-like field; every database has exactly one. Names row pages. */
@@ -472,13 +473,23 @@ export const localDatabaseSchema = z.object({
   /** Row origin; absent means a local (user-authored) database. */
   source: databaseSourceSchema.optional(),
   /**
-   * Shared page template for rows-as-pages: blocks (with `{{ thisPage.X }}`
-   * expression tokens in text) rendered VIRTUALLY when a row page opens.
-   * Nothing is stored per row — a real page materializes copy-on-write only
-   * when the user first edits a specific row's page. Absent = default
-   * template (title + properties section).
+   * Default cell values applied to rows created via "New row", authored in
+   * the row-template editor's properties header. Sparse — clearing a default
+   * removes its key; explicit caller values always win over defaults.
    */
-  rowTemplate: z.array(blockSchema).optional(),
+  rowDefaults: z.record(z.string(), databaseCellValueSchema).optional(),
+  /**
+   * Where row pages show their properties: the resizable side panel
+   * (default) or a section at the top of the page. Per database — the whole
+   * row-page family (rows, preview, template editor) shares it.
+   */
+  rowPropertiesPlacement: z.enum(["panel", "top"]).optional(),
+  /**
+   * Which fields appear in the row-page properties panel. Independent of
+   * per-view `visibleFieldIds`. Absent = all non-primary fields; the primary
+   * field is always the page title and never listed here.
+   */
+  rowPropertiesVisibleFieldIds: z.array(z.string()).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   /**
@@ -498,6 +509,8 @@ export type LocalDatabase = z.infer<typeof localDatabaseSchema>;
 export const localDatabaseRowSchema = z.object({
   id: z.string(),
   databaseId: z.string(),
+  /** Optional row glyph, used by the database path and virtual row page. */
+  icon: z.string().optional(),
   /** Sparse per-field values keyed by field id; missing/null = empty. */
   values: z.record(z.string(), databaseCellValueSchema),
   /**
