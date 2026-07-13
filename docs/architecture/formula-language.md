@@ -214,6 +214,71 @@ fallback — the relation chip rule) via `formulaValueToDisplay(value, { rowLabe
 `formulaValueToCellValue` projects rows/row lists to those titles for the merged-row
 pipeline. The type badge reads "row" / "list of rows".
 
+## Incremental engine core
+
+[`src/lib/formula-engine/`](../../src/lib/formula-engine/) is the **pure core** of the
+cross-database incremental engine (proposal §5.1, stage P3.3a): snapshots in, plain
+data out — no collections, no subscriptions, no instances. The stateful shell
+(P3.3b, pending) will own engine instances, rebuild the graph on schema change, feed
+it collection events, and wire the resolver's `formulaValue` to the value cache.
+
+**Static references** ([`references.ts`](../../src/lib/formula/references.ts)):
+`formulaStaticReferences(ast, context)` extracts what a formula reads — same-row
+field ids (the checker's own reference list), relation **traversals**, and clock
+volatility. Traversals come from a provenance walk: relation properties mint tracked
+sources that flow through row-preserving list functions, lambda params, `let`
+bindings, `if`/`switch` branches, `??`, and list literals; each member access emits a
+precise `(relationFieldId, memberFieldId)` traversal, and a source consumed opaquely
+(`length()`, operators, escaping as the result) degrades to `memberFieldId: null`
+("any target field"). Chained hops compose: `Rel.first().Steps.first().Hours` yields
+one traversal per hop, each knowing its owner (`sourceDatabaseId`) and target
+database. A failed walk degrades to "no traversals" — never throws.
+
+**Column graph** ([`graph.ts`](../../src/lib/formula-engine/graph.ts)):
+`buildFormulaGraph(databases)` — nodes are formula COLUMNS keyed
+`databaseId:fieldId`; edges are formula→formula dependencies annotated with a **row
+mapping**: `sameRow` (dependency in the same database) or
+`viaRelation { relationFieldId, sourceDatabaseId }` (read through a traversal, so a
+changed target row maps to referrer rows via the relation's reverse index).
+Cross-database edges exist ONLY for traversals naming an explicit formula member —
+null-member traversals never edge, so opaque consumption (`Rel.length()`) can't
+manufacture false cycles. Cycles reuse the overlay's naming
+([`topo.ts`](../../src/lib/formula-engine/topo.ts) is shared by both), db-qualified
+when the cycle spans databases (`Circular reference: Projects.AF → Tasks.BRoll →
+Projects.AF`); cycle columns are excluded from the global topological order and
+carry a named error value, while their dependents evaluate normally and propagate
+it. The graph also lists every traversed relation field for reverse indexing.
+
+**Reverse indexes** ([`reverse-index.ts`](../../src/lib/formula-engine/reverse-index.ts)):
+per traversed relation field, `targetRowId → Set<sourceRowId>`, built from the RAW
+stored id lists — stale ids included, so creating/restoring a target row can dirty
+exactly the referrers whose refs un-skip. `applyFormulaRelationDiff` maintains an
+index incrementally (link/unlink/retarget, no-op for un-indexed fields).
+
+**Dirty events** ([`dirty.ts`](../../src/lib/formula-engine/dirty.ts)): pure
+functions mapping input events to per-column dirty ROW sets (`FormulaDirtyMap`),
+with the explicit `FORMULA_ALL_ROWS` sentinel for coarse events. A data-cell change
+dirties same-database referencing columns (same row) plus traversing columns
+elsewhere, member-precise, mapping target rows back through composed reverse indexes
+(chained hops C→B→A). A relation-cell change updates the index FIRST, then dirties
+like a data cell. Row add/remove implement stale-id semantics (referrers dirty on
+both; a removed row keeps its entries as a TARGET since stored cells still hold the
+id). Schema change marks the database's columns and inbound traversers all-rows (the
+caller rebuilds the graph first); the 60s clock tick marks volatile columns.
+
+**Incremental evaluation** ([`evaluate-dirty.ts`](../../src/lib/formula-engine/evaluate-dirty.ts)):
+`evaluateDirtyFormulas` consumes the dirty map in the graph's global topological
+order, re-evaluating exactly the dirty (column, row) cells into a caller-owned
+`FormulaValueCache` through the same scope machinery the overlay uses. **Equality
+cutoff**: dirtiness propagates to dependents only when the recomputed value differs
+(`formulaValuesEqual`, errors compared by message) — per-row, so an edit that leaves
+a formula's value unchanged stops the cascade cold. Cycle columns never evaluate:
+their named error seeds the cache and dirties dependents through the same cutoff.
+Cell projection is shared with the overlay via
+[`project.ts`](../../src/lib/formula-engine/project.ts) (`formulaCellResultOf` — the
+one "value → `{ cellValue, display, isError }`" rule), and the `onEvaluate` hook
+lets tests assert evaluation COUNTS instead of wall-clock.
+
 ## Editor panel
 
 [`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx)
@@ -302,8 +367,10 @@ errors inline as "⚠ message". Never throws.
 
 ## Deferred
 
-`db()` whole-database references, the incremental dependency-graph engine (reverse
-index, dirty tracking, reactive cross-database reads, member canonicalization,
-member autocomplete after `r.`), and save-time cross-database cycle rejection are
-planned later phases — see the [proposal](../proposals/formula-language-v2.md)
-§4.4–§7.
+`db()` whole-database references, the engine's stateful shell (P3.3b: engine
+instances over the local collections, reactive cross-database reads, graph rebuild
+on schema change), member canonicalization, member autocomplete after `r.`, and
+save-time cross-database cycle rejection are planned later phases — see the
+[proposal](../proposals/formula-language-v2.md) §4.4–§7. The pure engine core
+(graph, reverse indexes, dirty propagation, incremental evaluation) is implemented
+above but not yet wired to any interactive surface.

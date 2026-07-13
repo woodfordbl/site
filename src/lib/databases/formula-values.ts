@@ -4,11 +4,7 @@ import {
   type FormulaCheckDatabase,
   type FormulaCheckProperty,
 } from "@/lib/formula/check.ts";
-import {
-  type FormulaValueDisplayOptions,
-  formulaDateToDisplay,
-  formulaValueToDisplay,
-} from "@/lib/formula/display.ts";
+import type { FormulaValueDisplayOptions } from "@/lib/formula/display.ts";
 import { evaluateFormula, isVolatileFormula } from "@/lib/formula/evaluate.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
@@ -17,14 +13,21 @@ import {
 } from "@/lib/formula/row-scope.ts";
 import { type FormulaType, UNKNOWN_TYPE } from "@/lib/formula/types.ts";
 import {
-  FormulaDate,
   type FormulaRelationResolver,
-  FormulaRowRef,
   type FormulaScope,
   type FormulaValue,
   formulaError,
-  isFormulaError,
 } from "@/lib/formula/values.ts";
+import {
+  FORMULA_EMPTY_CELL_RESULT,
+  type FormulaCellResult,
+  formulaCellResultOf,
+} from "@/lib/formula-engine/project.ts";
+import {
+  formulaCycleMessage,
+  formulaCyclePathFrom,
+  formulaTopoOrder,
+} from "@/lib/formula-engine/topo.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -50,20 +53,10 @@ import type {
  * error value.
  */
 
-/** One computed formula cell. */
-export interface FormulaCellResult {
-  /**
-   * The result projected into the cell-value domain: evaluation errors,
-   * non-finite numbers, and non-cell shapes (lambdas, rows) collapse to
-   * `null` so filters/sorts/aggregates treat them as empty; dates project
-   * to their ISO string; lists to their elements' display strings.
-   */
-  cellValue: DatabaseCellValue;
-  /** Human display string (`formulaValueToDisplay`); errors read "⚠ …". */
-  display: string;
-  /** Whether evaluation produced an error value for this cell. */
-  isError: boolean;
-}
+// The cell-result shape and its projection moved to the engine core
+// (`formula-engine/project.ts`) so the incremental evaluator shares one
+// projection rule; the type stays exported from here for existing consumers.
+export type { FormulaCellResult } from "@/lib/formula-engine/project.ts";
 
 /** Computed formula values: rowId → fieldId → result. */
 export type FormulaOverlay = Map<string, Record<string, FormulaCellResult>>;
@@ -79,64 +72,6 @@ export interface ComputeFormulaOverlayOptions {
    * cells read as blank and members can't resolve.
    */
   relations?: FormulaRelationResolver;
-}
-
-/** Shared result for cells with no computable value (blank/parse-error). */
-const EMPTY_RESULT: FormulaCellResult = {
-  cellValue: null,
-  display: "",
-  isError: false,
-};
-
-/**
- * Project a formula value into the cell-value domain for the merged-row
- * pipeline: scalars pass through (non-finite numbers → null), dates render
- * `yyyy-mm-dd` when date-only and the full ISO instant otherwise, lists
- * become their elements' display strings (row elements labeled by their
- * target row's title via `display.rowLabel`), a lone row ref becomes its
- * title text, everything else (blank, errors, lambdas, unlabeled rows) is
- * null.
- */
-function formulaValueToCellValue(
-  value: FormulaValue,
-  display: FormulaValueDisplayOptions
-): DatabaseCellValue {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  if (value instanceof FormulaDate) {
-    return value.dateOnly
-      ? formulaDateToDisplay(value)
-      : value.date.toISOString();
-  }
-  if (value instanceof FormulaRowRef) {
-    return display.rowLabel === undefined ? null : display.rowLabel(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => formulaValueToDisplay(item, display));
-  }
-  return null;
-}
-
-function resultOf(
-  value: FormulaValue,
-  display: FormulaValueDisplayOptions
-): FormulaCellResult {
-  if (isFormulaError(value)) {
-    return {
-      cellValue: null,
-      display: formulaValueToDisplay(value),
-      isError: true,
-    };
-  }
-  return {
-    cellValue: formulaValueToCellValue(value, display),
-    display: formulaValueToDisplay(value, display),
-    isError: false,
-  };
 }
 
 // --- evaluation plan ---------------------------------------------------------
@@ -231,74 +166,6 @@ function planFields(fields: readonly DatabaseField[]): PlannedField[] {
   return planned;
 }
 
-/**
- * The dependency cycle through `start`, as field ids `[start, …]`, or null
- * when `start` is not on any cycle. Depth-first over formula→formula edges;
- * bounded by the (small) number of formula fields.
- */
-function cyclePathFrom(
-  start: string,
-  deps: ReadonlyMap<string, readonly string[]>
-): string[] | null {
-  const path: string[] = [start];
-  const visited = new Set<string>([start]);
-  const walk = (node: string): boolean => {
-    for (const dep of deps.get(node) ?? []) {
-      if (dep === start) {
-        return true;
-      }
-      if (visited.has(dep)) {
-        continue;
-      }
-      visited.add(dep);
-      path.push(dep);
-      if (walk(dep)) {
-        return true;
-      }
-      path.pop();
-    }
-    return false;
-  };
-  return walk(start) ? path : null;
-}
-
-/** `Circular reference: Total → Subtotal → Total` (names, cycle order). */
-function cycleMessage(
-  path: readonly string[],
-  nameOf: (id: string) => string
-): string {
-  const names = [...path.map(nameOf), nameOf(path[0])];
-  return `Circular reference: ${names.join(" → ")}`;
-}
-
-/** Kahn-style ordering over non-cycle fields; cycle deps count satisfied. */
-function topoOrder(
-  planned: readonly PlannedField[],
-  cycleIds: ReadonlySet<string>
-): PlannedField[] {
-  const ordered: PlannedField[] = [];
-  const done = new Set<string>(cycleIds);
-  const queue = planned.filter((plan) => !cycleIds.has(plan.field.id));
-  let progress = true;
-  while (progress) {
-    progress = false;
-    for (let index = 0; index < queue.length; index += 1) {
-      const plan = queue[index];
-      if (plan.deps.every((dep) => done.has(dep))) {
-        ordered.push(plan);
-        done.add(plan.field.id);
-        queue.splice(index, 1);
-        index -= 1;
-        progress = true;
-      }
-    }
-  }
-  // Defensive: cycle detection covers everything reachable, so the queue is
-  // empty here; if it ever weren't, appending keeps every field producing a
-  // result (unresolved formula deps read as blank).
-  return [...ordered, ...queue];
-}
-
 /** Build the evaluation plan: parse, check, detect cycles, order fields. */
 function buildFormulaPlan(fields: readonly DatabaseField[]): FormulaPlan {
   const planned = planFields(fields);
@@ -310,17 +177,22 @@ function buildFormulaPlan(fields: readonly DatabaseField[]): FormulaPlan {
   );
   const cycleErrors = new Map<string, FormulaValue>();
   for (const plan of planned) {
-    const path = cyclePathFrom(plan.field.id, deps);
+    const path = formulaCyclePathFrom(plan.field.id, deps);
     if (path !== null) {
       cycleErrors.set(
         plan.field.id,
-        formulaError(cycleMessage(path, (id) => names.get(id) ?? id))
+        formulaError(formulaCycleMessage(path, (id) => names.get(id) ?? id))
       );
     }
   }
   return {
     cycleErrors,
-    ordered: topoOrder(planned, new Set(cycleErrors.keys())),
+    ordered: formulaTopoOrder(
+      planned,
+      (plan) => plan.field.id,
+      (plan) => plan.deps,
+      new Set(cycleErrors.keys())
+    ),
   };
 }
 
@@ -372,7 +244,7 @@ export function computeFormulaOverlay(
     evaluations.push(rowEvaluationOf(plan, fields, row.values, opts));
     const entry: Record<string, FormulaCellResult> = {};
     for (const [fieldId, error] of plan.cycleErrors) {
-      entry[fieldId] = resultOf(error, display);
+      entry[fieldId] = formulaCellResultOf(error, display);
     }
     overlay.set(row.id, entry);
   }
@@ -384,7 +256,9 @@ export function computeFormulaOverlay(
       const entry = overlay.get(row.id);
       if (entry) {
         entry[field.id] =
-          ast === null ? EMPTY_RESULT : resultOf(value, display);
+          ast === null
+            ? FORMULA_EMPTY_CELL_RESULT
+            : formulaCellResultOf(value, display);
       }
     }
   }

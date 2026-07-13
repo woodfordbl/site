@@ -286,7 +286,10 @@ static checker, id-canonical references — full reference:
 orders formula fields **topologically** over their formula→formula references, and
 evaluates column-major via `createFormulaRowScope` — so formulas may reference other
 formulas; reference cycles yield named per-cell errors (`Circular reference:
-Total → Subtotal → Total`). Each cell records `{ cellValue, display, isError }`.
+Total → Subtotal → Total`). Each cell records `{ cellValue, display, isError }` —
+cycle naming, topological ordering, and the cell projection are shared with the
+incremental engine core via `src/lib/formula-engine/{topo,project}.ts`
+([formula-language — Incremental engine core](./formula-language.md#incremental-engine-core)).
 `withFormulaValues` merges the results into row **copies** (inputs never mutated;
 parse-error and blank expressions yield `null` cells, shadowing any stale stored
 values under the field id). `database-table-view.tsx` feeds these merged rows to the
