@@ -410,8 +410,25 @@ result type fits (`formulaTypeFits` — the checker's own acceptance relation) a
 boosted above CM's fuzzy-match score, with properties leading ties. The popup is
 theme-styled via CSS variables and parents to `document.body` so the enclosing menu
 popup can't clip it; while it's open, Escape closes only the popup (its bubble is
-consumed so the menu stays open), and bubbles to close the menu otherwise. The chip
-option menu and diagnostics-in-editor (squiggles) are later stages (proposal §6).
+consumed so the menu stays open), and bubbles to close the menu otherwise.
+Diagnostics render in-editor as destructive wavy underlines (a diagnostic touching an
+atomic chip rings the whole chip instead), and an argument info card anchors at the
+callee while the caret sits in a call's argument list.
+
+**Chip option menu** (proposal §7, "chip tap = menu, not caret gymnastics"): when the
+panel wires `onChipTap`, presses on a chip are intercepted (caret placement *around*
+chips and whole-chip backspace are untouched) and reported with the chip's DOM node
+plus its canonical span resolved from the current doc at tap time — never stale
+build-time offsets. The panel opens
+[`formula-chip-menu.tsx`](../../src/components/database/formula-chip-menu.tsx)
+anchored at the chip: **Change property** (a property list with field-type icons)
+splices `canonicalPropertyReference(id)` over the span via the editor handle's
+`replaceRange`, and **Remove** deletes the whole span. It's a ui Popover with plain
+buttons — not a DropdownMenu, because the stack layout lives inside a Base UI menu
+popup where nested menus are illegal (the rollup wizard's constraint) — and on coarse
+pointers it renders as a vaul bottom drawer (`variant="menu"`) automatically, matching
+the accessory row's picker drawers. Escape/outside-click dismissal refocuses the
+editor.
 
 ### Mobile sheet
 

@@ -382,6 +382,131 @@ describe("FormulaCodeEditor", () => {
     });
   });
 
+  describe("chip option menu hook", () => {
+    function chip(): HTMLElement {
+      const element = document.querySelector(".cm-formula-chip");
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("chip not rendered");
+      }
+      return element;
+    }
+
+    it("emits onChipTap with the field id and the chip's CURRENT span", () => {
+      const onChipTap = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          onChipTap={onChipTap}
+          value={'prop("f-price") + 1'}
+        />
+      );
+
+      const first = chip();
+      fireEvent.click(first);
+      expect(onChipTap).toHaveBeenCalledTimes(1);
+      expect(onChipTap).toHaveBeenLastCalledWith({
+        anchor: first,
+        fieldId: "f-price",
+        from: 0,
+        to: 'prop("f-price")'.length,
+      });
+
+      // Text inserted BEFORE the chip shifts its span: a later tap must
+      // report positions resolved from the CURRENT doc, not offsets captured
+      // when the decoration was built.
+      act(() => {
+        editorView().dispatch({
+          changes: { from: 0, insert: "10 + ", to: 0 },
+        });
+      });
+      const shifted = chip();
+      fireEvent.click(shifted);
+      expect(onChipTap).toHaveBeenLastCalledWith({
+        anchor: shifted,
+        fieldId: "f-price",
+        from: "10 + ".length,
+        to: '10 + prop("f-price")'.length,
+      });
+    });
+
+    it("intercepts chip presses only while onChipTap is wired", () => {
+      const onChipTap = vi.fn();
+      const { unmount } = render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          onChipTap={onChipTap}
+          value={'prop("f-price") * 2'}
+        />
+      );
+
+      // Wired: the press is swallowed (fireEvent returns false when
+      // preventDefault ran) — no caret jump to the chip boundary — and the
+      // click reports the tap instead of falling through to CM.
+      expect(fireEvent.mouseDown(chip())).toBe(false);
+      expect(onChipTap).not.toHaveBeenCalled();
+      expect(fireEvent.click(chip())).toBe(false);
+      expect(onChipTap).toHaveBeenCalledTimes(1);
+      unmount();
+
+      // Unwired: the click falls through to CM untouched (mousedown stays
+      // CM's own press handling), keeping the default caret-at-boundary
+      // behavior the atomicity tests pin down.
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'prop("f-price") * 2'}
+        />
+      );
+      expect(fireEvent.click(chip())).toBe(true);
+    });
+
+    it("replaceRange swaps a canonical span in place and can delete it", () => {
+      const editorRef = createRef<FormulaCodeEditorHandle>();
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          editorRef={editorRef}
+          fields={FIELDS}
+          onChange={onChange}
+          value={'prop("f-price") + 1'}
+        />
+      );
+
+      // The menu's Change-property path: splice the new canonical reference
+      // over the old span; the chip relabels and the caret lands after it.
+      act(() => {
+        editorRef.current?.replaceRange(
+          0,
+          'prop("f-price")'.length,
+          'prop("f-qty")'
+        );
+      });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-qty") + 1');
+      expect(chip().textContent).toBe("Unit Count");
+      expect(editorView().state.selection.main.head).toBe(
+        'prop("f-qty")'.length
+      );
+
+      // The menu's Remove path: empty text deletes the span outright.
+      act(() => {
+        editorRef.current?.replaceRange(0, 'prop("f-qty")'.length, "");
+      });
+      expect(onChange).toHaveBeenLastCalledWith(" + 1");
+      expect(document.querySelector(".cm-formula-chip")).toBeNull();
+    });
+  });
+
   describe("fused autocomplete", () => {
     function popup(): HTMLElement | null {
       const element = document.querySelector(".cm-tooltip-autocomplete");

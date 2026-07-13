@@ -13,7 +13,11 @@ import {
   useState,
 } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
-import type { FormulaCodeEditorHandle } from "@/components/database/formula-code-editor.tsx";
+import { FormulaChipMenu } from "@/components/database/formula-chip-menu.tsx";
+import type {
+  FormulaChipTap,
+  FormulaCodeEditorHandle,
+} from "@/components/database/formula-code-editor.tsx";
 import { FormulaEditorAccessoryRow } from "@/components/database/formula-editor-accessory-row.tsx";
 import {
   FormulaRollupWizard,
@@ -105,7 +109,12 @@ import { cn } from "@/lib/utils.ts";
  * highlighting, diagnostic squiggles (fed the panel's memoized check context
  * via `checkContext`), the argument info card, soft wrap, Mod+Enter saves —
  * with the plain textarea as the Suspense fallback while the CM6 chunk
- * loads. Coarse pointers outside the sheet keep the textarea entirely (the
+ * loads. Tapping a chip in the CM6 surface opens the chip option menu
+ * (formula-chip-menu.tsx, anchored at the chip; a bottom drawer on coarse
+ * pointers): Change property swaps the reference in place and Remove deletes
+ * the whole canonical span, both applied through the editor handle's
+ * `replaceRange` against the span the tap reported. Coarse pointers outside
+ * the sheet keep the textarea entirely (the
  * cramped in-menu stack has no room for chip affordances). Caret insertion from the
  * reference list goes through the editor's imperative handle when mounted
  * (properties insert the canonical `prop("<id>")` text, which renders as a
@@ -848,6 +857,8 @@ export function FormulaEditorPanel({
   const [rollupOpen, setRollupOpen] = useState(false);
   /** Picked preview row; `null` (or a since-deleted id) falls back to first. */
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
+  /** The chip the option menu is open for; `null` while closed. */
+  const [chipTap, setChipTap] = useState<FormulaChipTap | null>(null);
   const coarsePointer = useIsCoarsePrimaryPointer();
   // The sheet layout mounts CM6 even on coarse pointers (its native touch
   // caret/IME handling is the point of the sheet); everywhere else coarse
@@ -924,6 +935,37 @@ export function FormulaEditorPanel({
     }
     const display = formulaPropertyReference(propertyField.name);
     insertAtCaret(display, display.length);
+  };
+
+  /**
+   * Chip menu dismissed without an action (Escape/outside-click): hand focus
+   * back to the editor so typing can continue where the tap interrupted it.
+   */
+  const closeChipMenu = () => {
+    setChipTap(null);
+    requestAnimationFrame(() => {
+      codeEditorRef.current?.focus();
+    });
+  };
+
+  /** Chip menu → Remove: delete the tapped reference's whole canonical span. */
+  const removeChipReference = () => {
+    if (chipTap !== null) {
+      codeEditorRef.current?.replaceRange(chipTap.from, chipTap.to, "");
+    }
+    setChipTap(null);
+  };
+
+  /** Chip menu → Change property: swap the reference in place. */
+  const swapChipReference = (field: DatabaseField) => {
+    if (chipTap !== null) {
+      codeEditorRef.current?.replaceRange(
+        chipTap.from,
+        chipTap.to,
+        canonicalPropertyReference(field.id)
+      );
+    }
+    setChipTap(null);
   };
 
   /** Wizard output lands like property references do (see the helper). */
@@ -1129,12 +1171,22 @@ export function FormulaEditorPanel({
               editorRef={codeEditorRef}
               fields={fields}
               onChange={setDraft}
+              onChipTap={setChipTap}
               onSubmit={save}
               placeholder="thisPage.Price * 1.1"
               value={draft}
             />
           </Suspense>
         </FormulaCodeEditorBoundary>
+      )}
+      {usesTextarea ? null : (
+        <FormulaChipMenu
+          fields={fields}
+          onClose={closeChipMenu}
+          onPickProperty={swapChipReference}
+          onRemove={removeChipReference}
+          tap={chipTap}
+        />
       )}
     </div>
   );

@@ -5,9 +5,11 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FormulaChipMenu } from "@/components/database/formula-chip-menu.tsx";
 import {
   FormulaCodeEditorBoundary,
   FormulaEditorPanel,
@@ -630,6 +632,83 @@ describe("FormulaEditorPanel", () => {
       expect(screen.getByText(PARSE_ERROR_AT_8_RE)).toBeDefined();
     });
 
+    describe("chip option menu", () => {
+      beforeEach(() => {
+        // Base UI's popover positioner observes size; jsdom lacks
+        // ResizeObserver (same stub as the relation cell editor tests).
+        vi.stubGlobal(
+          "ResizeObserver",
+          class {
+            observe() {
+              /* no-op */
+            }
+            unobserve() {
+              /* no-op */
+            }
+            disconnect() {
+              /* no-op */
+            }
+          }
+        );
+        // With ResizeObserver present, Base UI's ScrollArea (the reference
+        // list) reaches its animation bookkeeping; jsdom lacks that too.
+        Element.prototype.getAnimations = () => [];
+      });
+
+      /** Wait for the CM6 chip, tap it, and return the opened menu popup. */
+      async function tapChip(): Promise<HTMLElement> {
+        await waitFor(() => {
+          expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+        });
+        fireEvent.click(
+          document.querySelector(".cm-formula-chip") as HTMLElement
+        );
+        return await waitFor(() => {
+          const popup = document.querySelector("[data-slot='popover-content']");
+          expect(popup).not.toBeNull();
+          return popup as HTMLElement;
+        });
+      }
+
+      it("opens on chip tap; Remove deletes the reference from the draft", async () => {
+        const onSave = renderPanel(vi.fn(), 'prop("f-price")');
+
+        const popup = await tapChip();
+        fireEvent.click(within(popup).getByRole("button", { name: "Remove" }));
+
+        // The whole canonical span is gone from the CM6 doc…
+        await waitFor(() => {
+          expect(document.querySelector(".cm-formula-chip")).toBeNull();
+        });
+        // …and from the DRAFT: the emptied (blank, hence saveable) text is
+        // what Save hands up.
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        expect(onSave).toHaveBeenCalledWith("");
+      });
+
+      it("Change property swaps the canonical reference in place", async () => {
+        const onSave = renderPanel(vi.fn(), 'prop("f-price") * 2');
+
+        const popup = await tapChip();
+        fireEvent.click(
+          within(popup).getByRole("button", { name: "Change property" })
+        );
+        // The property list is scoped to the popup — the reference list
+        // outside also carries a "Unit Count" row.
+        fireEvent.click(
+          within(popup).getByRole("button", { name: "Unit Count" })
+        );
+
+        await waitFor(() => {
+          expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+            "Unit Count"
+          );
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        expect(onSave).toHaveBeenCalledWith('prop("f-qty") * 2');
+      });
+    });
+
     it("degrades to the fallback when the editor fails to mount", () => {
       // Stands in for a chunk-fetch failure (stale deploy hash, offline).
       function ExplodingEditor(): ReactNode {
@@ -812,6 +891,75 @@ describe("FormulaEditorPanel", () => {
       ).toBeNull();
       // The accessory row stands in for it.
       expect(screen.getByRole("toolbar")).toBeDefined();
+    });
+  });
+
+  describe("chip option menu (drawer presentation)", () => {
+    // The sheet tests keep the CM6 mount suspended (see the module mock), so
+    // chips never render on the fallback textarea and there's nothing to tap
+    // through the panel. The coarse-pointer drawer presentation is covered by
+    // rendering the menu component directly instead.
+    beforeEach(() => {
+      pointer.coarse = true;
+    });
+
+    function renderMenu() {
+      const onClose = vi.fn();
+      const onPickProperty = vi.fn();
+      const onRemove = vi.fn();
+      render(
+        <FormulaChipMenu
+          fields={FIELDS}
+          onClose={onClose}
+          onPickProperty={onPickProperty}
+          onRemove={onRemove}
+          tap={{
+            anchor: document.createElement("span"),
+            fieldId: "f-price",
+            from: 0,
+            to: 'prop("f-price")'.length,
+          }}
+        />
+      );
+      return { onClose, onPickProperty, onRemove };
+    }
+
+    it("presents the options as a bottom drawer and routes Remove", async () => {
+      const { onRemove } = renderMenu();
+
+      // Coarse pointers get the vaul drawer, not an anchored popover.
+      const drawer = await waitFor(() => {
+        const element = document.querySelector("[data-slot='drawer-content']");
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      expect(
+        document.querySelector("[data-slot='popover-content']")
+      ).toBeNull();
+
+      fireEvent.click(within(drawer).getByRole("button", { name: "Remove" }));
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it("walks Change property to the schema list and reports the pick", async () => {
+      const { onPickProperty } = renderMenu();
+
+      const drawer = await waitFor(() => {
+        const element = document.querySelector("[data-slot='drawer-content']");
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      fireEvent.click(
+        within(drawer).getByRole("button", { name: "Change property" })
+      );
+      fireEvent.click(
+        within(drawer).getByRole("button", { name: "Unit Count" })
+      );
+      expect(onPickProperty).toHaveBeenCalledTimes(1);
+      expect(onPickProperty.mock.calls[0]?.[0]).toMatchObject({
+        id: "f-qty",
+        name: "Unit Count",
+      });
     });
   });
 });

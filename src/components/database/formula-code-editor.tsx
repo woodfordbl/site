@@ -115,6 +115,17 @@ import { cn } from "@/lib/utils.ts";
  * {@link FormulaCheckContext} (a state field, like {@link chipFields}) — it
  * is never recomputed per keystroke here.
  *
+ * CHIP TAP = MENU (proposal §7, deferred from §6): when the host wires
+ * `onChipTap`, presses landing ON a chip are intercepted (mousedown swallowed
+ * so the caret never jumps to the chip boundary; click reports the tap) and
+ * surfaced with the chip's DOM node — the anchor for the host's option menu —
+ * plus the canonical span resolved from the CURRENT doc at tap time
+ * ({@link chipTapAt}; widget spans move as the doc changes, so build-time
+ * offsets would go stale). The menu applies its actions through the handle's
+ * `replaceRange`. Without the prop, chip clicks keep CM's default
+ * caret-at-boundary behavior, and caret placement AROUND chips plus
+ * whole-chip backspace are untouched either way.
+ *
  * ARGUMENT INFO CARD (proposal §6.2): while the caret sits inside a function
  * call's argument list, a small tooltip anchored at the callee shows the
  * signature with the CURRENT parameter emphasized plus the one-line
@@ -140,6 +151,30 @@ export interface FormulaCodeEditorHandle {
    * caret `caretOffset` characters into the inserted text and refocus.
    */
   insertText: (text: string, caretOffset: number) => void;
+  /**
+   * Replace the doc span `[from, to)` with `text` (empty text deletes the
+   * span), place the caret after the inserted text, and refocus — the chip
+   * option menu's apply path (swap a reference in place / remove it).
+   * Offsets clamp to the doc so a stale span can never throw.
+   */
+  replaceRange: (from: number, to: number, text: string) => void;
+}
+
+/**
+ * One chip press routed to the host (see the CHIP TAP module docs): the
+ * chip's rendered DOM node — the anchor for the host's option menu — and the
+ * canonical `prop("<id>")` span it stood for, resolved from the CURRENT doc
+ * at tap time.
+ */
+export interface FormulaChipTap {
+  /** The chip's DOM node, for anchoring the option menu. */
+  anchor: HTMLElement;
+  /** The referenced field id (may match no live field for broken chips). */
+  fieldId: string;
+  /** Canonical span start (inclusive) in the current doc. */
+  from: number;
+  /** Canonical span end (exclusive) in the current doc. */
+  to: number;
 }
 
 export interface FormulaCodeEditorProps {
@@ -168,6 +203,12 @@ export interface FormulaCodeEditorProps {
    */
   fields: readonly DatabaseField[];
   onChange: (value: string) => void;
+  /**
+   * A click/tap landed on a property chip (see the CHIP TAP module docs).
+   * When wired, chip presses are intercepted and reported instead of placing
+   * the caret; absent, chip clicks keep CM's caret-at-boundary default.
+   */
+  onChipTap?: (tap: FormulaChipTap) => void;
   /** Mod+Enter (Cmd on mac, Ctrl elsewhere) — the panel wires Save here. */
   onSubmit?: () => void;
   placeholder?: string;
@@ -419,6 +460,74 @@ const propertyChips = ViewPlugin.fromClass(
       ),
   }
 );
+
+// --- chip tap → option menu ----------------------------------------------------
+
+/** The chip element a pointer event landed on, if any. */
+function chipEventTarget(event: MouseEvent): HTMLElement | null {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  const chip = target.closest(".cm-formula-chip");
+  return chip instanceof HTMLElement ? chip : null;
+}
+
+/**
+ * Resolve a tapped chip to its canonical span in the CURRENT doc. The widget
+ * deliberately stores no offsets — spans move as the doc changes, so a
+ * build-time from/to would go stale; `posAtDOM` plus the same token-level
+ * span scan the decorations use recovers the live positions. The exact-start
+ * match wins; the containment fallback covers renderers that resolve the
+ * widget DOM to an interior/boundary position.
+ */
+function chipTapAt(view: EditorView, chip: HTMLElement): FormulaChipTap | null {
+  const pos = view.posAtDOM(chip, 0);
+  const spans = formulaPropIdSpans(view.state.doc.toString());
+  const span =
+    spans.find((candidate) => candidate.start === pos) ??
+    spans.find((candidate) => candidate.start < pos && pos <= candidate.end);
+  if (span === undefined) {
+    return null;
+  }
+  return { anchor: chip, fieldId: span.id, from: span.start, to: span.end };
+}
+
+/**
+ * Chip mousedown with a tap handler wired: swallow the press so CM neither
+ * moves the caret to the chip boundary nor starts a selection drag there —
+ * {@link emitChipTap} turns the subsequent click into the menu callback.
+ * Unwired (or off-chip), the press falls through to CM untouched.
+ */
+function suppressChipPress(event: MouseEvent, wired: boolean): boolean {
+  if (!(wired && chipEventTarget(event) !== null)) {
+    return false;
+  }
+  event.preventDefault();
+  return true;
+}
+
+/** Chip click with a tap handler wired: report the tap to the host. */
+function emitChipTap(
+  event: MouseEvent,
+  view: EditorView,
+  onChipTap: ((tap: FormulaChipTap) => void) | undefined
+): boolean {
+  if (onChipTap === undefined) {
+    return false;
+  }
+  const chip = chipEventTarget(event);
+  if (chip === null) {
+    return false;
+  }
+  const tap = chipTapAt(view, chip);
+  if (tap === null) {
+    return false;
+  }
+  event.preventDefault();
+  onChipTap(tap);
+  return true;
+}
 
 /**
  * Debounce before converting a completed typed reference into a chip —
@@ -1242,6 +1351,7 @@ const formulaEditorTheme = EditorView.theme({
 /** Latest-callback cell so the mount-once extensions never go stale. */
 interface EditorCallbacks {
   onChange: (value: string) => void;
+  onChipTap?: (tap: FormulaChipTap) => void;
   onSubmit?: () => void;
 }
 
@@ -1254,13 +1364,18 @@ export function FormulaCodeEditor({
   editorRef,
   fields,
   onChange,
+  onChipTap,
   onSubmit,
   placeholder,
   value,
 }: FormulaCodeEditorProps): ReactNode {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const callbacksRef = useRef<EditorCallbacks>({ onChange, onSubmit });
+  const callbacksRef = useRef<EditorCallbacks>({
+    onChange,
+    onChipTap,
+    onSubmit,
+  });
   /**
    * Doc text the React side last saw — written by the update listener before
    * `onChange` so the controlled-sync effect skips redundant dispatches, and
@@ -1273,8 +1388,8 @@ export function FormulaCodeEditor({
   const checkContextRef = useRef(checkContext);
 
   useEffect(() => {
-    callbacksRef.current = { onChange, onSubmit };
-  }, [onChange, onSubmit]);
+    callbacksRef.current = { onChange, onChipTap, onSubmit };
+  }, [onChange, onChipTap, onSubmit]);
 
   // Push schema changes into editor state so open chips relabel live.
   useEffect(() => {
@@ -1308,6 +1423,18 @@ export function FormulaCodeEditor({
           Prec.highest(
             EditorView.domEventHandlers({ keydown: menuKeydownGuard })
           ),
+          // Chip tap → option menu (see module docs): both handlers no-op
+          // unless the host wired onChipTap, so default caret behavior on and
+          // around chips is untouched otherwise.
+          EditorView.domEventHandlers({
+            click: (event, view) =>
+              emitChipTap(event, view, callbacksRef.current.onChipTap),
+            mousedown: (event) =>
+              suppressChipPress(
+                event,
+                callbacksRef.current.onChipTap !== undefined
+              ),
+          }),
           keymap.of([
             {
               key: "Mod-Enter",
@@ -1419,6 +1546,22 @@ export function FormulaCodeEditor({
         view.dispatch({
           changes: { from, to, insert: text },
           selection: { anchor: from + caretOffset },
+        });
+        view.focus();
+      },
+      replaceRange: (from, to, text) => {
+        const view = viewRef.current;
+        if (view === null) {
+          return;
+        }
+        // Clamp: the menu's span was captured at tap time; if the doc shrank
+        // since (external controlled sync), a stale span must not throw.
+        const docLength = view.state.doc.length;
+        const start = Math.min(from, docLength);
+        const end = Math.min(Math.max(to, start), docLength);
+        view.dispatch({
+          changes: { from: start, insert: text, to: end },
+          selection: { anchor: start + text.length },
         });
         view.focus();
       },
