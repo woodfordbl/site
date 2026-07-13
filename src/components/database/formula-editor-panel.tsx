@@ -541,10 +541,12 @@ function DetailStrip({
 
 interface PanelLayoutProps {
   detail: ReactNode;
+  /** In the wide form Save lives INSIDE this slot (the editor's InputGroup). */
   editor: ReactNode;
   preview: ReactNode;
   /** The search + reference list, or the rollup wizard while it's open. */
   reference: ReactNode;
+  /** Standalone Save for the stack form; unused in wide (see `editor`). */
   save: ReactNode;
   status: ReactNode;
   wide: boolean;
@@ -552,9 +554,10 @@ interface PanelLayoutProps {
 
 /**
  * Arranges the panel's slots per layout: the narrow menu form stacks
- * everything in one column; the wide dialog form splits into editor-side
- * (input, status, preview, Save pinned to the bottom) and reference-side
- * (browser + detail strip) columns so the extra width is actually used.
+ * everything in one column; the wide dialog form fixes the height and splits
+ * into an editor column (input with Save inside, status, then preview and
+ * the detail strip anchored to the bottom) and a full-height reference
+ * column, so the extra width and height are actually used.
  */
 function PanelLayout({
   detail,
@@ -581,18 +584,45 @@ function PanelLayout({
     );
   }
   return (
-    <div className="grid w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+    <div className="grid h-[30rem] max-h-[65svh] w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         {editor}
         {status}
-        {preview}
-        <div className="mt-auto flex justify-end pt-1.5">{save}</div>
+        <div className="mt-auto flex flex-col gap-1.5">
+          {preview}
+          {detail}
+        </div>
       </div>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        {reference}
-        {detail}
-      </div>
+      <div className="flex min-h-0 min-w-0 flex-col gap-1.5">{reference}</div>
     </div>
+  );
+}
+
+/**
+ * Wide layouts wrap the editing surface in an InputGroup that draws the
+ * chrome and hosts Save inside the text area (shadcn InputGroup block-end
+ * addon pattern); the stack form renders the surface bare and the layout
+ * places Save at the bottom.
+ */
+function EditorSlot({
+  save,
+  surface,
+  wide,
+}: {
+  save: ReactNode;
+  surface: ReactNode;
+  wide: boolean;
+}): ReactNode {
+  if (!wide) {
+    return surface;
+  }
+  return (
+    <InputGroup className="h-auto focus-within:border-ring">
+      {surface}
+      <InputGroupAddon align="block-end" className="justify-end">
+        {save}
+      </InputGroupAddon>
+    </InputGroup>
   );
 }
 
@@ -844,13 +874,18 @@ export function FormulaEditorPanel({
   // The plain-textarea input: the whole editor on coarse pointers (mobile
   // gets its own treatment in a later phase), and the Suspense fallback
   // while the CM6 chunk loads on fine pointers.
+  // In the wide layout the editing surface sits inside an InputGroup that
+  // draws the border (the Save addon lives inside it), so the surface itself
+  // goes chromeless.
+  const chromeless =
+    "rounded-none border-0 bg-transparent focus-visible:border-transparent dark:bg-transparent";
   const expressionTextarea = (
     <Textarea
       aria-label="Formula expression"
       autoComplete="off"
       className={cn(
         "max-h-32 min-h-16 font-mono text-xs md:text-xs",
-        wide && "max-h-72 min-h-40"
+        wide && cn("max-h-72 min-h-40", chromeless)
       )}
       onChange={(event) => {
         setDraft(canonicalizeExpression(event.target.value, fields).text);
@@ -863,14 +898,20 @@ export function FormulaEditorPanel({
     />
   );
 
+  const saveButton = (
+    <Button disabled={saveDisabled} onClick={save} size="xs">
+      Save
+    </Button>
+  );
+
   // The wide (dialog) editor gets more vertical room than the menu form.
   // CM injects its theme stylesheet after ours, so the height overrides need
   // `!` to beat the theme's fixed min/max rules at equal specificity.
-  const editor = (
+  const editorSurface = (
     <div
       className={cn(
         "flex min-w-0 flex-col",
-        wide && "[&_.cm-content]:min-h-40! [&_.cm-scroller]:max-h-72!"
+        wide && "w-full [&_.cm-content]:min-h-40! [&_.cm-scroller]:max-h-72!"
       )}
     >
       {coarsePointer ? (
@@ -882,6 +923,7 @@ export function FormulaEditorPanel({
               ariaLabel="Formula expression"
               autoFocus
               checkContext={checkContext}
+              className={wide ? chromeless : undefined}
               editorRef={codeEditorRef}
               fields={fields}
               onChange={setDraft}
@@ -893,6 +935,10 @@ export function FormulaEditorPanel({
         </FormulaCodeEditorBoundary>
       )}
     </div>
+  );
+
+  const editor = (
+    <EditorSlot save={saveButton} surface={editorSurface} wide={wide} />
   );
 
   const previewLine =
@@ -952,7 +998,7 @@ export function FormulaEditorPanel({
           ) : null}
         </div>
         <ReferenceList
-          className={wide ? "max-h-80" : undefined}
+          className={wide ? "max-h-none min-h-0 flex-1" : undefined}
           entries={{ functionEntries, operatorEntries, propertyFields }}
           onInsertAtCaret={insertAtCaret}
           onInsertProperty={insertPropertyReference}
@@ -967,16 +1013,7 @@ export function FormulaEditorPanel({
       editor={editor}
       preview={previewLine}
       reference={reference}
-      save={
-        <Button
-          disabled={saveDisabled}
-          onClick={save}
-          size="xs"
-          variant="outline"
-        >
-          Save
-        </Button>
-      }
+      save={saveButton}
       status={statusRow}
       wide={wide}
     />

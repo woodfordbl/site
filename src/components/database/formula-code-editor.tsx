@@ -153,6 +153,12 @@ export interface FormulaCodeEditorProps {
    * recomputes it per keystroke.
    */
   checkContext: FormulaCheckContext;
+  /**
+   * Host-div class overrides — e.g. the panel's dialog layout strips the
+   * default Textarea chrome when the editor sits inside an InputGroup that
+   * draws the border itself.
+   */
+  className?: string;
   /** Receives the imperative handle; `null` while unmounted. */
   editorRef?: RefObject<FormulaCodeEditorHandle | null>;
   /**
@@ -1214,6 +1220,7 @@ export function FormulaCodeEditor({
   ariaLabel,
   autoFocus = false,
   checkContext,
+  className,
   editorRef,
   fields,
   onChange,
@@ -1396,7 +1403,8 @@ export function FormulaCodeEditor({
       className={cn(
         // Mirrors the Textarea component's chrome; focus ring moves to
         // focus-within because the editable node is a nested contenteditable.
-        "w-full rounded-lg border border-border bg-input/30 font-mono text-xs outline-none transition-colors focus-within:border-ring dark:bg-input/30"
+        "w-full rounded-lg border border-border bg-input/30 font-mono text-xs outline-none transition-colors focus-within:border-ring dark:bg-input/30",
+        className
       )}
       ref={containerRef}
     />
