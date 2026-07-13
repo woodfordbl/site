@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactNode, useMemo } from "react";
 import { Area, AreaChart, Line, LineChart, XAxis, YAxis } from "recharts";
 
+import { DitherKitCartesian } from "@/components/charts/dither-kit-cartesian.tsx";
 import { chartConfigPatch } from "@/components/database/views/database-chart-config-helpers.ts";
 import {
   type ChartConfig,
@@ -215,6 +216,70 @@ function timeSeriesLabelFormatter(
 ): string {
   const t = payload?.[0]?.payload?.t;
   return typeof t === "number" ? TOOLTIP_LABEL_FORMAT.format(t) : "";
+}
+
+/** The dithered (dither-kit) time-series render: window control + canvas chart. */
+function DitheredTimeSeries({
+  chart,
+  chartConfig,
+  database,
+  mark,
+  palette,
+  seriesEntries,
+  timeFormatter,
+  view,
+  windowMs,
+}: {
+  chart: ChartViewConfig;
+  chartConfig: ChartConfig;
+  database: LocalDatabase;
+  mark: "area" | "line";
+  palette: ReturnType<typeof resolveChartPaletteId>;
+  seriesEntries: { key: string; points: Record<string, number>[] }[];
+  timeFormatter: (t: number) => string;
+  view: DatabaseView;
+  windowMs: number;
+}): ReactNode {
+  return (
+    <div>
+      <WindowControl
+        activeWindowMs={windowMs}
+        chart={chart}
+        database={database}
+        view={view}
+      />
+      <div className={cn("aspect-auto w-full", CHART_HEIGHT_CLASS)}>
+        <DitherKitCartesian
+          animate={false}
+          config={chartConfig}
+          data={mergeTimeSeriesRows(seriesEntries)}
+          mark={mark}
+          palette={palette}
+          showLegend={chart.showLegend ?? seriesEntries.length > 1}
+          showTooltip={chart.showTooltip !== false}
+          xKey="t"
+          xTickFormatter={(value) =>
+            typeof value === "number" ? timeFormatter(value) : ""
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Merge per-series time points into unified rows keyed by timestamp. */
+function mergeTimeSeriesRows(
+  seriesEntries: { key: string; points: Record<string, number>[] }[]
+): Record<string, number>[] {
+  const byT = new Map<number, Record<string, number>>();
+  for (const { key, points } of seriesEntries) {
+    for (const point of points) {
+      const row = byT.get(point.t) ?? { t: point.t };
+      row[key] = point[key];
+      byT.set(point.t, row);
+    }
+  }
+  return [...byT.values()].sort((a, b) => a.t - b.t);
 }
 
 type MarkStyle = ReturnType<typeof useTimeSeriesMarkStyle>;
@@ -465,6 +530,23 @@ export function DatabaseTimeSeriesChart({
       points: scaled.map((point) => ({ t: point.t, [key]: point.v })),
     };
   });
+
+  // Dithered mode → the dither-kit engine (see DitheredTimeSeries).
+  if (dither.enabled) {
+    return (
+      <DitheredTimeSeries
+        chart={chart}
+        chartConfig={chartConfig}
+        database={database}
+        mark={mark}
+        palette={palette}
+        seriesEntries={seriesEntries}
+        timeFormatter={timeFormatter}
+        view={view}
+        windowMs={windowMs}
+      />
+    );
+  }
 
   const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
 

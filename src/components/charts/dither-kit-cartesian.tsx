@@ -101,6 +101,8 @@ interface DitherKitCartesianProps {
   stacked?: boolean;
   /** X-axis field key on each row. */
   xKey: string;
+  /** Formats x tick values (e.g. timestamps for a time-series). */
+  xTickFormatter?: (value: unknown, index: number) => string;
 }
 
 /**
@@ -121,6 +123,7 @@ export function DitherKitCartesian({
   className,
   animate = true,
   bloom = "off",
+  xTickFormatter,
 }: DitherKitCartesianProps): ReactNode {
   const { chartPalette: workspacePalette } = useSiteAppearance();
   const { ref, seeds } = useDitherKitSeeds(config);
@@ -152,7 +155,7 @@ export function DitherKitCartesian({
   const inner = (
     <>
       <Grid />
-      <XAxis dataKey={xKey} />
+      <XAxis dataKey={xKey} tickFormatter={xTickFormatter} />
       <YAxis />
       {legend}
       {tooltip}
