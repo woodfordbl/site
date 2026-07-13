@@ -55,9 +55,13 @@ import {
   unionTypeOf,
 } from "@/lib/formula/types.ts";
 import {
+  type FormulaPreparedUserFunction,
+  type FormulaPreparedUserFunctions,
   formulaMemberOnNonRowMessage,
   formulaMemberOnRowListMessage,
   formulaUnknownDatabaseMessage,
+  formulaUserFunctionArityMessage,
+  formulaUserFunctionBrokenMessage,
   LAMBDA_AS_VALUE_MESSAGE,
 } from "@/lib/formula/values.ts";
 
@@ -115,6 +119,14 @@ export interface FormulaCheckContext {
    */
   readonly databases?: ReadonlyMap<string, FormulaCheckDatabase>;
   readonly properties: readonly FormulaCheckProperty[];
+  /**
+   * Named user-defined functions callable from this formula (prepared
+   * registry, lowercased-name keys — `prepareUserFunctions`). Calls resolve
+   * catalog-first: write-time validation prevents catalog collisions, but a
+   * colliding registry entry is simply shadowed, never a crash. Absent,
+   * user-function calls diagnose as unknown functions.
+   */
+  readonly userFunctions?: FormulaPreparedUserFunctions;
 }
 
 /** One positioned check error; `start`/`end` are 0-based, end-exclusive. */
@@ -640,6 +652,8 @@ function opSpan(node: FormulaBinaryNode): Span {
 }
 
 class Checker {
+  /** Lowercased user-function names on the current expansion stack. */
+  private readonly checkingUserFunctions = new Set<string>();
   private readonly databases?: ReadonlyMap<string, FormulaCheckDatabase>;
   private readonly diagnostics: FormulaCheckDiagnostic[] = [];
   private readonly fieldsById = new Map<string, FormulaCheckProperty>();
@@ -648,9 +662,11 @@ class Checker {
   private readonly seenReferences = new Set<string>();
   private readonly seenUnresolved = new Set<string>();
   private readonly unresolvedNames: string[] = [];
+  private readonly userFunctions?: FormulaPreparedUserFunctions;
 
   constructor(context: FormulaCheckContext) {
     this.databases = context.databases;
+    this.userFunctions = context.userFunctions;
     for (const property of context.properties) {
       this.fieldsById.set(property.id, property);
       const key = normalizeFormulaPropertyName(property.name);
@@ -1098,6 +1114,10 @@ class Checker {
     }
     const entry = formulaFunctionForName(node.name);
     if (entry === undefined) {
+      const userFunction = this.userFunctions?.get(lower);
+      if (userFunction !== undefined) {
+        return this.checkUserFunctionCall(node, lower, userFunction, env);
+      }
       return this.reportUnknownFunction(node, env);
     }
     if (entry.name === "if") {
@@ -1121,6 +1141,65 @@ class Checker {
     );
     this.walkArgumentsLeniently(node.args, env);
     return result;
+  }
+
+  /**
+   * A named user-defined function call. Typing is bidirectional like lambda
+   * bodies: the body checks with each parameter bound to its ARGUMENT's
+   * synthesized type, so `weightedScore(number, number)` synthesizes the
+   * body's real result type. Body diagnostics are DISCARDED — their spans
+   * index the definition's expression, not this formula, and the
+   * definition editor is where body mistakes surface; the body's property
+   * references still collect (the see-through contract dependency tracking
+   * needs). Recursion (direct or mutual) returns `unknown` optimistically —
+   * evaluation names the cycle. A body that doesn't parse diagnoses at the
+   * CALL site naming the function; wrong arity diagnoses like a catalog
+   * call (exact parameter count).
+   */
+  private checkUserFunctionCall(
+    node: FormulaCallNode,
+    lower: string,
+    def: FormulaPreparedUserFunction,
+    env: CheckBinding | null
+  ): FormulaType {
+    if (def.body === null) {
+      const result = this.report(
+        formulaUserFunctionBrokenMessage(def.name),
+        spanOf(node)
+      );
+      this.walkArgumentsLeniently(node.args, env);
+      return result;
+    }
+    if (node.args.length !== def.params.length) {
+      const result = this.report(
+        formulaUserFunctionArityMessage(
+          node.name,
+          def.params.length,
+          node.args.length
+        ),
+        spanOf(node)
+      );
+      this.walkArgumentsLeniently(node.args, env);
+      return result;
+    }
+    // Lambda arguments type as values (`synthBoundValue`): the runtime
+    // binds them like any argument, and the body may apply them.
+    const argTypes = node.args.map((arg) => this.synthBoundValue(arg, env));
+    if (this.checkingUserFunctions.has(lower)) {
+      return UNKNOWN_TYPE;
+    }
+    let scope: CheckBinding | null = null;
+    for (const [index, param] of def.params.entries()) {
+      scope = { name: param, parent: scope, type: groundType(argTypes[index]) };
+    }
+    this.checkingUserFunctions.add(lower);
+    const diagnosticMark = this.diagnostics.length;
+    try {
+      return this.synth(def.body, scope);
+    } finally {
+      this.diagnostics.length = diagnosticMark;
+      this.checkingUserFunctions.delete(lower);
+    }
   }
 
   /** Call through a `let`/lambda binding, e.g. `let(f, x => x + 1, f(2))`. */

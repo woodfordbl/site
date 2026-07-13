@@ -6,6 +6,7 @@ import { V1_GOLDEN_CORPUS } from "@/lib/formula/corpus.fixture.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula, isVolatileFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import {
   FORMULA_FIXED_NOW_ISO,
   FormulaDate,
@@ -1153,4 +1154,176 @@ describe("v1 golden corpus", () => {
       }
     });
   }
+});
+
+describe("user-defined functions", () => {
+  const scopeWith = (
+    defs: Parameters<typeof prepareUserFunctions>[0],
+    properties: Record<string, FormulaValue> = {}
+  ): FormulaScope => ({
+    ...scopeOf(properties),
+    userFunctions: prepareUserFunctions(defs),
+  });
+
+  it("evaluates a golden call with params bound to arguments", () => {
+    const scope = scopeWith([
+      {
+        expression: "points * weight * 1.1",
+        name: "weightedScore",
+        params: ["points", "weight"],
+      },
+    ]);
+    expect(run("weightedScore(10, 2)", scope)).toBeCloseTo(22);
+  });
+
+  it("resolves names case-insensitively, like the catalog", () => {
+    const scope = scopeWith([
+      { expression: "x * 2", name: "Double", params: ["x"] },
+    ]);
+    expect(run("double(4) + DOUBLE(3)", scope)).toBe(14);
+  });
+
+  it("reads the caller's properties from inside the body", () => {
+    const scope = scopeWith(
+      [
+        {
+          expression: 'prop("f-est") * factor',
+          name: "scaledEst",
+          params: ["factor"],
+        },
+      ],
+      { "f-est": 5 }
+    );
+    expect(run("scaledEst(3)", scope)).toBe(15);
+  });
+
+  it("nests user→user calls", () => {
+    const scope = scopeWith([
+      { expression: "x * 2", name: "double", params: ["x"] },
+      { expression: "double(x) + 1", name: "doublePlus", params: ["x"] },
+    ]);
+    expect(run("doublePlus(3)", scope)).toBe(7);
+  });
+
+  it("keeps the body lexically standalone — caller let bindings never leak", () => {
+    const scope = scopeWith([
+      { expression: "hidden", name: "leaky", params: [] },
+    ]);
+    expect(errorMessage(run("let(hidden, 1, leaky())", scope))).toBe(
+      'Unknown name "hidden"'
+    );
+  });
+
+  it("names direct recursion as a circular function", () => {
+    const scope = scopeWith([
+      { expression: "fact(n - 1) * n", name: "fact", params: ["n"] },
+    ]);
+    expect(errorMessage(run("fact(3)", scope))).toBe(
+      "Circular function: fact → fact"
+    );
+  });
+
+  it("names mutual recursion with the full chain", () => {
+    const scope = scopeWith([
+      { expression: "b(x)", name: "a", params: ["x"] },
+      { expression: "a(x)", name: "b", params: ["x"] },
+    ]);
+    expect(errorMessage(run("a(1)", scope))).toBe(
+      "Circular function: a → b → a"
+    );
+  });
+
+  it("allows repeated NON-nested calls (no false cycle)", () => {
+    const scope = scopeWith([
+      { expression: "x * 2", name: "double", params: ["x"] },
+    ]);
+    expect(run("double(1) + double(2) + double(double(3))", scope)).toBe(18);
+  });
+
+  it("errors on wrong arity with the exact count", () => {
+    const scope = scopeWith([
+      { expression: "a + b", name: "add2", params: ["a", "b"] },
+    ]);
+    expect(errorMessage(run("add2(1)", scope))).toBe(
+      "add2() expects 2 arguments, got 1"
+    );
+    expect(errorMessage(run("add2(1, 2, 3)", scope))).toBe(
+      "add2() expects 2 arguments, got 3"
+    );
+  });
+
+  it("errors on a broken definition, naming the function", () => {
+    const scope = scopeWith([
+      { expression: "1 +", name: "broken", params: [] },
+    ]);
+    expect(errorMessage(run("broken()", scope))).toBe(
+      'The custom function "broken" has an error in its definition'
+    );
+  });
+
+  it("propagates argument errors eagerly (first error wins)", () => {
+    const scope = scopeWith([
+      { expression: "x", name: "identity", params: ["x"] },
+    ]);
+    expect(errorMessage(run("identity(1 / 0)", scope))).toBe(
+      "Division by zero"
+    );
+  });
+
+  it("resolves catalog-first on a (write-prevented) name collision", () => {
+    const scope = scopeWith([
+      { expression: '"shadowed"', name: "round", params: ["x"] },
+    ]);
+    expect(run("round(1.4)", scope)).toBe(1);
+  });
+
+  it("lets bindings shadow user functions", () => {
+    const scope = scopeWith([{ expression: "1", name: "f", params: [] }]);
+    expect(run("let(f, x => x + 10, f(5))", scope)).toBe(15);
+  });
+
+  it("applies lambda arguments bound to parameters", () => {
+    const scope = scopeWith([
+      { expression: "f(x)", name: "applyTo", params: ["f", "x"] },
+    ]);
+    expect(run("applyTo(v => v * 3, 4)", scope)).toBe(12);
+  });
+
+  it("evaluates unknown calls to the unchanged error without a registry", () => {
+    expect(errorMessage(run("weightedScore(1, 2)"))).toBe(
+      'Unknown function "weightedScore"'
+    );
+  });
+
+  it("marks callers volatile when a called body reads the clock", () => {
+    const fns = prepareUserFunctions([
+      { expression: "now()", name: "rightNow", params: [] },
+      { expression: "rightNow()", name: "indirect", params: [] },
+      { expression: "1 + 1", name: "calm", params: [] },
+      { expression: "loop()", name: "loop", params: [] },
+    ]);
+    expect(isVolatileFormula(astOf("rightNow()"), fns)).toBe(true);
+    expect(isVolatileFormula(astOf("indirect()"), fns)).toBe(true);
+    expect(isVolatileFormula(astOf("calm()"), fns)).toBe(false);
+    // Recursive definitions terminate instead of hanging the walk.
+    expect(isVolatileFormula(astOf("loop()"), fns)).toBe(false);
+    // No registry: bodies can't be seen, so no volatility.
+    expect(isVolatileFormula(astOf("rightNow()"))).toBe(false);
+  });
+
+  it("evaluates the body against the scope clock (volatile body golden)", () => {
+    const fns = prepareUserFunctions([
+      {
+        expression: 'formatDate(today(), "yyyy")',
+        name: "yearNow",
+        params: [],
+      },
+    ]);
+    const scope: FormulaScope = {
+      getProperty: () => null,
+      now: () => new Date("2031-06-15T12:00:00.000Z"),
+      userFunctions: fns,
+    };
+    expect(run("yearNow()", scope)).toBe("2031");
+  });
 });

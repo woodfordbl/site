@@ -29,6 +29,7 @@ import {
   UNKNOWN_TYPE,
   unionTypeOf,
 } from "@/lib/formula/types.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import {
   type FormulaScope,
   isFormulaError,
@@ -1218,5 +1219,175 @@ describe("check-vs-runtime consistency", () => {
         }
       }
     }
+  });
+});
+
+describe("user-defined functions", () => {
+  const registry = (defs: Parameters<typeof prepareUserFunctions>[0]) =>
+    prepareUserFunctions(defs);
+
+  const checkWith = (
+    source: string,
+    userFunctions: ReturnType<typeof prepareUserFunctions>,
+    properties: FormulaCheckProperty[] = []
+  ): FormulaCheckResult => {
+    const parsed = parseFormula(source);
+    if (!parsed.ok) {
+      throw new Error(`parse failed: ${parsed.error.message}`);
+    }
+    return checkFormula(parsed.ast, { properties, userFunctions });
+  };
+
+  it("types the body with params bound to the argument types", () => {
+    const fns = registry([
+      {
+        expression: "points * weight * 1.1",
+        name: "weightedScore",
+        params: ["points", "weight"],
+      },
+    ]);
+    const result = checkWith("weightedScore(2, 3)", fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(result.resultType, NUMBER_TYPE)).toBe(true);
+  });
+
+  it("propagates argument types bidirectionally (text body → text result)", () => {
+    const fns = registry([
+      { expression: 'upper(x) + "!"', name: "shout", params: ["x"] },
+    ]);
+    const result = checkWith('shout("hey")', fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(result.resultType, TEXT_TYPE)).toBe(true);
+  });
+
+  it("collects the body's property references (see-through)", () => {
+    const fns = registry([
+      {
+        expression: 'prop("f_est") * factor',
+        name: "scaledEst",
+        params: ["factor"],
+      },
+    ]);
+    const result = checkWith("scaledEst(2)", fns, SCHEMA);
+    expect(result.references).toContain("f_est");
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("discards body diagnostics (definition-editor territory), keeping the call clean", () => {
+    // Body has a genuine type error; its span indexes the DEFINITION, so it
+    // must not leak into this formula's diagnostics.
+    const fns = registry([
+      { expression: 'abs("nope")', name: "bad", params: [] },
+    ]);
+    const result = checkWith("bad() + 1", fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.resultType.kind).toBe("unknown");
+  });
+
+  it("diagnoses a body parse error at the CALL site naming the function", () => {
+    const fns = registry([{ expression: "1 +", name: "broken", params: [] }]);
+    const result = checkWith("broken() * 2", fns);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].message).toBe(
+      'The custom function "broken" has an error in its definition'
+    );
+    expect(result.diagnostics[0].start).toBe(0);
+  });
+
+  it("diagnoses wrong arity with the exact parameter count", () => {
+    const fns = registry([
+      { expression: "a + b", name: "add2", params: ["a", "b"] },
+    ]);
+    const one = checkWith("add2(1)", fns);
+    expect(one.diagnostics[0].message).toBe(
+      "add2() expects 2 arguments, got 1"
+    );
+    const three = checkWith("add2(1, 2, 3)", fns);
+    expect(three.diagnostics[0].message).toBe(
+      "add2() expects 2 arguments, got 3"
+    );
+    const single = registry([
+      { expression: "x", name: "identity", params: ["x"] },
+    ]);
+    expect(checkWith("identity()", single).diagnostics[0].message).toBe(
+      "identity() expects 1 argument, got 0"
+    );
+  });
+
+  it("resolves catalog-first on a (write-prevented) name collision", () => {
+    // A registry entry named like a catalog function is shadowed — the call
+    // checks against the catalog signature, never the user body.
+    const fns = registry([
+      { expression: '"shadowed"', name: "round", params: [] },
+    ]);
+    const ok = checkWith("round(1.5)", fns);
+    expect(ok.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(ok.resultType, NUMBER_TYPE)).toBe(true);
+    // Zero args is the CATALOG arity error, not the user function's.
+    const arity = checkWith("round()", fns);
+    expect(arity.diagnostics[0].message).toContain("round() expects 1 to 2");
+  });
+
+  it("keeps unknown-function diagnostics unchanged without a registry", () => {
+    const result = resultOf("weightedScore(1, 2)");
+    expect(result.diagnostics[0].message).toContain(
+      'Unknown function "weightedScore"'
+    );
+  });
+
+  it("resolves calls case-insensitively like the catalog", () => {
+    const fns = registry([
+      { expression: "x * 2", name: "Double", params: ["x"] },
+    ]);
+    const result = checkWith("double(4) + DOUBLE(2)", fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(result.resultType, NUMBER_TYPE)).toBe(true);
+  });
+
+  it("types nested user→user calls through both bodies", () => {
+    const fns = registry([
+      { expression: "x * 2", name: "double", params: ["x"] },
+      { expression: "double(x) + 1", name: "doublePlus", params: ["x"] },
+    ]);
+    const result = checkWith("doublePlus(3)", fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(result.resultType, NUMBER_TYPE)).toBe(true);
+  });
+
+  it("survives direct and mutual recursion, typing optimistically", () => {
+    const direct = registry([
+      { expression: "fact(n - 1) * n", name: "fact", params: ["n"] },
+    ]);
+    const result = checkWith("fact(3)", direct);
+    expect(result.diagnostics).toEqual([]);
+    const mutual = registry([
+      { expression: "b(x)", name: "a", params: ["x"] },
+      { expression: "a(x)", name: "b", params: ["x"] },
+    ]);
+    expect(checkWith("a(1)", mutual).diagnostics).toEqual([]);
+  });
+
+  it("accepts a lambda argument as a bound value the body can apply", () => {
+    const fns = registry([
+      { expression: "f(x)", name: "applyTo", params: ["f", "x"] },
+    ]);
+    const result = checkWith("applyTo(v => v + 1, 2)", fns);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("keeps method-call spelling working (receiver counts toward arity)", () => {
+    const fns = registry([
+      { expression: "x * 2", name: "double", params: ["x"] },
+    ]);
+    const result = checkWith("(3).double()", fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(result.resultType, NUMBER_TYPE)).toBe(true);
+  });
+
+  it("lets let/lambda bindings shadow user functions, like the evaluator", () => {
+    const fns = registry([{ expression: "1", name: "shadowed", params: [] }]);
+    const result = checkWith('let(shadowed, x => "text", shadowed(1))', fns);
+    expect(result.diagnostics).toEqual([]);
+    expect(formulaTypesEqual(result.resultType, TEXT_TYPE)).toBe(true);
   });
 });

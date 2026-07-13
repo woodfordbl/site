@@ -42,12 +42,17 @@ import {
   type FormulaEnvironment,
   type FormulaError,
   FormulaLambda,
+  type FormulaPreparedUserFunction,
+  type FormulaPreparedUserFunctions,
   FormulaRowRef,
   type FormulaScope,
   type FormulaValue,
+  formulaCircularFunctionMessage,
   formulaError,
   formulaMemberOnNonRowMessage,
   formulaMemberOnRowListMessage,
+  formulaUserFunctionArityMessage,
+  formulaUserFunctionBrokenMessage,
   formulaValueMatchesType,
   formulaValuesEqual,
   formulaValueTypeName,
@@ -289,6 +294,12 @@ function argumentTypeError(
 }
 
 class Evaluator {
+  /**
+   * User-function names on the current call stack (documented casing), for
+   * the recursion guard's named cycle. Depth is already bounded by
+   * {@link MAX_CALL_DEPTH}, so the linear re-entry scan stays cheap.
+   */
+  private readonly activeUserFunctions: string[] = [];
   private callDepth = 0;
   private readonly scope: FormulaScope;
 
@@ -463,9 +474,72 @@ class Evaluator {
     }
     const entry = formulaFunctionForName(node.name);
     if (entry === undefined) {
+      // Catalog-first: user functions can never shadow the stdlib (write-
+      // time validation rejects collisions; a colliding entry is ignored).
+      const userFunction = this.scope.userFunctions?.get(lower);
+      if (userFunction !== undefined) {
+        return this.callUserFunction(node, userFunction, env);
+      }
       return formulaError(`Unknown function "${node.name}"`);
     }
     return this.dispatch(node, entry, lower, env);
+  }
+
+  /**
+   * Call a named user-defined function: exact arity, arguments evaluated
+   * EAGERLY (first error wins, like any non-lazy call), parameters bound
+   * over the definition body's own environment (lexically standalone — the
+   * caller's `let` bindings never leak in). Recursion — direct or mutual —
+   * is a named error value (`Circular function: a → b → a`, the cross-DB
+   * cycle voice) via the active-call stack; {@link MAX_CALL_DEPTH} still
+   * backstops. A body that doesn't parse is an error value naming the
+   * function, matching the checker's call-site diagnostic verbatim.
+   */
+  private callUserFunction(
+    node: FormulaCallNode,
+    def: FormulaPreparedUserFunction,
+    env: FormulaEnvironment | null
+  ): FormulaValue {
+    if (def.body === null) {
+      return formulaError(formulaUserFunctionBrokenMessage(def.name));
+    }
+    if (node.args.length !== def.params.length) {
+      return formulaError(
+        formulaUserFunctionArityMessage(
+          node.name,
+          def.params.length,
+          node.args.length
+        )
+      );
+    }
+    const cycleStart = this.activeUserFunctions.findIndex(
+      (active) => active.toLowerCase() === def.name.toLowerCase()
+    );
+    if (cycleStart !== -1) {
+      const path = [...this.activeUserFunctions.slice(cycleStart), def.name];
+      return formulaError(formulaCircularFunctionMessage(path));
+    }
+    const args = this.evalArguments(node.args, env);
+    if (isFormulaError(args)) {
+      return args;
+    }
+    let bodyEnv: FormulaEnvironment | null = null;
+    for (const [index, param] of def.params.entries()) {
+      bodyEnv = { name: param, parent: bodyEnv, value: args[index] };
+    }
+    this.activeUserFunctions.push(def.name);
+    this.callDepth += 1;
+    try {
+      if (this.callDepth > MAX_CALL_DEPTH) {
+        return formulaError(
+          `Formula recursion went too deep (more than ${MAX_CALL_DEPTH} nested function calls)`
+        );
+      }
+      return this.evalNode(def.body, bodyEnv);
+    } finally {
+      this.callDepth -= 1;
+      this.activeUserFunctions.pop();
+    }
   }
 
   private dispatch(
@@ -656,22 +730,55 @@ export function evaluateFormula(
   }
 }
 
+/** {@link isVolatileFormula}'s walk, with a visited set so recursion terminates. */
+function volatileWalk(
+  ast: FormulaNode,
+  userFunctions: FormulaPreparedUserFunctions | undefined,
+  visited: Set<string>
+): boolean {
+  let volatile = false;
+  walkFormula(ast, (node) => {
+    if (volatile) {
+      return false;
+    }
+    if (node.kind !== "call") {
+      return true;
+    }
+    const lower = node.name.toLowerCase();
+    if (VOLATILE_FORMULA_FUNCTION_NAMES.has(lower)) {
+      volatile = true;
+      return false;
+    }
+    // Expand user-function bodies (catalog-first: a catalog name is never a
+    // user call). The visited set is never cleared — a body is either
+    // volatile or not, and one walk decides it.
+    if (
+      userFunctions !== undefined &&
+      !visited.has(lower) &&
+      formulaFunctionForName(node.name) === undefined
+    ) {
+      const body = userFunctions.get(lower)?.body;
+      if (body != null) {
+        visited.add(lower);
+        volatile = volatileWalk(body, userFunctions, visited);
+      }
+    }
+    return !volatile;
+  });
+  return volatile;
+}
+
 /**
  * Whether a formula reads the clock (`now()`/`today()` anywhere in the
  * tree, method-call spelling included). Volatile formulas need scheduled
  * re-evaluation ticks; they must never become dependency-graph edges.
+ * `userFunctions` (when supplied) expands user-defined function bodies —
+ * a `now()` INSIDE a called definition marks the caller volatile too — with
+ * a visited set so recursive definitions terminate.
  */
-export function isVolatileFormula(ast: FormulaNode): boolean {
-  let volatile = false;
-  walkFormula(ast, (node) => {
-    if (
-      node.kind === "call" &&
-      VOLATILE_FORMULA_FUNCTION_NAMES.has(node.name.toLowerCase())
-    ) {
-      volatile = true;
-      return false;
-    }
-    return true;
-  });
-  return volatile;
+export function isVolatileFormula(
+  ast: FormulaNode,
+  userFunctions?: FormulaPreparedUserFunctions
+): boolean {
+  return volatileWalk(ast, userFunctions, new Set());
 }

@@ -33,6 +33,7 @@ import { normalizeFormulaPropertyName } from "@/lib/formula/check.ts";
 import {
   DATABASE_REF_UNAVAILABLE_MESSAGE,
   FormulaDate,
+  type FormulaPreparedUserFunctions,
   type FormulaRelationResolver,
   FormulaRowRef,
   type FormulaScope,
@@ -54,6 +55,11 @@ export interface CreateFormulaRowScopeOptions {
    * paths), relation cells read as blank and row members can't resolve.
    */
   relations?: FormulaRelationResolver;
+  /**
+   * Named user-defined functions (prepared registry). Absent, user-function
+   * calls read as unknown functions.
+   */
+  userFunctions?: FormulaPreparedUserFunctions;
 }
 
 /**
@@ -325,6 +331,9 @@ export function createFormulaRowScope(
   }
   if (relations !== undefined) {
     scope.relations = relations;
+  }
+  if (opts?.userFunctions !== undefined) {
+    scope.userFunctions = opts.userFunctions;
   }
   return scope;
 }

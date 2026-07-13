@@ -39,7 +39,11 @@ import {
   type FormulaTraversal,
   formulaStaticReferences,
 } from "@/lib/formula/references.ts";
-import { type FormulaError, formulaError } from "@/lib/formula/values.ts";
+import {
+  type FormulaError,
+  type FormulaPreparedUserFunctions,
+  formulaError,
+} from "@/lib/formula/values.ts";
 import {
   formulaCycleMessage,
   formulaCyclePathFrom,
@@ -153,7 +157,8 @@ type MutableColumnNode = Omit<FormulaColumnNode, "cycleError"> & {
 };
 
 function buildColumns(
-  databases: ReadonlyMap<string, FormulaGraphDatabase>
+  databases: ReadonlyMap<string, FormulaGraphDatabase>,
+  userFunctions?: FormulaPreparedUserFunctions
 ): MutableColumnNode[] {
   const related = [...databases].map(([id, database]) => ({
     // `FormulaRelatedDatabase.fields` is a mutable array type; copy.
@@ -163,7 +168,11 @@ function buildColumns(
   }));
   const columns: MutableColumnNode[] = [];
   for (const [databaseId, database] of databases) {
-    const context = formulaCheckContext(database.fields, related);
+    const context = formulaCheckContext(
+      database.fields,
+      related,
+      userFunctions
+    );
     for (const field of database.fields) {
       if (field.type !== "formula") {
         continue;
@@ -280,12 +289,17 @@ function cycleNameOf(
 
 /**
  * Build the column graph from a schema snapshot of every database. Pure —
- * call again on any schema change (the coarse `formulaSchemaChanged` path).
+ * call again on any schema change (the coarse `formulaSchemaChanged` path)
+ * OR any user-function definition change (`userFunctions` threads into the
+ * reference extraction, so a body reading `prop("f-x")` edges every caller
+ * — same-row references, traversals, db refs, and volatility all see
+ * through calls).
  */
 export function buildFormulaGraph(
-  databases: ReadonlyMap<string, FormulaGraphDatabase>
+  databases: ReadonlyMap<string, FormulaGraphDatabase>,
+  userFunctions?: FormulaPreparedUserFunctions
 ): FormulaGraph {
-  const nodes = buildColumns(databases);
+  const nodes = buildColumns(databases, userFunctions);
   const formulaIds = formulaFieldIdsByDatabase(databases);
   const byKey = new Map(nodes.map((node) => [node.key, node]));
   const deps = new Map<string, string[]>();

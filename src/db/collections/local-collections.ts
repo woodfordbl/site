@@ -30,6 +30,7 @@ import {
 } from "@/lib/schemas/database.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
 import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
+import { localFormulaFunctionSchema } from "@/lib/schemas/local-formula-function.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
 
@@ -136,6 +137,25 @@ export const localFavoritesCollection = getOrCreateHotCollection(
 );
 
 /**
+ * Named user-defined formula functions (Sheets Named Functions model) —
+ * workspace-level like keybindings: one row per definition, callable from
+ * any formula. Small rows, plain single-key localStorage persistence. CRUD
+ * + name validation: `db/queries/formula-function-ops.ts`.
+ */
+export const localFormulaFunctionsCollection = getOrCreateHotCollection(
+  "localFormulaFunctionsCollection",
+  () =>
+    createCollection(
+      localStorageCollectionOptions({
+        id: "local-formula-functions",
+        storageKey: "site-local-formula-functions",
+        getKey: (item) => item.id,
+        schema: localFormulaFunctionSchema,
+      })
+    )
+);
+
+/**
  * Notion-style database definitions (fields, views, source config). Small,
  * page-metadata-sized rows — plain single-key localStorage persistence.
  */
@@ -226,6 +246,7 @@ function startLocalCollectionsSync(): void {
   localBlocksCollection.startSyncImmediate();
   localKeybindingsCollection.startSyncImmediate();
   localFavoritesCollection.startSyncImmediate();
+  localFormulaFunctionsCollection.startSyncImmediate();
   localDatabasesCollection.startSyncImmediate();
   localDatabaseRowsCollection.startSyncImmediate();
   // Canonicalize stored formula references (name → field id) now that the

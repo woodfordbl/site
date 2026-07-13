@@ -16,6 +16,7 @@ import {
 } from "@/components/database/formula-code-editor.tsx";
 import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
 import type { FormulaRefDatabase } from "@/lib/formula/ref-rewrite.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 const FIELDS: DatabaseField[] = [
@@ -31,6 +32,20 @@ const DATABASES: FormulaRefDatabase[] = [
 
 // The panel memoizes this once per schema; the editor takes it as a prop.
 const CHECK_CONTEXT = formulaCheckContext(FIELDS);
+
+// A context carrying a user-defined function, for the completion tests.
+const USER_FN_CONTEXT = formulaCheckContext(
+  FIELDS,
+  undefined,
+  prepareUserFunctions([
+    {
+      description: "Score with a weighting factor.",
+      expression: "points * weight * 1.1",
+      name: "weightedScore",
+      params: ["points", "weight"],
+    },
+  ])
+);
 
 /**
  * jsdom has no layout: CodeMirror measures text through
@@ -976,6 +991,60 @@ describe("FormulaCodeEditor", () => {
       expect(andRows).toHaveLength(1);
       // The surviving row is the keyword form — no signature detail.
       expect(andRows[0]?.querySelector(".cm-completionDetail")).toBeNull();
+    });
+
+    it("offers user-defined functions with their signature detail", async () => {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={USER_FN_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value=""
+        />
+      );
+      typeText("wei");
+
+      const open = await waitForPopup();
+      const labels = optionLabels(open);
+      expect(labels).toContain("weightedScore");
+      const row = [...open.querySelectorAll("li")].find(
+        (li) =>
+          li.querySelector(".cm-completionLabel")?.textContent ===
+          "weightedScore"
+      );
+      expect(row?.querySelector(".cm-completionDetail")?.textContent).toBe(
+        "(points, weight)"
+      );
+    });
+
+    it("applies a user-function completion as a placeholder snippet", async () => {
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={USER_FN_CONTEXT}
+          fields={FIELDS}
+          onChange={onChange}
+          value=""
+        />
+      );
+      typeText("weightedSc");
+      await waitForPopup();
+      await settleInteractionDelay();
+
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith(
+        "weightedScore(points, weight)"
+      );
+      // Parameter NAMES land as placeholder pills, first one selected.
+      const pills = [
+        ...document.querySelectorAll(".cm-formula-placeholder"),
+      ].map((pill) => pill.textContent);
+      expect(pills).toEqual(["points", "weight"]);
+      const selection = editorView().state.selection.main;
+      expect(selection.from).toBe("weightedScore(".length);
+      expect(selection.to).toBe("weightedScore(points".length);
     });
   });
 

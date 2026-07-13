@@ -7,6 +7,7 @@ import {
   formulaStaticReferences,
 } from "@/lib/formula/references.ts";
 import { NUMBER_TYPE, TEXT_TYPE, UNKNOWN_TYPE } from "@/lib/formula/types.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 
 // Own database (A): a couple of data fields, a relation into B, a second
 // relation into B, and a formula field.
@@ -450,5 +451,132 @@ describe("formulaStaticReferences — db() references", () => {
 
   it("extracts no db references from db-free formulas", () => {
     expect(refs('prop("a-rel").length()').databaseRefs).toEqual([]);
+  });
+});
+
+describe("formulaStaticReferences — user-defined functions", () => {
+  const withFns = (
+    expression: string,
+    defs: Parameters<typeof prepareUserFunctions>[0]
+  ): FormulaStaticReferences => {
+    const parsed = parseFormula(expression);
+    if (!parsed.ok) {
+      throw new Error(`fixture does not parse: ${expression}`);
+    }
+    return formulaStaticReferences(parsed.ast, {
+      ...CONTEXT,
+      userFunctions: prepareUserFunctions(defs),
+    });
+  };
+
+  it("sees same-row references through a called body", () => {
+    const result = withFns("scaled(2)", [
+      {
+        expression: 'prop("a-price") * factor',
+        name: "scaled",
+        params: ["factor"],
+      },
+    ]);
+    expect([...result.sameRowFieldIds]).toContain("a-price");
+  });
+
+  it("composes traversals through argument subtrees", () => {
+    // The relation flows INTO the call as an argument; the body aggregates
+    // the member list — the traversal must still be member-precise.
+    const result = withFns('weighted(prop("a-rel").map(r => r.Estimate), 2)', [
+      {
+        expression: "values.sum() * weight",
+        name: "weighted",
+        params: ["values", "weight"],
+      },
+    ]);
+    expect(result.traversals).toEqual([
+      {
+        memberFieldId: "b-est",
+        relationFieldId: "a-rel",
+        sourceDatabaseId: null,
+        targetDatabaseId: "db-b",
+      },
+    ]);
+  });
+
+  it("emits traversals for member access INSIDE the body", () => {
+    const result = withFns('rollup(prop("a-rel"))', [
+      {
+        expression: "rel.map(r => r.Estimate).sum()",
+        name: "rollup",
+        params: ["rel"],
+      },
+    ]);
+    expect(result.traversals).toEqual([
+      {
+        memberFieldId: "b-est",
+        relationFieldId: "a-rel",
+        sourceDatabaseId: null,
+        targetDatabaseId: "db-b",
+      },
+    ]);
+    expect([...result.sameRowFieldIds]).toContain("a-rel");
+  });
+
+  it("extracts db() references from inside a body", () => {
+    const result = withFns("countTasks()", [
+      {
+        expression: 'db("db-b").filter(t => t.Estimate > 1).length()',
+        name: "countTasks",
+        params: [],
+      },
+    ]);
+    // `.length()` consumes the filtered list opaquely, so the precise
+    // member ref rides with the usual conservative null-member ref — the
+    // same shape the direct (non-user-function) spelling extracts.
+    expect(result.databaseRefs).toEqual([
+      { memberFieldId: "b-est", targetDatabaseId: "db-b" },
+      { memberFieldId: null, targetDatabaseId: "db-b" },
+    ]);
+  });
+
+  it("terminates on recursive definitions, consuming args opaquely", () => {
+    const result = withFns('loop(prop("a-rel"))', [
+      { expression: "loop(rel)", name: "loop", params: ["rel"] },
+    ]);
+    // The recursive re-entry marks the relation opaque → null-member
+    // traversal, never a hang or a throw.
+    expect(result.traversals).toEqual([
+      {
+        memberFieldId: null,
+        relationFieldId: "a-rel",
+        sourceDatabaseId: null,
+        targetDatabaseId: "db-b",
+      },
+    ]);
+  });
+
+  it("contributes no references from an unparseable body", () => {
+    const result = withFns('broken(prop("a-rel"))', [
+      { expression: "1 +", name: "broken", params: ["rel"] },
+    ]);
+    // The argument still walked in the caller (same-row ref) but the body
+    // adds nothing; the opaque consumption keeps the null-member traversal.
+    expect([...result.sameRowFieldIds]).toContain("a-rel");
+    expect(result.traversals).toEqual([
+      {
+        memberFieldId: null,
+        relationFieldId: "a-rel",
+        sourceDatabaseId: null,
+        targetDatabaseId: "db-b",
+      },
+    ]);
+  });
+
+  it("marks callers volatile when the called body reads the clock", () => {
+    const volatileResult = withFns("stamp()", [
+      { expression: 'formatDate(now(), "yyyy")', name: "stamp", params: [] },
+    ]);
+    expect(volatileResult.volatile).toBe(true);
+    const calm = withFns("calm()", [
+      { expression: "1 + 1", name: "calm", params: [] },
+    ]);
+    expect(calm.volatile).toBe(false);
   });
 });

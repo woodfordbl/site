@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computeFormulaOverlay } from "@/lib/databases/formula-values.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import {
   buildFormulaGraph,
   type FormulaGraphDatabase,
@@ -403,5 +404,141 @@ describe("buildFormulaGraph — cycles", () => {
     expect(keys.indexOf("db-a:a-count")).toBeLessThan(
       keys.indexOf("db-b:b-roll")
     );
+  });
+});
+
+describe("buildFormulaGraph — user-defined functions", () => {
+  const FUNCTIONS = prepareUserFunctions([
+    {
+      expression: 'prop("a-local") + bump',
+      name: "bumpedLocal",
+      params: ["bump"],
+    },
+    {
+      expression: "rel.map(r => r.Double).sum()",
+      name: "sumDouble",
+      params: ["rel"],
+    },
+    { expression: "now()", name: "stamp", params: [] },
+  ]);
+
+  it("edges same-row formula deps read inside a called body", () => {
+    const graph = buildFormulaGraph(
+      new Map(
+        Object.entries({
+          "db-a": {
+            fields: [
+              numberField("a-price", "Price"),
+              formulaField("a-local", "Local", 'prop("a-price") * 2'),
+              formulaField("a-user", "User", "bumpedLocal(1)"),
+            ],
+            name: "Projects",
+          },
+        })
+      ),
+      FUNCTIONS
+    );
+    const dependents = graph.dependents.get(
+      formulaColumnKey("db-a", "a-local")
+    );
+    expect(dependents?.map((edge) => edge.column.fieldId)).toContain("a-user");
+    expect(
+      dependents?.find((edge) => edge.column.fieldId === "a-user")?.mapping
+    ).toEqual({ kind: "sameRow" });
+    // Order respects the dependency: a-local before a-user.
+    const order = graph.order.map((column) => column.fieldId);
+    expect(order.indexOf("a-local")).toBeLessThan(order.indexOf("a-user"));
+  });
+
+  it("edges cross-database traversals composed through an argument", () => {
+    const graph = buildFormulaGraph(
+      new Map(
+        Object.entries({
+          "db-a": {
+            fields: [
+              relationField("a-rel", "Tasks", "db-b"),
+              formulaField("a-roll", "Roll", 'sumDouble(prop("a-rel"))'),
+            ],
+            name: "Projects",
+          },
+          "db-b": {
+            fields: [
+              numberField("b-est", "Estimate"),
+              formulaField("b-double", "Double", 'prop("b-est") * 2'),
+            ],
+            name: "Tasks",
+          },
+        })
+      ),
+      FUNCTIONS
+    );
+    const dependents = graph.dependents.get(
+      formulaColumnKey("db-b", "b-double")
+    );
+    expect(dependents).toEqual([
+      expect.objectContaining({
+        mapping: {
+          kind: "viaRelation",
+          relationFieldId: "a-rel",
+          sourceDatabaseId: "db-a",
+        },
+      }),
+    ]);
+    expect(graph.relationFields.get("a-rel")).toEqual({
+      databaseId: "db-a",
+      targetDatabaseId: "db-b",
+    });
+  });
+
+  it("marks callers of clock-reading bodies volatile", () => {
+    const graph = buildFormulaGraph(
+      new Map(
+        Object.entries({
+          "db-a": {
+            fields: [formulaField("a-stamp", "Stamp", "stamp()")],
+            name: "Projects",
+          },
+        })
+      ),
+      FUNCTIONS
+    );
+    expect(
+      graph.columns.get(formulaColumnKey("db-a", "a-stamp"))?.volatile
+    ).toBe(true);
+  });
+
+  it("changing the registry changes the graph (definition-change rebuild)", () => {
+    const databases = new Map(
+      Object.entries({
+        "db-a": {
+          fields: [
+            numberField("a-price", "Price"),
+            formulaField("a-local", "Local", 'prop("a-price") * 2'),
+            formulaField("a-user", "User", "readsLocal()"),
+          ],
+          name: "Projects",
+        },
+      })
+    );
+    const before = buildFormulaGraph(
+      databases,
+      prepareUserFunctions([
+        { expression: "1", name: "readsLocal", params: [] },
+      ])
+    );
+    expect(
+      before.dependents.get(formulaColumnKey("db-a", "a-local")) ?? []
+    ).toEqual([]);
+    const after = buildFormulaGraph(
+      databases,
+      prepareUserFunctions([
+        { expression: 'prop("a-local")', name: "readsLocal", params: [] },
+      ])
+    );
+    expect(
+      after.dependents
+        .get(formulaColumnKey("db-a", "a-local"))
+        ?.map((edge) => edge.column.fieldId)
+    ).toEqual(["a-user"]);
   });
 });

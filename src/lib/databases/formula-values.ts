@@ -13,6 +13,7 @@ import {
 } from "@/lib/formula/row-scope.ts";
 import { type FormulaType, UNKNOWN_TYPE } from "@/lib/formula/types.ts";
 import {
+  type FormulaPreparedUserFunctions,
   type FormulaRelationResolver,
   type FormulaScope,
   type FormulaValue,
@@ -72,6 +73,12 @@ export interface ComputeFormulaOverlayOptions {
    * cells read as blank and members can't resolve.
    */
   relations?: FormulaRelationResolver;
+  /**
+   * Named user-defined functions (prepared registry) — threads into the
+   * plan's check contexts (formula→formula deps see through call bodies)
+   * and every row scope. Omitted, user-function calls read as unknown.
+   */
+  userFunctions?: FormulaPreparedUserFunctions;
 }
 
 // --- evaluation plan ---------------------------------------------------------
@@ -132,17 +139,22 @@ function checkPropertyOf(
 /** Build a check context over one schema. */
 function checkContextOf(
   fields: readonly DatabaseField[],
-  types?: ReadonlyMap<string, FormulaType>
+  types?: ReadonlyMap<string, FormulaType>,
+  userFunctions?: FormulaPreparedUserFunctions
 ): FormulaCheckContext {
   return {
     properties: fields.map((field) => checkPropertyOf(field, types)),
+    ...(userFunctions === undefined ? {} : { userFunctions }),
   };
 }
 
 /** Parse + check every formula field, extracting formula→formula edges. */
-function planFields(fields: readonly DatabaseField[]): PlannedField[] {
+function planFields(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): PlannedField[] {
   const parseCache = new Map<string, ParseFormulaResult>();
-  const context = checkContextOf(fields);
+  const context = checkContextOf(fields, undefined, userFunctions);
   const formulaIds = new Set<string>();
   for (const field of fields) {
     if (field.type === "formula") {
@@ -167,8 +179,11 @@ function planFields(fields: readonly DatabaseField[]): PlannedField[] {
 }
 
 /** Build the evaluation plan: parse, check, detect cycles, order fields. */
-function buildFormulaPlan(fields: readonly DatabaseField[]): FormulaPlan {
-  const planned = planFields(fields);
+function buildFormulaPlan(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): FormulaPlan {
+  const planned = planFields(fields, userFunctions);
   const deps = new Map<string, readonly string[]>(
     planned.map((plan) => [plan.field.id, plan.deps])
   );
@@ -214,6 +229,7 @@ function rowEvaluationOf(
   const scope = createFormulaRowScope(fields, values, resolved, {
     now: opts?.now,
     relations: opts?.relations,
+    userFunctions: opts?.userFunctions,
   });
   return { resolved, scope };
 }
@@ -238,7 +254,7 @@ export function computeFormulaOverlay(
   const display: FormulaValueDisplayOptions = {
     rowLabel: formulaRowLabelOf(opts?.relations),
   };
-  const plan = buildFormulaPlan(fields);
+  const plan = buildFormulaPlan(fields, opts?.userFunctions);
   const evaluations: RowEvaluation[] = [];
   for (const row of rows) {
     evaluations.push(rowEvaluationOf(plan, fields, row.values, opts));
@@ -277,7 +293,7 @@ export function computeFormulaRowValues(
   values: Record<string, DatabaseCellValue>,
   opts?: ComputeFormulaOverlayOptions
 ): ReadonlyMap<string, FormulaValue> {
-  const plan = buildFormulaPlan(fields);
+  const plan = buildFormulaPlan(fields, opts?.userFunctions);
   const { resolved, scope } = rowEvaluationOf(plan, fields, values, opts);
   for (const { ast, field } of plan.ordered) {
     resolved.set(field.id, ast === null ? null : evaluateFormula(ast, scope));
@@ -294,9 +310,10 @@ export function computeFormulaRowValues(
  * blank/unparseable expressions type as `unknown`.
  */
 export function formulaFieldTypes(
-  fields: readonly DatabaseField[]
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
 ): ReadonlyMap<string, FormulaType> {
-  const plan = buildFormulaPlan(fields);
+  const plan = buildFormulaPlan(fields, userFunctions);
   const types = new Map<string, FormulaType>();
   for (const fieldId of plan.cycleErrors.keys()) {
     types.set(fieldId, UNKNOWN_TYPE);
@@ -308,7 +325,7 @@ export function formulaFieldTypes(
     }
     types.set(
       field.id,
-      checkFormula(ast, checkContextOf(fields, types)).resultType
+      checkFormula(ast, checkContextOf(fields, types, userFunctions)).resultType
     );
   }
   return types;
@@ -330,9 +347,14 @@ export type FormulaRelatedDatabase = Pick<
  */
 export function formulaCheckContext(
   fields: readonly DatabaseField[],
-  relatedDatabases?: readonly FormulaRelatedDatabase[]
+  relatedDatabases?: readonly FormulaRelatedDatabase[],
+  userFunctions?: FormulaPreparedUserFunctions
 ): FormulaCheckContext {
-  const context = checkContextOf(fields, formulaFieldTypes(fields));
+  const context = checkContextOf(
+    fields,
+    formulaFieldTypes(fields, userFunctions),
+    userFunctions
+  );
   if (relatedDatabases === undefined) {
     return context;
   }
@@ -343,7 +365,7 @@ export function formulaCheckContext(
         name: database.name,
         properties: checkContextOf(
           database.fields,
-          formulaFieldTypes(database.fields)
+          formulaFieldTypes(database.fields, userFunctions)
         ).properties,
       },
     ])
@@ -434,14 +456,19 @@ export function formulaDisplayInfo(field: DatabaseField): {
 /**
  * Whether any formula field's expression depends on the clock
  * (`now()`/`today()`) — callers re-evaluate the overlay on an interval when
- * true. Blank/unparseable expressions are never volatile.
+ * true. Blank/unparseable expressions are never volatile. `userFunctions`
+ * expands user-defined function bodies, so `now()` inside a called
+ * definition counts.
  */
-export function hasVolatileFormula(fields: readonly DatabaseField[]): boolean {
+export function hasVolatileFormula(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): boolean {
   return fields.some((field) => {
     if (field.type !== "formula") {
       return false;
     }
     const parsed = parseFormula(field.expression);
-    return parsed.ok && isVolatileFormula(parsed.ast);
+    return parsed.ok && isVolatileFormula(parsed.ast, userFunctions);
   });
 }

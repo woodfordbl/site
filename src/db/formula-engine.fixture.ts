@@ -3,6 +3,7 @@ import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import type { LocalFormulaFunction } from "@/lib/schemas/local-formula-function.ts";
 
 /**
  * In-memory stand-in for `local-collections.ts` used by the formula-engine
@@ -28,8 +29,10 @@ type FakeListener<T> = (changes: FakeChange<T>[]) => void;
 
 const databases = new Map<string, LocalDatabase>();
 const rows = new Map<string, LocalDatabaseRow>();
+const formulaFunctions = new Map<string, LocalFormulaFunction>();
 const databaseListeners = new Set<FakeListener<LocalDatabase>>();
 const rowListeners = new Set<FakeListener<LocalDatabaseRow>>();
+const functionListeners = new Set<FakeListener<LocalFormulaFunction>>();
 
 function emitDatabaseChanges(changes: FakeChange<LocalDatabase>[]): void {
   for (const listener of [...databaseListeners]) {
@@ -39,6 +42,14 @@ function emitDatabaseChanges(changes: FakeChange<LocalDatabase>[]): void {
 
 function emitRowChanges(changes: FakeChange<LocalDatabaseRow>[]): void {
   for (const listener of [...rowListeners]) {
+    listener(changes);
+  }
+}
+
+function emitFunctionChanges(
+  changes: FakeChange<LocalFormulaFunction>[]
+): void {
+  for (const listener of [...functionListeners]) {
     listener(changes);
   }
 }
@@ -67,11 +78,28 @@ export const localDatabaseRowsCollection = {
   },
 };
 
+/** Fake `localFormulaFunctionsCollection` (user-defined functions). */
+export const localFormulaFunctionsCollection = {
+  get: (id: string) => formulaFunctions.get(id),
+  subscribeChanges(listener: FakeListener<LocalFormulaFunction>) {
+    functionListeners.add(listener);
+    return { unsubscribe: () => functionListeners.delete(listener) };
+  },
+  get toArray() {
+    return [...formulaFunctions.values()];
+  },
+};
+
 /** Test driver: seed state, then emit collection-shaped change events. */
 export const formulaEngineFixture = {
   /** How many change subscriptions are live (0 on the server). */
   get activeSubscriptionCount(): number {
-    return databaseListeners.size + rowListeners.size;
+    return databaseListeners.size + rowListeners.size + functionListeners.size;
+  },
+
+  insertFunction(fn: LocalFormulaFunction): void {
+    formulaFunctions.set(fn.id, fn);
+    emitFunctionChanges([{ key: fn.id, type: "insert", value: fn }]);
   },
 
   insertRow(row: LocalDatabaseRow): void {
@@ -93,6 +121,11 @@ export const formulaEngineFixture = {
     emitDatabaseChanges([{ key: databaseId, type: "delete" }]);
   },
 
+  removeFunction(functionId: string): void {
+    formulaFunctions.delete(functionId);
+    emitFunctionChanges([{ key: functionId, type: "delete" }]);
+  },
+
   removeRow(rowId: string): void {
     const previous = rows.get(rowId);
     rows.delete(rowId);
@@ -104,14 +137,17 @@ export const formulaEngineFixture = {
   reset(): void {
     databases.clear();
     rows.clear();
+    formulaFunctions.clear();
     databaseListeners.clear();
     rowListeners.clear();
+    functionListeners.clear();
   },
 
   /** Populate state WITHOUT events — the engine reads it at start. */
   seed(
     seedDatabases: readonly LocalDatabase[],
-    seedRows: readonly LocalDatabaseRow[]
+    seedRows: readonly LocalDatabaseRow[],
+    seedFunctions: readonly LocalFormulaFunction[] = []
   ): void {
     for (const database of seedDatabases) {
       databases.set(database.id, database);
@@ -119,6 +155,17 @@ export const formulaEngineFixture = {
     for (const row of seedRows) {
       rows.set(row.id, row);
     }
+    for (const fn of seedFunctions) {
+      formulaFunctions.set(fn.id, fn);
+    }
+  },
+
+  updateFunction(fn: LocalFormulaFunction): void {
+    const previous = formulaFunctions.get(fn.id);
+    formulaFunctions.set(fn.id, fn);
+    emitFunctionChanges([
+      { key: fn.id, previousValue: previous, type: "update", value: fn },
+    ]);
   },
 
   updateDatabase(database: LocalDatabase): void {
@@ -206,5 +253,21 @@ export function rowOf(
     id,
     updatedAt: "2026-01-01T00:00:00.000Z",
     values,
+  };
+}
+
+export function functionOf(
+  id: string,
+  name: string,
+  params: readonly string[],
+  expression: string
+): LocalFormulaFunction {
+  return {
+    createdAt: "2026-01-01T00:00:00.000Z",
+    expression,
+    id,
+    name,
+    params: [...params],
+    updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }

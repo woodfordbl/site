@@ -116,6 +116,7 @@ import {
   useDatabase,
   useDatabaseRows,
 } from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
@@ -478,6 +479,7 @@ function FormulaExpressionEditor({
   const database = useDatabase(databaseId);
   const rows = useDatabaseRows(databaseId);
   const relatedDatabases = useAllDatabases();
+  const userFunctions = useFormulaUserFunctions();
   const fields = database?.fields ?? [];
   const primaryFieldId = database?.primaryFieldId;
   const previewRows = useMemo(
@@ -521,6 +523,7 @@ function FormulaExpressionEditor({
       previewRows={previewRows}
       relatedDatabases={relatedDatabases}
       relations={relations}
+      userFunctions={userFunctions}
     />
   );
 }

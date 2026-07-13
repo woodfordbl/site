@@ -27,6 +27,7 @@ import {
   formulaRowLabelOf,
 } from "@/lib/formula/row-scope.ts";
 import {
+  type FormulaPreparedUserFunctions,
   type FormulaRelationResolver,
   type FormulaValue,
   formulaValuesEqual,
@@ -110,6 +111,11 @@ export interface EvaluateDirtyFormulasOptions {
   onEvaluate?: (databaseId: string, fieldId: string, rowId: string) => void;
   /** Cross-database reader for relation cells and row members. */
   relations?: FormulaRelationResolver;
+  /**
+   * Named user-defined functions (prepared registry) — must match the
+   * registry the graph was built with, or edges and evaluation disagree.
+   */
+  userFunctions?: FormulaPreparedUserFunctions;
 }
 
 /**
@@ -276,7 +282,11 @@ function evaluateColumn(pass: EvaluationPass, column: FormulaColumnNode): void {
       fields,
       row.values,
       resolvedValuesFor(pass, column, row.id),
-      { now: pass.opts?.now, relations: pass.opts?.relations }
+      {
+        now: pass.opts?.now,
+        relations: pass.opts?.relations,
+        userFunctions: pass.opts?.userFunctions,
+      }
     );
     pass.opts?.onEvaluate?.(column.databaseId, column.fieldId, row.id);
     const value =

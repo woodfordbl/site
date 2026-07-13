@@ -15,6 +15,7 @@ import {
   FormulaEditorPanel,
 } from "@/components/database/formula-editor-panel.tsx";
 import type { FormulaRelatedDatabase } from "@/lib/databases/formula-values.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import type { FormulaRelationResolver } from "@/lib/formula/values.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
@@ -96,6 +97,10 @@ const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
 const ABS_DIAG_AT_28_RE = /abs\(\) expects .*\(at character 28\)/;
 const PARSE_ERROR_AT_8_RE = /Unexpected end of expression.*\(at character 8\)/;
 const NOT_A_TASKS_PROPERTY_RE = /isn't a property of Tasks/;
+const USER_FN_ARITY_AT_RE =
+  /weightedScore\(\) expects 2 arguments, got 1.*\(at character \d+\)/;
+const USER_FN_BROKEN_AT_RE =
+  /The custom function "brokenFn" has an error.*\(at character \d+\)/;
 const ROLLUP_TITLE_RE = /Rollup: /;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
@@ -1159,6 +1164,144 @@ describe("FormulaEditorPanel", () => {
         name: "Projects",
       });
       expect(onPickProperty).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("FormulaEditorPanel — user-defined functions", () => {
+  const USER_FUNCTIONS = prepareUserFunctions([
+    {
+      description: "Score with a weighting factor.",
+      expression: "points * weight + 1",
+      name: "weightedScore",
+      params: ["points", "weight"],
+    },
+    { expression: "1 +", name: "brokenFn", params: [] },
+  ]);
+
+  function renderWithFunctions(onSave = vi.fn(), expression = "") {
+    render(
+      <FormulaEditorPanel
+        expression={expression}
+        fields={FIELDS}
+        onSave={onSave}
+        previewRows={PREVIEW_ROWS}
+        userFunctions={USER_FUNCTIONS}
+      />
+    );
+    return onSave;
+  }
+
+  it("lists custom functions with signatures, searches, and inserts", async () => {
+    renderWithFunctions();
+    await flushFrames();
+
+    // The Custom functions section renders both definitions.
+    expect(screen.getByText("Custom functions")).toBeDefined();
+    expect(screen.getByText("weightedScore")).toBeDefined();
+
+    const search = screen.getByLabelText(
+      "Search properties, functions, and operators"
+    );
+    fireEvent.change(search, { target: { value: "weighted" } });
+    expect(screen.queryByText("brokenFn")).toBeNull();
+    expect(screen.queryByText("average")).toBeNull();
+
+    // Tapping inserts `weightedScore()` with the caret inside the parens
+    // (textarea path — placeholders are a CM6 affordance).
+    fireEvent.click(screen.getByText("weightedScore"));
+    await flushFrames();
+    const textarea = screen.getByLabelText(
+      "Formula expression"
+    ) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("weightedScore()");
+    expect(textarea.selectionStart).toBe("weightedScore(".length);
+  });
+
+  it("checks and previews a call through the definition body", async () => {
+    renderWithFunctions();
+    await flushFrames();
+
+    const textarea = screen.getByLabelText("Formula expression");
+    fireEvent.change(textarea, {
+      target: { value: "weightedScore(thisPage.Price, 2)" },
+    });
+    await flushFrames();
+
+    // 10 * 2 + 1 — evaluated against the first preview row's values.
+    expect(screen.getByText("✓ Valid")).toBeDefined();
+    expect(screen.getByText("Preview: 21")).toBeDefined();
+    // The result type flows out of the body (number badge).
+    expect(screen.getByText("number")).toBeDefined();
+  });
+
+  it("gates Save on user-function arity and broken definitions", async () => {
+    const onSave = renderWithFunctions();
+    await flushFrames();
+
+    const textarea = screen.getByLabelText("Formula expression");
+    fireEvent.change(textarea, { target: { value: "weightedScore(1)" } });
+    await flushFrames();
+    expect(screen.getByText(USER_FN_ARITY_AT_RE)).toBeDefined();
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+
+    fireEvent.change(textarea, { target: { value: "brokenFn()" } });
+    await flushFrames();
+    expect(screen.getByText(USER_FN_BROKEN_AT_RE)).toBeDefined();
+
+    fireEvent.change(textarea, {
+      target: { value: "weightedScore(2, 3)" },
+    });
+    await flushFrames();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(save);
+    expect(onSave).toHaveBeenCalledWith("weightedScore(2, 3)");
+  });
+
+  describe("code editor (fine pointers)", () => {
+    beforeEach(() => {
+      pointer.coarse = false;
+      Range.prototype.getClientRects = () =>
+        ({
+          length: 0,
+          item: () => null,
+          [Symbol.iterator]: [][Symbol.iterator],
+        }) as unknown as DOMRectList;
+      Range.prototype.getBoundingClientRect = () =>
+        ({
+          bottom: 0,
+          height: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect;
+    });
+
+    it("inserts custom functions as parameter-name placeholder snippets", async () => {
+      renderWithFunctions();
+      await waitFor(() => {
+        expect(document.querySelector(".cm-content")).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByText("weightedScore"));
+      await waitFor(() => {
+        expect(document.querySelector(".cm-content")?.textContent).toContain(
+          "weightedScore(points, weight)"
+        );
+      });
+      expect(
+        [...document.querySelectorAll(".cm-formula-placeholder")].map(
+          (pill) => pill.textContent
+        )
+      ).toEqual(["points", "weight"]);
     });
   });
 });

@@ -627,6 +627,98 @@ by running the real tokenizer, plus the keyword/reserved list) emit the bracket 
 with escaped quotes. It lives inside the Base UI menu popup, so it's plain buttons
 only — no nested menus.
 
+## User-defined functions
+
+Named, parameterized formulas stored once and callable from any formula in the
+workspace (proposal §9 P5 — the Sheets Named Functions model): a definition
+`weightedScore(points, weight) = points * weight * 1.1` makes
+`weightedScore(prop("f-est"), 2)` legal everywhere. The management UI is a
+later pass; the storage + language + engine core shipped.
+
+**Storage** — workspace-level like keybindings:
+[`localFormulaFunctionSchema`](../../src/lib/schemas/local-formula-function.ts)
+rows (`{id, name, params, expression, description?}`) in
+`localFormulaFunctionsCollection` (`site-local-formula-functions`,
+[`local-collections.ts`](../../src/db/collections/local-collections.ts)). CRUD
+lives in [`formula-function-ops.ts`](../../src/db/queries/formula-function-ops.ts)
+(keybindings-style direct writes), which enforces the name rules at WRITE time
+via the pure validators in
+[`user-functions.ts`](../../src/lib/formula/user-functions.ts): identifier-safe
+per the REAL tokenizer (the rollup-template discipline), not a reserved word or
+a reference root (`prop`/`db`/`thisPage`/`thisRow`) or an evaluator special
+form (`let`/`lets`), not a catalog name OR alias, and unique among definitions
+case-insensitively. Parameters follow the lambda-parameter rules plus the
+reference-root exclusion. The schema itself stays structural — stored rows
+must survive rule changes; live reads:
+[`use-formula-functions.ts`](../../src/db/queries/use-formula-functions.ts)
+(`useFormulaUserFunctions` returns the prepared registry).
+
+**Prepared registry** — `prepareUserFunctions(defs)` parses each body ONCE
+into a `FormulaPreparedUserFunctions` map (lowercased-name keys —
+case-insensitive lookup, like the catalog; blank/unparseable bodies keep their
+parse-error message instead of an AST). The registry threads as
+`FormulaCheckContext.userFunctions` and `FormulaScope.userFunctions`
+([`values.ts`](../../src/lib/formula/values.ts) owns the types and the shared
+error messages, so checker/evaluator wording can never drift).
+
+**Resolution order** — `let`/`lets` special forms, then environment bindings,
+then the CATALOG, then user functions, then "Unknown function". Write-time
+validation prevents catalog collisions, but a colliding registry entry is
+simply shadowed — never a crash.
+
+**Typing** ([`check.ts`](../../src/lib/formula/check.ts)) — bidirectional like
+lambda bodies: a call synthesizes each argument's type, binds the parameters to
+those types over a STANDALONE environment (caller bindings never leak in), and
+checks the body, so `weightedScore(number, number)` → number. Body diagnostics
+are DISCARDED — their spans index the definition's expression, not the calling
+formula (the definition editor is where body mistakes surface) — while the
+body's property references still collect. Wrong arity diagnoses exactly
+(`add2() expects 2 arguments, got 1`); a body parse error diagnoses at the
+CALL site naming the function (`The custom function "…" has an error in its
+definition`); recursion types optimistically as `unknown` (evaluation names
+the cycle).
+
+**Evaluation** ([`evaluate.ts`](../../src/lib/formula/evaluate.ts)) — arguments
+evaluate eagerly (first error wins), bind to parameter names over the body via
+the same environment machinery `let`/lambdas use. Recursion — direct or mutual
+— is a named error value in the cross-DB cycle voice (`Circular function:
+a → b → a`), guarded by the evaluator's active-call stack; `MAX_CALL_DEPTH`
+still backstops. Wrong arity and broken bodies are error values matching the
+checker's messages verbatim.
+
+**Reference expansion** ([`references.ts`](../../src/lib/formula/references.ts))
+— `formulaStaticReferences` sees THROUGH calls: bodies expand inline during
+the provenance walk with parameters bound to the CALL's argument source sets,
+so `weightedScore(prop("f-rel").map(r => r.Est), 2)` composes traversals
+through the argument subtree, bodies contribute same-row `prop()` references,
+relation traversals, and `db()` refs to every caller, and a per-walk visited
+set terminates recursive definitions (re-entry consumes arguments opaquely).
+A body parse error contributes NO references — the cell shows the
+broken-definition error anyway. **Volatility propagates**: `now()`/`today()`
+inside a called body marks the caller volatile
+(`isVolatileFormula(ast, userFunctions)` expands bodies with the same visited
+set), so volatile-through-a-function columns ride the engine's 60s tick.
+
+**Engine recompute policy** — the graph builds with the registry
+(`buildFormulaGraph(databases, userFunctions)`), and the shell
+([`formula-engine.ts`](../../src/db/formula-engine.ts)) subscribes to the
+functions collection. Any definition change/create/delete takes the
+deliberately COARSE path: re-prepare the registry, rebuild the graph (new
+bodies → new edges), and mark EVERY formula column `FORMULA_ALL_ROWS` dirty.
+Definition edits are rare, the equality cutoff stops cascades for unchanged
+values, and correctness never depends on a name→columns index; that finer
+index is a documented future optimization.
+
+**Editor** — user functions appear in the fused autocomplete (function-type
+rows, signature detail, applied as the parameter-NAME placeholder snippet via
+the same `insertSnippet` machinery) sourced live from the check context, and
+in the panel's reference list under a **Custom functions** section (inserted
+like catalog functions; the textarea path keeps the caret-inside-parens
+`name()` insert). The panel takes the registry as an optional `userFunctions`
+prop; the column menu's `FormulaExpressionEditor` wires
+`useFormulaUserFunctions()`. No management UI this pass — definitions are
+created through the ops layer.
+
 ## Templates
 
 [`template.ts`](../../src/lib/formula/template.ts) powers `{{ thisPage.X }}` tokens in

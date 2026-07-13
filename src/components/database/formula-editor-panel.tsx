@@ -71,7 +71,12 @@ import {
   createFormulaRowScope,
   formulaRowLabelOf,
 } from "@/lib/formula/row-scope.ts";
-import type { FormulaRelationResolver } from "@/lib/formula/values.ts";
+import { formulaUserFunctionSignature } from "@/lib/formula/user-functions.ts";
+import type {
+  FormulaPreparedUserFunction,
+  FormulaPreparedUserFunctions,
+  FormulaRelationResolver,
+} from "@/lib/formula/values.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -503,9 +508,20 @@ export interface FormulaEditorPanelProps {
    * preview as blank.
    */
   relations?: FormulaRelationResolver;
+  /**
+   * Named user-defined functions (prepared registry —
+   * `useFormulaUserFunctions()` at interactive call sites): threads into
+   * the check context (typing + CM6 completions), the live preview's
+   * scope, and the reference list's Custom functions section. Omitted,
+   * user-function calls diagnose as unknown functions.
+   */
+  userFunctions?: FormulaPreparedUserFunctions;
 }
 
 interface ReferenceListEntries {
+  customFunctionEntries: (FormulaPreparedUserFunction & {
+    signature: string;
+  })[];
   functionEntries: (FormulaFunctionEntry & { signature: string })[];
   operatorEntries: FormulaOperatorCatalogEntry[];
   propertyFields: DatabaseField[];
@@ -516,6 +532,7 @@ function ReferenceList({
   className,
   entries,
   onInsertAtCaret,
+  onInsertCustomFunction,
   onInsertFunction,
   onInsertProperty,
   onShowDetail,
@@ -524,14 +541,21 @@ function ReferenceList({
   className?: string;
   entries: ReferenceListEntries;
   onInsertAtCaret: (text: string, caretOffset: number) => void;
+  onInsertCustomFunction: (def: FormulaPreparedUserFunction) => void;
   onInsertFunction: (entry: FormulaFunctionEntry) => void;
   onInsertProperty: (propertyField: DatabaseField) => void;
   onShowDetail: (detail: ReferenceDetail) => void;
 }): ReactNode {
-  const { functionEntries, operatorEntries, propertyFields } = entries;
+  const {
+    customFunctionEntries,
+    functionEntries,
+    operatorEntries,
+    propertyFields,
+  } = entries;
   const nothingMatches =
     propertyFields.length === 0 &&
     functionEntries.length === 0 &&
+    customFunctionEntries.length === 0 &&
     operatorEntries.length === 0;
   return (
     <ScrollArea
@@ -585,6 +609,31 @@ function ReferenceList({
             <span className="shrink-0 font-mono text-xs">{entry.name}</span>
             <span className="truncate text-muted-foreground text-xs">
               {entry.signature.slice(entry.name.length)}
+            </span>
+          </ReferenceRow>
+        ))}
+        {customFunctionEntries.length > 0 ? (
+          <SectionLabel>Custom functions</SectionLabel>
+        ) : null}
+        {customFunctionEntries.map((def) => (
+          <ReferenceRow
+            detail={{
+              title: def.signature,
+              description:
+                def.description ??
+                "A custom function defined in this workspace.",
+              example: def.signature,
+            }}
+            key={def.name}
+            onInsert={() => {
+              onInsertCustomFunction(def);
+            }}
+            onShowDetail={onShowDetail}
+          >
+            <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+            <span className="shrink-0 font-mono text-xs">{def.name}</span>
+            <span className="truncate text-muted-foreground text-xs">
+              {def.signature.slice(def.name.length)}
             </span>
           </ReferenceRow>
         ))}
@@ -900,6 +949,7 @@ export function FormulaEditorPanel({
   previewRows,
   relatedDatabases,
   relations,
+  userFunctions,
 }: FormulaEditorPanelProps): ReactNode {
   const wide = layout === "wide";
   const sheet = layout === "sheet";
@@ -1012,6 +1062,21 @@ export function FormulaEditorPanel({
   };
 
   /**
+   * Custom-function rows insert exactly like catalog functions: the CM6
+   * editor takes the placeholder snippet (parameter NAMES as the labels,
+   * first one selected, Tab walking the rest); the textarea keeps the plain
+   * `name()` insert with the caret inside the parens.
+   */
+  const insertCustomFunction = (def: FormulaPreparedUserFunction) => {
+    const editor = codeEditorRef.current;
+    if (editor !== null) {
+      editor.insertSnippet(def.name, def.params);
+      return;
+    }
+    insertAtCaret(`${def.name}()`, def.name.length + 1);
+  };
+
+  /**
    * Chip menu dismissed without an action (Escape/outside-click): hand focus
    * back to the editor so typing can continue where the tap interrupted it.
    */
@@ -1075,8 +1140,8 @@ export function FormulaEditorPanel({
   // typed via the same topological pass the overlay uses; related databases
   // (when supplied) type member access on relation rows.
   const checkContext = useMemo(
-    () => formulaCheckContext(fields, relatedDatabases),
-    [fields, relatedDatabases]
+    () => formulaCheckContext(fields, relatedDatabases, userFunctions),
+    [fields, relatedDatabases, userFunctions]
   );
   const checked: FormulaCheckResult | null = useMemo(
     () => (parsed?.ok ? checkFormula(parsed.ast, checkContext) : null),
@@ -1115,15 +1180,17 @@ export function FormulaEditorPanel({
     const resolved = computeFormulaRowValues(fields, previewValues, {
       now,
       relations,
+      userFunctions,
     });
     const scope = createFormulaRowScope(fields, previewValues, resolved, {
       now,
       relations,
+      userFunctions,
     });
     return formulaValueToDisplay(evaluateFormula(parsed.ast, scope), {
       rowLabel: formulaRowLabelOf(relations),
     });
-  }, [parsed, fields, previewValues, relations]);
+  }, [parsed, fields, previewValues, relations, userFunctions]);
 
   // Canonical-offset → visible-offset mapping for status positions: each
   // `prop("<id>")` / `db("<id>")` span before an offset renders shorter than
@@ -1195,6 +1262,23 @@ export function FormulaEditorPanel({
           .includes(normalizedQuery)
       ),
     [normalizedQuery]
+  );
+
+  const customFunctionEntries = useMemo(
+    () =>
+      [...(userFunctions?.values() ?? [])]
+        .map((def) => ({
+          ...def,
+          signature: formulaUserFunctionSignature(def),
+        }))
+        .filter((def) =>
+          [def.name, def.signature, def.description ?? ""]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedQuery)
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [userFunctions, normalizedQuery]
   );
 
   const operatorEntries = useMemo(
@@ -1361,8 +1445,14 @@ export function FormulaEditorPanel({
       </div>
       <ReferenceList
         className={wide ? "max-h-none min-h-0 flex-1" : undefined}
-        entries={{ functionEntries, operatorEntries, propertyFields }}
+        entries={{
+          customFunctionEntries,
+          functionEntries,
+          operatorEntries,
+          propertyFields,
+        }}
         onInsertAtCaret={insertAtCaret}
+        onInsertCustomFunction={insertCustomFunction}
         onInsertFunction={insertFunctionEntry}
         onInsertProperty={insertPropertyReference}
         onShowDetail={setDetail}

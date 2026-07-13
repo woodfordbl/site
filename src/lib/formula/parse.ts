@@ -59,9 +59,15 @@ export const FORMULA_DB_ROOT = "db";
 
 /**
  * Words that read as literals or operators and therefore can't name a lambda
- * parameter (lowercased; identifier keywords are case-insensitive).
+ * parameter (lowercased; identifier keywords are case-insensitive). Exported
+ * (as {@link FORMULA_RESERVED_WORDS}) so name validators — user-defined
+ * function names, rollup member safety — share the grammar's own list
+ * instead of duplicating it.
  */
 const RESERVED_WORDS = new Set(["true", "false", "null", "and", "or", "not"]);
+
+/** Public read-only view of the grammar's reserved words (lowercased). */
+export const FORMULA_RESERVED_WORDS: ReadonlySet<string> = RESERVED_WORDS;
 
 /**
  * Names a `let` STATEMENT can't bind, beyond {@link RESERVED_WORDS}: the

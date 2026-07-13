@@ -5,6 +5,7 @@ import {
   databaseOf,
   formulaEngineFixture as fixture,
   formulaField,
+  functionOf,
   numberField,
   relationField,
   rowOf,
@@ -378,6 +379,153 @@ describe("formula engine — volatile clock", () => {
 
     vi.advanceTimersByTime(180_000);
     expect(onChange).not.toHaveBeenCalled();
+    stop();
+  });
+});
+
+describe("formula engine — user-defined functions", () => {
+  const SCORE_FIELDS = [
+    textField("s-title", "Title"),
+    numberField("s-points", "Points"),
+    formulaField("s-score", "Score", 'weightedScore(prop("s-points"), 2)'),
+    formulaField("s-plain", "Plain", 'prop("s-points") + 1'),
+  ];
+
+  function seedScored(): void {
+    fixture.seed(
+      [databaseOf("scored", "Scored", SCORE_FIELDS, "s-title")],
+      [rowOf("scored", "row-1", { "s-points": 10, "s-title": "One" })],
+      [
+        functionOf(
+          "fn-1",
+          "weightedScore",
+          ["points", "weight"],
+          "points * weight * 1.1"
+        ),
+      ]
+    );
+  }
+
+  function scoreValue(): unknown {
+    return formulaOverlaySnapshot("scored").get("row-1")?.["s-score"]
+      ?.cellValue;
+  }
+
+  it("warm pass evaluates columns through seeded definitions", () => {
+    seedScored();
+    const stop = subscribeFormulaEngine("scored", vi.fn());
+    expect(scoreValue()).toBeCloseTo(22);
+    stop();
+  });
+
+  it("a cell edit re-evaluates through the definition body", async () => {
+    seedScored();
+    const stop = subscribeFormulaEngine("scored", vi.fn());
+    fixture.updateRowValues("row-1", { "s-points": 20 });
+    await flushEngine();
+    expect(scoreValue()).toBeCloseTo(44);
+    stop();
+  });
+
+  it("editing a definition recomputes callers live (coarse policy)", async () => {
+    seedScored();
+    const onScored = vi.fn();
+    const stop = subscribeFormulaEngine("scored", onScored);
+    expect(scoreValue()).toBeCloseTo(22);
+
+    const evaluations: string[] = [];
+    observeFormulaEvaluationsForTests((databaseId, fieldId, rowId) => {
+      evaluations.push(`${databaseId}:${fieldId}:${rowId}`);
+    });
+    fixture.updateFunction(
+      functionOf(
+        "fn-1",
+        "weightedScore",
+        ["points", "weight"],
+        "points * weight * 2"
+      )
+    );
+    await flushEngine();
+    expect(scoreValue()).toBe(40);
+    expect(onScored).toHaveBeenCalledTimes(1);
+    // Coarse-correct policy: EVERY formula column re-evaluates on a
+    // definition change (both columns, all rows) — equality cutoff still
+    // stops downstream cascades for unchanged values.
+    expect(evaluations.sort()).toEqual([
+      "scored:s-plain:row-1",
+      "scored:s-score:row-1",
+    ]);
+    stop();
+  });
+
+  it("creating and deleting definitions heals/breaks callers live", async () => {
+    fixture.seed(
+      [databaseOf("scored", "Scored", SCORE_FIELDS, "s-title")],
+      [rowOf("scored", "row-1", { "s-points": 10, "s-title": "One" })]
+    );
+    const stop = subscribeFormulaEngine("scored", vi.fn());
+    // No definition yet: the call is an unknown function (error cell).
+    expect(
+      formulaOverlaySnapshot("scored").get("row-1")?.["s-score"]?.isError
+    ).toBe(true);
+
+    fixture.insertFunction(
+      functionOf(
+        "fn-1",
+        "weightedScore",
+        ["points", "weight"],
+        "points * weight"
+      )
+    );
+    await flushEngine();
+    expect(scoreValue()).toBe(20);
+
+    fixture.removeFunction("fn-1");
+    await flushEngine();
+    expect(
+      formulaOverlaySnapshot("scored").get("row-1")?.["s-score"]?.isError
+    ).toBe(true);
+    stop();
+  });
+
+  it("definition edits rewire dependency edges (body starts reading a formula)", async () => {
+    fixture.seed(
+      [
+        databaseOf(
+          "scored",
+          "Scored",
+          [
+            textField("s-title", "Title"),
+            numberField("s-points", "Points"),
+            formulaField("s-base", "Base", 'prop("s-points") * 2'),
+            formulaField("s-user", "User", "viaFn()"),
+          ],
+          "s-title"
+        ),
+      ],
+      [rowOf("scored", "row-1", { "s-points": 5, "s-title": "One" })],
+      [functionOf("fn-2", "viaFn", [], "1")]
+    );
+    const stop = subscribeFormulaEngine("scored", vi.fn());
+    expect(
+      formulaOverlaySnapshot("scored").get("row-1")?.["s-user"]?.cellValue
+    ).toBe(1);
+
+    // Redefine the body to read the Base formula: the rebuilt graph must
+    // carry the new same-row edge, so a Points edit now reaches s-user.
+    fixture.updateFunction(
+      functionOf("fn-2", "viaFn", [], 'prop("s-base") + 1')
+    );
+    await flushEngine();
+    expect(
+      formulaOverlaySnapshot("scored").get("row-1")?.["s-user"]?.cellValue
+    ).toBe(11);
+
+    fixture.updateRowValues("row-1", { "s-points": 6 });
+    await flushEngine();
+    expect(
+      formulaOverlaySnapshot("scored").get("row-1")?.["s-user"]?.cellValue
+    ).toBe(13);
     stop();
   });
 });

@@ -166,6 +166,78 @@ export interface FormulaRelationResolver {
   rowIds?(databaseId: string): readonly string[] | null;
 }
 
+/**
+ * One named user-defined function definition (Sheets Named Functions model,
+ * proposal §9 P5): a parameterized formula stored once at workspace level
+ * and callable from any formula. The pure layer consumes definitions
+ * through {@link FormulaPreparedUserFunctions} — bodies parsed ONCE by
+ * `prepareUserFunctions` (`lib/formula/user-functions.ts`).
+ */
+export interface FormulaUserFunction {
+  readonly description?: string;
+  /** The body expression, in canonical stored text (may use prop()/db()). */
+  readonly expression: string;
+  readonly name: string;
+  /** Parameter names, bound to the call's arguments over the body. */
+  readonly params: readonly string[];
+}
+
+/** One prepared definition: the body parsed once, or its parse error. */
+export interface FormulaPreparedUserFunction {
+  /** Parsed body AST, or `null` when the expression doesn't parse. */
+  readonly body: FormulaNode | null;
+  /** The parse-error message when `body` is null (definition editor UX). */
+  readonly bodyError: string | null;
+  readonly description?: string;
+  readonly name: string;
+  readonly params: readonly string[];
+}
+
+/**
+ * The prepared user-function registry, keyed by LOWERCASED name (lookups are
+ * case-insensitive, like the catalog's). Threaded into checking via
+ * `FormulaCheckContext.userFunctions` and into evaluation via
+ * {@link FormulaScope.userFunctions}; resolution order is bindings →
+ * catalog → user functions (write-time validation prevents catalog
+ * collisions, but the catalog wins if one slips through).
+ */
+export type FormulaPreparedUserFunctions = ReadonlyMap<
+  string,
+  FormulaPreparedUserFunction
+>;
+
+/**
+ * Calling a user function whose definition doesn't parse. Shared by the
+ * checker (call-site diagnostic) and the evaluator (error value) so the
+ * message can never drift between them.
+ */
+export function formulaUserFunctionBrokenMessage(name: string): string {
+  return `The custom function "${name}" has an error in its definition`;
+}
+
+/**
+ * Wrong argument count for a user function — exact arity, v1 message shape.
+ * Shared by the checker and the evaluator.
+ */
+export function formulaUserFunctionArityMessage(
+  name: string,
+  expected: number,
+  got: number
+): string {
+  const plural = expected === 1 ? "argument" : "arguments";
+  return `${name}() expects ${expected} ${plural}, got ${got}`;
+}
+
+/**
+ * A recursive user-function call (direct or mutual), named like the
+ * cross-database cycle guard: `Circular function: a → b → a`.
+ */
+export function formulaCircularFunctionMessage(
+  path: readonly string[]
+): string {
+  return `Circular function: ${path.join(" → ")}`;
+}
+
 /** Error message for using a lambda anywhere except a function argument. */
 export const LAMBDA_AS_VALUE_MESSAGE =
   "A function needs to be called, not used as a value";
@@ -214,6 +286,12 @@ export interface FormulaScope {
   getProperty(ref: string): FormulaValue;
   now?(): Date;
   relations?: FormulaRelationResolver;
+  /**
+   * Named user-defined functions callable from this formula (prepared
+   * registry, lowercased-name keys). Absent, user-function calls read as
+   * unknown functions — exactly the pre-P5 behavior.
+   */
+  userFunctions?: FormulaPreparedUserFunctions;
 }
 
 /**

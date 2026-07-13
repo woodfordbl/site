@@ -12,6 +12,7 @@
 | Server database defaults | `content/databases/` (one JSON document per database) | Yes (git) — eagerly seeded into the local collections at boot ([databases — Shipped content](./databases.md#shipped-content)) |
 | Local databases | `localDatabasesCollection` (`site-local-databases`; deleted shipped ids in `site-shipped-db-tombstones`) | No (localStorage) |
 | Local database rows | `localDatabaseRowsCollection` (`site-local-db-rows:<databaseId>` shards; quarantine `site-local-db-rows-quarantine`) | No (localStorage) |
+| Local formula functions | `localFormulaFunctionsCollection` (`site-local-formula-functions`) — workspace-level user-defined formula functions ([formula-language — User-defined functions](./formula-language.md#user-defined-functions)) | No (localStorage) |
 | Local media blobs | IndexedDB `site-assets` / `assets` (`idb-keyval`, content-hash keys) | No |
 | Page version history | IndexedDB `site-page-snapshots` / `snapshots` (`idb-keyval`, split index + per-checkpoint content keys) | No |
 | Server baseline content | Same IndexedDB store, reserved `${pageId}:baseline` key ([`page-baseline-store.ts`](../../src/db/snapshots/page-baseline-store.ts)) | No |

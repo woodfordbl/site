@@ -71,6 +71,8 @@ import {
   type FormulaType,
   UNKNOWN_TYPE,
 } from "@/lib/formula/types.ts";
+import { formulaUserFunctionSignature } from "@/lib/formula/user-functions.ts";
+import type { FormulaPreparedUserFunction } from "@/lib/formula/values.ts";
 import {
   TABLER_PAGE_ICON_PREFIX,
   type TablerIconNode,
@@ -1505,6 +1507,26 @@ function functionCompletion(
 }
 
 /**
+ * A user-defined function option: same treatment as a catalog function —
+ * signature detail, the description as the info card, applied as the
+ * argument-placeholder snippet form (`weightedScore(points, weight)` with
+ * the first placeholder selected). No type boost: the body's result type
+ * depends on the call's argument types, so there's no static result to rank
+ * by.
+ */
+function userFunctionCompletion(def: FormulaPreparedUserFunction): Completion {
+  return {
+    apply: (view, _completion, from, to) => {
+      insertSnippetAt(view, { from, to }, def.name, def.params);
+    },
+    detail: formulaUserFunctionSignature(def).slice(def.name.length),
+    ...(def.description === undefined ? {} : { info: def.description }),
+    label: def.name,
+    type: "function",
+  };
+}
+
+/**
  * The word operators/keywords that read naturally as completions. All five
  * head boolean expressions, so a boolean argument position boosts them.
  */
@@ -1734,6 +1756,15 @@ function formulaCompletionSource(
     for (const entry of FORMULA_FUNCTION_CATALOG) {
       if (!KEYWORD_FUNCTION_NAMES.has(entry.name)) {
         options.push(functionCompletion(entry, expected));
+      }
+    }
+    // User-defined functions ride the live check context (the panel's
+    // memoized `formulaCheckContext(fields, related, userFunctions)`), so a
+    // definition created while the editor is open completes immediately.
+    const userFunctions = context.state.field(checkContextState).userFunctions;
+    if (userFunctions !== undefined) {
+      for (const def of userFunctions.values()) {
+        options.push(userFunctionCompletion(def));
       }
     }
     options.push(...keywordCompletions(expected), ...scopeRootCompletions());

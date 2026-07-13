@@ -3,12 +3,15 @@ import { useCallback, useSyncExternalStore } from "react";
 import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
+  localFormulaFunctionsCollection,
 } from "@/db/collections/local-collections.ts";
 import type {
   FormulaCellResult,
   FormulaOverlay,
 } from "@/lib/databases/formula-values.ts";
+import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import type {
+  FormulaPreparedUserFunctions,
   FormulaRelationDatabase,
   FormulaRelationResolver,
 } from "@/lib/formula/values.ts";
@@ -44,6 +47,7 @@ import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import type { LocalFormulaFunction } from "@/lib/schemas/local-formula-function.ts";
 
 /**
  * The stateful formula engine (proposal §5.2, stage P3.3b): a browser-only
@@ -101,6 +105,8 @@ interface FormulaEngineState {
   /** Pending dirty marks, consumed by the next evaluation pass. */
   dirty: FormulaDirtyMap;
   flushScheduled: boolean;
+  /** User-function definitions mirror (functions-collection events). */
+  functionDefs: Map<string, LocalFormulaFunction>;
   graph: FormulaGraph;
   indexes: FormulaReverseIndexes;
   intervalId: number | undefined;
@@ -111,6 +117,8 @@ interface FormulaEngineState {
   /** Rows mirror: databaseId → rowId → row. */
   rows: Map<string, Map<string, LocalDatabaseRow>>;
   subscriptions: { unsubscribe(): void }[];
+  /** Prepared registry over {@link functionDefs} (bodies parsed once). */
+  userFunctions: FormulaPreparedUserFunctions;
   /** Per-database overlay version; bumps invalidate the materialized map. */
   versions: Map<string, number>;
 }
@@ -260,7 +268,10 @@ function pruneEngineCache(engine: FormulaEngineState): void {
 
 /** Rebuild the column graph and reverse indexes from the current mirrors. */
 function rebuildEngineGraph(engine: FormulaEngineState): void {
-  engine.graph = buildFormulaGraph(formulaGraphDatabasesOf(engine.databases));
+  engine.graph = buildFormulaGraph(
+    formulaGraphDatabasesOf(engine.databases),
+    engine.userFunctions
+  );
   engine.indexes = buildFormulaReverseIndexes(engine.graph, (databaseId) => {
     const rows = engine.rows.get(databaseId);
     return rows === undefined ? undefined : [...rows.values()];
@@ -316,6 +327,7 @@ function runEvaluationPass(engine: FormulaEngineState): void {
           evaluationObserver?.(databaseId, fieldId, rowId);
         },
         relations: engineResolverOf(engine),
+        userFunctions: engine.userFunctions,
       }
     );
   }
@@ -518,6 +530,47 @@ function handleDatabaseChanges(changes: readonly EngineDatabaseChange[]): void {
   scheduleEngineFlush(engine);
 }
 
+interface EngineFunctionChange {
+  key: string | number;
+  type: "delete" | "insert" | "update";
+  value?: LocalFormulaFunction;
+}
+
+/**
+ * Any functions-collection change takes the COARSE recompute path
+ * (deliberate v1 policy — definition edits are rare, correctness beats
+ * precision): update the definitions mirror, re-prepare the registry,
+ * rebuild the graph with it (reference extraction sees through the new
+ * bodies), then mark EVERY formula column fully dirty — a definition edit
+ * can change any caller's value, and the equality cutoff stops the cascade
+ * for columns whose values didn't actually move. A finer name→columns index
+ * is a future optimization documented in
+ * `docs/architecture/formula-language.md`.
+ */
+function handleFunctionChanges(changes: readonly EngineFunctionChange[]): void {
+  const engine = state;
+  if (engine === null) {
+    return;
+  }
+  for (const change of changes) {
+    if (change.type === "delete") {
+      engine.functionDefs.delete(String(change.key));
+      continue;
+    }
+    if (change.value !== undefined) {
+      engine.functionDefs.set(change.value.id, change.value);
+    }
+  }
+  engine.userFunctions = prepareUserFunctions([
+    ...engine.functionDefs.values(),
+  ]);
+  rebuildEngineGraph(engine);
+  for (const key of engine.graph.columns.keys()) {
+    addFormulaDirtyRows(engine.dirty, key, FORMULA_ALL_ROWS);
+  }
+  scheduleEngineFlush(engine);
+}
+
 // --- clock -------------------------------------------------------------------------
 
 /** One volatile tick: mark volatile columns and evaluate synchronously. */
@@ -586,6 +639,7 @@ function ensureFormulaEngineStarted(): void {
     databases: new Map(),
     dirty: new Map(),
     flushScheduled: false,
+    functionDefs: new Map(),
     graph: buildFormulaGraph(new Map()),
     indexes: new Map(),
     intervalId: undefined,
@@ -593,6 +647,7 @@ function ensureFormulaEngineStarted(): void {
     pendingNotify: new Set(),
     rows: new Map(),
     subscriptions: [],
+    userFunctions: new Map(),
     versions: new Map(),
   };
   state = engine;
@@ -604,6 +659,9 @@ function ensureFormulaEngineStarted(): void {
     }),
     localDatabaseRowsCollection.subscribeChanges((changes) => {
       handleRowChanges(changes);
+    }),
+    localFormulaFunctionsCollection.subscribeChanges((changes) => {
+      handleFunctionChanges(changes);
     })
   );
   for (const database of localDatabasesCollection.toArray) {
@@ -612,6 +670,12 @@ function ensureFormulaEngineStarted(): void {
   for (const row of localDatabaseRowsCollection.toArray) {
     rowsMapOf(engine, row.databaseId).set(row.id, row);
   }
+  for (const fn of localFormulaFunctionsCollection.toArray) {
+    engine.functionDefs.set(fn.id, fn);
+  }
+  engine.userFunctions = prepareUserFunctions([
+    ...engine.functionDefs.values(),
+  ]);
   rebuildEngineGraph(engine);
   for (const key of engine.graph.columns.keys()) {
     addFormulaDirtyRows(engine.dirty, key, FORMULA_ALL_ROWS);
