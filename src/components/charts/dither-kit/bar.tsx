@@ -1,19 +1,17 @@
 "use client"
 
-import { type ReactNode, useEffect } from "react"
+import { useEffect } from "react"
 import {
   type AreaVariant,
   type StrokeVariant,
   useChartPart,
 } from "./chart-context"
-import { SeriesContext } from "./series-context"
 
 export type BarProps = {
   dataKey: string
   variant?: AreaVariant
   strokeVariant?: StrokeVariant
   isClickable?: boolean
-  children?: ReactNode
 }
 
 /**
@@ -27,7 +25,6 @@ export function Bar({
   variant = "gradient",
   strokeVariant = "solid",
   isClickable = false,
-  children,
 }: BarProps) {
   const ctx = useChartPart("Bar", "bar")
   const { registerSeries, unregisterSeries } = ctx
@@ -46,8 +43,6 @@ export function Bar({
   const band = ctx.bands[dataKey]
   if (!ctx.ready || !band) return null
 
-  const seed = ctx.seedOf(dataKey)
-  const dimmed = ctx.selectedDataKey !== null && ctx.selectedDataKey !== dataKey
   const si = ctx.configKeys.indexOf(dataKey)
   const n = ctx.configKeys.length
   const onClick = () =>
@@ -75,9 +70,6 @@ export function Bar({
             />
           )
         })}
-      <SeriesContext value={{ dataKey, seed, dimmed }}>
-        {children}
-      </SeriesContext>
     </>
   )
 }

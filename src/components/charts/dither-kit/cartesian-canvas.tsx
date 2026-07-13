@@ -170,10 +170,14 @@ function startCartesianLoop({
       }
     }
     if (moving) needsFill = true
+    // Selection/legend-focus change flips the per-series dim; must force a
+    // repaint on its own (with reduced motion there's no wink tick to carry it).
+    let emphasisChanged = false
     const emphasisNow = s.selectedDataKey ?? s.focusDataKey
     if (emphasisNow !== lastSelected) {
       lastSelected = emphasisNow
       needsFill = true
+      emphasisChanged = true
     }
 
     const itTarget = s.isMouseInChart || s.hovered ? 1 : 0
@@ -205,7 +209,8 @@ function startCartesianLoop({
         winkDue ||
         marker != null ||
         progChanged ||
-        sigChanged
+        sigChanged ||
+        emphasisChanged
       )
     )
       return

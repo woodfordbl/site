@@ -1,27 +1,25 @@
 "use client"
 
-import { type ReactNode, useEffect } from "react"
+import { useEffect } from "react"
 import {
   type AreaVariant,
   type SeriesKind,
   type StrokeVariant,
   useChartPart,
 } from "./chart-context"
-import { SeriesContext } from "./series-context"
 
 export type SeriesProps = {
   dataKey: string
   variant?: AreaVariant
   strokeVariant?: StrokeVariant
   isClickable?: boolean
-  children?: ReactNode
 }
 
 /**
  * Shared implementation for the continuous series (`<Area>`, `<Line>`). The
  * dithered fill/line is painted on the canvas; this registers the series so the
- * canvas knows how to draw it, wires click-to-select via a transparent band
- * polygon, and exposes the series to child `<Dot>`/`<ActiveDot>` markers.
+ * canvas knows how to draw it and wires click-to-select via a transparent band
+ * polygon.
  */
 function CartesianSeries({
   part,
@@ -30,7 +28,6 @@ function CartesianSeries({
   variant = "gradient",
   strokeVariant = "solid",
   isClickable = false,
-  children,
 }: SeriesProps & { part: string; kind: SeriesKind }) {
   const ctx = useChartPart(part, kind === "line" ? "line" : "area")
   const { registerSeries, unregisterSeries } = ctx
@@ -49,9 +46,6 @@ function CartesianSeries({
   const band = ctx.bands[dataKey]
   if (!ctx.ready || !band) return null
 
-  const seed = ctx.seedOf(dataKey)
-  const emphasis = ctx.selectedDataKey ?? ctx.focusDataKey
-  const dimmed = emphasis !== null && emphasis !== dataKey
   const onClick = isClickable
     ? () => ctx.selectDataKey(ctx.selectedDataKey === dataKey ? null : dataKey)
     : undefined
@@ -82,9 +76,6 @@ function CartesianSeries({
           onClick={onClick}
         />
       )}
-      <SeriesContext value={{ dataKey, seed, dimmed }}>
-        {children}
-      </SeriesContext>
     </>
   )
 }

@@ -337,7 +337,7 @@ function ChartDitherPattern({
 }
 
 /** Per-chart dither override; `inherit` falls back to the workspace setting. */
-export type ChartDitherOverride = "inherit" | "on" | "off";
+type ChartDitherOverride = "inherit" | "on" | "off";
 
 /**
  * Resolve a chart's effective dither state: an explicit `on`/`off` wins,

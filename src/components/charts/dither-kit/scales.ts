@@ -1,5 +1,5 @@
 // Pure geometry helpers for the dither chart engine. Kept framework-free so the
-// context (and, later, bar/line/pie/radar roots) can share the same math.
+// context (and the bar/line/area roots) can share the same math.
 
 import { scaleBand, scaleLinear, scalePoint } from "d3-scale"
 import { stack as d3Stack, stackOffsetExpand } from "d3-shape"

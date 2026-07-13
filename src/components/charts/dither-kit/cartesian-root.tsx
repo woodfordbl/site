@@ -38,8 +38,8 @@ export type CartesianChartProps<TData extends Row> = {
   animate?: boolean
   animationDuration?: number
   replayToken?: number // change to re-play the entrance without remounting
-  /** Set false for a decorative sparkline: keeps the hover lift but no scrub
-   * crosshair / tooltip. */
+  /** Set false for a decorative/non-interactive chart: keeps the hover lift but
+   * no scrub crosshair / tooltip. */
   interactive?: boolean
   /** Controlled crosshair position (e.g. a committed point) — overrides the
    * internal hover when set. */

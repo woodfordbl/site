@@ -30,7 +30,6 @@ import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
 import type { ChartConfig } from "@/components/ui/chart.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import { cssColorToRgb } from "@/lib/charts/dither-texture.ts";
-import { cn } from "@/lib/utils.ts";
 
 /**
  * Resolves each series' workspace colour (`config[key].color`, a `var(--chart-N)`
@@ -62,7 +61,11 @@ function useDitherKitSeeds(config: ChartConfig): {
     }
     const next: Record<string, Seed> = {};
     for (const pair of sig.split("|").filter(Boolean)) {
-      const [key, color] = pair.split(":");
+      // Split on the FIRST colon only — the colour token (`var(--chart-1)`, an
+      // `hsl(…)`, etc.) may itself contain colons.
+      const sep = pair.indexOf(":");
+      const key = pair.slice(0, sep);
+      const color = pair.slice(sep + 1);
       const rgb = cssColorToRgb(el, color || `var(--color-${key})`);
       if (rgb) {
         next[key] = seedFromRgb(rgb);
@@ -88,9 +91,6 @@ const AREA_VARIANT_CYCLE = ["gradient", "hatched"] as const;
 interface DitherKitCartesianProps {
   /** Static charts animate + show sparkles; live charts should pass false. */
   animate?: boolean;
-  /** Bloom preset; "off" by default. */
-  bloom?: "off" | "low" | "high" | "aura";
-  className?: string;
   /** Our chart config: `{ key: { label, color: "var(--chart-N)" } }`. */
   config: ChartConfig;
   /** Rows keyed by the series keys plus the x field. */
@@ -185,9 +185,7 @@ export function DitherKitCartesian({
   xAxisTitle,
   yAxisTitle,
   palette,
-  className,
   animate = true,
-  bloom = "off",
   xTickFormatter,
   yTickFormatter,
   tooltipLabelFormatter,
@@ -273,7 +271,6 @@ export function DitherKitCartesian({
 
   const chartProps = {
     animate,
-    bloom,
     config: dkConfig,
     data,
     margins: legendMargins,
@@ -294,7 +291,7 @@ export function DitherKitCartesian({
 
   return (
     <div
-      className={cn("flex h-full w-full flex-col", className)}
+      className="flex h-full w-full flex-col"
       data-chart-palette={palette ?? workspacePalette}
       ref={ref}
     >

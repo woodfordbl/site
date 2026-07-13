@@ -53,6 +53,3 @@ export const seedFromRgb = (fill: Rgb): Seed => {
   ]
   return { fill, line: mix(0.4), star: mix(0.7) }
 }
-
-export const isDitherColor = (value: unknown): value is DitherColor =>
-  typeof value === "string" && value in PALETTE
