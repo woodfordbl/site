@@ -287,9 +287,12 @@ export function FormulaRollupWizard({
               }}
               onShowDetail={onShowDetail}
             >
-              <span className="truncate">{option.label}</span>
-              <span className="ml-auto truncate text-muted-foreground text-xs">
-                {option.description}
+              {/* Stacked so neither line truncates at menu/dialog widths. */}
+              <span className="flex min-w-0 flex-col py-0.5">
+                <span>{option.label}</span>
+                <span className="text-muted-foreground text-xs">
+                  {option.description}
+                </span>
               </span>
             </WizardRow>
           );
