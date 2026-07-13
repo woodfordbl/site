@@ -380,8 +380,9 @@ export const databaseTableViewConfigSchema = z.object({
       yMax: z.number().optional(),
       stacked: z.boolean().optional(),
       /**
-       * Smooth the line/area curve (absent = on). When off, segments are
-       * straight — or a crisp pixel staircase when the workspace dither is on.
+       * Smooth the line/area curve. Absent follows the look: on (monotone) for
+       * a plain chart, off (pixel staircase) for a dithered one. When off on a
+       * plain chart, segments are straight (linear).
        */
       smoothing: z.boolean().optional(),
       /**

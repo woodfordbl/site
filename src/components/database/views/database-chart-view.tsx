@@ -104,7 +104,15 @@ const EMPTY_CHART_CONFIG: ChartViewConfig = {};
  * are disabled when set; hover tooltips remain (state, not motion).
  */
 function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
+  // Initialise synchronously so the very first render is already correct — a
+  // lazy `false` let the Recharts mount animation fire once before an effect
+  // could flip it. Charts render client-side (local-first data), so reading
+  // matchMedia here is safe; the `typeof window` guard covers any SSR pass.
+  const [reduced, setReduced] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
     setReduced(query.matches);
@@ -234,16 +242,16 @@ function CartesianChart({
     });
   }, [data, stackedDomain, aggregate, chart.gridCount, chart.yMin, chart.yMax]);
 
-  // Per-chart curve + fill options (both default on).
-  // Default off: dithered charts read as a pixel staircase (the dither-kit
-  // look); turn Smoothing on for a monotone curve.
-  const smoothing = chart.smoothing === true;
   // The per-chart dither override (on/off) wins over the workspace setting;
   // inherit follows it.
   const ditherEnabled = useResolvedChartDither(chart.dither);
   const dither = useChartGradientDither(chartConfig, {
     enabled: ditherEnabled,
   });
+  // Smoothing default depends on the look: a dithered chart reads as a pixel
+  // staircase (smoothing off), a plain chart keeps its smooth monotone curve
+  // (smoothing on). An explicit setting always wins.
+  const smoothing = chart.smoothing ?? !ditherEnabled;
   // Non-dithered area fade, for when the dither is off.
   const softGradient = useAreaSoftGradient(chartConfig, {
     enabled: mark === "area" && !dither.enabled,

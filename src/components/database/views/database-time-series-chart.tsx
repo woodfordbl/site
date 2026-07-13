@@ -126,10 +126,12 @@ function useTimeSeriesMarkStyle(
   chartConfig: ChartConfig,
   mark: "area" | "line"
 ) {
-  // Default off: pixel staircase (dither-kit look) unless Smoothing is on.
-  const smoothing = chart.smoothing === true;
+  const ditherEnabled = useResolvedChartDither(chart.dither);
+  // Dithered → pixel staircase (smoothing off); plain → smooth monotone
+  // (smoothing on). An explicit setting always wins.
+  const smoothing = chart.smoothing ?? !ditherEnabled;
   const dither = useChartGradientDither(chartConfig, {
-    enabled: useResolvedChartDither(chart.dither),
+    enabled: ditherEnabled,
   });
   const softGradient = useAreaSoftGradient(chartConfig, {
     enabled: mark === "area" && !dither.enabled,
