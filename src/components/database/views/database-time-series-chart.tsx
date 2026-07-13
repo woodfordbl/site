@@ -128,13 +128,11 @@ function useTimeSeriesMarkStyle(
 ) {
   // Default off: pixel staircase (dither-kit look) unless Smoothing is on.
   const smoothing = chart.smoothing === true;
-  const gradient = chart.gradient !== false;
   const dither = useChartGradientDither(chartConfig, {
     enabled: useResolvedChartDither(chart.dither),
-    gamma: mark === "area" && !gradient ? 0 : undefined,
   });
   const softGradient = useAreaSoftGradient(chartConfig, {
-    enabled: mark === "area" && gradient && !dither.enabled,
+    enabled: mark === "area" && !dither.enabled,
   });
   const glow = useChartGlow();
   const reveal = useChartReveal();
@@ -242,7 +240,6 @@ function DitheredTimeSeries({
           animate={false}
           config={chartConfig}
           data={mergeTimeSeriesRows(seriesEntries)}
-          gradient={chart.gradient !== false}
           gridMinor={chart.gridMinor ?? 0}
           gridVertical={chart.gridVertical === true}
           gridVerticalMaxTicks={8}

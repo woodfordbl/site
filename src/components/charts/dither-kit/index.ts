@@ -17,16 +17,10 @@ export type {
   BloomInput,
   BloomLevel,
 } from "./dither-paint"
-export { ActiveDot, Dot, type DotVariant } from "./dot"
 export { Grid } from "./grid"
 export { Legend } from "./legend"
 export type { DitherColor } from "./palette"
-export { Pie, type PieProps } from "./pie"
-export { PieChart, type PieChartProps } from "./pie-chart"
-export { Radar, type RadarProps } from "./radar"
-export { RadarChart, type RadarChartProps } from "./radar-chart"
 export type { StackType } from "./scales"
-export { Sparkline, type SparklineProps } from "./sparkline"
 export { Tooltip, type TooltipVariant } from "./tooltip"
 export { XAxis } from "./x-axis"
 export { YAxis } from "./y-axis"

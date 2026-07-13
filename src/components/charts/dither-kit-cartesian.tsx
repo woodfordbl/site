@@ -95,8 +95,6 @@ interface DitherKitCartesianProps {
   config: ChartConfig;
   /** Rows keyed by the series keys plus the x field. */
   data: Record<string, number | string | null>[];
-  /** Area fill fades to the baseline (true) or is a flat solid fill (false). */
-  gradient?: boolean;
   /** Number of minor horizontal grid lines between each major line. */
   gridMinor?: number;
   /** Draw vertical grid lines (one per category). */
@@ -181,7 +179,6 @@ export function DitherKitCartesian({
   gridVerticalMaxTicks,
   gridMinor = 0,
   tickCount,
-  gradient = true,
   smooth = false,
   yMin,
   yMax,
@@ -223,18 +220,12 @@ export function DitherKitCartesian({
   ) : null;
   // Overlapping (non-stacked) area series get distinct dither textures on top of
   // their colour — gradient / hatched — so meshed layers read apart instead of
-  // blending into one muddy fill. Stacked or single-series keep the plain
-  // gradient; gradient-off flattens every fill to solid.
+  // blending into one muddy fill. Stacked or single-series keep plain gradient.
   const overlappingAreas = mark === "area" && !stacked && keys.length > 1;
-  const areaVariantAt = (index: number) => {
-    if (!gradient) {
-      return "solid" as const;
-    }
-    if (overlappingAreas) {
-      return AREA_VARIANT_CYCLE[index % AREA_VARIANT_CYCLE.length];
-    }
-    return "gradient" as const;
-  };
+  const areaVariantAt = (index: number) =>
+    overlappingAreas
+      ? AREA_VARIANT_CYCLE[index % AREA_VARIANT_CYCLE.length]
+      : ("gradient" as const);
 
   const series = keys.map((key, index) => {
     if (mark === "bar") {

@@ -86,7 +86,8 @@ function startCartesianLoop({
       // read as distinct layers instead of a muddy blend.
       const sparse = stacked ? 0 : si * 0.14
       for (let x = 0; x < cols; x++) {
-        if (x > revealCols) break
+        // `>=` so reveal = 0 paints nothing (revealCols 0) instead of column 0.
+        if (x >= revealCols) break
         paintColumn(octx, x, cur.top[x] ?? 0, cur.floor[x] ?? 0, seed, {
           variant,
           intensity,

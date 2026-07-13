@@ -238,19 +238,15 @@ function CartesianChart({
   // Default off: dithered charts read as a pixel staircase (the dither-kit
   // look); turn Smoothing on for a monotone curve.
   const smoothing = chart.smoothing === true;
-  const gradient = chart.gradient !== false;
-  // Flatten the dither fade for areas when the gradient is off (gamma 0 =
-  // uniform density); other marks keep the default fade. The per-chart dither
-  // override (on/off) wins over the workspace setting; inherit follows it.
+  // The per-chart dither override (on/off) wins over the workspace setting;
+  // inherit follows it.
   const ditherEnabled = useResolvedChartDither(chart.dither);
   const dither = useChartGradientDither(chartConfig, {
     enabled: ditherEnabled,
-    gamma: mark === "area" && !gradient ? 0 : undefined,
   });
-  // Non-dithered area fade, for when the workspace dither is off but the
-  // gradient option is on.
+  // Non-dithered area fade, for when the dither is off.
   const softGradient = useAreaSoftGradient(chartConfig, {
-    enabled: mark === "area" && gradient && !dither.enabled,
+    enabled: mark === "area" && !dither.enabled,
   });
   // Smoothing off + dither on = crisp pixel staircase; otherwise smooth
   // (monotone) or straight (linear) per the smoothing option.
@@ -273,7 +269,6 @@ function CartesianChart({
           animate={!reduceMotion}
           config={chartConfig}
           data={chartRows}
-          gradient={gradient}
           gridMinor={chart.gridMinor ?? 0}
           gridVertical={chart.gridVertical === true}
           legendPosition={chart.legendPosition ?? "bottom"}
@@ -497,9 +492,11 @@ function PieMarkChart({
     >
       <PieChart accessibilityLayer>
         {dither.defs}
-        <ChartTooltip
-          content={<ChartTooltipContent formatter={tooltipFormatter} />}
-        />
+        {chart.showTooltip === false ? null : (
+          <ChartTooltip
+            content={<ChartTooltipContent formatter={tooltipFormatter} />}
+          />
+        )}
         <Pie
           data={slices}
           dataKey="value"

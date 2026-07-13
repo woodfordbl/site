@@ -18,7 +18,7 @@ import {
 import type { Dimensions } from "./use-chart-dimensions"
 
 /** Which chart root a part is composed under — drives the boundary guards. */
-export type ChartType = "area" | "bar" | "line" | "pie" | "radar"
+export type ChartType = "area" | "bar" | "line"
 
 export type ChartConfig = Record<
   string,
@@ -114,8 +114,6 @@ const ROOT_OF: Record<ChartType, string> = {
   area: "<AreaChart />",
   bar: "<BarChart />",
   line: "<LineChart />",
-  pie: "<PieChart />",
-  radar: "<RadarChart />",
 }
 
 /** Generic accessor for internal layers (canvas/overlay) that work for any root. */
