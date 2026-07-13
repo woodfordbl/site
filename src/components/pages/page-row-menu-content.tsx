@@ -175,6 +175,12 @@ export function PageRowMenuContent({
           <P.SubTrigger>
             <IconCopy />
             Duplicate page
+            {/* Hint lives on the trigger — the single key fires from the
+                top-level menu; useMenuCommandKeys ignores keydowns once you
+                descend into this submenu. */}
+            <P.Shortcut>
+              <Shortcut command="duplicate-page" />
+            </P.Shortcut>
           </P.SubTrigger>
           <P.SubContent>
             <P.Item
@@ -184,9 +190,6 @@ export function PageRowMenuContent({
             >
               <IconCopy />
               With content
-              <P.Shortcut>
-                <Shortcut command="duplicate-page" />
-              </P.Shortcut>
             </P.Item>
             <P.Item
               onClick={() => {
