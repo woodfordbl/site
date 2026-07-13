@@ -1,12 +1,18 @@
 # Local-first persistence
 
+> **Dev disk mode:** in `pnpm dev` (unless `VITE_DEV_DISK=0`) the content
+> collections are backed by one shared in-memory Storage instead of
+> localStorage, reads come fresh from `content/**.md`, and edits
+> debounce-flush to disk — the local-first machinery below describes the
+> production visitor experience and the legacy dev flow. See
+> [markdown-content-format — Dev disk mode](./markdown-content-format.md#dev-disk-mode).
 > Scope: `src/lib/content/` also holds stateless SSR/build-time helpers that are **not** part of the persistence layer — e.g. metadata generation ([`page-head.ts`](../../src/lib/content/page-head.ts)) and the build-time origin constant ([`site-origin.ts`](../../src/lib/content/site-origin.ts)). Those are covered by [pages — Routing & SEO](./pages.md#routing--seo), not here.
 
 ## Two storage paths
 
 | Path | Collection / file | Survives deploy |
 |------|-------------------|-----------------|
-| Server defaults | `content/pages/**/*.json` | Yes (git) |
+| Server defaults | `content/pages/**/*.md` | Yes (git) |
 | Local page metadata | `localPagesCollection` (`site-local-pages`) | No (localStorage) |
 | Local blocks | `localBlocksCollection` (`site-local-blocks:<pageId>` shards) | No (localStorage) |
 | Server database defaults | `content/databases/` (one JSON document per database) | Yes (git) — eagerly seeded into the local collections at boot ([databases — Shipped content](./databases.md#shipped-content)) |

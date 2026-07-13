@@ -6,7 +6,7 @@
 - ShadCN on Base UI, Tabler icons, Tailwind v4
 - TanStack DB (localStorage) for user edits
 - Zod schemas in `src/lib/schemas/`
-- Server pages in `content/pages/**/*.json`, bundled at build time via `src/lib/content/page-store.server.ts` (`import.meta.glob`)
+- Server pages in `content/pages/**/*.md`, bundled at build time via `src/lib/content/page-store.server.ts` (`import.meta.glob`)
 
 ## Capability nesting
 

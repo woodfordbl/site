@@ -304,6 +304,31 @@
         "src/components/database/database-column-menu.tsx",
         "src/components/database/database-row-menu.tsx"
       ]
+    },
+    {
+      "globs": [
+        "src/lib/markdown-canonical/**",
+        "src/lib/csv/**",
+        "src/lib/content/dev-disk/**",
+        "src/lib/content/assemble-markdown-pages.ts",
+        "src/lib/content/database-folder.ts",
+        "src/lib/content/content-pages-fs.server.ts",
+        "src/lib/content/content-databases-fs.server.ts",
+        "src/lib/content/delete-page.ts",
+        "src/db/rows-index/**",
+        "vite-plugins/**",
+        "src/components/pages/dev-content-sync-effect.tsx"
+      ],
+      "docs": [
+        "docs/architecture/markdown-content-format.md",
+        "docs/architecture/author-dev-mode.md"
+      ],
+      "majorGlobs": [
+        "src/lib/markdown-canonical/serialize-page.ts",
+        "src/lib/markdown-canonical/parse-page.ts",
+        "src/lib/content/page-path.ts",
+        "src/lib/content/database-folder.ts"
+      ]
     }
   ]
 }

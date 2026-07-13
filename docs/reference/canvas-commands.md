@@ -152,3 +152,12 @@ Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** i
 Boot routing ([`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts)) and passive-tab slug sync ([`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts)) are not `PageEffect` entries — see [pages — Route migration](../architecture/pages.md#route-migration).
 
 Canvas-only page helpers (`page.revertToServer`, `page.acknowledgeServerBaseline`) stay on **`CanvasEffect`** / **`CanvasCommand`**, not `PageEffect`. Staleness is resolved from site settings **Development** (**Refresh site content** → [`refreshSiteContent`](../../src/lib/pages/refresh-site-content.ts) → `page.resetToRemote`), so these in-editor revert/acknowledge helpers are not dispatched by the UI — see [author-dev-mode](../architecture/author-dev-mode.md). The read-only render views ([`page-canvas-server.tsx`](../../src/components/canvas/page-canvas-server.tsx), [`page-canvas-local-view.tsx`](../../src/components/canvas/page-canvas-local-view.tsx)) construct a no-op `CanvasEditorActions` so blocks render before the editor chunk loads without dispatching commands. The same `CanvasBlocksReadOnly` with `mode="view"` powers the [version-history preview](../architecture/pages.md#version-history) — fully non-editable, no command dispatch. Do not confuse canvas block `row.move` with `page.reposition`. Both surfaces use the [drag-and-drop toolkit](../architecture/drag-and-drop.md): sidebar whole-row drag with [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) and MIME `application/x-page-id`; canvas grip drag with MIME `application/x-canvas-row-id` and [`setClonedDragImage`](../../src/lib/dnd/drag-image.ts). Page routing and boot migration: [pages](../architecture/pages.md).
+
+## Markdown paste
+
+External markdown-shaped clipboard text inserts through the same `rows.paste`
+flow as internal copies: `insertMarkdownText` (in
+[`use-canvas-editor.ts`](../../src/hooks/use-canvas-editor.ts)) parses blocks
+with the canonical codec (fresh ids via a random paste salt) and calls
+`rowActions.pasteAfter`. See
+[markdown-content-format](../architecture/markdown-content-format.md#clipboard).

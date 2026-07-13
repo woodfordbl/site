@@ -1,6 +1,6 @@
 # Proposal: markdown-native content format
 
-Status: **exploration** — nothing here is implemented. This doc maps every block
+Status: **implemented** (phases 1–5; see [markdown-content-format](../architecture/markdown-content-format.md) for the shipped behavior — this document is the original design rationale). This doc maps every block
 type onto markdown, proposes a file layout (index files + frontmatter), designs a
 markdown analog for databases, and sketches a migration path. The end state: the
 `content/` tree is a plain markdown workspace, the block editor is *functionally a
@@ -17,15 +17,15 @@ the runtime editor:
    CommonMark/GFM constructs. The document is a flat ordered array with
    `parentId` links — exactly what an mdast tree flattens to.
 2. **A lossy converter pair already exists.**
-   [`page-to-markdown.ts`](../../src/lib/markdown/page-to-markdown.ts) and
-   [`markdown-to-blocks.ts`](../../src/lib/markdown/markdown-to-blocks.ts) handle
+   the old `page-to-markdown` and
+   `markdown-to-blocks` converters (since replaced by the canonical codec) handled
    headings, lists, checklists, quotes, code, GFM tables, media, dividers, and
    page links today. What they drop: inline `marks`, layout containers
    (columns/tabs are flattened), callout icons, block colors, and all database
    content. This proposal is a **fidelity upgrade of an existing seam**, not a
    new subsystem.
-3. **The shipped format is already a build-time artifact.** Pages ship as
-   `content/pages/**/*.json` bundled via `import.meta.glob`
+3. **The shipped format is already a build-time artifact.** Pages shipped as
+   block JSON under `content/pages/` bundled via `import.meta.glob`
    ([`page-store.server.ts`](../../src/lib/content/page-store.server.ts)) and are
    written back by the dev **Save all** flow
    ([`save-page.ts`](../../src/lib/content/save-page.ts)). Swapping the on-disk
@@ -291,7 +291,7 @@ state keeps the JSON documents in `content/databases/` while pages go markdown.
 
 | Seam | Today | After |
 |------|-------|-------|
-| Parser/serializer | hand-written line scanner, lossy ([`src/lib/markdown/`](../../src/lib/markdown/)) | unified/remark pipeline (`remark-parse` + `remark-gfm` + `remark-frontmatter` + `remark-directive`) with a bidirectional `mdast ↔ Block[]` mapping layer. Correct escaping and a canonical printer are exactly what the ecosystem solves; hand-rolling them is where round-trip bugs breed. Server/build + dev-save use it directly; the client paste-importer lazy-loads the same module |
+| Parser/serializer | hand-written line scanner, lossy (since deleted) | unified/remark pipeline (`remark-parse` + `remark-gfm` + `remark-frontmatter` + `remark-directive`) with a bidirectional `mdast ↔ Block[]` mapping layer. Correct escaping and a canonical printer are exactly what the ecosystem solves; hand-rolling them is where round-trip bugs breed. Server/build + dev-save use it directly; the client paste-importer lazy-loads the same module |
 | Load | `import.meta.glob("content/pages/**/*.json")` | same glob over `**/*.md` (`?raw`), parse to `pageSchema` at build; `parentId`/`slug` derived from path |
 | Save all | `JSON.stringify` per page ([`save-page.ts`](../../src/lib/content/save-page.ts)) | serialize blocks → canonical markdown; write folder/index layout |
 | Baseline hash | hash of block JSON | unchanged — keep hashing **parsed blocks**, so the baseline is encoding-independent and the JSON→md migration doesn't mark every page stale |
