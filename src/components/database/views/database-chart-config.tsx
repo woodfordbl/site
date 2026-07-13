@@ -22,6 +22,7 @@ import {
   DropdownMenuSwitchItem,
 } from "@/components/ui/dropdown-menu.tsx";
 import { InputGroup, InputGroupInput } from "@/components/ui/input-group.tsx";
+import { MenuNumberField } from "@/components/ui/number-field.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import {
   CHART_PALETTE_IDS,
@@ -104,7 +105,7 @@ function RadioSubmenu({
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <span className="shrink-0">{label}</span>
-        <span className="ml-auto min-w-0 truncate pl-3 text-muted-foreground text-xs">
+        <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
           {currentLabel}
         </span>
       </DropdownMenuSubTrigger>
@@ -136,15 +137,6 @@ function PaletteSwatch({ palette }: { palette: ChartPaletteId }): ReactNode {
     </span>
   );
 }
-
-/** Grid-line count choices (horizontal gridlines / Y ticks); "auto" clears. */
-const GRID_COUNT_OPTIONS: RadioSubmenuOption[] = [
-  { value: "auto", label: "Auto" },
-  ...["2", "3", "4", "5", "6", "8", "10", "12"].map((n) => ({
-    value: n,
-    label: n,
-  })),
-];
 
 /** Field picker option with the field's (custom or type) icon. */
 function fieldOption(field: DatabaseField): RadioSubmenuOption {
@@ -283,13 +275,187 @@ function MarkPicker({
   );
 }
 
+/** Trigger summary for the grid submenu from the horizontal/vertical state. */
+function gridSummary(horizontal: boolean, vertical: boolean): string {
+  if (horizontal && vertical) {
+    return "Both";
+  }
+  if (horizontal) {
+    return "Horizontal";
+  }
+  if (vertical) {
+    return "Vertical";
+  }
+  return "Off";
+}
+
+/**
+ * Grid-lines submenu. Horizontal (value-axis) lines carry the major/minor
+ * ruler: `Major lines` sets how many top-level lines, `Minor lines` how many
+ * fainter subdivisions to draw between each pair of majors. Vertical
+ * (category-axis) lines are a plain on/off. Enabling the horizontal grid seeds
+ * a 4 major / 1 minor default.
+ */
+function GridSubmenu({
+  chart,
+  write,
+}: {
+  chart: ChartViewConfig;
+  write: WriteChartPatch;
+}): ReactNode {
+  const horizontal = chart.showGrid !== false;
+  const vertical = chart.gridVertical === true;
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className="shrink-0">Grid lines</span>
+        <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
+          {gridSummary(horizontal, vertical)}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuSwitchItem
+          checked={horizontal}
+          onCheckedChange={(next) => {
+            write(
+              next
+                ? {
+                    showGrid: true,
+                    gridCount: chart.gridCount ?? 4,
+                    gridMinor: chart.gridMinor ?? 1,
+                  }
+                : { showGrid: false }
+            );
+          }}
+        >
+          Horizontal
+        </DropdownMenuSwitchItem>
+        {horizontal ? (
+          <>
+            <MenuNumberField
+              label="Major lines"
+              max={12}
+              min={2}
+              onValueChange={(next) => {
+                write({ gridCount: next ?? undefined });
+              }}
+              placeholder="Auto"
+              value={chart.gridCount ?? null}
+            />
+            <MenuNumberField
+              label="Minor lines"
+              max={8}
+              min={0}
+              onValueChange={(next) => {
+                write({ gridMinor: next && next > 0 ? next : undefined });
+              }}
+              placeholder="Off"
+              value={chart.gridMinor ?? null}
+            />
+          </>
+        ) : null}
+        <DropdownMenuSwitchItem
+          checked={vertical}
+          onCheckedChange={(next) => {
+            write({ gridVertical: next });
+          }}
+        >
+          Vertical
+        </DropdownMenuSwitchItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/** Trigger summary for the Y-range submenu. */
+function yRangeSummary(
+  min: number | undefined,
+  max: number | undefined
+): string {
+  if (min === undefined && max === undefined) {
+    return "Auto";
+  }
+  return `${min ?? "Auto"} – ${max ?? "Auto"}`;
+}
+
+/** Y-axis range submenu: fixed min/max, each clearable back to auto. */
+function YRangeSubmenu({
+  chart,
+  write,
+}: {
+  chart: ChartViewConfig;
+  write: WriteChartPatch;
+}): ReactNode {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <span className="shrink-0">Y axis range</span>
+        <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
+          {yRangeSummary(chart.yMin, chart.yMax)}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <MenuNumberField
+          label="Min"
+          onValueChange={(next) => {
+            write({ yMin: next ?? undefined });
+          }}
+          placeholder="Auto"
+          value={chart.yMin ?? null}
+        />
+        <MenuNumberField
+          label="Max"
+          onValueChange={(next) => {
+            write({ yMax: next ?? undefined });
+          }}
+          placeholder="Auto"
+          value={chart.yMax ?? null}
+        />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+/** Y-axis number format choices. */
+const Y_FORMAT_OPTIONS: RadioSubmenuOption[] = [
+  { value: "number", label: "Number" },
+  { value: "percent", label: "Percent" },
+];
+
+/** Per-chart dither override choices. */
+const DITHER_OPTIONS: RadioSubmenuOption[] = [
+  { value: "inherit", label: "Inherit" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+
+const DITHER_LABEL: Record<string, string> = {
+  inherit: "Inherit",
+  on: "On",
+  off: "Off",
+};
+
+/**
+ * Stacking only means something with 2+ overlaid series on a bar/area mark;
+ * it's hidden for single-series, line, pie, and the time axis (not stackable).
+ */
+function stackingApplies(
+  mark: DatabaseChartMark,
+  isTime: boolean,
+  seriesCount: number
+): boolean {
+  return !isTime && (mark === "bar" || mark === "area") && seriesCount > 1;
+}
+
 /** Legend switch + position, stacked (bar/area), and grid (cartesian) rows. */
 function ChartToggleItems({
+  canStack,
   chart,
   mark,
   showLegend,
   write,
 }: {
+  canStack: boolean;
   chart: ChartViewConfig;
   mark: DatabaseChartMark;
   showLegend: boolean;
@@ -322,7 +488,24 @@ function ChartToggleItems({
           value={chart.legendPosition ?? "bottom"}
         />
       ) : null}
-      {mark === "bar" || mark === "area" ? (
+      <DropdownMenuSwitchItem
+        checked={chart.showTooltip !== false}
+        onCheckedChange={(next) => {
+          write({ showTooltip: next });
+        }}
+      >
+        Tooltip
+      </DropdownMenuSwitchItem>
+      <RadioSubmenu
+        currentLabel={DITHER_LABEL[chart.dither ?? "inherit"]}
+        label="Dither"
+        onValueChange={(value) => {
+          write({ dither: value as ChartViewConfig["dither"] });
+        }}
+        options={DITHER_OPTIONS}
+        value={chart.dither ?? "inherit"}
+      />
+      {canStack ? (
         <DropdownMenuSwitchItem
           checked={chart.stacked === true}
           onCheckedChange={(next) => {
@@ -332,39 +515,31 @@ function ChartToggleItems({
           Stacked
         </DropdownMenuSwitchItem>
       ) : null}
-      {mark === "pie" ? null : (
+      {mark === "line" || mark === "area" ? (
         <DropdownMenuSwitchItem
-          checked={chart.showGrid !== false}
+          checked={chart.smoothing === true}
           onCheckedChange={(next) => {
-            write({ showGrid: next });
+            write({ smoothing: next });
           }}
         >
-          Grid lines
+          Smoothing
         </DropdownMenuSwitchItem>
-      )}
-      {mark !== "pie" && chart.showGrid !== false ? (
-        <>
-          <DropdownMenuSwitchItem
-            checked={chart.gridVertical === true}
-            onCheckedChange={(next) => {
-              write({ gridVertical: next });
-            }}
-          >
-            Vertical grid
-          </DropdownMenuSwitchItem>
-          <RadioSubmenu
-            currentLabel={chart.gridCount ? String(chart.gridCount) : "Auto"}
-            label="Grid line count"
-            onValueChange={(value) => {
-              write({
-                gridCount: value === "auto" ? undefined : Number(value),
-              });
-            }}
-            options={GRID_COUNT_OPTIONS}
-            value={chart.gridCount ? String(chart.gridCount) : "auto"}
-          />
-        </>
       ) : null}
+      {mark === "pie" ? null : (
+        <>
+          <RadioSubmenu
+            currentLabel={chart.yFormat === "percent" ? "Percent" : "Number"}
+            label="Y axis format"
+            onValueChange={(value) => {
+              write({ yFormat: value === "percent" ? "percent" : "number" });
+            }}
+            options={Y_FORMAT_OPTIONS}
+            value={chart.yFormat ?? "number"}
+          />
+          <GridSubmenu chart={chart} write={write} />
+          <YRangeSubmenu chart={chart} write={write} />
+        </>
+      )}
     </>
   );
 }
@@ -463,7 +638,8 @@ function TimeAxisOptions({
   );
   const firstTimeFieldId = timeFieldCandidates[0]?.id;
   const currentWindowMs = chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS;
-  const currentWindowId = presetForWindow(currentWindowMs).id;
+  const currentWindow = presetForWindow(currentWindowMs);
+  const currentWindowId = currentWindow.id;
   const currentScale = chart.timeSeries?.scale ?? "absolute";
   const fieldName = (fieldId: string | undefined): string =>
     fields.find((field) => field.id === fieldId)?.name ?? "None";
@@ -480,7 +656,7 @@ function TimeAxisOptions({
         value={chart.timeSeries?.fieldId ?? ""}
       />
       <RadioSubmenu
-        currentLabel={currentWindowId}
+        currentLabel={currentWindow.label}
         label="Window"
         onValueChange={(value) => {
           const preset = TIME_WINDOW_PRESETS.find(
@@ -598,6 +774,7 @@ export function ChartOptionsItems({
     ? data.categories.length > 1
     : data.series.length > 1;
   const showLegend = chart.showLegend ?? legendDefault;
+  const canStack = stackingApplies(mark, isTime, data.series.length);
 
   return (
     <>
@@ -664,6 +841,7 @@ export function ChartOptionsItems({
       )}
       <DropdownMenuSeparator />
       <ChartToggleItems
+        canStack={canStack}
         chart={chart}
         mark={mark}
         showLegend={showLegend}
