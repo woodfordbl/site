@@ -17,15 +17,11 @@ import { DatabaseBoardView } from "@/components/database/views/database-board-vi
 import { DatabaseChartView } from "@/components/database/views/database-chart-view.tsx";
 import { DatabaseListView } from "@/components/database/views/database-list-view.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { useFormulaOverlay } from "@/db/formula-engine.ts";
 import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
 import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
 import { buildChartData } from "@/lib/databases/chart-data.ts";
-import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
-import {
-  computeFormulaOverlay,
-  hasVolatileFormula,
-  withFormulaValues,
-} from "@/lib/databases/formula-values.ts";
+import { withFormulaValues } from "@/lib/databases/formula-values.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import {
   type DatabaseRowGroup,
@@ -95,12 +91,10 @@ function EmptyState({
 }
 
 /**
- * Refresh cadence for clock-dependent display: volatile (`now()`/`today()`)
- * formulas and `relative`-format date columns.
+ * Refresh cadence for clock-dependent display: `relative`-format date
+ * columns and relative filter windows.
  */
 const DISPLAY_CLOCK_REFRESH_MS = 60_000;
-
-const NO_FIELDS: DatabaseField[] = [];
 
 /** Whether any of the given (visible) date fields displays relatively. */
 function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
@@ -110,26 +104,25 @@ function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
 }
 
 /**
- * The single visible clock behind time-dependent display AND filtering:
- * ticks every minute while any formula uses `now()`/`today()`, any visible
- * date column uses the `relative` format ("3 days ago" must not go stale on
- * screen), OR the active view's filter contains a relative date operator
- * (`pastDay`…`nextMonth` windows shift as time passes — `applyFilter` re-runs
- * on the tick). Pauses entirely while the tab is hidden (refreshing
- * immediately when it becomes visible again). Non-clock-dependent schemas
- * keep the mount-time instant — their renders never read the clock.
+ * The visible clock behind time-dependent DISPLAY and FILTERING of stored
+ * cells: ticks every minute while any visible date column uses the
+ * `relative` format ("3 days ago" must not go stale on screen) OR the active
+ * view's filter contains a relative date operator (`pastDay`…`nextMonth`
+ * windows shift as time passes — `applyFilter` re-runs on the tick).
+ * Volatile (`now()`/`today()`) FORMULAS no longer tick here — the formula
+ * engine owns its own 60s pass and pushes a fresh overlay snapshot. Pauses
+ * entirely while the tab is hidden (refreshing immediately when it becomes
+ * visible again). Non-clock-dependent schemas keep the mount-time instant —
+ * their renders never read the clock.
  */
 function useDisplayClock(
-  fields: readonly DatabaseField[],
   visibleFields: readonly DatabaseField[],
   filter: DatabaseFilterGroup | undefined
 ): Date {
   const ticking = useMemo(
     () =>
-      hasVolatileFormula(fields) ||
-      hasRelativeDateField(visibleFields) ||
-      filterHasRelativeOperator(filter),
-    [fields, visibleFields, filter]
+      hasRelativeDateField(visibleFields) || filterHasRelativeOperator(filter),
+    [visibleFields, filter]
   );
   const [now, setNow] = useState(() => new Date());
 
@@ -310,14 +303,12 @@ export function DatabaseTableView({
     [onViewIdChange]
   );
 
-  const fields = database?.fields ?? NO_FIELDS;
-
   const columns = useMemo(
     () => (database && view ? resolveColumnOrder(database.fields, view) : []),
     [database, view]
   );
 
-  const clockNow = useDisplayClock(fields, columns, view?.filter);
+  const clockNow = useDisplayClock(columns, view?.filter);
 
   // Watch mode: while ANY view of a synced database is mounted (edit mode
   // and published view mode alike), the sync engine polls at the connector's
@@ -331,22 +322,18 @@ export function DatabaseTableView({
     return watchDatabaseSync(databaseId);
   }, [databaseId, isSyncedDatabase]);
 
-  // Formula overlay: computed values merged into row COPIES so formulas ride
-  // the whole existing pipeline — filter, sort, group, Calculate row, and the
-  // grid's cells all read merged values. No formula fields → rows pass
-  // through untouched. The relation resolver is created fresh per compute so
-  // relation rollups read the target collections' current rows — but only
-  // when THIS database's rows/fields (or the clock) change; edits to a
-  // target database alone don't retrigger (accepted v1 limitation, see
-  // formula-relations.ts).
-  const mergedRows = useMemo<LocalDatabaseRow[]>(() => {
-    const now = () => clockNow;
-    const overlay = computeFormulaOverlay(fields, allRows, {
-      now,
-      relations: localFormulaRelationResolver({ now }),
-    });
-    return withFormulaValues(allRows, overlay);
-  }, [allRows, fields, clockNow]);
+  // Formula overlay, engine-served: computed values merged into row COPIES
+  // so formulas ride the whole existing pipeline — filter, sort, group,
+  // Calculate row, and the grid's cells all read merged values. The overlay
+  // reference is stable per database and replaced by the engine whenever any
+  // input changes — including edits to OTHER databases this one's formulas
+  // traverse into (rollups react; the old per-view recompute couldn't see
+  // those) and the engine's own volatile 60s tick.
+  const formulaOverlay = useFormulaOverlay(databaseId);
+  const mergedRows = useMemo<LocalDatabaseRow[]>(
+    () => withFormulaValues(allRows, formulaOverlay),
+    [allRows, formulaOverlay]
+  );
 
   const rows = useMemo<LocalDatabaseRow[]>(() => {
     if (!(database && view)) {

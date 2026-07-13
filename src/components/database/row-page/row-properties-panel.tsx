@@ -12,11 +12,10 @@ import {
   isInlineEditableField,
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
-import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
-import { computeFormulaRowValues } from "@/lib/databases/formula-values.ts";
+import { useFormulaOverlay } from "@/db/formula-engine.ts";
+import type { FormulaCellResult } from "@/lib/databases/formula-values.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
-import { formulaRowLabelOf } from "@/lib/formula/row-scope.ts";
 import { formulaError } from "@/lib/formula/values.ts";
 import type {
   DatabaseField,
@@ -36,14 +35,15 @@ import { cn } from "@/lib/utils.ts";
  */
 
 /**
- * Evaluate a formula field against the row for display, through the same
- * plan the table overlay uses (`computeFormulaRowValues`) so
- * formula-referencing-formula and cycle errors render identically here.
+ * Display string for a formula field: the ENGINE overlay's cell result for
+ * this row (same values the table grid shows, reactive to cross-database
+ * edits), except parse errors — the engine leaves unparseable expressions
+ * blank (the grid surfaces them as a header badge), while this panel keeps
+ * rendering the "⚠ …" parse message inline like it always has.
  */
 function formulaDisplay(
   field: Extract<DatabaseField, { type: "formula" }>,
-  fields: DatabaseField[],
-  values: LocalDatabaseRow["values"]
+  results: Record<string, FormulaCellResult> | undefined
 ): string {
   if (field.expression.trim() === "") {
     return "";
@@ -52,20 +52,14 @@ function formulaDisplay(
   if (!parsed.ok) {
     return formulaValueToDisplay(formulaError(parsed.error.message));
   }
-  const now = () => new Date();
-  // Fresh per call: cross-database reads are synchronous and non-reactive
-  // (see formula-relations.ts), so a cached resolver would serve stale rows.
-  const relations = localFormulaRelationResolver({ now });
-  const resolved = computeFormulaRowValues(fields, values, { now, relations });
-  return formulaValueToDisplay(resolved.get(field.id) ?? null, {
-    rowLabel: formulaRowLabelOf(relations),
-  });
+  return results?.[field.id]?.display ?? "";
 }
 
 interface RowPropertyValueProps {
   editing: boolean;
   field: DatabaseField;
-  fields: DatabaseField[];
+  /** Engine-computed formula results for THIS row (rowId picked by the panel). */
+  formulaResults: Record<string, FormulaCellResult> | undefined;
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   onStartEdit: (fieldId: string) => void;
   onStopEdit: () => void;
@@ -75,7 +69,7 @@ interface RowPropertyValueProps {
 function RowPropertyValue({
   editing,
   field,
-  fields,
+  formulaResults,
   onNavigate,
   onStartEdit,
   onStopEdit,
@@ -84,7 +78,7 @@ function RowPropertyValue({
   const value = row.values[field.id];
 
   if (field.type === "formula") {
-    const display = formulaDisplay(field, fields, row.values);
+    const display = formulaDisplay(field, formulaResults);
     return display === "" ? (
       <RowPropertyEmptyLabel />
     ) : (
@@ -152,6 +146,12 @@ export function RowPropertiesPanel({
 }: RowPropertiesPanelProps): ReactNode {
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
 
+  // Engine overlay for the whole database; this row's results picked below.
+  // Reactive to cross-database edits (rollups update live) unlike the old
+  // per-row compute, which only re-ran when this component re-rendered.
+  const formulaOverlay = useFormulaOverlay(database.id);
+  const formulaResults = formulaOverlay.get(row.id);
+
   const panelFields = useMemo(
     () =>
       database.fields.filter((field) => field.id !== database.primaryFieldId),
@@ -217,7 +217,7 @@ export function RowPropertiesPanel({
               <RowPropertyValue
                 editing={editingFieldId === field.id}
                 field={field}
-                fields={database.fields}
+                formulaResults={formulaResults}
                 onNavigate={handleNavigate}
                 onStartEdit={handleStartEdit}
                 onStopEdit={handleStopEdit}

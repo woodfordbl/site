@@ -160,12 +160,17 @@ side). Per `computeFormulaOverlay` call:
    to display strings. Blank and parse-error expressions yield null cells, shadowing
    stale stored values under the field id.
 
-`computeFormulaRowValues` runs the same plan for ONE row (row-page properties panel,
-editor preview). `formulaFieldTypes` / `formulaCheckContext` type formula fields in
+`computeFormulaRowValues` runs the same plan for ONE row (editor preview, template
+tokens). `formulaFieldTypes` / `formulaCheckContext` type formula fields in
 the same topological order, so a formula referencing another formula checks against
-its dependency's real result type. `hasVolatileFormula` flags clock-dependent schemas;
-the table view re-evaluates the overlay on a 60-second tick (paused while the tab is
-hidden). `formulaDisplayInfo` supplies the parse-error badge on column headers.
+its dependency's real result type. `hasVolatileFormula` flags clock-dependent
+schemas; `formulaDisplayInfo` supplies the parse-error badge on column headers.
+
+Since P3.3b these pure entry points are the **one-shot** path (editor preview drafts,
+row templates, tests); the table view and the row-page properties panel read the
+[engine shell](#engine-shell)'s cached overlay instead — same projection, same
+results (a parity test pins engine output to `computeFormulaOverlay` byte-for-byte),
+plus reactivity to cross-database edits and the engine-owned volatile tick.
 
 ## Relations
 
@@ -201,12 +206,15 @@ checker’s exact messages.
 `localFormulaRelationResolver()` reads `localDatabasesCollection` /
 `localDatabaseRowsCollection` synchronously, caching each target’s rows per
 instance — call sites create a fresh resolver per compute pass. Cross-database reads
-are **non-reactive** (accepted v1 limitation): edits to a target database don’t
-retrigger the referring database’s overlay until its own inputs change; the P3.3
-engine adds subscriptions. Cross-database formula cycles are guarded at evaluation
-time by a visiting set keyed by (databaseId, fieldId, rowId) — re-entry returns a
-named error (`Circular reference: Tasks.Calc → Projects.Rollup → Tasks.Calc`);
-same-database formula-on-formula still flows through the overlay’s topological plan.
+through it are **non-reactive one-shots**, which is now fine for its remaining
+callers (editor preview, templates, column-menu type resolution): the P3.2
+"target edits don’t retrigger views" limitation is **resolved for views** by the
+[engine shell](#engine-shell), whose subscriptions dirty referrer rows precisely.
+Cross-database formula cycles are guarded at evaluation time by a visiting set keyed
+by (databaseId, fieldId, rowId) — re-entry returns a named error
+(`Circular reference: Tasks.Calc → Projects.Rollup → Tasks.Calc`); same-database
+formula-on-formula still flows through the overlay’s topological plan. (The engine
+never uses this resolver — its formula members read the engine cache, see below.)
 
 **Display**: a row ref renders as its target row’s primary-field text ("Untitled"
 fallback — the relation chip rule) via `formulaValueToDisplay(value, { rowLabel })` /
@@ -219,8 +227,9 @@ pipeline. The type badge reads "row" / "list of rows".
 [`src/lib/formula-engine/`](../../src/lib/formula-engine/) is the **pure core** of the
 cross-database incremental engine (proposal §5.1, stage P3.3a): snapshots in, plain
 data out — no collections, no subscriptions, no instances. The stateful shell
-(P3.3b, pending) will own engine instances, rebuild the graph on schema change, feed
-it collection events, and wire the resolver's `formulaValue` to the value cache.
+([engine shell](#engine-shell), P3.3b) owns the singleton instance, rebuilds the
+graph on schema change, feeds it collection events, and wires the resolver's
+`formulaValue` to the value cache.
 
 **Static references** ([`references.ts`](../../src/lib/formula/references.ts)):
 `formulaStaticReferences(ast, context)` extracts what a formula reads — same-row
@@ -278,6 +287,53 @@ Cell projection is shared with the overlay via
 [`project.ts`](../../src/lib/formula-engine/project.ts) (`formulaCellResultOf` — the
 one "value → `{ cellValue, display, isError }`" rule), and the `onEvaluate` hook
 lets tests assert evaluation COUNTS instead of wall-clock.
+
+## Engine shell
+
+[`src/db/formula-engine.ts`](../../src/db/formula-engine.ts) (proposal §5.2, stage
+P3.3b) is the **stateful singleton** over the pure core: it subscribes to
+`localDatabasesCollection` / `localDatabaseRowsCollection` (`subscribeChanges`),
+mirrors both, owns the graph + reverse indexes + `FormulaValueCache`, and serves
+per-database `FormulaOverlay` snapshots to React.
+
+- **Lifecycle** — created lazily by the first subscriber, never on the server
+  (`subscribe` no-ops without `window`; the server snapshot is a shared empty
+  overlay, the SSR-safe `useSyncExternalStore` pattern). On start it builds the
+  graph from every database, marks every formula column `FORMULA_ALL_ROWS` dirty,
+  and runs one synchronous **warm pass** — the warm-cache invariant: the
+  incremental evaluator reads non-dirty same-row dependencies straight from the
+  cache, so the cache must be fully populated before any incremental pass. Once
+  started it stays alive (HMR disposes; the next subscriber rebuilds).
+- **Resolver wiring** — passes evaluate with a resolver whose `database()` reads
+  the engine's mirrors and whose `formulaValue()` reads the **engine cache only**
+  (cache miss → blank, the stale-ref rule). It never falls back to
+  `localFormulaRelationResolver` — an on-demand recompute would bypass the graph's
+  static cycle guard and re-derive values mid-pass.
+- **Event mapping** — row updates diff old/new cells per field (the previous row
+  always taken from the engine's own mirror): relation fields →
+  `formulaRelationCellChanged` (old/new target ids), others →
+  `formulaDataCellChanged`; inserts → `formulaRowAdded`; deletes →
+  `formulaRowRemoved` **plus** `evictFormulaCacheRow` (the core never evicts). Any
+  databases-collection change is the coarse path: rebuild graph + reverse indexes
+  synchronously, prune cached cells for columns that no longer exist, then
+  `formulaSchemaChanged` per changed database. Synchronous bursts coalesce into
+  one evaluation pass via a queued microtask.
+- **Snapshots** — `useFormulaOverlay(databaseId)` returns a per-database overlay
+  with a STABLE reference, replaced only when that database's cache changed
+  (per-database version counters; affected databases = initially-dirty columns'
+  owners + every database `onEvaluate` touched — propagation during a pass can
+  cross databases — + evictions/prunes). Only affected databases' subscribers are
+  notified, so a Tasks edit re-renders the Projects view exactly when a rollup
+  actually read it.
+- **Clock** — the engine owns the 60s volatile tick (`formulaClockTick` + pass),
+  running only while subscribers exist and the tab is visible (immediate refresh
+  on return); each pass evaluates against one captured instant.
+
+The table view (`database-table-view.tsx`) and the row-page properties panel
+consume the hook (`withFormulaValues` still merges into row copies); the view's
+own display clock now ticks only for relative dates and relative filter windows.
+Cross-database reads are therefore **reactive for views**; the editor panel's
+draft preview and row templates remain one-shot pure-path evaluations.
 
 ## Editor panel
 
@@ -367,10 +423,6 @@ errors inline as "⚠ message". Never throws.
 
 ## Deferred
 
-`db()` whole-database references, the engine's stateful shell (P3.3b: engine
-instances over the local collections, reactive cross-database reads, graph rebuild
-on schema change), member canonicalization, member autocomplete after `r.`, and
-save-time cross-database cycle rejection are planned later phases — see the
-[proposal](../proposals/formula-language-v2.md) §4.4–§7. The pure engine core
-(graph, reverse indexes, dirty propagation, incremental evaluation) is implemented
-above but not yet wired to any interactive surface.
+`db()` whole-database references, member canonicalization, member autocomplete
+after `r.`, and save-time cross-database cycle rejection are planned later phases —
+see the [proposal](../proposals/formula-language-v2.md) §4.4–§7.

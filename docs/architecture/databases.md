@@ -294,12 +294,19 @@ incremental engine core via `src/lib/formula-engine/{topo,project}.ts`
 parse-error and blank expressions yield `null` cells, shadowing any stale stored
 values under the field id). `database-table-view.tsx` feeds these merged rows to the
 whole pipeline — filter, sort, group, Calculate row, and the grid — so formulas
-participate in the view machinery like stored columns. Interactive call sites pass
+participate in the view machinery like stored columns. The view (and the row-page
+properties panel) get the overlay from the **stateful engine**
+(`useFormulaOverlay`, [`src/db/formula-engine.ts`](../../src/db/formula-engine.ts) —
+[formula-language — Engine shell](./formula-language.md#engine-shell)): a
+collection-subscribed singleton whose incremental passes make cross-database
+rollups **reactive** (editing a target row updates referrer views live) and whose
+per-database snapshots re-render only affected views. `computeFormulaOverlay`
+stays the equivalent pure one-shot path (editor preview, templates, tests —
+engine parity is pinned by test). One-shot call sites pass
 `relations: localFormulaRelationResolver()`
 ([`formula-relations.ts`](../../src/lib/databases/formula-relations.ts)) so relation
-rollups read target databases (synchronous, non-reactive v1 reads; cross-database
-cycles degrade to named per-cell errors — see
-[formula-language — Relations](./formula-language.md#relations)):
+rollups read target databases (cross-database cycles degrade to named per-cell
+errors — see [formula-language — Relations](./formula-language.md#relations)):
 
 - **Coercion** — `coerceCellValue`'s formula case passes scalar string/number/boolean
   through; everything else reads as empty.
@@ -315,9 +322,11 @@ cycles degrade to named per-cell errors — see
   emptiness operators but not text matches). Sorting compares same-type pairs natively,
   mixed pairs by text collation. Numeric Calculate reducers (sum/average/…) work over a
   formula column's number-typed results; grouping stays excluded (`isGroupableField`).
-- **Volatile clocks** — when any expression uses `now()`/`today()`
-  (`hasVolatileFormula`), the table view re-evaluates every 60s, pausing while the tab
-  is hidden and refreshing on visibility return.
+- **Volatile clocks** — when any expression uses `now()`/`today()`, the ENGINE
+  re-evaluates volatile columns every 60s (subscribers present + tab visible,
+  refreshing on visibility return) and pushes a fresh overlay snapshot; the table
+  view's own display clock ticks only for relative-format dates and relative
+  filter windows.
 - **Editing** — the column menu's Edit property submenu becomes a formula **builder**
   ([`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx),
   width-fluid for the desktop submenu and the touch menu drawer alike): a monospace

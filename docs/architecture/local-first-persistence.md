@@ -201,6 +201,8 @@ In `import.meta.env.DEV`, author can save working copy directly to JSON — see 
 
 Importing `local-collections.ts` at the top of the provider also kicks off `startLocalCollectionsSync` (migrations, dirty-cookie reconcile, collection sync, idle orphan-asset sweep).
 
+**Formula engine** ([`src/db/formula-engine.ts`](../../src/db/formula-engine.ts)): a lazy browser-only singleton that `subscribeChanges`-subscribes to `localDatabasesCollection` / `localDatabaseRowsCollection`, maintains an in-memory formula value cache over the pure incremental core, and serves per-database overlay snapshots through `useFormulaOverlay` (`useSyncExternalStore`, shared empty overlay as the server snapshot — nothing here touches collections or storage during SSR). Created on the first subscribing view, torn down only by HMR dispose. Details: [formula-language — Engine shell](./formula-language.md#engine-shell).
+
 ## Client-only icon/emoji assets (not in TanStack collections)
 
 Page icon catalogs are separate from page/block persistence. [`preload-page-icon-picker.ts`](../../src/lib/pages/preload-page-icon-picker.ts) owns cached dynamic imports of [`PageIconPickerEmojiPanel`](../../src/components/pages/page-icon-picker-emoji-panel.tsx) and [`PageIconPickerIconPanel`](../../src/components/pages/page-icon-picker-icon-panel.tsx). Global idle warm loads panel chunks only; `ensurePageIconPickerReady` (pointer enter / popover open) also runs `prefetchPageIconCatalogs`, warming two self-hosted JSON assets into TanStack Query (`staleTime: Infinity`):
