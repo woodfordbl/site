@@ -343,7 +343,12 @@ draft preview and row templates remain one-shot pure-path evaluations.
 ## Editor panel
 
 [`formula-editor-panel.tsx`](../../src/components/database/formula-editor-panel.tsx)
-(the column menu's Edit-property builder): the draft state is the **canonical**
+(the Edit-property builder): on fine pointers the column menu's "Edit property" item
+closes the menu and opens a **wide dialog** (hosted by `DatabaseColumnMenu` so it
+outlives the menu, same pattern as the icon picker) rendering the panel's two-column
+`layout="wide"` form — taller editor, status, preview, and Save on the left; the
+reference browser and detail strip on the right. Coarse pointers keep the in-drawer
+single-column stack (the dedicated mobile sheet is a later phase). The draft state is the **canonical**
 expression (`prop("<id>")` — exactly what gets stored), so parse/check/preview/save
 operate on it directly; Save runs one final idempotent `canonicalizeExpression` to
 catch typed name refs the editor hasn't converted yet. The plain textarea (coarse

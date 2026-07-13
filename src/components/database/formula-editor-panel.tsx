@@ -74,9 +74,9 @@ import { cn } from "@/lib/utils.ts";
  * default; a compact row selector appears when the caller supplies more —
  * see `previewRows`) on top, then a searchable reference of Properties /
  * Functions / Operators that insert at the caret, with a fixed-height detail
- * strip documenting the focused entry. Width-fluid so it works both in the
- * desktop column-menu submenu (~360px) and full-width in the mobile menu
- * drawer.
+ * strip documenting the focused entry. Two arrangements via `layout`: the
+ * default single-column stack (mobile menu drawer), and the two-column
+ * `wide` form for the desktop formula dialog (see {@link PanelLayout}).
  *
  * The `draft` state is the CANONICAL expression (`prop("<id>")` — exactly
  * what gets stored), so parse/check/preview/save all operate on it directly.
@@ -363,6 +363,14 @@ export interface FormulaEditorPanelProps {
    * and the whole list feeds the preview scope.
    */
   fields: readonly DatabaseField[];
+  /**
+   * Arrangement: `stack` (default) is the narrow single-column form for the
+   * column-menu popup/drawer; `wide` is the two-column dialog form — editor,
+   * status, preview, and Save on the left; the reference browser and detail
+   * strip on the right, with a taller editor and reference list. The host
+   * dialog owns the heading, so `wide` drops the panel's own "Formula" label.
+   */
+  layout?: "stack" | "wide";
   /** Called with the CANONICAL text on Save (even when unchanged — the caller decides). */
   onSave: (expression: string) => void;
   /**
@@ -393,11 +401,14 @@ interface ReferenceListEntries {
 
 /** The searchable Properties / Functions / Operators reference list. */
 function ReferenceList({
+  className,
   entries,
   onInsertAtCaret,
   onInsertProperty,
   onShowDetail,
 }: {
+  /** Height override for the wide (dialog) layout. */
+  className?: string;
   entries: ReferenceListEntries;
   onInsertAtCaret: (text: string, caretOffset: number) => void;
   onInsertProperty: (propertyField: DatabaseField) => void;
@@ -409,7 +420,12 @@ function ReferenceList({
     functionEntries.length === 0 &&
     operatorEntries.length === 0;
   return (
-    <ScrollArea className="max-h-52 overflow-hidden rounded-md border border-border">
+    <ScrollArea
+      className={cn(
+        "max-h-52 overflow-hidden rounded-md border border-border",
+        className
+      )}
+    >
       <div className="flex flex-col p-1">
         {propertyFields.length > 0 ? (
           <SectionLabel>Properties</SectionLabel>
@@ -523,15 +539,74 @@ function DetailStrip({
   );
 }
 
+interface PanelLayoutProps {
+  detail: ReactNode;
+  editor: ReactNode;
+  preview: ReactNode;
+  /** The search + reference list, or the rollup wizard while it's open. */
+  reference: ReactNode;
+  save: ReactNode;
+  status: ReactNode;
+  wide: boolean;
+}
+
+/**
+ * Arranges the panel's slots per layout: the narrow menu form stacks
+ * everything in one column; the wide dialog form splits into editor-side
+ * (input, status, preview, Save pinned to the bottom) and reference-side
+ * (browser + detail strip) columns so the extra width is actually used.
+ */
+function PanelLayout({
+  detail,
+  editor,
+  preview,
+  reference,
+  save,
+  status,
+  wide,
+}: PanelLayoutProps): ReactNode {
+  if (!wide) {
+    return (
+      <div className="flex w-full flex-col gap-1.5 p-1">
+        <span className="px-0.5 font-medium text-muted-foreground text-xs">
+          Formula
+        </span>
+        {editor}
+        {status}
+        {preview}
+        {reference}
+        {detail}
+        <div className="flex justify-end">{save}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        {editor}
+        {status}
+        {preview}
+        <div className="mt-auto flex justify-end pt-1.5">{save}</div>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        {reference}
+        {detail}
+      </div>
+    </div>
+  );
+}
+
 /** The formula builder panel (see module docs). */
 export function FormulaEditorPanel({
   expression,
   fields,
+  layout = "stack",
   onSave,
   previewRows,
   relatedDatabases,
   relations,
 }: FormulaEditorPanelProps): ReactNode {
+  const wide = layout === "wide";
   // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
   // natively; the textarea path humanizes for display below.
   const [draft, setDraft] = useState(expression);
@@ -773,7 +848,10 @@ export function FormulaEditorPanel({
     <Textarea
       aria-label="Formula expression"
       autoComplete="off"
-      className="max-h-32 min-h-16 font-mono text-xs md:text-xs"
+      className={cn(
+        "max-h-32 min-h-16 font-mono text-xs md:text-xs",
+        wide && "max-h-72 min-h-40"
+      )}
       onChange={(event) => {
         setDraft(canonicalizeExpression(event.target.value, fields).text);
       }}
@@ -785,11 +863,16 @@ export function FormulaEditorPanel({
     />
   );
 
-  return (
-    <div className="flex w-full flex-col gap-1.5 p-1">
-      <span className="px-0.5 font-medium text-muted-foreground text-xs">
-        Formula
-      </span>
+  // The wide (dialog) editor gets more vertical room than the menu form.
+  // CM injects its theme stylesheet after ours, so the height overrides need
+  // `!` to beat the theme's fixed min/max rules at equal specificity.
+  const editor = (
+    <div
+      className={cn(
+        "flex min-w-0 flex-col",
+        wide && "[&_.cm-content]:min-h-40! [&_.cm-scroller]:max-h-72!"
+      )}
+    >
       {coarsePointer ? (
         expressionTextarea
       ) : (
@@ -809,78 +892,93 @@ export function FormulaEditorPanel({
           </Suspense>
         </FormulaCodeEditorBoundary>
       )}
-      {statusRow}
-      {preview === null || previewRow === null ? null : (
-        <FormulaPreviewLine
-          onPickRow={setPreviewRowId}
-          pickedRow={previewRow}
-          preview={preview}
-          rows={previewRows}
-        />
-      )}
-      {rollupOpen && relatedDatabases !== undefined ? (
-        <FormulaRollupWizard
-          checkContext={checkContext}
-          fields={fields}
-          onClose={() => {
-            setRollupOpen(false);
-          }}
-          onInsert={insertGeneratedExpression}
-          onShowDetail={setDetail}
-          relatedDatabases={relatedDatabases}
-        />
-      ) : (
-        <>
-          <div className="flex items-center gap-1.5">
-            <InputGroup className="h-8 flex-1">
-              <InputGroupAddon align="inline-start">
-                <InputGroupText>
-                  <IconSearch />
-                </InputGroupText>
-              </InputGroupAddon>
-              <InputGroupInput
-                aria-label="Search properties, functions, and operators"
-                autoComplete="off"
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                }}
-                onKeyDown={stopMenuKeys}
-                placeholder="Search reference…"
-                value={query}
-              />
-            </InputGroup>
-            {rollupAvailable ? (
-              <Button
-                className="shrink-0"
-                onClick={() => {
-                  setRollupOpen(true);
-                }}
-                size="xs"
-                variant="outline"
-              >
-                <IconSum />
-                Rollup
-              </Button>
-            ) : null}
-          </div>
-          <ReferenceList
-            entries={{ functionEntries, operatorEntries, propertyFields }}
-            onInsertAtCaret={insertAtCaret}
-            onInsertProperty={insertPropertyReference}
-            onShowDetail={setDetail}
-          />
-        </>
-      )}
-      <DetailStrip detail={detail} />
-      <Button
-        className="self-end"
-        disabled={saveDisabled}
-        onClick={save}
-        size="xs"
-        variant="outline"
-      >
-        Save
-      </Button>
     </div>
+  );
+
+  const previewLine =
+    preview === null || previewRow === null ? null : (
+      <FormulaPreviewLine
+        onPickRow={setPreviewRowId}
+        pickedRow={previewRow}
+        preview={preview}
+        rows={previewRows}
+      />
+    );
+
+  const reference =
+    rollupOpen && relatedDatabases !== undefined ? (
+      <FormulaRollupWizard
+        checkContext={checkContext}
+        fields={fields}
+        onClose={() => {
+          setRollupOpen(false);
+        }}
+        onInsert={insertGeneratedExpression}
+        onShowDetail={setDetail}
+        relatedDatabases={relatedDatabases}
+      />
+    ) : (
+      <>
+        <div className="flex items-center gap-1.5">
+          <InputGroup className="h-8 flex-1">
+            <InputGroupAddon align="inline-start">
+              <InputGroupText>
+                <IconSearch />
+              </InputGroupText>
+            </InputGroupAddon>
+            <InputGroupInput
+              aria-label="Search properties, functions, and operators"
+              autoComplete="off"
+              onChange={(event) => {
+                setQuery(event.target.value);
+              }}
+              onKeyDown={stopMenuKeys}
+              placeholder="Search reference…"
+              value={query}
+            />
+          </InputGroup>
+          {rollupAvailable ? (
+            <Button
+              className="shrink-0"
+              onClick={() => {
+                setRollupOpen(true);
+              }}
+              size="xs"
+              variant="outline"
+            >
+              <IconSum />
+              Rollup
+            </Button>
+          ) : null}
+        </div>
+        <ReferenceList
+          className={wide ? "max-h-80" : undefined}
+          entries={{ functionEntries, operatorEntries, propertyFields }}
+          onInsertAtCaret={insertAtCaret}
+          onInsertProperty={insertPropertyReference}
+          onShowDetail={setDetail}
+        />
+      </>
+    );
+
+  return (
+    <PanelLayout
+      detail={<DetailStrip detail={detail} />}
+      editor={editor}
+      preview={previewLine}
+      reference={reference}
+      save={
+        <Button
+          disabled={saveDisabled}
+          onClick={save}
+          size="xs"
+          variant="outline"
+        >
+          Save
+        </Button>
+      }
+      status={statusRow}
+      wide={wide}
+    />
   );
 }

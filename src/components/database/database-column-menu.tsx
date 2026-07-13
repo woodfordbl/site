@@ -78,6 +78,12 @@ import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.t
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.tsx";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -111,6 +117,7 @@ import {
   useDatabase,
   useDatabaseRows,
 } from "@/db/queries/use-database.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,
@@ -423,7 +430,9 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
 interface FormulaExpressionEditorProps {
   databaseId: string;
   field: DatabaseField & { type: "formula" };
-  /** Closes the whole column menu after Save. */
+  /** Passed through to the panel: `wide` for the dialog host. */
+  layout?: "stack" | "wide";
+  /** Closes the host (column menu or dialog) after Save. */
   onSaved: () => void;
 }
 
@@ -441,6 +450,7 @@ interface FormulaExpressionEditorProps {
 function FormulaExpressionEditor({
   databaseId,
   field,
+  layout,
   onSaved,
 }: FormulaExpressionEditorProps) {
   const database = useDatabase(databaseId);
@@ -470,6 +480,7 @@ function FormulaExpressionEditor({
     <FormulaEditorPanel
       expression={field.expression}
       fields={fields}
+      layout={layout}
       onSave={(expression) => {
         if (
           expression !== canonicalizeExpression(field.expression, fields).text
@@ -643,6 +654,11 @@ interface EditPropertySubmenuProps {
    */
   displayOnly?: boolean;
   field: DatabaseField;
+  /**
+   * Fine pointers: closes the menu and opens the wide formula dialog
+   * (hosted by {@link DatabaseColumnMenu}, so it outlives the menu).
+   */
+  onOpenFormulaEditor: () => void;
   /** Closes the whole column menu (used after the formula editor saves). */
   onRequestClose: () => void;
 }
@@ -658,22 +674,34 @@ function EditPropertySubmenu({
   databaseId,
   displayOnly = false,
   field,
+  onOpenFormulaEditor,
   onRequestClose,
 }: EditPropertySubmenuProps) {
+  const coarsePointer = useIsCoarsePrimaryPointer();
+
   if (displayOnly && field.type !== "date" && field.type !== "number") {
     return null;
   }
 
   if (field.type === "formula") {
+    // Fine pointers escalate to the wide dialog — the 360px submenu is too
+    // cramped for real formula work. Coarse pointers keep the drawer submenu
+    // (the dedicated mobile sheet is a later phase).
+    if (!coarsePointer) {
+      return (
+        <DropdownMenuItem onClick={onOpenFormulaEditor}>
+          <IconSettings />
+          Edit property
+        </DropdownMenuItem>
+      );
+    }
     return (
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
           <IconSettings />
           Edit property
         </DropdownMenuSubTrigger>
-        {/* Wider than the standard submenu so the builder's reference list
-            breathes; ignored in drawer presentation (panel is width-fluid). */}
-        <DropdownMenuSubContent className="w-[360px] min-w-[360px]">
+        <DropdownMenuSubContent>
           <FormulaExpressionEditor
             databaseId={databaseId}
             field={field}
@@ -957,6 +985,9 @@ export function DatabaseColumnMenu({
   // The picker opens anchored to the header cell after the menu closes —
   // same controlled `hideTrigger` pattern as the sidebar "Change icon".
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  // The wide formula dialog opens after the menu closes (fine pointers) —
+  // hosted here so it survives the menu unmounting.
+  const [formulaEditorOpen, setFormulaEditorOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const queryClient = useQueryClient();
   const config = view.config;
@@ -1107,6 +1138,10 @@ export function DatabaseColumnMenu({
               databaseId={databaseId}
               displayOnly={synced}
               field={field}
+              onOpenFormulaEditor={() => {
+                handleOpenChange(false);
+                setFormulaEditorOpen(true);
+              }}
               onRequestClose={() => {
                 handleOpenChange(false);
               }}
@@ -1283,6 +1318,23 @@ export function DatabaseColumnMenu({
         onSelect={writeIcon}
         open={iconPickerOpen}
       />
+      {field.type === "formula" ? (
+        <Dialog onOpenChange={setFormulaEditorOpen} open={formulaEditorOpen}>
+          <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>{field.name}</DialogTitle>
+            </DialogHeader>
+            <FormulaExpressionEditor
+              databaseId={databaseId}
+              field={field}
+              layout="wide"
+              onSaved={() => {
+                setFormulaEditorOpen(false);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }

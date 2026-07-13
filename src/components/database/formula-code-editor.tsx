@@ -265,7 +265,7 @@ function tablerIconSvg(node: TablerIconNode): SVGSVGElement {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("class", "size-3.5 shrink-0");
+  svg.setAttribute("class", "size-3.5 shrink-0 self-center");
   for (const [tag, attrs] of node) {
     const child = document.createElementNS(SVG_NS, tag);
     for (const [name, attrValue] of Object.entries(attrs)) {
@@ -287,7 +287,7 @@ function chipIcon(field: DatabaseField): Element {
   if (icon && !icon.startsWith(TABLER_PAGE_ICON_PREFIX)) {
     const emoji = document.createElement("span");
     emoji.setAttribute("aria-hidden", "true");
-    emoji.className = "shrink-0 select-none leading-none";
+    emoji.className = "shrink-0 select-none self-center leading-none";
     emoji.textContent = icon;
     return emoji;
   }
@@ -328,7 +328,11 @@ class PropertyChipWidget extends WidgetType {
     const chip = document.createElement("span");
     chip.className = cn(
       tokenChipVariants({ tone: this.field === null ? "destructive" : "blue" }),
-      "cm-formula-chip select-none py-0 align-baseline",
+      // items-baseline (over the variant's items-center) makes the LABEL's
+      // baseline the chip's baseline, so align-baseline lines the chip up
+      // with the surrounding code text instead of synthesizing from the
+      // chip's bottom edge (which floats the whole chip above the line).
+      "cm-formula-chip select-none items-baseline py-0 align-baseline",
       this.field === null && "line-through",
       this.diagnosed && "cm-formula-chip-diagnosed"
     );

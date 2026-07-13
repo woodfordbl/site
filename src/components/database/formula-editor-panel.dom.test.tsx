@@ -312,6 +312,33 @@ describe("FormulaEditorPanel", () => {
     });
   });
 
+  describe("wide layout (formula dialog)", () => {
+    it("drops the panel's own heading and keeps the working parts", async () => {
+      const onSave = vi.fn();
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={FIELDS}
+          layout="wide"
+          onSave={onSave}
+          previewRows={PREVIEW_ROWS}
+        />
+      );
+      await flushFrames();
+
+      // The host dialog owns the title, so no inner "Formula" label.
+      expect(screen.queryByText("Formula")).toBeNull();
+
+      // Editor, reference list, and Save all still wired.
+      const textarea = screen.getByLabelText("Formula expression");
+      fireEvent.change(textarea, { target: { value: "thisPage.Price * 2" } });
+      expect(screen.getByText("✓ Valid")).toBeDefined();
+      expect(screen.getByText("Price")).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
+    });
+  });
+
   describe("rollup wizard", () => {
     const relationFields: DatabaseField[] = [
       { id: "f-rel", name: "Rel", targetDatabaseId: "db-t", type: "relation" },
