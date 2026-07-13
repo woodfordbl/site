@@ -124,6 +124,19 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   phones can always reach unfrozen columns); grid ARIA roles; memoized rows (stable
   callbacks via a latest-values ref; row identity from the collection layer's
   structural sharing).
+  **Grouped views & aggregates:** `view.groupBy` buckets the filtered + sorted rows
+  ([`row-group.ts`](../../src/lib/databases/row-group.ts) `groupRowsForView`; the grid is
+  the only group renderer) and the grid virtualizes a flattened header+row item list —
+  collapsed groups (`config.collapsedGroupKeys`) contribute only their header band. The
+  footer **Calculate row** ([`database-calculate-row.tsx`](../../src/components/database/database-calculate-row.tsx))
+  renders `view.config.calculations` over ALL filtered rows, collapsed groups included.
+  Grouped views ALSO render **per-group aggregates**: each group header band carries the
+  same calculations computed over that group's rows (`DatabaseGroupAggregateCells` — the
+  footer's column geometry and formatting, as a non-interactive overlay that paints under
+  the sticky group label and passes clicks through to the collapse toggle; cells are
+  statically positioned, no pinned-column stickiness). Because collapsed groups keep
+  their header, a collapsed group keeps its aggregate summary visible — the point of the
+  feature.
   **Row selection:** per-view `config.rowSelectDisplay` — `always` (checkboxes
   always visible in the leading lane), `hover` (default when absent:
   `.hover-reveal` on row checkboxes, forced visible while any row is selected),
@@ -396,7 +409,16 @@ database's live rows for whole-database `db("…")` references:
   references read the engine overlay's projected values rather than re-evaluating.
   Sorting compares same-type pairs natively,
   mixed pairs by text collation. Numeric Calculate reducers (sum/average/…) work over a
-  formula column's number-typed results; grouping stays excluded (`isGroupableField`).
+  formula column's number-typed results and are **list-aware**
+  ([`row-aggregate.ts`](../../src/lib/databases/row-aggregate.ts), exact semantics in its
+  module JSDoc): a list-valued formula cell (show-all rollups, `db()` references — merged
+  as its elements' display strings) contributes its FLATTENED numeric elements — each
+  element that reads back as an en-US number (grouping commas stripped) is one datum,
+  non-numeric elements are skipped, and average/median divide over the flattened
+  numeric-element count. Count aggregates treat a non-empty list as ONE value (empty
+  lists and "⚠ …" error markers stay empty; countUnique keys a list by its comma-joined
+  element text, so identical lists dedupe); `countAll` still counts rows. Grouping stays
+  excluded (`isGroupableField`).
 - **Volatile clocks** — when any expression uses `now()`/`today()`, the ENGINE
   re-evaluates volatile columns every 60s (subscribers present + tab visible,
   refreshing on visibility return) and pushes a fresh overlay snapshot; the table

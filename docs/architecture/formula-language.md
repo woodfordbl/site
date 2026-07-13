@@ -190,7 +190,11 @@ side). Per `computeFormulaOverlay` call:
    non-finite numbers, and non-cell shapes (lambdas, rows) collapse to `null` so
    filters/sorts/aggregates treat them as empty; dates project to ISO strings, lists
    to display strings. Blank and parse-error expressions yield null cells, shadowing
-   stale stored values under the field id.
+   stale stored values under the field id. Calculate-row aggregates are the one
+   consumer that reads the projected list arrays as LISTS rather than empty —
+   `row-aggregate.ts` flattens numeric elements into the numeric reducers and counts
+   a non-empty list as one value (see
+   [databases — Formula fields](./databases.md#formula-fields)).
 
 `computeFormulaRowValues` runs the same plan for ONE row (editor preview, template
 tokens). `formulaFieldTypes` / `formulaCheckContext` type formula fields in
