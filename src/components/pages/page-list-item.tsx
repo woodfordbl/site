@@ -567,6 +567,15 @@ export function PageListItem({
     openTemplateEditor(navigate, setTemplatePageId);
   }, [navigate, setTemplatePageId]);
 
+  // Entering inline rename swaps the row (and its ⋯ button) out. Close both the
+  // controlled context menu and the icon picker first so neither lingers anchored
+  // to an unmounted element on top of the rename field.
+  const handleStartRenaming = useCallback(() => {
+    setContextMenuOpen(false);
+    setIconPickerOpen(false);
+    startRenaming();
+  }, [setIconPickerOpen, startRenaming]);
+
   // Single-key shortcuts (F/D/Backspace/E/T) are live only while this right-click
   // menu is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
@@ -608,7 +617,7 @@ export function PageListItem({
       onDelete={() => setDeleteOpen(true)}
       onDuplicate={handleDuplicate}
       onMoveTo={handleMoveTo}
-      onRename={startRenaming}
+      onRename={handleStartRenaming}
       onResetToRemote={handleResetToRemote}
       onSaveAsTemplate={saveAsTemplate.request}
       onToggleExpand={onToggleExpand}
@@ -640,13 +649,7 @@ export function PageListItem({
           onDuplicate={handleDuplicate}
           onEditTemplate={handleEditTemplate}
           onMoveTo={handleMoveTo}
-          onRename={() => {
-            // Inline rename swaps the row out for the edit field, unmounting
-            // this controlled ContextMenu. Force `open` false first so it does
-            // not remount still-open (and pop back up) when rename finishes.
-            setContextMenuOpen(false);
-            startRenaming();
-          }}
+          onRename={handleStartRenaming}
           onResetToRemote={handleResetToRemote}
           onSaveAsTemplate={saveAsTemplate.request}
           onToggleFavorite={handleToggleFavorite}
