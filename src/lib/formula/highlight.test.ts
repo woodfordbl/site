@@ -151,6 +151,40 @@ describe("highlightFormula", () => {
     expect(highlightFormula("@@@@")).toEqual([]);
     expect(highlightFormula("\\")).toEqual([]);
   });
+
+  it("classifies a let statement: keyword and = styled, ; unstyled", () => {
+    expect(spansOf("let tax = 1; tax")).toEqual([
+      "operator:let",
+      "name:tax",
+      "operator:=",
+      "number:1",
+      "name:tax",
+    ]);
+  });
+
+  it("keeps let(…) call form a function and bare let a name", () => {
+    expect(spansOf("let(x, 1, x)")).toEqual([
+      "function:let",
+      "name:x",
+      "number:1",
+      "name:x",
+    ]);
+    expect(spansOf("let")).toEqual(["name:let"]);
+    expect(spansOf("let + 1")).toEqual(["name:let", "operator:+", "number:1"]);
+  });
+
+  it("classifies references and comments across statement lines", () => {
+    expect(spansOf('let t = prop("f-a"); // tax\nround(t, 0)')).toEqual([
+      "operator:let",
+      "name:t",
+      "operator:=",
+      'property:prop("f-a")',
+      "comment:// tax",
+      "function:round",
+      "name:t",
+      "number:0",
+    ]);
+  });
 });
 
 describe("formulaPropIdSpans", () => {
@@ -184,6 +218,14 @@ describe("formulaPropIdSpans", () => {
     expect(formulaPropIdSpans('db("d-a") + prop("f-a")')).toEqual([
       { start: 12, end: 23, id: "f-a" },
     ]);
+  });
+
+  it("locates spans across let statements on multiple lines", () => {
+    const source = 'let t = prop("f-a") * 2;\nround(t, 0) + prop("f-b")';
+    const spans = formulaPropIdSpans(source);
+    expect(spans.map((span) => span.id)).toEqual(["f-a", "f-b"]);
+    expect(source.slice(spans[0].start, spans[0].end)).toBe('prop("f-a")');
+    expect(source.slice(spans[1].start, spans[1].end)).toBe('prop("f-b")');
   });
 });
 
@@ -352,5 +394,20 @@ describe("formulaEnclosingCallAt", () => {
       name: "round",
       position: 0,
     });
+  });
+
+  it("finds the enclosing call on a later statement line", () => {
+    const source = "let t = 1;\nround(t, ";
+    expect(at(source)).toEqual({
+      argIndex: 1,
+      method: false,
+      name: "round",
+      position: 11,
+    });
+  });
+
+  it("stays null at the top level of a statement value", () => {
+    expect(at("let t = 1 + ")).toBeNull();
+    expect(at("let t = round(1);\n")).toBeNull();
   });
 });

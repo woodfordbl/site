@@ -261,6 +261,23 @@ describe("FormulaCodeEditor", () => {
       expect(chip().textContent).toBe("Cost");
     });
 
+    it("renders a chip on the second line of a let-statement formula", () => {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'let t = 1;\nround(prop("f-price") * t, 2)'}
+        />
+      );
+
+      expect(chip().textContent).toBe("Price");
+      expect(cmContent().textContent).not.toContain("f-price");
+      // The statement line renders untouched around it.
+      expect(cmContent().textContent).toContain("let t = 1;");
+    });
+
     it("renders unknown ids as destructive Unknown-property chips", () => {
       render(
         <FormulaCodeEditor
@@ -745,6 +762,14 @@ describe("FormulaCodeEditor", () => {
       expect(
         priceRow?.querySelector(".cm-formula-completion-icon svg")
       ).not.toBeNull();
+    });
+
+    it("opens on the second line of a multi-statement draft", async () => {
+      renderEditor();
+      typeText("let t = 1;\npri");
+
+      const open = await waitForPopup();
+      expect(optionLabels(open)).toContain("Price");
     });
 
     it("applies a property completion as one canonical chip", async () => {
@@ -1233,6 +1258,17 @@ describe("FormulaCodeEditor", () => {
       await waitFor(() => {
         expect(activeParam()).toBe("separator");
       });
+    });
+
+    it("shows the card inside a call on a later statement line", async () => {
+      renderEditor();
+      typeText("let t = 1;\nround(t, ");
+
+      await waitFor(() => {
+        expect(card()).not.toBeNull();
+      });
+      expect(card()?.textContent).toContain("round(value, digits?)");
+      expect(activeParam()).toBe("digits?");
     });
 
     it("hides while the completion popup is open and returns on close", async () => {

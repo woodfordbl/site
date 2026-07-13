@@ -8,14 +8,17 @@
  *
  * Everything the retired v1 grammar accepted stays valid and
  * parses to equivalent shapes; new here are comments, exponent literals,
- * `??`/`^`, list literals, lambdas, bare-identifier name references, and
- * dot-chained member access and method calls.
+ * `??`/`^`, list literals, lambdas, bare-identifier name references,
+ * dot-chained member access and method calls, and top-level `let` statements
+ * (`let x = …;` lines before the final expression — pure sugar that desugars
+ * to the exact nested `let(name, value, body)` call nodes of the call form).
  */
 
 import type {
   FormulaBinaryOp,
   FormulaLambdaNode,
   FormulaLambdaParam,
+  FormulaNameNode,
   FormulaNode,
 } from "@/lib/formula/ast.ts";
 import {
@@ -61,6 +64,22 @@ export const FORMULA_DB_ROOT = "db";
 const RESERVED_WORDS = new Set(["true", "false", "null", "and", "or", "not"]);
 
 /**
+ * Names a `let` STATEMENT can't bind, beyond {@link RESERVED_WORDS}: the
+ * reference syntax roots. A binding named `prop`/`db`/`thisPage`/`thisRow`
+ * could never be read back (a bare mention of any of them re-enters the
+ * reference grammar and fails), so the statement form rejects them up front
+ * with a clear message instead of leaving a silently unreachable binding.
+ */
+const STATEMENT_RESERVED_NAMES = new Set([
+  FORMULA_PROP_ROOT,
+  FORMULA_DB_ROOT,
+  ...FORMULA_SCOPE_ROOTS,
+]);
+
+/** The `let` statement keyword (lowercased; matched case-insensitively). */
+const LET_KEYWORD = "let";
+
+/**
  * Longest accepted formula source, in characters. Longer input becomes a
  * parse error instead of feeding the tokenizer/parser pathological data.
  */
@@ -92,6 +111,14 @@ class FormulaParseFailure extends Error {
 interface MatchedBinaryOp {
   op: FormulaBinaryOp;
   token: FormulaToken;
+}
+
+/** One parsed top-level `let <name> = <value>;` statement, pre-desugar. */
+interface LetStatement {
+  name: FormulaNameNode;
+  /** Position of the `let` keyword — the desugared call node's start. */
+  position: number;
+  value: FormulaNode;
 }
 
 class Parser {
@@ -131,17 +158,117 @@ class Parser {
     }
   }
 
+  /**
+   * A formula is zero or more top-level `let <name> = <value>;` statements
+   * followed by one final expression (an optional trailing `;` after it is
+   * tolerated — people type it). The statements are pure sugar: each one
+   * wraps everything after it in the exact `let(name, value, body)` call
+   * node the call form parses to, so the checker and evaluator see nothing
+   * new.
+   */
   parse(): FormulaNode {
     const first = this.peek();
     if (first.type === "eof") {
       throw new FormulaParseFailure("Empty expression", first.position);
     }
-    const ast = this.parseExpression();
+    const statements = this.parseLetStatements();
+    const body = this.peek();
+    if (body.type === "eof") {
+      throw new FormulaParseFailure(
+        "Expected an expression after the let statements — the last line is the formula's result",
+        body.position
+      );
+    }
+    let ast = this.parseExpression();
+    const bodyEnd = this.lastEnd;
+    for (let index = statements.length - 1; index >= 0; index -= 1) {
+      const statement = statements[index];
+      ast = {
+        kind: "call",
+        name: LET_KEYWORD,
+        args: [statement.name, statement.value, ast],
+        method: false,
+        position: statement.position,
+        end: bodyEnd,
+      };
+    }
+    // A trailing `;` is fine only directly before the end of the source; a
+    // `;` followed by more tokens is the statement-position error below.
+    if (this.peekIsPunct(";") && this.tokens[this.index + 1]?.type === "eof") {
+      this.advance();
+    }
     const trailing = this.peek();
     if (trailing.type !== "eof") {
       throw this.unexpectedToken(trailing);
     }
     return ast;
+  }
+
+  /**
+   * All leading `let` statements. `let` stays an ordinary identifier
+   * everywhere else: only `let` directly followed by an identifier — at the
+   * top level, in statement position — is the statement keyword, so the call
+   * form `let(x, 1, x)` (next token `(`), a bare `let` name reference, and a
+   * `let => …` lambda parameter all keep parsing exactly as before.
+   */
+  private parseLetStatements(): LetStatement[] {
+    const statements: LetStatement[] = [];
+    while (this.peekIsLetStatementHead()) {
+      // Each statement adds one level to the desugared AST, so it spends one
+      // level of the depth budget permanently (never restored) — preserving
+      // the "parse depth bounds AST depth" contract recursive consumers of
+      // the tree rely on.
+      this.depth += 1;
+      if (this.depth > MAX_PARSE_DEPTH) {
+        throw new FormulaParseFailure(
+          "Expression too deeply nested",
+          this.peek().position
+        );
+      }
+      statements.push(this.parseLetStatement());
+    }
+    return statements;
+  }
+
+  /** True when the upcoming tokens read `let <identifier>` (case-insensitive). */
+  private peekIsLetStatementHead(): boolean {
+    const token = this.peek();
+    return (
+      token.type === "identifier" &&
+      token.value.toLowerCase() === LET_KEYWORD &&
+      this.tokens[this.index + 1]?.type === "identifier"
+    );
+  }
+
+  /** One `let <name> = <value>;` statement; the head is already validated. */
+  private parseLetStatement(): LetStatement {
+    const keyword = this.advance();
+    const name = this.parseLetStatementName();
+    this.expectPunct("=", `after "${name.name}" in the let statement`);
+    const value = this.parseExpression();
+    this.expectPunct(";", "to end the let statement");
+    return { name, position: keyword.position, value };
+  }
+
+  /** The statement's binding name, as the same name node the call form binds. */
+  private parseLetStatementName(): FormulaNameNode {
+    const token = this.advance();
+    if (token.type !== "identifier") {
+      throw this.unexpectedToken(token);
+    }
+    const lower = token.value.toLowerCase();
+    if (RESERVED_WORDS.has(lower) || STATEMENT_RESERVED_NAMES.has(lower)) {
+      throw new FormulaParseFailure(
+        `"${token.value}" is reserved and can't be a let name`,
+        token.position
+      );
+    }
+    return {
+      kind: "name",
+      name: token.value,
+      position: token.position,
+      end: token.end,
+    };
   }
 
   private peek(): FormulaToken {
@@ -187,7 +314,12 @@ class Parser {
     const token = this.matchPunct(value);
     if (token === null) {
       const found = this.peek();
-      if (found.type === "punct" && found.value === "=>") {
+      // `=>` and `=` carry targeted hints wherever they surprise a
+      // production; everything else gets the expected/got message.
+      if (
+        found.type === "punct" &&
+        (found.value === "=>" || found.value === "=")
+      ) {
         throw this.unexpectedToken(found);
       }
       throw new FormulaParseFailure(
@@ -200,8 +332,10 @@ class Parser {
 
   /**
    * Positioned failure for a token no production expected, with targeted
-   * hints for the two commonest slips: input that stops mid-expression and a
-   * `=>` with no parameter list in front of it.
+   * hints for the commonest slips: input that stops mid-expression, a `=>`
+   * with no parameter list in front of it, a lone `=` (comparison typo or a
+   * `let` statement outside statement position), and a `;` anywhere other
+   * than after a top-level `let` statement or the final expression.
    */
   private unexpectedToken(token: FormulaToken): FormulaParseFailure {
     if (token.type === "eof") {
@@ -213,6 +347,18 @@ class Parser {
     if (token.type === "punct" && token.value === "=>") {
       return new FormulaParseFailure(
         'Unexpected "=>" — expected a parameter name before "=>"',
+        token.position
+      );
+    }
+    if (token.type === "punct" && token.value === "=") {
+      return new FormulaParseFailure(
+        'Unexpected "=" — use "==" to compare',
+        token.position
+      );
+    }
+    if (token.type === "punct" && token.value === ";") {
+      return new FormulaParseFailure(
+        'Unexpected ";" — a semicolon can only end a top-level "let" statement or the final expression',
         token.position
       );
     }

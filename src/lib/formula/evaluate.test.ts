@@ -390,6 +390,32 @@ describe("let / lets", () => {
   });
 });
 
+describe("let statements (parser sugar)", () => {
+  it("computes identically to the nested let() call form", () => {
+    const statements =
+      "let tax = 0.1;\nlet total = 100 * (1 + tax);\nround(total, 2)";
+    const calls = "let(tax, 0.1, let(total, 100 * (1 + tax), round(total, 2)))";
+    expect(run(statements)).toBe(110);
+    expect(run(statements)).toBe(run(calls));
+  });
+
+  it("shadows earlier bindings in statement order, like nested let()", () => {
+    const statements = "let x = 1; let x = x + 2; x * 10";
+    expect(run(statements)).toBe(30);
+    expect(run(statements)).toBe(run("let(x, 1, let(x, x + 2, x * 10))"));
+  });
+
+  it("reads properties inside statement values", () => {
+    expect(
+      run('let t = prop("price") * 2;\nt + 1', scopeOf({ price: 10 }))
+    ).toBe(21);
+  });
+
+  it("binds and calls lambdas through statements", () => {
+    expect(run("let double = x => x * 2;\ndouble(21)")).toBe(42);
+  });
+});
+
 describe("names", () => {
   it("errors on unknown names, with a case hint from in-scope bindings", () => {
     expect(errorMessage(run("score"))).toBe('Unknown name "score"');

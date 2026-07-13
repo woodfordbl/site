@@ -261,7 +261,7 @@ describe("tokenize operators", () => {
   });
 
   it("lexes every single-character operator", () => {
-    const values = tokensOf("+ - * / % ^ ( ) , . [ ] < > !")
+    const values = tokensOf("+ - * / % ^ ( ) , . [ ] < > ! = ;")
       .filter((token) => token.type === "punct")
       .map((token) => token.value);
     expect(values).toEqual([
@@ -280,6 +280,8 @@ describe("tokenize operators", () => {
       "<",
       ">",
       "!",
+      "=",
+      ";",
     ]);
   });
 
@@ -300,18 +302,27 @@ describe("tokenize operators", () => {
     ]);
   });
 
-  it("gives a hint for a lone =", () => {
-    expect(errorOf("a = 1")).toEqual({
-      message: 'Unexpected "=" — use "==" to compare',
-      position: 2,
-    });
+  it("lexes a lone = as its own punct (the let-statement equals)", () => {
+    // The "=" vs "==" hint moved to the parser, which knows whether the
+    // token sits in a let statement (see parse.test.ts).
+    expect(tokensOf("a = 1")).toEqual([
+      { type: "identifier", value: "a", position: 0, end: 1 },
+      { type: "punct", value: "=", position: 2, end: 3 },
+      { type: "number", value: 1, position: 4, end: 5 },
+      { type: "eof", position: 5, end: 5 },
+    ]);
   });
 
-  it("gives a hint for a lone = at the end of input", () => {
-    expect(errorOf("1 =")).toEqual({
-      message: 'Unexpected "=" — use "==" to compare',
-      position: 2,
-    });
+  it("lexes ; as its own punct, tightly against neighbors", () => {
+    expect(tokensOf("let x = 1;x")).toEqual([
+      { type: "identifier", value: "let", position: 0, end: 3 },
+      { type: "identifier", value: "x", position: 4, end: 5 },
+      { type: "punct", value: "=", position: 6, end: 7 },
+      { type: "number", value: 1, position: 8, end: 9 },
+      { type: "punct", value: ";", position: 9, end: 10 },
+      { type: "identifier", value: "x", position: 10, end: 11 },
+      { type: "eof", position: 11, end: 11 },
+    ]);
   });
 
   it("gives a hint for a lone &", () => {

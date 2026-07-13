@@ -222,6 +222,22 @@ describe("round-trips", () => {
       ).toBe(text);
     }
   });
+
+  it("round-trips multi-line let statement sources, refs on both lines", () => {
+    const display =
+      "let t = thisPage.Price * 2; // tax\nround(t, 0) + thisPage.Price";
+    const canonical = canonicalizeExpression(display, FIELDS).text;
+    // Only the reference spans move; statements, `;`, newlines, and the
+    // comment pass through untouched.
+    expect(canonical).toBe(
+      'let t = prop("f-price") * 2; // tax\nround(t, 0) + prop("f-price")'
+    );
+    expect(humanizeExpression(canonical, FIELDS)).toBe(display);
+    expect(canonicalizeExpression(canonical, FIELDS)).toMatchObject({
+      changed: false,
+      text: canonical,
+    });
+  });
 });
 
 describe("canonicalPropertyRewrites", () => {

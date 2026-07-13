@@ -119,7 +119,10 @@ export interface FormulaBinaryNode {
  * as `fn(expr, a)` with the receiver prepended to `args` and `method: true`,
  * so rewriters can print the chain back in its original shape. `let`, `lets`,
  * `if`, and `switch` are ordinary calls — binding and branching semantics
- * live in the checker/evaluator, not the grammar.
+ * live in the checker/evaluator, not the grammar. Top-level `let` STATEMENTS
+ * (`let x = 1; …`) desugar at parse time to these same nested `let` call
+ * nodes (name `"let"`, `method: false`, spanning the `let` keyword through
+ * the final expression), so no consumer sees a statement shape.
  */
 export interface FormulaCallNode {
   args: FormulaNode[];

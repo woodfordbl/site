@@ -553,6 +553,35 @@ describe("let and lets", () => {
   });
 });
 
+describe("let statements (parser sugar)", () => {
+  it("types statement bindings through to the body", () => {
+    expect(typeOf("let n = thisPage.Estimate + 1;\nn * 2", SCHEMA)).toEqual(
+      NUMBER_TYPE
+    );
+    expect(typeOf('let s = "a";\nupper(s)')).toEqual(TEXT_TYPE);
+    expect(
+      typeOf("let x = 1;\nlet x = [x];\nx", SCHEMA) // statement shadowing
+    ).toEqual(listTypeOf(NUMBER_TYPE));
+  });
+
+  it("checks identically to the nested let() call form", () => {
+    const statements = resultOf("let a = 1;\nlet b = a + 1;\nb > a", SCHEMA);
+    const calls = resultOf("let(a, 1, let(b, a + 1, b > a))", SCHEMA);
+    expect(statements.diagnostics).toEqual([]);
+    expect(statements.resultType).toEqual(calls.resultType);
+  });
+
+  it("positions a body diagnostic on a later line at absolute offsets", () => {
+    // "let l = [1];\n" is 13 characters, so the offending `l` sits at 18.
+    expect(soleDiagnostic("let l = [1];\ntrim(l)")).toEqual({
+      end: 19,
+      message: "trim() expects text, got list of numbers",
+      severity: "error",
+      start: 18,
+    });
+  });
+});
+
 describe("let-bound lambdas", () => {
   it("checks a bound lambda call clean, typing the synthesized return", () => {
     expect(typeOf("let(f, x => x + 1, f(2))")).toEqual(UNKNOWN_TYPE);

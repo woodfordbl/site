@@ -850,6 +850,180 @@ describe("parse errors", () => {
   });
 });
 
+describe("parse let statements", () => {
+  it("desugars one statement to the exact let() call AST", () => {
+    expect(sexpr(astOf("let x = 1; x + 1"))).toBe(
+      sexpr(astOf("let(x, 1, x + 1)"))
+    );
+  });
+
+  it("desugars chained statements to right-nested let() calls, shadowing in order", () => {
+    const statements = "let x = 1;\nlet x = x + 2;\nx * 10";
+    expect(sexpr(astOf(statements))).toBe(
+      sexpr(astOf("let(x, 1, let(x, x + 2, x * 10))"))
+    );
+    expect(sexpr(astOf(statements))).toBe(
+      "(let name:x 1 (let name:x (+ name:x 2) (* name:x 10)))"
+    );
+  });
+
+  it("parses the proposal's multi-line example", () => {
+    const source =
+      'let tax = 0.1;\nlet total = prop("f-price") * (1 + tax);\nround(total, 2)';
+    expect(sexpr(astOf(source))).toBe(
+      "(let name:tax 0.1 (let name:total (* prop:f-price (+ 1 name:tax)) (round name:total 2)))"
+    );
+  });
+
+  it("spans each desugared node from its let keyword to the body end", () => {
+    const source = "let a = 1; let b = 2; a + b";
+    expect(astOf(source)).toMatchObject({
+      kind: "call",
+      name: "let",
+      method: false,
+      position: 0,
+      end: source.length,
+      args: [
+        { kind: "name", name: "a", position: 4, end: 5 },
+        { kind: "literal", value: 1, position: 8, end: 9 },
+        {
+          kind: "call",
+          name: "let",
+          method: false,
+          position: 11,
+          end: source.length,
+          args: [
+            { kind: "name", name: "b", position: 15, end: 16 },
+            { kind: "literal", value: 2 },
+            { kind: "binary", op: "+" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("tolerates one trailing semicolon after the final expression", () => {
+    expect(sexpr(astOf("let x = 1; x;"))).toBe("(let name:x 1 name:x)");
+    expect(sexpr(astOf("1 + 2;"))).toBe("(+ 1 2)");
+    expect(sexpr(astOf("1 + 2 ;"))).toBe("(+ 1 2)");
+    // The tolerated `;` stays outside the AST's span.
+    expect(astOf("let x = 1; x;")).toMatchObject({ position: 0, end: 12 });
+  });
+
+  it("matches the let keyword case-insensitively", () => {
+    expect(sexpr(astOf("LET x = 1; x"))).toBe("(let name:x 1 name:x)");
+    expect(sexpr(astOf("Let x = 1; x"))).toBe("(let name:x 1 name:x)");
+  });
+
+  it("keeps the let(…) call form, bare name, and lambda param untouched", () => {
+    expect(sexpr(astOf("let(x, 1, x)"))).toBe("(let name:x 1 name:x)");
+    expect(sexpr(astOf("let"))).toBe("name:let");
+    expect(sexpr(astOf("let + 1"))).toBe("(+ name:let 1)");
+    expect(sexpr(astOf("let => let"))).toBe("(lambda (let) name:let)");
+  });
+
+  it("does not recognize statements inside parens, calls, or lambda bodies", () => {
+    const grouped = errorOf("(let x = 1; x)");
+    expect(grouped.message).toBe('Expected ")" to close the group, got "x"');
+    expect(grouped.position).toBe(5);
+    const argument = errorOf("round(let x = 1; x)");
+    expect(argument.message).toContain('close the "round(…)" call');
+    const lambda = errorOf("y => let x = y; x");
+    expect(lambda.message).toContain("Unexpected");
+  });
+
+  it("reports a missing final expression after the statements", () => {
+    const single = errorOf("let x = 1;");
+    expect(single.message).toContain(
+      "Expected an expression after the let statements"
+    );
+    expect(single.position).toBe(10);
+    expect(errorOf("let a = 1; let b = a + 1;").message).toContain(
+      "Expected an expression after the let statements"
+    );
+  });
+
+  it("reports a missing = with the statement context", () => {
+    const error = errorOf("let x 5; x");
+    expect(error.message).toBe(
+      'Expected "=" after "x" in the let statement, got number 5'
+    );
+    expect(error.position).toBe(6);
+  });
+
+  it("reports a missing value after the =", () => {
+    const error = errorOf("let x = ; x");
+    expect(error.message).toContain('Unexpected ";"');
+    expect(error.position).toBe(8);
+  });
+
+  it("reports a missing ; between statements at the next statement", () => {
+    const error = errorOf("let x = 1 let y = 2; x");
+    expect(error.message).toBe(
+      'Expected ";" to end the let statement, got "let"'
+    );
+    expect(error.position).toBe(10);
+  });
+
+  it("rejects reserved words as statement names, at the identifier", () => {
+    expect(errorOf("let true = 1; 2")).toEqual({
+      message: '"true" is reserved and can\'t be a let name',
+      position: 4,
+    });
+    expect(errorOf("let not = 1; 2").message).toContain("reserved");
+    expect(errorOf("let AND = 1; 2").message).toContain("reserved");
+  });
+
+  it("rejects reference-syntax roots as statement names", () => {
+    expect(errorOf("let prop = 1; 2")).toEqual({
+      message: '"prop" is reserved and can\'t be a let name',
+      position: 4,
+    });
+    expect(errorOf("let db = 1; 2").message).toContain("reserved");
+    expect(errorOf("let thisPage = 1; 2").message).toContain("reserved");
+    expect(errorOf("let thisRow = 1; 2").message).toContain("reserved");
+  });
+
+  it("reports a stray semicolon with the statement-position hint", () => {
+    expect(errorOf("; 1")).toEqual({
+      message:
+        'Unexpected ";" — a semicolon can only end a top-level "let" statement or the final expression',
+      position: 0,
+    });
+    const between = errorOf("1; 2");
+    expect(between.message).toContain('Unexpected ";"');
+    expect(between.position).toBe(1);
+    const inCall = errorOf("max(1; 2)");
+    expect(inCall.message).toBe(
+      'Expected ")" to close the "max(…)" call, got ";"'
+    );
+    expect(inCall.position).toBe(5);
+  });
+
+  it("keeps the lone = comparison hint, now from the parser", () => {
+    expect(errorOf("a = 1")).toEqual({
+      message: 'Unexpected "=" — use "==" to compare',
+      position: 2,
+    });
+    expect(errorOf("1 =")).toEqual({
+      message: 'Unexpected "=" — use "==" to compare',
+      position: 2,
+    });
+    expect(errorOf("max(a = 1)").message).toContain('use "=="');
+  });
+
+  it("counts each statement against the depth budget", () => {
+    const deep = Array.from({ length: 200 }, (_, i) => `let v${i} = 1;`).join(
+      " "
+    );
+    expect(errorOf(`${deep} 1`).message).toContain("too deeply nested");
+    const fine = Array.from({ length: 50 }, (_, i) => `let v${i} = 1;`).join(
+      " "
+    );
+    expect(sexpr(astOf(`${fine} 1`)).startsWith("(let name:v0 1 ")).toBe(true);
+  });
+});
+
 describe("parse guards (depth and length)", () => {
   it("returns a parse error instead of overflowing on deeply nested parens", () => {
     const source = `${"(".repeat(2000)}1${")".repeat(2000)}`;

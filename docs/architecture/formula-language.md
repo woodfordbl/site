@@ -71,6 +71,28 @@ equivalent shapes, guarded by the frozen
   and `db`, which are syntax parsing straight to property/database nodes (only the
   single-string-literal form is special — `db(expr)` is a parse error naming the
   constraint).
+- **`let` statement sugar** — at the top level only, a formula may open with
+  `let <name> = <expression>;` lines before its final expression:
+
+  ```
+  let tax = 0.1;
+  let total = prop("f-price") * (1 + tax);
+  round(total, 2)
+  ```
+
+  Pure parser sugar: each statement desugars to the exact nested
+  `let(name, value, body)` call node the call form parses to (here
+  `let(tax, 0.1, let(total, …, round(total, 2)))`), so the checker, evaluator,
+  rewriters, and engine see nothing new. Both syntaxes coexist — `let` followed by
+  `(` is the call form, `let` followed by an identifier (in top-level statement
+  position) is the statement form; everywhere else `let` stays an ordinary
+  identifier (bare name reference, lambda parameter). A trailing `;` after the
+  final expression is tolerated; a `;` anywhere else is a parse error with a hint,
+  as is a lone `=` (both are tokens only so these statements can lex). Statement
+  names reject the reserved words plus the reference roots
+  (`prop`/`db`/`thisPage`/`thisRow`, which could never be read back). Each
+  statement spends one level of the parse-depth budget, preserving the
+  "parse depth bounds AST depth" contract.
 - **Lambdas** — `x => expr`, `(a, b) => expr`; body extends maximally right. Named
   parameters only — no implicit `current`. Lambda application is depth-capped
   (`MAX_CALL_DEPTH` 100) because higher-order recursion is otherwise unbounded.

@@ -91,7 +91,17 @@ const OPERATOR_PUNCTS = new Set<FormulaPunct>([
   ">",
   "!",
   ".",
+  "=",
 ]);
+
+/**
+ * The `let` statement keyword (lowercased). Classified like a word operator
+ * when it heads a statement — i.e. when directly followed by an identifier,
+ * the parser's own lookahead — so `let(x, 1, x)` keeps its call-form
+ * function styling and a bare `let` name reference stays a name. The `;`
+ * ending a statement stays unstyled, like the grouping puncts.
+ */
+const LET_STATEMENT_KEYWORD = "let";
 
 const WHITESPACE_RE = /\s/;
 
@@ -209,6 +219,12 @@ function classifyIdentifier(
   }
   if (isPunct(tokens[index - 1], ".")) {
     return span("property");
+  }
+  if (
+    lower === LET_STATEMENT_KEYWORD &&
+    tokens[index + 1]?.type === "identifier"
+  ) {
+    return span("operator");
   }
   return span("name");
 }

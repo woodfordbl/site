@@ -7,7 +7,9 @@
  *
  * Beyond the retired v1 lexer this one skips `//` line comments and
  * slash-star block comments, accepts exponent number literals (`1e5`,
- * `2.5e-3`), and recognizes the `??`, `^`, and `=>` operators.
+ * `2.5e-3`), and recognizes the `??`, `^`, and `=>` operators plus the `=`
+ * and `;` puncts of top-level `let` statements (the parser rejects them
+ * everywhere else, with hints).
  */
 
 /** A source-positioned lexer/parser error. `position` is a 0-based character index. */
@@ -40,7 +42,9 @@ export type FormulaPunct =
   | "]"
   | "<"
   | ">"
-  | "!";
+  | "!"
+  | "="
+  | ";";
 
 /**
  * One lexed token. `position` is the 0-based index of the token's first
@@ -91,6 +95,8 @@ const SINGLE_CHAR_PUNCTS = new Set<FormulaPunct>([
   "<",
   ">",
   "!",
+  "=",
+  ";",
 ]);
 
 /** Named escape sequences inside string literals; any other `\x` yields `x`. */
@@ -102,7 +108,6 @@ const STRING_ESCAPES = new Map<string, string>([
 
 /** Hints for characters that are only valid as part of a two-character operator. */
 const LONELY_CHAR_HINTS = new Map<string, string>([
-  ["=", 'Unexpected "=" — use "==" to compare'],
   ["&", 'Unexpected "&" — use "&&" or "and"'],
   ["|", 'Unexpected "|" — use "||" or "or"'],
   ["?", 'Unexpected "?" — use "??" to fall back when a value is blank'],
