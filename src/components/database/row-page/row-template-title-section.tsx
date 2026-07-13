@@ -1,6 +1,5 @@
 import { IconCopy } from "@tabler/icons-react";
 import { type ReactNode, useMemo } from "react";
-import { toast } from "sonner";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { RowDefaultValueEditor } from "@/components/database/row-page/row-default-value-editor.tsx";
@@ -21,6 +20,11 @@ import {
 } from "@/lib/pages/page-title-layout.ts";
 import type { DatabaseField, LocalDatabase } from "@/lib/schemas/database.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_COPY_TEMPLATE_TOKEN,
+  TOAST_ID_COPY_TEMPLATE_TOKEN_ERROR,
+} from "@/lib/toast/toast-ids.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
@@ -35,8 +39,14 @@ function copyToken(fieldName: string): void {
   const token = rowPropertyToken(fieldName);
   navigator.clipboard
     .writeText(token)
-    .then(() => toast(`Copied ${token}`))
-    .catch(() => toast("Couldn't copy the token"));
+    .then(() =>
+      appToast(`Copied ${token}`, { id: TOAST_ID_COPY_TEMPLATE_TOKEN })
+    )
+    .catch(() =>
+      appToast("Couldn't copy the token", {
+        id: TOAST_ID_COPY_TEMPLATE_TOKEN_ERROR,
+      })
+    );
 }
 
 function RowTemplatePropertyRow({

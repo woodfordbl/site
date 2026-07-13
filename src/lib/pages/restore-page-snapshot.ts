@@ -1,5 +1,3 @@
-import { toast } from "sonner";
-
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
@@ -21,6 +19,11 @@ import { formatRelativeTime } from "@/lib/pages/format-relative-time.ts";
 import { syncPageListLocalPreviewFromCollection } from "@/lib/pages/page-list-local-preview-cookie.ts";
 import type { PageSnapshotContent } from "@/lib/pages/page-snapshot-types.ts";
 import { blocksFromLocalBlocks } from "@/lib/schemas/local-block.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_RESTORE_SNAPSHOT,
+  TOAST_ID_RESTORE_SNAPSHOT_MISSING,
+} from "@/lib/toast/toast-ids.ts";
 
 function restorePageMetadata(
   pageId: string,
@@ -90,7 +93,9 @@ export async function restorePageSnapshot(
   try {
     const content = await readSnapshotContent(pageId, snapshotId);
     if (!content) {
-      toast.error("That version is no longer available.");
+      appToast.error("That version is no longer available.", {
+        id: TOAST_ID_RESTORE_SNAPSHOT_MISSING,
+      });
       return;
     }
 
@@ -124,10 +129,11 @@ export async function restorePageSnapshot(
     // Rewind the timeline: discard every checkpoint after the restored one.
     await purgeSnapshotsAfterRestore(pageId, snapshotId);
 
-    toast.success(
+    appToast.success(
       capturedAt
         ? `Restored version from ${formatRelativeTime(capturedAt)}`
-        : "Restored earlier version"
+        : "Restored earlier version",
+      { id: TOAST_ID_RESTORE_SNAPSHOT }
     );
   } catch (error) {
     reportPersistenceError(error);

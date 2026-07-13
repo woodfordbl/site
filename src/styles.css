@@ -846,6 +846,31 @@
   }
 }
 
+@keyframes cn-toast-retoast {
+  0%,
+  100% {
+    transform: var(--y) scale(1);
+  }
+
+  50% {
+    transform: var(--y) translateY(-0.25rem) scale(1.02);
+  }
+}
+
+[data-sonner-toast].cn-toast.cn-toast--retoast {
+  transition:
+    opacity 400ms ease,
+    height 400ms ease,
+    box-shadow 200ms ease;
+  animation: cn-toast-retoast 200ms var(--ease-out-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toast].cn-toast.cn-toast--retoast {
+    animation: none;
+  }
+}
+
 /*
  * Mobile (below md): center the toast card across the viewport instead of
  * pinning it to the bottom-right. Selectors carry higher specificity than

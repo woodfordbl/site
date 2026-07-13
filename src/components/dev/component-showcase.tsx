@@ -29,7 +29,6 @@ import {
   LineChart,
   XAxis,
 } from "recharts";
-import { toast } from "sonner";
 import { editorFieldClassName } from "@/components/editor/editable-surface.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button, iconSlotClassName } from "@/components/ui/button.tsx";
@@ -154,6 +153,7 @@ import {
   chartPaletteIds,
 } from "@/lib/charts/chart-palettes.ts";
 import { pageTitleUnderlineClassName } from "@/lib/pages/page-link-display.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface ColorToken {
@@ -1231,9 +1231,11 @@ function demoToastAction(): void {
   // Showcase-only toast action — no side effects.
 }
 
+const TOAST_ID_DEV_RETOAST = "dev-retoast";
+
 function ToastsSection() {
   const showPromiseSuccess = () => {
-    toast.promise(
+    appToast.promise(
       new Promise<string>((resolve) => {
         setTimeout(() => resolve("page data"), 1500);
       }),
@@ -1246,7 +1248,7 @@ function ToastsSection() {
   };
 
   const showPromiseError = () => {
-    toast.promise(
+    appToast.promise(
       new Promise<void>((_, reject) => {
         setTimeout(() => reject(new Error("network")), 1500);
       }),
@@ -1267,20 +1269,20 @@ function ToastsSection() {
         <TabVariantColumn label="Types">
           <div className="flex flex-wrap gap-2">
             <Button
-              onClick={() => toast.message("Event has been created")}
+              onClick={() => appToast.message("Event has been created")}
               variant="outline"
             >
               Default
             </Button>
             <Button
-              onClick={() => toast.success("Saved successfully")}
+              onClick={() => appToast.success("Saved successfully")}
               variant="outline"
             >
               Success
             </Button>
             <Button
               onClick={() =>
-                toast.info("New version available — refresh to update")
+                appToast.info("New version available — refresh to update")
               }
               variant="outline"
             >
@@ -1288,20 +1290,20 @@ function ToastsSection() {
             </Button>
             <Button
               onClick={() =>
-                toast.warning("You have unsaved changes on this page")
+                appToast.warning("You have unsaved changes on this page")
               }
               variant="outline"
             >
               Warning
             </Button>
             <Button
-              onClick={() => toast.error("Something went wrong")}
+              onClick={() => appToast.error("Something went wrong")}
               variant="outline"
             >
               Error
             </Button>
             <Button
-              onClick={() => toast.loading("Uploading file…")}
+              onClick={() => appToast.loading("Uploading file…")}
               variant="outline"
             >
               Loading
@@ -1313,16 +1315,19 @@ function ToastsSection() {
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() =>
-                toast.info("Opening http://localhost:3000/ in Cursor Browser", {
-                  cancel: {
-                    label: "Don't show again",
-                    onClick: demoToastAction,
-                  },
-                  action: {
-                    label: "Don't open",
-                    onClick: demoToastAction,
-                  },
-                })
+                appToast.info(
+                  "Opening http://localhost:3000/ in Cursor Browser",
+                  {
+                    cancel: {
+                      label: "Don't show again",
+                      onClick: demoToastAction,
+                    },
+                    action: {
+                      label: "Don't open",
+                      onClick: demoToastAction,
+                    },
+                  }
+                )
               }
               variant="outline"
             >
@@ -1330,7 +1335,7 @@ function ToastsSection() {
             </Button>
             <Button
               onClick={() =>
-                toast.success("Profile updated", {
+                appToast.success("Profile updated", {
                   description: "Your changes are visible to collaborators.",
                 })
               }
@@ -1340,7 +1345,7 @@ function ToastsSection() {
             </Button>
             <Button
               onClick={() =>
-                toast.message("File exported", {
+                appToast.message("File exported", {
                   action: {
                     label: "Open",
                     onClick: demoToastAction,
@@ -1353,7 +1358,7 @@ function ToastsSection() {
             </Button>
             <Button
               onClick={() =>
-                toast.message("Delete this page?", {
+                appToast.message("Delete this page?", {
                   cancel: {
                     label: "Keep page",
                     onClick: demoToastAction,
@@ -1370,13 +1375,16 @@ function ToastsSection() {
             </Button>
             <Button
               onClick={() =>
-                toast.error('Local copy of "Draft" is no longer on the site', {
-                  action: {
-                    label: "Discard",
-                    onClick: demoToastAction,
-                  },
-                  duration: Number.POSITIVE_INFINITY,
-                })
+                appToast.error(
+                  'Local copy of "Draft" is no longer on the site',
+                  {
+                    action: {
+                      label: "Discard",
+                      onClick: demoToastAction,
+                    },
+                    duration: Number.POSITIVE_INFINITY,
+                  }
+                )
               }
               variant="outline"
             >
@@ -1392,6 +1400,21 @@ function ToastsSection() {
             </Button>
             <Button onClick={showPromiseError} variant="outline">
               Promise error
+            </Button>
+          </div>
+        </TabVariantColumn>
+
+        <TabVariantColumn label="Retoast">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() =>
+                appToast.success("Saved successfully", {
+                  id: TOAST_ID_DEV_RETOAST,
+                })
+              }
+              variant="outline"
+            >
+              Retoast (click twice)
             </Button>
           </div>
         </TabVariantColumn>
