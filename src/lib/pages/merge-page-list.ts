@@ -1,4 +1,5 @@
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { isCanvasFixturePageId } from "@/lib/pages/canvas-fixture-page.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import {
@@ -38,6 +39,7 @@ export function mergePageList(
         sidebarOrder: local.sidebarOrder,
         icon: local.icon ?? serverPage.icon,
         databaseRowSource: local.databaseRowSource,
+        databaseSource: local.databaseSource,
         routeBy: "slug",
       });
       continue;
@@ -54,6 +56,7 @@ export function mergePageList(
     if (
       isUserCreatedPage(localPage) &&
       !isTemplatePageId(localPage.id) &&
+      !isDatabaseTemplatePageId(localPage.id) &&
       !isCanvasFixturePageId(localPage.id) &&
       !serverIds.has(localPage.id) &&
       !isLocallyDeletedPage(localPage)
@@ -66,6 +69,7 @@ export function mergePageList(
         sidebarOrder: localPage.sidebarOrder,
         icon: localPage.icon,
         databaseRowSource: localPage.databaseRowSource,
+        databaseSource: localPage.databaseSource,
         routeBy: "id",
       });
     }

@@ -97,24 +97,26 @@ describe("resolveDatabaseHostParentId", () => {
   });
 
   it("walks up to the deepest allowed ancestor when the host is at max depth", () => {
-    // MAX_PAGE_DEPTH = 3: a depth-3 host cannot take a child; its depth-2
+    // MAX_PAGE_DEPTH = 5: a depth-5 host cannot take a child; its depth-4
     // parent can.
     const pages = [
-      page("root", "/root"),
-      page("mid", "/root/mid", "root"),
-      page("leaf", "/root/mid/leaf", "mid"),
+      page("a", "/a"),
+      page("b", "/a/b", "a"),
+      page("c", "/a/b/c", "b"),
+      page("d", "/a/b/c/d", "c"),
+      page("e", "/a/b/c/d/e", "d"),
     ];
     expect(
       resolveDatabaseHostParentId({
-        blocks: [databaseBlock("leaf", DB_ID)],
+        blocks: [databaseBlock("e", DB_ID)],
         databaseId: DB_ID,
         pages,
       })
-    ).toBe("mid");
+    ).toBe("d");
   });
 
   it("falls back to top-level when the over-deep host has a broken ancestor chain", () => {
-    const pages = [page("leaf", "/root/mid/leaf", "gone")];
+    const pages = [page("leaf", "/a/b/c/d/e", "gone")];
     expect(
       resolveDatabaseHostParentId({
         blocks: [databaseBlock("leaf", DB_ID)],
@@ -134,24 +136,41 @@ describe("resolveDatabaseHostParentId", () => {
       })
     ).toBe("mid");
   });
-});
 
-describe("findDatabaseHostPageId", () => {
-  it("returns the raw host page without the parent depth clamp", () => {
-    // A depth-3 host: resolveDatabaseHostParentId walks up to "mid", but the
-    // host page itself (for the breadcrumb) is still "leaf".
+  it("keeps a depth-3 host as the parent (hub+row still fit under MAX 5)", () => {
     const pages = [
       page("root", "/root"),
       page("mid", "/root/mid", "root"),
       page("leaf", "/root/mid/leaf", "mid"),
     ];
-    const blocks = [databaseBlock("leaf", DB_ID)];
+    expect(
+      resolveDatabaseHostParentId({
+        blocks: [databaseBlock("leaf", DB_ID)],
+        databaseId: DB_ID,
+        pages,
+      })
+    ).toBe("leaf");
+  });
+});
+
+describe("findDatabaseHostPageId", () => {
+  it("returns the raw host page without the parent depth clamp", () => {
+    // A depth-5 host: resolveDatabaseHostParentId walks up to "d", but the
+    // host page itself (for the breadcrumb) is still "e".
+    const pages = [
+      page("a", "/a"),
+      page("b", "/a/b", "a"),
+      page("c", "/a/b/c", "b"),
+      page("d", "/a/b/c/d", "c"),
+      page("e", "/a/b/c/d/e", "d"),
+    ];
+    const blocks = [databaseBlock("e", DB_ID)];
     expect(findDatabaseHostPageId({ blocks, databaseId: DB_ID, pages })).toBe(
-      "leaf"
+      "e"
     );
     expect(
       resolveDatabaseHostParentId({ blocks, databaseId: DB_ID, pages })
-    ).toBe("mid");
+    ).toBe("d");
   });
 
   it("picks the smallest pageId across linked views and null when absent", () => {

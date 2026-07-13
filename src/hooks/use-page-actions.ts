@@ -1,6 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
-import { toast } from "sonner";
 
 import { isActivePage, useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
@@ -11,6 +10,11 @@ import { buildPageLinkUrl } from "@/lib/pages/copy-page-link.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { resolveDeleteRedirectTarget } from "@/lib/pages/resolve-page-nav-target.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_COPY_LINK,
+  TOAST_ID_COPY_LINK_ERROR,
+} from "@/lib/toast/toast-ids.ts";
 
 export function usePageActions(pageId: string) {
   const { pages } = useMergedPageListItems();
@@ -26,9 +30,9 @@ export function usePageActions(pageId: string) {
     const url = buildPageLinkUrl(pageId, pages, window.location.origin);
     try {
       await navigator.clipboard.writeText(url);
-      toast.success("Link copied to clipboard");
+      appToast.success("Link copied to clipboard", { id: TOAST_ID_COPY_LINK });
     } catch {
-      toast.error("Could not copy link");
+      appToast.error("Could not copy link", { id: TOAST_ID_COPY_LINK_ERROR });
     }
   }, [pageId, pages]);
 

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   databaseGet: vi.fn(),
   databaseInsert: vi.fn(),
   databaseUpdate: vi.fn(),
+  deleteRowTemplate: vi.fn(),
   mutate: vi.fn(),
   reportPersistenceError: vi.fn(),
   rowDelete: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock("@tanstack/react-db", () => ({
 
 vi.mock("@/db/persistence-errors.ts", () => ({
   reportPersistenceError: mocks.reportPersistenceError,
+}));
+
+vi.mock("@/lib/databases/row-template-store.ts", () => ({
+  deleteRowTemplate: mocks.deleteRowTemplate,
 }));
 
 vi.mock("@/db/collections/local-collections.ts", () => ({
@@ -269,6 +274,76 @@ describe("database collection ops", () => {
     expect(mocks.rowUpdate).not.toHaveBeenCalled();
   });
 
+  it("insertDatabaseRow seeds new rows from the database's rowDefaults", async () => {
+    mocks.databaseGet.mockReturnValue({
+      ...makeDatabase(),
+      rowDefaults: { "f-title": "New task", "f-extra": 5 },
+    });
+    mocks.rowState = [];
+
+    const inserted = ops.insertDatabaseRow(databaseId);
+    await flushAsync();
+
+    expect(inserted.values).toEqual({ "f-title": "New task", "f-extra": 5 });
+  });
+
+  it("setDatabaseRowDefault merges a new default into the existing map", async () => {
+    const database = { ...makeDatabase(), rowDefaults: { "f-extra": 5 } };
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowDefault(databaseId, "f-title", "New task");
+    await flushAsync();
+
+    expect(drafts[0]?.rowDefaults).toEqual({
+      "f-extra": 5,
+      "f-title": "New task",
+    });
+  });
+
+  it("setDatabaseRowDefault drops the map entirely when the last key clears", async () => {
+    const database = { ...makeDatabase(), rowDefaults: { "f-extra": 5 } };
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowDefault(databaseId, "f-extra", null);
+    await flushAsync();
+
+    expect(drafts[0]?.rowDefaults).toBeUndefined();
+  });
+
+  it("setDatabaseRowPropertiesPlacement stores panel and clears the default top", async () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowPropertiesPlacement(databaseId, "panel");
+    await flushAsync();
+
+    expect(drafts[0]?.rowPropertiesPlacement).toBe("panel");
+
+    ops.setDatabaseRowPropertiesPlacement(databaseId, "top");
+    await flushAsync();
+
+    expect(drafts[1]?.rowPropertiesPlacement).toBeUndefined();
+  });
+
+  it("setDatabaseRowPropertiesVisibleFieldIds stores and clears the list", async () => {
+    const database = makeDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    const drafts = captureDatabaseDrafts(database);
+
+    ops.setDatabaseRowPropertiesVisibleFieldIds(databaseId, ["f-extra"]);
+    await flushAsync();
+
+    expect(drafts[0]?.rowPropertiesVisibleFieldIds).toEqual(["f-extra"]);
+
+    ops.setDatabaseRowPropertiesVisibleFieldIds(databaseId, undefined);
+    await flushAsync();
+
+    expect(drafts[1]?.rowPropertiesVisibleFieldIds).toBeUndefined();
+  });
+
   it("insertDatabaseRow after a row takes the midpoint to its successor", async () => {
     mocks.rowState = [
       makeRow("row-a", { order: 1000 }),
@@ -367,7 +442,10 @@ describe("database collection ops", () => {
   });
 
   it("removeDatabaseField strips the field from rows and every view reference", async () => {
-    const database = makeDatabase();
+    const database = {
+      ...makeDatabase(),
+      rowPropertiesVisibleFieldIds: ["f-title", "f-extra"],
+    };
     mocks.databaseGet.mockReturnValue(database);
     mocks.rowState = [
       makeRow("row-1", { values: { "f-extra": 7, "f-title": "keep" } }),
@@ -385,6 +463,7 @@ describe("database collection ops", () => {
 
     const draft = databaseDrafts[0];
     expect(draft?.fields.map((field) => field.id)).toEqual(["f-title"]);
+    expect(draft?.rowPropertiesVisibleFieldIds).toEqual(["f-title"]);
 
     const view = draft?.views[0];
     expect(view?.visibleFieldIds).toEqual(["f-title"]);
@@ -713,6 +792,7 @@ describe("database collection ops", () => {
     expect(mocks.rowDelete).toHaveBeenCalledWith("row-1");
     expect(mocks.rowDelete).toHaveBeenCalledWith("row-2");
     expect(mocks.commit).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteRowTemplate).toHaveBeenCalledWith(databaseId);
   });
 
   it("setDatabaseRowPageId links the page id and bumps updatedAt", async () => {
@@ -739,19 +819,20 @@ describe("database collection ops", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("setDatabaseRowPageId refuses synced rows (externalId present)", async () => {
-    // Invariant: synced rows never get pages — the sync engine tombstones
-    // them, which would orphan the linked page.
-    mocks.rowGet.mockReturnValue({
+  it("setDatabaseRowPageId links synced rows so they can seed a normal page", async () => {
+    const row = {
       ...makeRow("row-synced"),
       externalId: "ext-1",
-    });
+    };
+    mocks.rowGet.mockReturnValue(row);
+    const drafts = captureRowDrafts([row]);
 
     ops.setDatabaseRowPageId("row-synced", "page-9");
     await flushAsync();
 
-    expect(mocks.rowUpdate).not.toHaveBeenCalled();
-    expect(mocks.commit).not.toHaveBeenCalled();
+    const draft = drafts.get("row-synced");
+    expect(draft?.pageId).toBe("page-9");
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
 
   it("duplicateDatabaseField regenerates select option ids and remaps row values", async () => {

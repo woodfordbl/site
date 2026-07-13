@@ -6,7 +6,10 @@ import {
 import { flattenVisiblePageRows } from "@/lib/pages/flatten-visible-page-rows.ts";
 
 function sidebarTreePages(pages: PageSummary[]): PageSummary[] {
-  return pages.filter((page) => page.databaseRowSource === undefined);
+  return pages.filter(
+    (page) =>
+      page.databaseRowSource === undefined && page.databaseSource === undefined
+  );
 }
 
 /** Merges persisted expand ids with ancestors of the active page (sidebar parity). */

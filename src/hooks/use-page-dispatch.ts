@@ -113,7 +113,11 @@ function resolveCreatePage(
   const title = command.title ?? DEFAULT_PAGE_TITLE;
   const parentId = command.parentId ?? null;
 
-  if (parentId) {
+  if (
+    parentId &&
+    command.databaseRowSource === undefined &&
+    command.databaseSource === undefined
+  ) {
     const parent = pagesById(pages).get(parentId);
     if (!parent) {
       throw new Error("Parent page not found");
@@ -165,6 +169,7 @@ export function pageReducer(
             title,
             parentId,
             databaseRowSource: command.databaseRowSource,
+            databaseSource: command.databaseSource,
             sidebarOrder,
             create: true,
             initialBlocks: command.initialBlocks,
@@ -284,6 +289,7 @@ function applyPagePersistEffect(
       title: effect.title,
       parentId: effect.parentId ?? null,
       databaseRowSource: effect.databaseRowSource,
+      databaseSource: effect.databaseSource,
       icon: effect.icon,
       headerImage: effect.headerImage,
       font: effect.font,

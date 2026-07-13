@@ -11,6 +11,9 @@ import {
   defaultColumnWidthPx,
   isInlineEditableField,
   isoDateToLocalDate,
+  isPointerInSelectLaneZone,
+  isSelectColumnCoveredByClip,
+  isSelectColumnPinned,
   isSyncedField,
   MIN_COLUMN_WIDTH_PX,
   minColumnWidthPx,
@@ -20,11 +23,12 @@ import {
   planColumnReorder,
   resolveColumnDropSpot,
   resolveColumnWidthPx,
+  resolveGridBleedMetrics,
   resolveRowSelectDisplay,
   rowSelectLeadingWidthPx,
   SELECTION_COLUMN_WIDTH_PX,
+  shouldShowSelectColumnPeek,
   urlCellHref,
-  usesRowSelectGutter,
   withPinnedRowIndex,
 } from "@/components/database/database-grid-helpers.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
@@ -568,16 +572,127 @@ describe("resolveRowSelectDisplay", () => {
   });
 });
 
-describe("usesRowSelectGutter", () => {
-  it("is false only for always", () => {
-    expect(usesRowSelectGutter("always")).toBe(false);
-    expect(usesRowSelectGutter("hover")).toBe(true);
-    expect(usesRowSelectGutter("number")).toBe(true);
+describe("rowSelectLeadingWidthPx", () => {
+  it("always reserves the select lane width", () => {
+    expect(rowSelectLeadingWidthPx()).toBe(SELECTION_COLUMN_WIDTH_PX);
   });
 });
 
-describe("rowSelectLeadingWidthPx", () => {
-  it("always reserves the select lane (gutter modes bleed left instead)", () => {
-    expect(rowSelectLeadingWidthPx()).toBe(SELECTION_COLUMN_WIDTH_PX);
+describe("isSelectColumnPinned", () => {
+  it("is false when no data columns are pinned", () => {
+    expect(isSelectColumnPinned(0)).toBe(false);
+  });
+
+  it("is true when at least one data column is pinned", () => {
+    expect(isSelectColumnPinned(1)).toBe(true);
+  });
+});
+
+describe("isSelectColumnCoveredByClip", () => {
+  it("is false when the sentinel is flush with the viewport left edge", () => {
+    expect(
+      isSelectColumnCoveredByClip({ left: 100, right: 132 }, { left: 100 })
+    ).toBe(false);
+  });
+
+  it("is true when the sentinel is clipped on the left", () => {
+    expect(
+      isSelectColumnCoveredByClip({ left: 90, right: 122 }, { left: 100 })
+    ).toBe(true);
+  });
+
+  it("is true when the sentinel has fully scrolled past", () => {
+    expect(
+      isSelectColumnCoveredByClip({ left: 80, right: 100 }, { left: 100 })
+    ).toBe(true);
+  });
+});
+
+describe("resolveGridBleedMetrics", () => {
+  it("uses 32px gutter bleed when host is flush with the boundary", () => {
+    expect(
+      resolveGridBleedMetrics({
+        boundaryLeft: 200,
+        boundaryRight: 1200,
+        gridWidth: 800,
+        hostLeft: 200,
+        hostWidthPx: 600,
+      })
+    ).toEqual({
+      extraBleed: 0,
+      gutterBleed: 32,
+      leftBleedPx: 32,
+      paddedGridWidth: 800,
+      rightAvailPx: 400,
+      rightBleed: 168,
+    });
+  });
+
+  it("extends bleed to the boundary when the host is inset", () => {
+    expect(
+      resolveGridBleedMetrics({
+        boundaryLeft: 120,
+        boundaryRight: 1200,
+        gridWidth: 800,
+        hostLeft: 200,
+        hostWidthPx: 600,
+      })
+    ).toEqual({
+      extraBleed: 48,
+      gutterBleed: 80,
+      leftBleedPx: 80,
+      paddedGridWidth: 848,
+      rightAvailPx: 400,
+      rightBleed: 168,
+    });
+  });
+
+  it("caps right bleed at available boundary room", () => {
+    expect(
+      resolveGridBleedMetrics({
+        boundaryLeft: 200,
+        boundaryRight: 820,
+        gridWidth: 1200,
+        hostLeft: 200,
+        hostWidthPx: 600,
+      })
+    ).toEqual({
+      extraBleed: 0,
+      gutterBleed: 32,
+      leftBleedPx: 32,
+      paddedGridWidth: 1200,
+      rightAvailPx: 20,
+      rightBleed: 20,
+    });
+  });
+});
+
+describe("isPointerInSelectLaneZone", () => {
+  it("is true inside the leading lane width", () => {
+    expect(isPointerInSelectLaneZone(120, { left: 100 })).toBe(true);
+    expect(isPointerInSelectLaneZone(132, { left: 100 })).toBe(true);
+  });
+
+  it("is false outside the lane or when the pointer is unknown", () => {
+    expect(isPointerInSelectLaneZone(133, { left: 100 })).toBe(false);
+    expect(isPointerInSelectLaneZone(null, { left: 100 })).toBe(false);
+  });
+});
+
+describe("shouldShowSelectColumnPeek", () => {
+  it("is false when the column is not covered", () => {
+    expect(shouldShowSelectColumnPeek(false, true, true)).toBe(false);
+  });
+
+  it("shows peek when covered and the pointer is in the lane", () => {
+    expect(shouldShowSelectColumnPeek(true, true, false)).toBe(true);
+  });
+
+  it("shows peek when covered and any row is selected", () => {
+    expect(shouldShowSelectColumnPeek(true, false, true)).toBe(true);
+  });
+
+  it("hides peek when covered with no pointer and no selection", () => {
+    expect(shouldShowSelectColumnPeek(true, false, false)).toBe(false);
   });
 });

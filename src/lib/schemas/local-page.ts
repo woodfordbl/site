@@ -15,6 +15,13 @@ export const databaseRowSourceSchema = z.object({
 
 export type DatabaseRowSource = z.infer<typeof databaseRowSourceSchema>;
 
+/** Marks the hidden hub page that owns a database's slug route. */
+export const databaseSourceSchema = z.object({
+  databaseId: z.string(),
+});
+
+export type DatabaseSource = z.infer<typeof databaseSourceSchema>;
+
 export const localPageSchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -23,6 +30,8 @@ export const localPageSchema = z.object({
   parentId: z.string().nullable(),
   /** Set at row-page materialization; hides the page from the sidebar. */
   databaseRowSource: databaseRowSourceSchema.optional(),
+  /** Set on the database hub page; keeps it out of the sidebar tree. */
+  databaseSource: databaseSourceSchema.optional(),
   /** Sidebar sibling order within the same parentId scope. */
   sidebarOrder: z.number().optional(),
   /** Flat block ids in document order for this page's shard. */

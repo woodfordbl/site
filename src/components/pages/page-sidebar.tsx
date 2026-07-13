@@ -1,4 +1,3 @@
-import { IconChevronRight } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import {
@@ -14,6 +13,7 @@ import { PageSidebarSettingsAction } from "@/components/pages/page-sidebar-setti
 import { SidebarPinAction } from "@/components/pages/sidebar-pin-action.tsx";
 import {
   Collapsible,
+  CollapsibleCaret,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible.tsx";
@@ -46,13 +46,9 @@ function SidebarCollapsibleSection({
     <SidebarGroup className="gap-y-px">
       <Collapsible defaultOpen={defaultOpen}>
         <div className="flex h-8 shrink-0 items-center">
-          <CollapsibleTrigger className="group/label flex h-8 min-w-0 flex-1 items-center gap-1 rounded-md px-2 text-left font-medium text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2">
-            <span className="min-w-0 flex-1 truncate">{label}</span>
-            <IconChevronRight
-              className={cn(
-                "size-3.5 shrink-0 text-sidebar-foreground/50 opacity-0 transition-[transform,opacity] duration-200 ease-[var(--ease-out-strong)] hover-none:opacity-100 group-hover/label:opacity-100 group-focus-visible/label:opacity-100 group-data-[panel-open]/label:rotate-90 motion-reduce:transition-none"
-              )}
-            />
+          <CollapsibleTrigger className="group/label flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left font-medium text-sidebar-foreground/70 text-xs outline-hidden ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2">
+            <span className="truncate">{label}</span>
+            <CollapsibleCaret />
           </CollapsibleTrigger>
           {action}
         </div>

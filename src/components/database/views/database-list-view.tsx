@@ -4,6 +4,7 @@ import { type ReactNode, useMemo, useRef } from "react";
 
 import { DatabaseAddRow } from "@/components/database/database-add-row.tsx";
 import { DatabaseCellValueView } from "@/components/database/database-cell.tsx";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
   coerceCellValue,
@@ -94,15 +95,18 @@ function ListRow({
   row: LocalDatabaseRow;
   secondaryFields: readonly DatabaseField[];
 }) {
+  const { row: rowTarget } = useDatabasePathTargets(databaseId, row);
   const title = primaryField
     ? formatCellValue(primaryField, row.values[primaryField.id])
     : "";
+  if (!rowTarget) {
+    return null;
+  }
   return (
     <Link
       className="flex items-center gap-3 border-border border-b px-2 outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
-      params={{ databaseId, rowId: row.id }}
       style={{ height: LIST_ROW_HEIGHT_PX }}
-      to="/db/$databaseId/$rowId"
+      {...rowTarget}
     >
       <span
         className={cn(

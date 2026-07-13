@@ -180,6 +180,7 @@ export function usePageRowEditing({
   }, [ensureSeed, localPage, page.id, pages, title]);
 
   return {
+    ensureSeed,
     handleTitleChange,
     iconPickerOpen,
     iconPickerSeed,

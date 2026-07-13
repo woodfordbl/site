@@ -10,7 +10,6 @@ import {
   AreaChart,
   Bar,
   BarChart,
-  CartesianGrid,
   Line,
   LineChart,
   Pie,
@@ -19,6 +18,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { DitherKitCartesian } from "@/components/charts/dither-kit-cartesian.tsx";
 import {
   ChartLegendSlot,
   chartXAxisLabel,
@@ -32,10 +32,20 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  renderCartesianGrids,
+  resolveCurveType,
+  useAreaSoftGradient,
   useChartDither,
+  useChartGlow,
   useChartGradientDither,
+  useChartReveal,
+  useResolvedChartDither,
 } from "@/components/ui/chart.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
+import {
+  isZeroBasedAggregate,
+  resolveAutoYDomain,
+} from "@/lib/charts/chart-y-domain.ts";
 import {
   buildChartData,
   CHART_Y_AGGREGATE_LABELS,
@@ -94,7 +104,15 @@ const EMPTY_CHART_CONFIG: ChartViewConfig = {};
  * are disabled when set; hover tooltips remain (state, not motion).
  */
 function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
+  // Initialise synchronously so the very first render is already correct — a
+  // lazy `false` let the Recharts mount animation fire once before an effect
+  // could flip it. Charts render client-side (local-first data), so reading
+  // matchMedia here is safe; the `typeof window` guard covers any SSR pass.
+  const [reduced, setReduced] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
     setReduced(query.matches);
@@ -145,6 +163,21 @@ function makeTooltipFormatter(
   };
 }
 
+/** Area fill: dither texture → soft vertical gradient → flat color, in order. */
+function resolveAreaFill(
+  key: string,
+  dither: { enabled: boolean; fill: (key: string) => string },
+  softGradient: { enabled: boolean; fill: (key: string) => string }
+): string {
+  if (dither.enabled) {
+    return dither.fill(key);
+  }
+  if (softGradient.enabled) {
+    return softGradient.fill(key);
+  }
+  return `var(--color-${key})`;
+}
+
 interface CartesianChartProps {
   aggregate: DatabaseChartYAggregate;
   chart: ChartViewConfig;
@@ -187,16 +220,98 @@ function CartesianChart({
   }, [data]);
 
   const seriesKeys = Object.keys(chartConfig);
-  const dither = useChartGradientDither(chartConfig);
+
+  // Shared Y auto-domain so the Recharts and dither-kit renderers agree. Count/
+  // sum + stacked charts anchor at 0; average/min/max zoom to the data band.
+  const stackedDomain = chart.stacked === true;
+  const yDomain = useMemo(() => {
+    const values = data.categories.map((_, categoryIndex) => {
+      const perSeries = data.series.map(
+        (series) => series.points[categoryIndex] ?? 0
+      );
+      return stackedDomain
+        ? perSeries.reduce((sum, v) => sum + (Number.isFinite(v) ? v : 0), 0)
+        : perSeries;
+    });
+    return resolveAutoYDomain({
+      tickCount: chart.gridCount ?? 4,
+      values: values.flat(),
+      yMax: chart.yMax,
+      yMin: chart.yMin,
+      zeroBased: stackedDomain || isZeroBasedAggregate(aggregate),
+    });
+  }, [data, stackedDomain, aggregate, chart.gridCount, chart.yMin, chart.yMax]);
+
+  // The per-chart dither override (on/off) wins over the workspace setting;
+  // inherit follows it.
+  const ditherEnabled = useResolvedChartDither(chart.dither);
+  const dither = useChartGradientDither(chartConfig, {
+    enabled: ditherEnabled,
+  });
+  // Smoothing default depends on the look: a dithered chart reads as a pixel
+  // staircase (smoothing off), a plain chart keeps its smooth monotone curve
+  // (smoothing on). An explicit setting always wins.
+  const smoothing = chart.smoothing ?? !ditherEnabled;
+  // Non-dithered area fade, for when the dither is off.
+  const softGradient = useAreaSoftGradient(chartConfig, {
+    enabled: mark === "area" && !dither.enabled,
+  });
+  // Smoothing off + dither on = crisp pixel staircase; otherwise smooth
+  // (monotone) or straight (linear) per the smoothing option.
+  const pixelated = dither.enabled && !smoothing;
+  const curveType = resolveCurveType(smoothing, dither);
+  // Line/area strokes get a soft colour bloom and a one-shot entrance wipe; bars
+  // keep their native grow. Both compose with the dither above.
+  const wantsPolish = mark === "line" || mark === "area";
+  const glow = useChartGlow({ enabled: wantsPolish });
+  const reveal = useChartReveal({ enabled: wantsPolish });
+  const introAnimation = !(reduceMotion || reveal.enabled);
+
+  // Dithered mode renders through the vendored dither-kit canvas engine, fed by
+  // the same chartConfig/chartRows. Non-dithered mode falls through to the
+  // Recharts renderer below. The workspace "Chart dither" setting is the switch.
+  if (dither.enabled) {
+    return (
+      <div className={cn("aspect-auto w-full", CHART_HEIGHT_CLASS)}>
+        <DitherKitCartesian
+          animate={!reduceMotion}
+          config={chartConfig}
+          data={chartRows}
+          gridMinor={chart.gridMinor ?? 0}
+          gridVertical={chart.gridVertical === true}
+          legendPosition={chart.legendPosition ?? "bottom"}
+          mark={mark}
+          palette={palette}
+          showGrid={chart.showGrid !== false}
+          showLegend={chart.showLegend ?? data.series.length > 1}
+          showTooltip={chart.showTooltip !== false}
+          smooth={smoothing}
+          stacked={chart.stacked === true}
+          tickCount={chart.gridCount}
+          tooltipValueFormatter={(value) =>
+            formatChartYValue(aggregate, yField, value, chart.yFormat)
+          }
+          xAxisTitle={chart.xAxisTitle}
+          xKey="category"
+          yAxisTitle={chart.yAxisTitle}
+          yMax={yDomain.max}
+          yMin={yDomain.min}
+          yTickFormatter={(value) =>
+            formatChartYValue(aggregate, yField, value, chart.yFormat)
+          }
+        />
+      </div>
+    );
+  }
+
   const formatValue = (value: number) =>
-    formatChartYValue(aggregate, yField, value);
+    formatChartYValue(aggregate, yField, value, chart.yFormat);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
   const stacked = chart.stacked === true;
-  const showGrid = chart.showGrid !== false;
-
-  const grid = showGrid ? (
-    <CartesianGrid vertical={chart.gridVertical === true} />
-  ) : null;
+  // Horizontal (value-axis) gridlines carry the major/minor ruler; vertical
+  // (category-axis) lines are a plain toggle. Minor lines subdivide each major
+  // gap and render fainter/dashed.
+  const grid = renderCartesianGrids(chart);
   const xAxisLabel = chartXAxisLabel(chart.xAxisTitle);
   const yAxisLabel = chartYAxisLabel(chart.yAxisTitle);
   const xAxis = (
@@ -212,8 +327,10 @@ function CartesianChart({
   );
   const yAxis = (
     <YAxis
+      allowDataOverflow
       allowDecimals={aggregate !== "count"}
       axisLine={false}
+      domain={[yDomain.min, yDomain.max]}
       label={yAxisLabel}
       tickCount={chart.gridCount}
       tickFormatter={formatValue}
@@ -221,11 +338,12 @@ function CartesianChart({
       width={yAxisLabel ? Y_AXIS_TITLE_WIDTH_PX : 48}
     />
   );
-  const tooltip = (
-    <ChartTooltip
-      content={<ChartTooltipContent formatter={tooltipFormatter} />}
-    />
-  );
+  const tooltip =
+    chart.showTooltip === false ? null : (
+      <ChartTooltip
+        content={<ChartTooltipContent formatter={tooltipFormatter} />}
+      />
+    );
   const legend = (
     <ChartLegendSlot chart={chart} seriesCount={data.series.length} />
   );
@@ -258,6 +376,8 @@ function CartesianChart({
   } else if (mark === "line") {
     plot = (
       <LineChart accessibilityLayer data={chartRows}>
+        {reveal.defs}
+        {glow.defs}
         {grid}
         {xAxis}
         {yAxis}
@@ -267,11 +387,12 @@ function CartesianChart({
             connectNulls={false}
             dataKey={key}
             dot={false}
-            isAnimationActive={!reduceMotion}
+            isAnimationActive={introAnimation}
             key={key}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
-            type={dither.lineType}
+            style={reveal.maskStyle}
+            type={curveType}
           />
         ))}
         {legend}
@@ -281,6 +402,9 @@ function CartesianChart({
     plot = (
       <AreaChart accessibilityLayer data={chartRows}>
         {dither.defs}
+        {softGradient.defs}
+        {reveal.defs}
+        {glow.defs}
         {grid}
         {xAxis}
         {yAxis}
@@ -289,14 +413,15 @@ function CartesianChart({
           <Area
             connectNulls={false}
             dataKey={key}
-            fill={dither.fill(key)}
-            fillOpacity={dither.enabled ? 1 : 0.4}
-            isAnimationActive={!reduceMotion}
+            fill={resolveAreaFill(key, dither, softGradient)}
+            fillOpacity={dither.enabled || softGradient.enabled ? 1 : 0.4}
+            isAnimationActive={introAnimation}
             key={key}
             stackId={stacked ? "stack" : undefined}
             stroke={`var(--color-${key})`}
             strokeWidth={2}
-            type={dither.lineType}
+            style={reveal.maskStyle}
+            type={curveType}
           />
         ))}
         {legend}
@@ -309,7 +434,9 @@ function CartesianChart({
       className={cn(
         "aspect-auto w-full",
         CHART_HEIGHT_CLASS,
-        dither.crispClassName
+        dither.fillCrispClassName,
+        pixelated && dither.curveCrispClassName,
+        glow.strokeClassName
       )}
       config={chartConfig}
       palette={palette}
@@ -354,9 +481,11 @@ function PieMarkChart({
     return { chartConfig: config, pieRows: rowsData };
   }, [chart, data]);
 
-  const dither = useChartDither(chartConfig);
+  const dither = useChartDither(chartConfig, {
+    enabled: useResolvedChartDither(chart.dither),
+  });
   const formatValue = (value: number) =>
-    formatChartYValue(aggregate, yField, value);
+    formatChartYValue(aggregate, yField, value, chart.yFormat);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);
   const slices = pieRows.map((entry) => ({
     ...entry,
@@ -371,9 +500,11 @@ function PieMarkChart({
     >
       <PieChart accessibilityLayer>
         {dither.defs}
-        <ChartTooltip
-          content={<ChartTooltipContent formatter={tooltipFormatter} />}
-        />
+        {chart.showTooltip === false ? null : (
+          <ChartTooltip
+            content={<ChartTooltipContent formatter={tooltipFormatter} />}
+          />
+        )}
         <Pie
           data={slices}
           dataKey="value"

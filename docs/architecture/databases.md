@@ -15,9 +15,9 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 
 | Entity | Shape |
 |--------|-------|
-| `LocalDatabase` | `id`, `name`, `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, timestamps |
+| `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`; default `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`, `formula` (`expression`), `relation` (`targetDatabaseId` — cells store target-row id arrays). All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
-| `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, `externalId?` (connector row identity), timestamps |
+| `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, optional `icon` (light override; no seed), `externalId?` (connector row identity), timestamps |
 | `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
 
 Invariants: every database has exactly one primary (title-like) field —
@@ -121,16 +121,25 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   phones can always reach unfrozen columns); grid ARIA roles; memoized rows (stable
   callbacks via a latest-values ref; row identity from the collection layer's
   structural sharing).
-  **Row selection:** per-view `config.rowSelectDisplay` — `always` (leading
-  sticky select column, `SELECTION_COLUMN_WIDTH_PX`, not a `DatabaseField`),
-  `hover` (default when absent: same in-flow select lane, but the grid bleeds
-  `-ml-12` so the lane sits in the canvas gutter and the first data column
-  stays flush with the filter bar; `.hover-reveal` on the select-header /
-  row hover groups, forced
-  visible while any row is selected; horizontal row/header rules start at the
-  first data column so the gutter stays borderless), or `number` (1-based visible row numbers
-  in that lane, swapping to the checkbox on row hover or when selected). Header
-  select-all follows the same reveal rules. Shift+click ranges from the last
+  **Row selection:** per-view `config.rowSelectDisplay` — `always` (checkboxes
+  always visible in the leading lane), `hover` (default when absent:
+  `.hover-reveal` on row checkboxes, forced visible while any row is selected),
+  or `number` (1-based row numbers swapping to the checkbox on row hover or when
+  selected). The select column is synthetic index 0 ({@link ROW_SELECT_COLUMN_ID}
+  `ColumnDef`, `SELECTION_COLUMN_WIDTH_PX`, not a `DatabaseField`). Layout is
+  shared across all three modes: the scrollport pulls left by at least
+  `SELECTION_COLUMN_WIDTH_PX` (32px) so the first data column aligns with the
+  block edge; `useGridBleedMetrics` extends that bleed to the nearest
+  `[data-column-content]` or `[data-page-main-panel]` boundary so scrolled
+  content clips at the page/column inset (compensating `paddingLeft` /
+  `--grid-bleed` on the grid keeps layout at rest). Horizontal row/header rules
+  start at the first data column so the select lane stays borderless. The select
+  column scrolls horizontally with the grid by default (no sticky). When any data
+  column is pinned, `columnPinning.left` includes the select id first so it
+  freezes at `left: var(--grid-bleed)` with the data pins. When the select column
+  is geometrically clipped by horizontal scroll, a floating peek overlay
+  (`SelectColumnPeekLayer` — popover surface) appears on lane hover or while any
+  row is selected; header select-all is always visible in the peek. Shift+click
   toggled visible row; selection is session state on the grid mount (cleared on
   database/view change). Selected rows use `bg-muted/40`. Right-click opens
   [`database-row-menu.tsx`](../../src/components/database/database-row-menu.tsx)
@@ -462,102 +471,100 @@ regenerate option ids and remap copied row values.
 
 ## Standalone database page
 
-Each workspace database has a dedicated route at `/db/$databaseId`
-([`db.$databaseId.tsx`](../../src/routes/db.$databaseId.tsx), client-only, noindex,
-neutral SSR shell like `/p/$`). [`DatabasePage`](../../src/components/database/database-page.tsx)
-resolves the database from `localDatabasesCollection`, renders the shared
-[`DatabaseTableView`](../../src/components/database/database-table-view.tsx) in edit mode
-inside the normal site shell (page sidebar + inset main panel), and shows a breadcrumb of
-**host-page ancestors / host page / database** (collapses to the database name on narrow
-viewports). The scroll body uses `pl-12` so the table's hover/number select-lane bleed
-(`-ml-12`) has room inside the panel's `overflow-hidden` clip — matching the canvas
-gutter lane. View switching on this surface is ephemeral per mount — there is no `database`
-block to persist `viewId` onto; view **definitions** remain on the one database entity
-(linked canvas blocks and the standalone page share them). A missing database renders an
-in-shell empty state with a home link.
+Each workspace database is reached at a **host-relative slug path**
+`{hostSlug}/{dbSlug}` (same `/$` or `/p/$` family as the host page — never by
+UUID). [`resolveDatabasePathFromSplat`](../../src/lib/databases/database-page-paths.ts)
+runs after normal page-slug resolution fails.
+[`DatabaseSlugPathPage`](../../src/components/database/database-slug-path-page.tsx)
+renders [`DatabaseHubPage`](../../src/components/database/database-hub-page.tsx)
+for hub paths. A **hub** `LocalPage` (`databaseSource: { databaseId }`) is
+created on open under the host
+([`ensureDatabaseHubPage`](../../src/lib/databases/ensure-database-hub-page.ts))
+with a linked `database` block as its body, then rendered through normal
+[`PageWorkspace`](../../src/components/pages/page-workspace.tsx) — same cover,
+title, header menu, and page settings as any other page. Optional persisted
+`database.slug` (else `slugifyPageSegment(name)`) forms the leaf segment.
+Legacy `/db/$databaseId` URLs client-redirect to the slug path.
 
-**Sidebar navigation:** two entry points open the same standalone page:
+**Sidebar navigation:** two entry points open the same hub path:
 
 | Surface | Component | Behavior |
 |---------|-----------|----------|
 | Per-host child row | [`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx) | One synthetic row per `database` block on a page (under that page in the tree) |
-| Workspace **Databases** section | [`databases-list.tsx`](../../src/components/pages/databases-list.tsx) | Collapsible section below **Pages** in [`page-sidebar.tsx`](../../src/components/pages/page-sidebar.tsx); every database alphabetically; gated by `useHasDatabases` |
+| Workspace **Databases** section | [`databases-list.tsx`](../../src/components/pages/databases-list.tsx) | Collapsible section below **Pages**; every database alphabetically; gated by `useHasDatabases` |
 
-Both are client-only (local collections paint nothing during SSR) and read the
-collections through SSR-safe `useSyncExternalStore` snapshot hooks
-([`use-local-databases.ts`](../../src/hooks/use-local-databases.ts) plus the
-incremental database-block snapshot in `page-list-database-rows.tsx`) — **never
-`useLiveQuery`**: these components render on every SSR'd page, and `useLiveQuery`
-subscribes without a server snapshot, which makes React abort the entire server
-render ("Missing getServerSnapshot") and silently revert the whole site to a
-client-rendered empty shell (no crawler-visible content). Each row is a shared
-[`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx): click opens
-the standalone page; right-click and the row ⋯ menu offer Rename, Change icon, and
-Delete (with confirmation). No drag or chevron — the database entity is the navigation
-surface, not a sidebar page document.
+Both are client-only (SSR-safe snapshot hooks — never `useLiveQuery` on the
+sidebar). Each row is a shared
+[`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx):
+click opens the hub slug path; right-click / ⋯ offer Rename, Change icon, and
+Delete. Hub pages and materialized row pages stay out of the Pages tree
+(`databaseSource` / `databaseRowSource`).
 
-## Row pages (virtual + copy-on-write)
+## Row pages (slug paths + seed-on-open)
 
-Every row "has" a page with **zero per-row storage**: the `/db/$databaseId/$rowId`
-route ([`db.$databaseId.$rowId.tsx`](../../src/routes/db.$databaseId.$rowId.tsx),
-client-only — SSR renders a neutral shell like `/p/$`) renders
-[`DatabaseRowPage`](../../src/components/database/row-page/database-row-page.tsx):
-title = primary field value, a properties panel reusing the grid's cell editors
-(local fields inline-editable, synced fields read-only, formulas computed), and a body
-instantiated per render from the shared `database.rowTemplate` via
-[`instantiateTemplateBlocks`](../../src/lib/databases/row-template.ts) —
-`{{ thisPage.X }}` tokens in text-bearing props (`text`, tab `label`, embed `caption`;
-`code` stays literal) evaluate through `evaluateTemplateText` + `createRowScope`,
-rendered read-only with `CanvasBlocksReadOnly`. Absent template = one **empty** text
-block, so a row with no custom template opens as a normal blank page — there is
-deliberately no "Edit page" button or placeholder copy. The grid's primary cells show a
-Page icon (the default document glyph, toggled per view by the ⋯ menu's
-**Page icons** switch) plus a hover-revealed "Open" pill (both modes) navigating there;
-the ⋯ settings menu shows the template status (authoring UI is deferred).
+Every local row opens at `{hostSlug}/{dbSlug}/{rowSlug}` (primary-field slug;
+unique per database). [`DatabaseRowPage`](../../src/components/database/row-page/database-row-page.tsx)
+seeds once on open via [`ensureDatabaseRowPage`](../../src/lib/databases/materialize-row-page.ts)
+(`navigate: false`), then renders the normal
+[`PageWorkspace`](../../src/components/pages/page-workspace.tsx) through
+[`DatabaseRowPageWorkspace`](../../src/components/database/row-page/database-row-page.tsx)
+— full page header menu (font, cover, favorites, duplicate, export/import,
+version history, move to, delete) plus the properties rail
+([`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx)).
+Seeded pages are children of the database hub; body blocks come from the row
+template snapshot ([`instantiateTemplateBlocks`](../../src/lib/databases/row-template.ts)).
 
-**Copy-on-write:** the first body click instantiates the template
-(a snapshot — live tokens inside real pages are a future phase), remaps ids
-(`clonePageBlocks`), creates a REAL user page via `page.create`, links it with
-`setDatabaseRowPageId(rowId, pageId)`, and navigates. The page's `parentId` is the
-database's **host page**, resolved by
-[`resolveDatabaseHostParentId`](../../src/lib/databases/resolve-database-host-page.ts):
-scan `localBlocksCollection` for `database` blocks referencing the database (pristine
-shipped pages are out of scope — every UI flow has the host's blocks in the local
-shard), pick the lexicographically smallest hosting `pageId` across linked views
-(deterministic), and walk up ancestors when nesting would exceed `MAX_PAGE_DEPTH`;
-top-level (`null`) only when no host exists (unreachable via the UI). The page also
-carries **`databaseRowSource: { databaseId, rowId }`** (threaded
-`page.create` → `page.persist` → `localPagesCollection`), which **hides it from the
-sidebar tree entirely** — the database's own sidebar entry is the navigation surface
-(see [pages — Page list](./pages.md#page-list)); the page stays resolvable for
-routing, search, and breadcrumbs. Subsequent opens of the row URL redirect to the
-page; a dangling `pageId` (page deleted) falls back to the virtual render.
+**Light vs seed:** optional `row.icon` (and title / field cells) persist on the
+row without creating a page — grid **Change icon** uses
+`setDatabaseRowIcon`. Opening the row URL seeds the page for **local and
+connector-synced** rows alike so cover, breadcrumb, and the page menu match
+ordinary pages; property values on synced rows continue to refresh from the
+connector.
 
-**Sidebar presence:** see [Standalone database page](#standalone-database-page) — hosted
-child rows and the workspace **Databases** section both navigate to `/db/$databaseId`.
-Materialized row pages stay hidden from the tree (`databaseRowSource`).
+Legacy `/db/$databaseId/$rowId` client-redirects to the slug path. The grid's
+primary cells show a Page icon plus a hover-revealed **Open** pill navigating
+to the row slug.
 
-**Row-page breadcrumb:** the row page header renders the full
-**host-page ancestors / host page / database / row** chain, mirroring the normal page
-header. [`findDatabaseHostPageId`](../../src/lib/databases/resolve-database-host-page.ts)
-(the raw host page — the sibling of `resolveDatabaseHostParentId`'s depth-clamped
-create-parent) resolves the page whose canvas holds the `database` block; its
-ancestors and itself render as navigable [`PageBreadcrumbAncestorCrumb`](../../src/components/pages/page-breadcrumb-ancestor-crumb.tsx)
-crumbs (sibling/children hover menus included), then a database crumb linking to
-`/db/$databaseId`, then the current row title. Collapses to database / row on narrow
-viewports.
+**Template storage & authoring:** the template is a sentinel local page per database —
+id `db-template:<databaseId>`
+([`database-template-page.ts`](../../src/lib/databases/database-template-page.ts)),
+record + block shard managed by
+[`row-template-store.ts`](../../src/lib/databases/row-template-store.ts) — mirroring the
+site page template: excluded from the merged page list, slug resolution, id resolution,
+and `saveAllLocalPages`. Edited as a NORMAL page at
+`{hostSlug}/{dbSlug}/template` (legacy `/db/$databaseId/template` redirects;
+editor UI in
+[`database-template-editor.tsx`](../../src/components/database/row-page/database-template-editor.tsx),
+mounted via
+[`DatabaseSlugPathPage`](../../src/components/database/database-slug-path-page.tsx)),
+entered from the database ⋯ menu's **Row pages** item. Authors can leave the
+body blank or insert `{{ thisPage.Field }}` property tokens (`{{` autocomplete +
+an empty-template hint). Preview-as-row demonstrates live evaluation.
+Rendering uses [`useRowTemplate`](../../src/hooks/use-row-template.ts);
+materialization uses `readRowTemplateSnapshot`. Row pages inherit the
+template's **icon** (overridden by `row.icon` when set) and **font** when
+explicitly set. The editor header edits **row defaults**
+(`database.rowDefaults`). The whole row-page family shares properties chrome via
+`useRowPageWorkspaceChrome` /
+[`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx);
+placement is `database.rowPropertiesPlacement` (`top` under the title
+by default, or `panel` side rail). Row-page show/hide writes
+`database.rowPropertiesVisibleFieldIds` (DB-wide, independent of per-view
+`visibleFieldIds`). Database rename + hub subtree slug cascade live in
+[`database-page-ops.ts`](../../src/db/queries/database-page-ops.ts) (re-exported
+from collection ops). Table primary cells and row pages share
+`resolveDatabaseRowIcon` (`row.icon` → template icon → `DEFAULT_PAGE_ICON`).
+Hub + row pages stay hidden from the Pages sidebar tree
+(`databaseSource` / `databaseRowSource`); favorites and move-to use the seeded
+page id. Breadcrumbs follow the normal page header once seeded.
 
 ## Deferred
 
 Row drag-reorder UI (table grid — board card drag shipped),
-row-page template authoring UI and live tokens
-(virtual pages + copy-on-write with host-page nesting shipped — see
-[Row pages](#row-pages-virtual--copy-on-write)), sidebar database-row
-scroll-to-block navigation (relations, rollups — wizard included — and reactive
-cross-database recompute shipped — see
-[formula-language](./formula-language.md)),
-formula-aware typed filter operators (formula→formula references shipped with the
-v2 engine — see [formula-language](./formula-language.md)),
+live tokens inside already-seeded pages, duplicate-database template cloning,
+formula-aware typed filter operators (relations, rollups — wizard included —
+reactive cross-database recompute, and formula→formula references shipped with
+the v2 engine — see [formula-language](./formula-language.md)),
 gallery view (multi-view switching, `viewId` threading, and list/board/chart views
 shipped — see [Table view](#table-view)), workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push

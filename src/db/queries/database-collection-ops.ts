@@ -3,10 +3,13 @@ import { createTransaction } from "@tanstack/react-db";
 import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
+  localPagesCollection,
 } from "@/db/collections/local-collections.ts";
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import { resolveRowDefaultValues } from "@/lib/databases/row-defaults.ts";
+import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
 import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
 import type {
   DatabaseCellValue,
@@ -50,6 +53,33 @@ function createDatabaseTransaction(): DatabaseTransaction {
 /** Commit a database transaction; surface persistence failures via toast. */
 function commitDatabaseTransaction(tx: DatabaseTransaction): void {
   tx.commit().catch(reportPersistenceError);
+}
+
+/**
+ * Sparse in-place patch of a database definition (bumps `updatedAt`).
+ */
+function patchDatabase(
+  databaseId: string,
+  patch: (draft: {
+    icon?: string | undefined;
+    rowDefaults?: LocalDatabase["rowDefaults"];
+    rowPropertiesPlacement?: LocalDatabase["rowPropertiesPlacement"];
+    rowPropertiesVisibleFieldIds?: string[] | undefined;
+    updatedAt: string;
+  }) => void
+): void {
+  if (!localDatabasesCollection.get(databaseId)) {
+    return;
+  }
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      patch(draft);
+      draft.updatedAt = timestamp;
+    });
+  });
+  commitDatabaseTransaction(tx);
 }
 
 function compareRowsByOrder(
@@ -217,10 +247,14 @@ export function insertDatabaseRow(
   const plan = planRowOrderAt(siblings, targetIndex);
 
   const timestamp = nowIso();
+  const database = localDatabasesCollection.get(databaseId);
   const row: LocalDatabaseRow = {
     id: crypto.randomUUID(),
     databaseId,
-    values: {},
+    // New rows start from the template's defaults (authored in the row-
+    // template editor; date sentinels resolve to the creation date); callers
+    // that set cells afterwards simply overwrite.
+    values: database ? resolveRowDefaultValues(database) : {},
     order: plan.order,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -463,6 +497,29 @@ export function updateDatabaseView(
           Object.entries(merged).filter(([key]) => !clearedKeys.includes(key))
         ) as typeof merged;
       });
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Replace one saved view wholesale (undo/redo restore). Does not record edit
+ * history — callers push the pre-restore snapshot themselves.
+ */
+export function restoreDatabaseView(
+  databaseId: string,
+  view: DatabaseView
+): void {
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.views = toPlain(draft.views).map((entry) =>
+        entry.id === view.id ? toPlain(view) : entry
+      );
       draft.updatedAt = timestamp;
     });
   });
@@ -773,6 +830,16 @@ export function removeDatabaseField(databaseId: string, fieldId: string): void {
         // the `.default({})`); normalize before stripping references.
         stripFieldFromView({ ...view, config: view.config ?? {} }, fieldId)
       );
+      if (draft.rowDefaults && fieldId in draft.rowDefaults) {
+        const { [fieldId]: _dropped, ...rest } = draft.rowDefaults;
+        draft.rowDefaults = Object.keys(rest).length > 0 ? rest : undefined;
+      }
+      if (draft.rowPropertiesVisibleFieldIds) {
+        const next = draft.rowPropertiesVisibleFieldIds.filter(
+          (id) => id !== fieldId
+        );
+        draft.rowPropertiesVisibleFieldIds = next.length > 0 ? next : undefined;
+      }
       draft.updatedAt = timestamp;
     });
 
@@ -884,19 +951,82 @@ export function duplicateDatabaseField(
   commitDatabaseTransaction(tx);
 }
 
-/** Rename a database and bump its `updatedAt`. */
-export function renameDatabase(databaseId: string, name: string): void {
+/** Set or clear a row's standalone icon; mirrors onto a linked page when present. */
+export function setDatabaseRowIcon(
+  rowId: string,
+  icon: string | undefined
+): void {
+  const row = localDatabaseRowsCollection.get(rowId);
+  if (!row) {
+    return;
+  }
+
   const timestamp = nowIso();
   const tx = createDatabaseTransaction();
-
   tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      draft.name = name;
+    localDatabaseRowsCollection.update(rowId, (draft) => {
+      draft.icon = icon;
       draft.updatedAt = timestamp;
     });
+    if (row.pageId && localPagesCollection.get(row.pageId)) {
+      localPagesCollection.update(row.pageId, (draft) => {
+        draft.icon = icon;
+        draft.updatedAt = timestamp;
+      });
+    }
   });
-
   commitDatabaseTransaction(tx);
+}
+
+/**
+ * Set (or clear, with `null`/`undefined`) one field's default value for new
+ * rows (`database.rowDefaults`), bumping `updatedAt`. Cleared keys are
+ * removed so the record stays sparse; an emptied map drops entirely.
+ */
+export function setDatabaseRowDefault(
+  databaseId: string,
+  fieldId: string,
+  value: DatabaseCellValue | null | undefined
+): void {
+  patchDatabase(databaseId, (draft) => {
+    const next = { ...draft.rowDefaults };
+    if (value === null || value === undefined || value === "") {
+      delete next[fieldId];
+    } else {
+      next[fieldId] = value;
+    }
+    draft.rowDefaults = Object.keys(next).length > 0 ? next : undefined;
+  });
+}
+
+/**
+ * Set where the database's row pages show their properties — a section under
+ * the title (default) or the side panel — bumping `updatedAt`. The default
+ * ("top") is stored as an absent field so records stay sparse.
+ */
+export function setDatabaseRowPropertiesPlacement(
+  databaseId: string,
+  placement: "panel" | "top"
+): void {
+  patchDatabase(databaseId, (draft) => {
+    draft.rowPropertiesPlacement = placement === "top" ? undefined : placement;
+  });
+}
+
+/**
+ * Set which fields appear on row-page properties panels. Independent of
+ * per-view table `visibleFieldIds`. Pass `undefined` (or omit an explicit
+ * list that still covers every non-primary field) to clear and show all;
+ * an empty array hides every non-primary field. Bumps `updatedAt`.
+ */
+export function setDatabaseRowPropertiesVisibleFieldIds(
+  databaseId: string,
+  visibleFieldIds: readonly string[] | undefined
+): void {
+  patchDatabase(databaseId, (draft) => {
+    draft.rowPropertiesVisibleFieldIds =
+      visibleFieldIds === undefined ? undefined : [...visibleFieldIds];
+  });
 }
 
 /**
@@ -907,17 +1037,9 @@ export function setDatabaseIcon(
   databaseId: string,
   icon: string | undefined
 ): void {
-  const timestamp = nowIso();
-  const tx = createDatabaseTransaction();
-
-  tx.mutate(() => {
-    localDatabasesCollection.update(databaseId, (draft) => {
-      draft.icon = icon;
-      draft.updatedAt = timestamp;
-    });
+  patchDatabase(databaseId, (draft) => {
+    draft.icon = icon;
   });
-
-  commitDatabaseTransaction(tx);
 }
 
 /**
@@ -1021,17 +1143,13 @@ export function updateDatabaseSource(
  * Unlink/cascade semantics land with the page-delete integration
  * (databases proposal §2.5).
  *
- * Synced rows (carrying an `externalId`) are refused as a no-op: "synced
- * rows never get pages" is a schema invariant (`schemas/database.ts`) — the
- * sync engine tombstones such rows when they leave the provider snapshot,
- * which would strand the linked page with no back-link, and a reappearing
- * record gets a brand-new row id, silently severing the association. The
- * row-page UI hides page materialization for synced rows; this guard is the
- * op-level enforcement.
+ * Applies to local and connector-synced rows alike — synced rows still seed
+ * a normal page on open so header/cover/menu match ordinary pages; property
+ * values continue to sync onto the row.
  */
 export function setDatabaseRowPageId(rowId: string, pageId: string): void {
   const row = localDatabaseRowsCollection.get(rowId);
-  if (!row || row.externalId !== undefined) {
+  if (!row) {
     return;
   }
 
@@ -1079,4 +1197,9 @@ export function deleteDatabase(databaseId: string): void {
   // Best-effort: drop the database's captured field history (IndexedDB) so it
   // doesn't leak after the table is gone. Derived data — failures are non-fatal.
   clearDatabaseFieldHistory(databaseId).catch(reportPersistenceError);
+
+  // The row template (sentinel page + block shard) belongs to the database;
+  // remove it so it doesn't orphan. A future duplicate-database op must clone
+  // it the same way (see row-template-store.ts).
+  deleteRowTemplate(databaseId);
 }

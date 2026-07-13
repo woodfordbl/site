@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { useTableCountScrub } from "@/components/blocks/types/table/use-table-count-scrub.ts";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Kbd } from "@/components/ui/kbd.tsx";
 import {
   Tooltip,
   TooltipContent,
@@ -76,15 +75,15 @@ export function TableAddRowButton({
         />
         <TooltipContent
           align="center"
-          className="flex-col items-center gap-1 py-2 text-center"
+          className="flex-col items-center gap-0.5 px-2 py-1 text-center"
           side="bottom"
         >
           <span className="inline-flex items-center gap-1">
-            <Kbd>Click</Kbd>
+            <span className="font-semibold">Click</span>
             to add a new row
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>Drag</Kbd>
+            <span className="font-semibold">Drag</span>
             to add or remove rows
           </span>
         </TooltipContent>
@@ -147,13 +146,16 @@ export function TableAddColumnButton({
             </Button>
           }
         />
-        <TooltipContent className="flex-col items-start gap-1 py-2" side="left">
+        <TooltipContent
+          className="flex-col items-start gap-0.5 px-2 py-1"
+          side="left"
+        >
           <span className="inline-flex items-center gap-1">
-            <Kbd>Click</Kbd>
+            <span className="font-semibold">Click</span>
             to add a new column
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd>Drag</Kbd>
+            <span className="font-semibold">Drag</span>
             to add or remove columns
           </span>
         </TooltipContent>

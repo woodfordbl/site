@@ -247,4 +247,80 @@ describe("DatabaseChartView", () => {
     );
     expect(screen.getByText("No data to chart")).toBeDefined();
   });
+
+  it("toggles the legend for a single-series chart via showLegend", () => {
+    const { container, rerender } = render(
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode="edit"
+        rows={ROWS}
+        view={chartView({ mark: "bar", xFieldId: "f-status" })}
+      />
+    );
+    // Single series: legend is off by default.
+    expect(container.querySelector(".recharts-legend-wrapper")).toBeNull();
+    rerender(
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode="edit"
+        rows={ROWS}
+        view={chartView({
+          mark: "bar",
+          xFieldId: "f-status",
+          showLegend: true,
+        })}
+      />
+    );
+    expect(container.querySelector(".recharts-legend-wrapper")).not.toBeNull();
+  });
+
+  it("hides the tooltip layer when showTooltip is false", () => {
+    const { container, rerender } = render(
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode="view"
+        rows={ROWS}
+        view={chartView({ mark: "bar", xFieldId: "f-status" })}
+      />
+    );
+    // Recharts renders the tooltip wrapper (inactive) whenever a Tooltip mounts.
+    expect(container.querySelector(".recharts-tooltip-wrapper")).not.toBeNull();
+    rerender(
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode="view"
+        rows={ROWS}
+        view={chartView({
+          mark: "bar",
+          xFieldId: "f-status",
+          showTooltip: false,
+        })}
+      />
+    );
+    expect(container.querySelector(".recharts-tooltip-wrapper")).toBeNull();
+  });
+
+  it("draws dashed minor gridlines when gridMinor is set", () => {
+    const { container } = render(
+      <DatabaseChartView
+        database={database}
+        fields={database.fields}
+        mode="view"
+        rows={ROWS}
+        view={chartView({
+          mark: "line",
+          xFieldId: "f-status",
+          gridCount: 4,
+          gridMinor: 1,
+        })}
+      />
+    );
+    expect(
+      container.querySelector('line[stroke-dasharray="2 4"]')
+    ).not.toBeNull();
+  });
 });

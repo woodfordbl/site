@@ -1,12 +1,12 @@
-import { IconChevronRight } from "@tabler/icons-react";
+import { IconCaretRightFilled } from "@tabler/icons-react";
 import type { MouseEvent, PointerEvent } from "react";
 
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 
 /**
- * Chevron that sits inline immediately after a toggle heading title. Hover-reveals
- * on fine pointers and stays visible on touch (via the `.hover-reveal` primitive).
+ * Filled caret that sits inline immediately after a toggle heading title.
+ * Always visible; rotates when the section is expanded.
  */
 export function HeadingCollapseChevron({
   collapsed,
@@ -19,7 +19,7 @@ export function HeadingCollapseChevron({
     <Button
       aria-expanded={!collapsed}
       aria-label={collapsed ? "Expand section" : "Collapse section"}
-      className="hover-reveal size-6 shrink-0 self-center text-muted-foreground"
+      className="size-6 shrink-0 self-center text-muted-foreground hover:text-foreground focus-visible:text-foreground"
       // Keep clicks off the row: no selection, drag, or caret move.
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
@@ -35,9 +35,9 @@ export function HeadingCollapseChevron({
       type="button"
       variant="ghost"
     >
-      <IconChevronRight
+      <IconCaretRightFilled
         className={cn(
-          "transition-transform duration-150 [transition-timing-function:var(--ease-out-strong)]",
+          "size-3 text-muted-foreground transition-transform duration-150 ease-(--ease-out-strong)",
           !collapsed && "rotate-90"
         )}
       />

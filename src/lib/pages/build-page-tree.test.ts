@@ -83,9 +83,12 @@ describe("assertPageCanHaveChild", () => {
       page("a", "/a", "A"),
       page("b", "/a/b", "B", "a"),
       page("c", "/a/b/c", "C", "b"),
+      page("d", "/a/b/c/d", "D", "c"),
+      page("e", "/a/b/c/d/e", "E", "d"),
     ];
 
-    expect(() => assertPageCanHaveChild(pages[2], pages)).toThrow(
+    expect(() => assertPageCanHaveChild(pages[2], pages)).not.toThrow();
+    expect(() => assertPageCanHaveChild(pages[4], pages)).toThrow(
       `Pages cannot be nested deeper than ${MAX_PAGE_DEPTH} segments`
     );
   });

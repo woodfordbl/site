@@ -15,17 +15,18 @@ import {
   IconLayoutKanban,
   IconLayoutList,
   IconListDetails,
+  IconPencil,
   IconRefresh,
+  IconRestore,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
+import { useNavigate } from "@tanstack/react-router";
 import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
   useCallback,
-  useEffect,
-  useRef,
   useState,
 } from "react";
 
@@ -38,6 +39,7 @@ import {
   AddDatabaseViewMenuItems,
   DATABASE_VIEW_TYPE_ICONS,
 } from "@/components/database/database-view-switcher.tsx";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
   type ListReorderHandleProps,
   useListReorder,
@@ -65,6 +67,10 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import {
+  MenuIconRenameInput,
+  shouldCancelMenuCloseForIconPicker,
+} from "@/components/ui/menu-icon-rename-input.tsx";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -76,11 +82,12 @@ import {
   duplicateDatabaseView,
   removeDatabaseField,
   removeDatabaseView,
-  renameDatabase,
   reorderDatabaseFields,
+  setDatabaseIcon,
   updateDatabaseSource,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
+import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { requestImmediateSync } from "@/db/sync/database-sync-engine.ts";
 import { useSyncStatus } from "@/hooks/use-sync-status.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
@@ -95,6 +102,10 @@ import type {
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
+import {
+  deleteRowTemplate,
+  readRowTemplateSnapshot,
+} from "@/lib/databases/row-template-store.ts";
 import type {
   DatabaseField,
   DatabaseSource,
@@ -130,62 +141,26 @@ function stopMenuKeys(event: KeyboardEvent<HTMLInputElement>): void {
 
 interface DatabaseRenameInputProps {
   draftName: string;
+  icon?: string;
+  iconPickerOpen: boolean;
   onCommit: () => void;
   onDraftNameChange: (name: string) => void;
+  onIconPickerOpenChange: (open: boolean) => void;
+  onIconRemove: () => void;
+  onIconSelect: (icon: string) => void;
   onSubmit: () => void;
 }
 
-/**
- * Rename input at the top of the menu (same pattern as the column menu
- * rename): mounted only while the menu is open, stealing focus from the popup
- * after Base UI's initial focus pass via a rAF — no inline ref callbacks.
- */
-function DatabaseRenameInput({
-  draftName,
-  onCommit,
-  onDraftNameChange,
-  onSubmit,
-}: DatabaseRenameInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-
+/** Database settings rename row — shared InputGroup + GlyphIconPicker pattern. */
+function DatabaseRenameInput(props: DatabaseRenameInputProps) {
   return (
-    <div className="p-1 pb-2">
-      <InputGroup className="h-8 pointer-coarse:h-10">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <IconDatabase className="stroke-[1.5px]" />
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label="Database name"
-          autoComplete="off"
-          onBlur={onCommit}
-          onChange={(event) => {
-            onDraftNameChange(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            stopMenuKeys(event);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onSubmit();
-            }
-          }}
-          placeholder="Database name"
-          ref={inputRef}
-          value={draftName}
-        />
-      </InputGroup>
-    </div>
+    <MenuIconRenameInput
+      {...props}
+      ariaLabelIcon="Change database icon"
+      ariaLabelName="Database name"
+      fallbackIcon={<IconDatabase className="size-4 stroke-[1.5px]" />}
+      placeholder="Database name"
+    />
   );
 }
 
@@ -1230,29 +1205,70 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
 }
 
 /**
- * Row pages status row: whether row pages (`/db/{databaseId}/{rowId}`)
- * render from the built-in default template or the database's custom
- * `rowTemplate` (with its block count). A real menu item (not a hand-rolled
- * div) so its icon size, gap, and padding align with the sibling rows in
- * both the popover and drawer presentations; it performs no action yet —
- * template AUTHORING lands with a dedicated template editor (canvas-backed,
- * writing `database.rowTemplate`), and this row becomes its entry point.
+ * Row pages submenu: template status plus the two actions — **Edit template**
+ * opens the row-template editor (`/db/$databaseId/template`, which creates
+ * the template on first visit), **Reset to default** deletes it (two-click
+ * confirm, matching Delete database; rows are never touched). The status
+ * reads the template store synchronously on render, which stays fresh
+ * because the menu content mounts on open.
  */
-function RowPagesItem({ database }: { database: LocalDatabase }) {
-  const blockCount = database.rowTemplate?.length ?? 0;
-  const status =
-    blockCount > 0
-      ? `Custom template · ${blockCount} ${blockCount === 1 ? "block" : "blocks"}`
-      : "Default template";
+function RowPagesSubmenu({ database }: { database: LocalDatabase }) {
+  const navigate = useNavigate();
+  const { template: templateTarget } = useDatabasePathTargets(database.id);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const template = readRowTemplateSnapshot(database.id);
+  const blockCount = template?.blocks.length ?? 0;
+
+  const handleResetClick = () => {
+    if (!confirmingReset) {
+      setConfirmingReset(true);
+      return;
+    }
+    deleteRowTemplate(database.id);
+    setConfirmingReset(false);
+  };
 
   return (
-    <DropdownMenuItem closeOnClick={false}>
-      <IconFileText />
-      Row pages
-      <span className="ml-auto min-w-0 truncate text-muted-foreground text-xs">
-        {status}
-      </span>
-    </DropdownMenuItem>
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <IconFileText />
+        Row pages
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <div className="space-y-1.5 px-2 py-2">
+          <InfoRow
+            label="Template"
+            value={template ? "Custom" : "Default · blank page"}
+          />
+          {template ? (
+            <InfoRow
+              label="Blocks"
+              value={`${blockCount} ${blockCount === 1 ? "block" : "blocks"}`}
+            />
+          ) : null}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            if (templateTarget) {
+              navigate(templateTarget);
+            }
+          }}
+        >
+          <IconPencil />
+          Edit template
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          closeOnClick={false}
+          disabled={!template}
+          onClick={handleResetClick}
+          variant="destructive"
+        >
+          <IconRestore />
+          {confirmingReset ? "Confirm reset…" : "Reset to default"}
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -1370,6 +1386,7 @@ export function DatabaseSettingsMenu({
   const [draftName, setDraftName] = useState(database.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadStats, setLoadStats] = useState<DatabaseLoadStats | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
@@ -1379,18 +1396,37 @@ export function DatabaseSettingsMenu({
   }, [database.id, database.name, draftName]);
 
   const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
+    (
+      nextOpen: boolean,
+      eventDetails?: {
+        cancel: () => void;
+        event: Event;
+        reason: string;
+      }
+    ) => {
+      if (
+        shouldCancelMenuCloseForIconPicker(
+          nextOpen,
+          iconPickerOpen,
+          eventDetails
+        )
+      ) {
+        return;
+      }
+
       if (nextOpen) {
         setDraftName(database.name);
         setConfirmingDelete(false);
         setLoadStats(measureDatabaseLoadStats(database.id));
+        setIconPickerOpen(false);
       } else {
         // Closing commits a pending rename (covers outside click / Escape).
         commitRename();
+        setIconPickerOpen(false);
       }
       setOpen(nextOpen);
     },
-    [commitRename, database.id, database.name]
+    [commitRename, database.id, database.name, iconPickerOpen]
   );
 
   // Per-view menu sections scope to the block's active view; `views[0]` is
@@ -1409,8 +1445,12 @@ export function DatabaseSettingsMenu({
     onDeleted?.();
   };
 
+  const writeIcon = (nextIcon: string | undefined) => {
+    setDatabaseIcon(database.id, nextIcon);
+  };
+
   return (
-    <DropdownMenu onOpenChange={handleOpenChange} open={open}>
+    <DropdownMenu modal={false} onOpenChange={handleOpenChange} open={open}>
       <DropdownMenuTrigger
         nativeButton
         render={
@@ -1428,8 +1468,15 @@ export function DatabaseSettingsMenu({
       <DropdownMenuContent align="end" className="w-64 min-w-64">
         <DatabaseRenameInput
           draftName={draftName}
+          icon={database.icon}
+          iconPickerOpen={iconPickerOpen}
           onCommit={commitRename}
           onDraftNameChange={setDraftName}
+          onIconPickerOpenChange={setIconPickerOpen}
+          onIconRemove={() => {
+            writeIcon(undefined);
+          }}
+          onIconSelect={writeIcon}
           onSubmit={() => {
             commitRename();
             setOpen(false);
@@ -1519,7 +1566,7 @@ export function DatabaseSettingsMenu({
         ) : null}
         <DropdownMenuSeparator />
         <SourceSubmenu database={database} rowCount={rowCount} />
-        <RowPagesItem database={database} />
+        <RowPagesSubmenu database={database} />
         <DropdownMenuSeparator />
         <DropdownMenuItem
           closeOnClick={false}

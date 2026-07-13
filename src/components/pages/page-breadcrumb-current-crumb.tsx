@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
-import { PageIconPicker } from "@/components/pages/page-icon-picker.tsx";
 import { Button, iconSlotClassName } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group.tsx";
+import { InputGroupIconPicker } from "@/components/ui/input-group-icon-picker.tsx";
+import { shouldCancelMenuCloseForIconPicker } from "@/components/ui/menu-icon-rename-input.tsx";
 import {
   Popover,
   PopoverContent,
@@ -14,6 +15,7 @@ import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageMetadataEditor } from "@/hooks/use-page-metadata-editor.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
+import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 
 interface PageBreadcrumbCurrentCrumbProps {
@@ -36,6 +38,7 @@ export function PageBreadcrumbCurrentCrumb({
   const localPage = useLocalPageById(pageId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   const {
     handleTitleBlur,
@@ -58,12 +61,40 @@ export function PageBreadcrumbCurrentCrumb({
 
   const displayTitle = localPage?.title ?? defaultTitle;
   const displayIcon = localPage?.icon ?? defaultIcon;
+  const previousSlug = previousSlugRef.current;
+
+  const handleIconSelect = useCallback(
+    (nextIcon: string) => {
+      persistPageIcon({
+        pageId,
+        icon: nextIcon,
+        title: resolvedTitle,
+        previousSlug,
+        seed: localPage ? undefined : seed,
+        pages,
+      });
+    },
+    [localPage, pageId, pages, previousSlug, resolvedTitle, seed]
+  );
 
   return (
     <Popover
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
+      onOpenChange={(nextOpen, eventDetails) => {
+        if (
+          shouldCancelMenuCloseForIconPicker(
+            nextOpen,
+            iconPickerOpen,
+            eventDetails
+          )
+        ) {
+          return;
+        }
+
+        if (nextOpen) {
+          setIconPickerOpen(false);
+        } else {
           handleTitleBlur();
+          setIconPickerOpen(false);
         }
         setOpen(nextOpen);
       }}
@@ -85,15 +116,13 @@ export function PageBreadcrumbCurrentCrumb({
         {open ? (
           <PageBreadcrumbCurrentCrumbEditor
             icon={icon}
+            iconPickerOpen={iconPickerOpen}
             inputRef={inputRef}
+            onIconPickerOpenChange={setIconPickerOpen}
+            onIconSelect={handleIconSelect}
             onTitleBlur={handleTitleBlur}
             onTitleChange={handleTitleChange}
             onTitleFocus={handleTitleFocus}
-            pageId={pageId}
-            pages={pages}
-            previousSlug={previousSlugRef.current}
-            resolvedTitle={resolvedTitle}
-            seed={localPage ? undefined : seed}
             title={title}
           />
         ) : null}
@@ -104,27 +133,23 @@ export function PageBreadcrumbCurrentCrumb({
 
 function PageBreadcrumbCurrentCrumbEditor({
   icon,
+  iconPickerOpen,
   inputRef,
+  onIconPickerOpenChange,
+  onIconSelect,
   onTitleBlur,
   onTitleChange,
   onTitleFocus,
-  pageId,
-  pages,
-  previousSlug,
-  resolvedTitle,
-  seed,
   title,
 }: {
   icon?: string;
+  iconPickerOpen: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  onIconPickerOpenChange: (open: boolean) => void;
+  onIconSelect: (icon: string) => void;
   onTitleBlur: () => void;
   onTitleChange: (nextTitle: string) => void;
   onTitleFocus: () => void;
-  pageId: string;
-  pages: PageSummary[];
-  previousSlug: string;
-  resolvedTitle: string;
-  seed?: PageMetadataSeed;
   title: string;
 }) {
   useEffect(() => {
@@ -141,21 +166,20 @@ function PageBreadcrumbCurrentCrumbEditor({
   }, [inputRef]);
 
   return (
-    <div className="flex items-center gap-1.5">
-      <PageIconPicker
-        className="mt-0 shrink-0"
+    <InputGroup className="h-8 pointer-coarse:h-10">
+      <InputGroupIconPicker
+        ariaLabel="Change page icon"
+        fallbackIcon={
+          <PageIconDisplay className="[&_svg]:size-4" icon={undefined} />
+        }
         icon={icon}
-        pageId={pageId}
-        pages={pages}
-        previousSlug={previousSlug}
-        seed={seed}
-        title={resolvedTitle}
-        triggerButtonSize="icon-sm"
-        triggerButtonVariant="ghost"
+        onOpenChange={onIconPickerOpenChange}
+        onSelect={onIconSelect}
+        open={iconPickerOpen}
       />
-      <Input
+      <InputGroupInput
         aria-label="Page title"
-        className="h-7 min-w-0 flex-1 px-2"
+        autoComplete="off"
         onBlur={onTitleBlur}
         onChange={(event) => onTitleChange(event.target.value)}
         onFocus={onTitleFocus}
@@ -169,6 +193,6 @@ function PageBreadcrumbCurrentCrumbEditor({
         type="text"
         value={title}
       />
-    </div>
+    </InputGroup>
   );
 }

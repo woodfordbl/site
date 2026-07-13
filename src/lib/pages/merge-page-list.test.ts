@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import {
+  databaseTemplatePageId,
+  databaseTemplatePageSlug,
+} from "@/lib/databases/database-template-page.ts";
 import { mergePageList } from "@/lib/pages/merge-page-list.ts";
 import { TEMPLATE_PAGE_ID } from "@/lib/pages/template-page.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
@@ -116,6 +120,24 @@ describe("mergePageList", () => {
     ]);
 
     expect(merged.some((page) => page.id === TEMPLATE_PAGE_ID)).toBe(false);
+    expect(merged.map((page) => page.id).sort()).toEqual(["about", "home"]);
+  });
+
+  it("excludes database row-template pages from the navigable list", () => {
+    const templateId = databaseTemplatePageId("db-1");
+    const merged = mergePageList(serverPages, [
+      {
+        id: templateId,
+        slug: databaseTemplatePageSlug("db-1"),
+        title: "Row template",
+        parentId: null,
+        serverBaselineHash: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    expect(merged.some((page) => page.id === templateId)).toBe(false);
     expect(merged.map((page) => page.id).sort()).toEqual(["about", "home"]);
   });
 

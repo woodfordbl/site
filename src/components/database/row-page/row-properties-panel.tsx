@@ -1,3 +1,4 @@
+import { IconPlus } from "@tabler/icons-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 
 import { DatabaseCellValueView } from "@/components/database/database-cell.tsx";
@@ -5,6 +6,7 @@ import {
   DatabaseCellInlineEditor,
   DatabaseCheckboxCellEditor,
 } from "@/components/database/database-cell-editor.tsx";
+import { DatabaseColumnMenu } from "@/components/database/database-column-menu.tsx";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   type CellEditMove,
@@ -12,8 +14,15 @@ import {
   isInlineEditableField,
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
+import { Button } from "@/components/ui/button.tsx";
 import { useFormulaOverlay } from "@/db/formula-engine.ts";
+import {
+  addDatabaseField,
+  setDatabaseRowPropertiesVisibleFieldIds,
+} from "@/db/queries/database-collection-ops.ts";
+import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import type { FormulaCellResult } from "@/lib/databases/formula-values.ts";
+import { resolveColumnOrder } from "@/lib/databases/view-config.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
 import { formulaError } from "@/lib/formula/values.ts";
@@ -25,13 +34,13 @@ import type {
 import { cn } from "@/lib/utils.ts";
 
 /**
- * The row page's properties panel: one row per non-primary field (icon +
- * name + value), in schema order. The primary field is excluded — it IS the
- * page title rendered above the panel. Local fields edit inline by reusing
- * the grid's cell editors (`DatabaseCellInlineEditor` overlays the value
- * area, popover editors anchor to it — the ops they write through are
- * position-independent, so no grid coupling); synced fields (`sourceKey`)
- * are always read-only, and formula fields render their computed value.
+ * The row page's properties panel: one row per visible non-primary field
+ * (icon + name + value), in schema order. The primary field is excluded — it
+ * IS the page title rendered above the panel. Local fields edit inline by
+ * reusing the grid's cell editors; synced fields (`sourceKey`) are always
+ * read-only, and formula fields render their computed value. Property names
+ * open the same column menu as table headers. Visibility is filtered by
+ * `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of views).
  */
 
 /**
@@ -79,10 +88,14 @@ function RowPropertyValue({
 
   if (field.type === "formula") {
     const display = formulaDisplay(field, formulaResults);
-    return display === "" ? (
-      <RowPropertyEmptyLabel />
-    ) : (
-      <span className="truncate">{display}</span>
+    return (
+      <div className="flex min-h-8 w-full min-w-0 items-center overflow-hidden px-2">
+        {display === "" ? (
+          <RowPropertyEmptyLabel />
+        ) : (
+          <span className="truncate">{display}</span>
+        )}
+      </div>
     );
   }
 
@@ -99,24 +112,30 @@ function RowPropertyValue({
 
   if (!isInlineEditableField(field)) {
     // Synced field: display-only, view-mode rendering (url cells link out).
-    return <DatabaseCellValueView field={field} mode="view" value={value} />;
+    return (
+      <div className="flex min-h-8 w-full min-w-0 items-center overflow-hidden px-2">
+        <DatabaseCellValueView field={field} mode="view" value={value} />
+      </div>
+    );
   }
 
   return (
     <>
-      <button
-        className="flex size-full min-w-0 cursor-default items-center overflow-hidden rounded-sm text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
-        onClick={() => {
-          onStartEdit(field.id);
-        }}
-        type="button"
-      >
-        {value === null || value === undefined || value === "" ? (
-          <RowPropertyEmptyLabel />
-        ) : (
-          <DatabaseCellValueView field={field} mode="edit" value={value} />
-        )}
-      </button>
+      {editing ? null : (
+        <button
+          className="flex h-8 w-full min-w-0 cursor-default items-center overflow-hidden rounded-sm px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+          onClick={() => {
+            onStartEdit(field.id);
+          }}
+          type="button"
+        >
+          {value === null || value === undefined || value === "" ? (
+            <RowPropertyEmptyLabel />
+          ) : (
+            <DatabaseCellValueView field={field} mode="edit" value={value} />
+          )}
+        </button>
+      )}
       {editing ? (
         <DatabaseCellInlineEditor
           field={field}
@@ -132,6 +151,50 @@ function RowPropertyValue({
 
 function RowPropertyEmptyLabel() {
   return <span className="text-muted-foreground">Empty</span>;
+}
+
+interface RowPropertyLabelProps {
+  database: LocalDatabase;
+  displayFieldIds: readonly string[];
+  field: DatabaseField;
+}
+
+/** Icon + name trigger for the field's column menu (table-header parity). */
+function RowPropertyLabel({
+  database,
+  displayFieldIds,
+  field,
+}: RowPropertyLabelProps): ReactNode {
+  const FieldIcon = resolveFieldIcon(field);
+  const view = database.views[0];
+  const label = (
+    <>
+      <FieldIcon className="size-4 shrink-0 stroke-[1.5px]" />
+      <span className="truncate">{field.name}</span>
+    </>
+  );
+
+  if (!view) {
+    return (
+      <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+        {label}
+      </div>
+    );
+  }
+
+  return (
+    <DatabaseColumnMenu
+      actions="schema"
+      databaseId={database.id}
+      displayFieldIds={displayFieldIds}
+      field={field}
+      isPrimary={false}
+      triggerClassName="flex min-w-0 max-w-full items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left text-muted-foreground outline-hidden transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground"
+      view={view}
+    >
+      {label}
+    </DatabaseColumnMenu>
+  );
 }
 
 export interface RowPropertiesPanelProps {
@@ -152,11 +215,30 @@ export function RowPropertiesPanel({
   const formulaOverlay = useFormulaOverlay(database.id);
   const formulaResults = formulaOverlay.get(row.id);
 
-  const panelFields = useMemo(
+  const view = database.views[0];
+  const displayFieldIds = useMemo(
     () =>
-      database.fields.filter((field) => field.id !== database.primaryFieldId),
-    [database.fields, database.primaryFieldId]
+      view
+        ? resolveColumnOrder(database.fields, view).map((field) => field.id)
+        : database.fields.map((field) => field.id),
+    [database.fields, view]
   );
+
+  const panelFields = useMemo(() => {
+    const nonPrimary = database.fields.filter(
+      (field) => field.id !== database.primaryFieldId
+    );
+    const visibleIds = database.rowPropertiesVisibleFieldIds;
+    if (!visibleIds) {
+      return nonPrimary;
+    }
+    const visible = new Set(visibleIds);
+    return nonPrimary.filter((field) => visible.has(field.id));
+  }, [
+    database.fields,
+    database.primaryFieldId,
+    database.rowPropertiesVisibleFieldIds,
+  ]);
 
   const editableFieldIds = useMemo(
     () =>
@@ -190,28 +272,36 @@ export function RowPropertiesPanel({
     setEditingFieldId(fieldId);
   }, []);
 
-  if (panelFields.length === 0) {
-    return null;
-  }
+  const handleAddProperty = useCallback(() => {
+    const field = createDatabaseField("text", "Text");
+    addDatabaseField(database.id, field);
+    // A materialized visible list must adopt the new field explicitly.
+    if (database.rowPropertiesVisibleFieldIds) {
+      setDatabaseRowPropertiesVisibleFieldIds(database.id, [
+        ...database.rowPropertiesVisibleFieldIds,
+        field.id,
+      ]);
+    }
+  }, [database.id, database.rowPropertiesVisibleFieldIds]);
 
   return (
     <div className="flex flex-col gap-0.5">
       {panelFields.map((field) => {
-        const FieldIcon = resolveFieldIcon(field);
         const isCheckbox = field.type === "checkbox";
         return (
           <div
-            className="flex min-h-8 items-center gap-2 text-sm"
+            className="grid min-h-8 w-full grid-cols-[1fr_2fr] items-center gap-2 text-sm"
             key={field.id}
           >
-            <div className="flex w-36 shrink-0 items-center gap-1.5 text-muted-foreground sm:w-44">
-              <FieldIcon className="size-4 shrink-0 stroke-[1.5px]" />
-              <span className="truncate">{field.name}</span>
-            </div>
+            <RowPropertyLabel
+              database={database}
+              displayFieldIds={displayFieldIds}
+              field={field}
+            />
             <div
               className={cn(
-                "relative flex min-h-8 min-w-0 flex-1 items-center overflow-hidden",
-                isCheckbox && "justify-start"
+                "relative min-h-8 w-full min-w-0 overflow-hidden",
+                isCheckbox && "flex items-center justify-start"
               )}
             >
               <RowPropertyValue
@@ -227,6 +317,16 @@ export function RowPropertiesPanel({
           </div>
         );
       })}
+      <Button
+        className="mt-0.5 h-8 w-full justify-start gap-1.5 px-1 font-normal text-muted-foreground hover:text-foreground"
+        onClick={handleAddProperty}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        <IconPlus aria-hidden className="size-4 stroke-[1.5px]" />
+        Add Property
+      </Button>
     </div>
   );
 }

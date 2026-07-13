@@ -1,14 +1,7 @@
-import { type ReactNode, useMemo } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { type ComponentProps, type ReactNode, useMemo } from "react";
+import { Area, AreaChart, Line, LineChart, XAxis, YAxis } from "recharts";
 
+import { DitherKitCartesian } from "@/components/charts/dither-kit-cartesian.tsx";
 import { chartConfigPatch } from "@/components/database/views/database-chart-config-helpers.ts";
 import {
   ChartLegendSlot,
@@ -22,10 +15,20 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  renderCartesianGrids,
+  resolveCurveType,
+  useAreaSoftGradient,
+  useChartGlow,
   useChartGradientDither,
+  useChartReveal,
+  useResolvedChartDither,
 } from "@/components/ui/chart.tsx";
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
+import {
+  type ResolvedYDomain,
+  resolveAutoYDomain,
+} from "@/lib/charts/chart-y-domain.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   type DatabaseChartConfig as ChartViewConfig,
@@ -81,6 +84,11 @@ function makeTimeFormatter(windowMs: number): (t: number) => string {
   return (t) => fmt.format(t);
 }
 
+const PERCENT_TICK_FORMATTER = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+  style: "percent",
+});
+
 const TOOLTIP_LABEL_FORMAT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -106,6 +114,325 @@ function toPercentChange(points: FieldHistoryPoint[]): FieldHistoryPoint[] {
 function formatPercentChange(value: number): string {
   const sign = value >= 0 ? "+" : "−";
   return `${sign}${Math.abs(value).toFixed(2)}%`;
+}
+
+/**
+ * Curve + fill styling for the time-series marks, derived from the shared chart
+ * options (smoothing / gradient) and the workspace dither. Extracted as a hook
+ * so the chart component stays under the complexity budget.
+ */
+function useTimeSeriesMarkStyle(
+  chart: ChartViewConfig,
+  chartConfig: ChartConfig,
+  mark: "area" | "line"
+) {
+  const ditherEnabled = useResolvedChartDither(chart.dither);
+  // Dithered → pixel staircase (smoothing off); plain → smooth monotone
+  // (smoothing on). An explicit setting always wins.
+  const smoothing = chart.smoothing ?? !ditherEnabled;
+  const dither = useChartGradientDither(chartConfig, {
+    enabled: ditherEnabled,
+  });
+  const softGradient = useAreaSoftGradient(chartConfig, {
+    enabled: mark === "area" && !dither.enabled,
+  });
+  const glow = useChartGlow();
+  const reveal = useChartReveal();
+  return {
+    curveType: resolveCurveType(smoothing, dither),
+    dither,
+    glow,
+    pixelated: dither.enabled && !smoothing,
+    reveal,
+    softGradient,
+  };
+}
+
+/** Area fill: dither texture → soft vertical gradient → flat color, in order. */
+function resolveTimeSeriesAreaFill(
+  key: string,
+  dither: { enabled: boolean; fill: (key: string) => string },
+  softGradient: { enabled: boolean; fill: (key: string) => string }
+): string {
+  if (dither.enabled) {
+    return dither.fill(key);
+  }
+  if (softGradient.enabled) {
+    return softGradient.fill(key);
+  }
+  return `var(--color-${key})`;
+}
+
+type TimeSeriesTooltipFormatter = NonNullable<
+  ComponentProps<typeof ChartTooltipContent>["formatter"]
+>;
+
+/** Tooltip row: swatch → series label → mono value, keyed by the series name. */
+function makeTimeSeriesTooltipFormatter(
+  chartConfig: ChartConfig,
+  formatValue: (value: number) => string
+): TimeSeriesTooltipFormatter {
+  return (value, name, item) => {
+    const label = chartConfig[String(name)]?.label ?? String(name);
+    const swatch =
+      (item as { color?: string })?.color ?? `var(--color-${String(name)})`;
+    const display =
+      typeof value === "number" ? formatValue(value) : String(value);
+    return (
+      <div className="flex flex-1 items-center gap-2 leading-none">
+        <span
+          aria-hidden
+          className="size-2.5 shrink-0 rounded-[2px]"
+          style={{ backgroundColor: swatch }}
+        />
+        <span className="text-muted-foreground">{label}</span>
+        <span className="ml-auto font-medium font-mono text-foreground tabular-nums">
+          {display}
+        </span>
+      </div>
+    );
+  };
+}
+
+/** Tooltip header: the hovered point's timestamp, formatted. */
+function timeSeriesLabelFormatter(
+  _label: unknown,
+  payload: readonly { payload?: { t?: number } }[]
+): string {
+  const t = payload?.[0]?.payload?.t;
+  return typeof t === "number" ? TOOLTIP_LABEL_FORMAT.format(t) : "";
+}
+
+/** The dithered (dither-kit) time-series render: window control + canvas chart. */
+function DitheredTimeSeries({
+  chart,
+  chartConfig,
+  database,
+  mark,
+  palette,
+  formatValue,
+  seriesEntries,
+  timeFormatter,
+  view,
+  windowMs,
+  yDomain,
+}: {
+  chart: ChartViewConfig;
+  chartConfig: ChartConfig;
+  database: LocalDatabase;
+  formatValue: (value: number) => string;
+  mark: "area" | "line";
+  palette: ReturnType<typeof resolveChartPaletteId>;
+  seriesEntries: { key: string; points: Record<string, number>[] }[];
+  timeFormatter: (t: number) => string;
+  view: DatabaseView;
+  windowMs: number;
+  yDomain: ResolvedYDomain;
+}): ReactNode {
+  return (
+    <div>
+      <WindowControl
+        activeWindowMs={windowMs}
+        chart={chart}
+        database={database}
+        view={view}
+      />
+      <div className={cn("aspect-auto w-full", CHART_HEIGHT_CLASS)}>
+        <DitherKitCartesian
+          animate={false}
+          config={chartConfig}
+          data={mergeTimeSeriesRows(seriesEntries)}
+          gridMinor={chart.gridMinor ?? 0}
+          gridVertical={chart.gridVertical === true}
+          gridVerticalMaxTicks={8}
+          legendPosition={chart.legendPosition ?? "bottom"}
+          mark={mark}
+          palette={palette}
+          showGrid={chart.showGrid !== false}
+          showLegend={chart.showLegend ?? seriesEntries.length > 1}
+          showTooltip={chart.showTooltip !== false}
+          smooth={chart.smoothing === true}
+          tickCount={chart.gridCount}
+          tooltipLabelFormatter={(raw) => {
+            const t = Number(raw);
+            return Number.isFinite(t) ? TOOLTIP_LABEL_FORMAT.format(t) : raw;
+          }}
+          tooltipValueFormatter={(value) => formatValue(value)}
+          xAxisTitle={chart.xAxisTitle}
+          xKey="t"
+          xTickFormatter={(value) =>
+            typeof value === "number" ? timeFormatter(value) : ""
+          }
+          yAxisTitle={chart.yAxisTitle}
+          yMax={yDomain.max}
+          yMin={yDomain.min}
+          yTickFormatter={formatValue}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Merge per-series time points into unified rows keyed by timestamp. */
+function mergeTimeSeriesRows(
+  seriesEntries: { key: string; points: Record<string, number>[] }[]
+): Record<string, number>[] {
+  const byT = new Map<number, Record<string, number>>();
+  for (const { key, points } of seriesEntries) {
+    for (const point of points) {
+      const row = byT.get(point.t) ?? { t: point.t };
+      row[key] = point[key];
+      byT.set(point.t, row);
+    }
+  }
+  return [...byT.values()].sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Grids + X/Y axes + tooltip + legend for the Recharts time series. Extracted so
+ * `DatabaseTimeSeriesChart` stays under the cognitive-complexity budget.
+ */
+function renderTimeSeriesAxes({
+  chart,
+  chartConfig,
+  data,
+  formatValue,
+  seriesCount,
+  timeFormatter,
+  xAxisLabel,
+  yAxisLabel,
+  yDomain,
+}: {
+  chart: ChartViewConfig;
+  chartConfig: ChartConfig;
+  data: ReturnType<typeof useTimeSeriesChartData>["data"];
+  formatValue: (value: number) => string;
+  seriesCount: number;
+  timeFormatter: (t: number) => string;
+  xAxisLabel: ReturnType<typeof chartXAxisLabel>;
+  yAxisLabel: ReturnType<typeof chartYAxisLabel>;
+  yDomain: ResolvedYDomain;
+}): ReactNode {
+  return (
+    <>
+      {renderCartesianGrids(chart)}
+      <XAxis
+        allowDataOverflow
+        axisLine={false}
+        dataKey="t"
+        domain={data ? [data.from, data.to] : ["dataMin", "dataMax"]}
+        height={xAxisLabel ? X_AXIS_TITLE_HEIGHT_PX : undefined}
+        label={xAxisLabel}
+        minTickGap={32}
+        scale="time"
+        tickFormatter={timeFormatter}
+        tickLine={false}
+        tickMargin={8}
+        type="number"
+      />
+      <YAxis
+        allowDataOverflow
+        axisLine={false}
+        domain={[yDomain.min, yDomain.max]}
+        label={yAxisLabel}
+        tickCount={chart.gridCount}
+        tickFormatter={formatValue}
+        tickLine={false}
+        width={yAxisLabel ? Y_AXIS_TITLE_WIDTH_PX : "auto"}
+      />
+      {chart.showTooltip === false ? null : (
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={makeTimeSeriesTooltipFormatter(
+                chartConfig,
+                formatValue
+              )}
+              labelFormatter={timeSeriesLabelFormatter}
+            />
+          }
+        />
+      )}
+      <ChartLegendSlot chart={chart} seriesCount={seriesCount} />
+    </>
+  );
+}
+
+type MarkStyle = ReturnType<typeof useTimeSeriesMarkStyle>;
+
+/**
+ * The Recharts area/line chart element for the time series. A plain function
+ * (not a component) so the returned `<AreaChart>`/`<LineChart>` stays the direct
+ * child of `ResponsiveContainer`; keeps `DatabaseTimeSeriesChart` under budget.
+ */
+function renderTimeSeriesPlot({
+  axes,
+  curveType,
+  dither,
+  glow,
+  mark,
+  reveal,
+  seriesEntries,
+  softGradient,
+}: {
+  axes: ReactNode;
+  curveType: MarkStyle["curveType"];
+  dither: MarkStyle["dither"];
+  glow: MarkStyle["glow"];
+  mark: "area" | "line";
+  reveal: MarkStyle["reveal"];
+  seriesEntries: { key: string; points: Record<string, number>[] }[];
+  softGradient: MarkStyle["softGradient"];
+}): ReactNode {
+  if (mark === "area") {
+    return (
+      <AreaChart accessibilityLayer>
+        {dither.defs}
+        {softGradient.defs}
+        {reveal.defs}
+        {glow.defs}
+        {axes}
+        {seriesEntries.map(({ points, key }) => (
+          <Area
+            connectNulls
+            data={points}
+            dataKey={key}
+            fill={resolveTimeSeriesAreaFill(key, dither, softGradient)}
+            fillOpacity={dither.enabled || softGradient.enabled ? 1 : 0.3}
+            isAnimationActive={false}
+            key={key}
+            name={key}
+            stroke={`var(--color-${key})`}
+            strokeWidth={2}
+            style={reveal.maskStyle}
+            type={curveType}
+          />
+        ))}
+      </AreaChart>
+    );
+  }
+  return (
+    <LineChart accessibilityLayer>
+      {reveal.defs}
+      {glow.defs}
+      {axes}
+      {seriesEntries.map(({ points, key }) => (
+        <Line
+          connectNulls
+          data={points}
+          dataKey={key}
+          dot={false}
+          isAnimationActive={false}
+          key={key}
+          name={key}
+          stroke={`var(--color-${key})`}
+          strokeWidth={2}
+          style={reveal.maskStyle}
+          type={curveType}
+        />
+      ))}
+    </LineChart>
+  );
 }
 
 interface DatabaseTimeSeriesChartProps {
@@ -219,11 +546,17 @@ export function DatabaseTimeSeriesChart({
     return config;
   }, [data]);
 
-  const dither = useChartGradientDither(chartConfig);
+  // Per-chart curve + fill options (smoothing / gradient) + stroke bloom and a
+  // one-shot entrance wipe, all shared with the categorical chart config.
+  const { curveType, dither, glow, pixelated, reveal, softGradient } =
+    useTimeSeriesMarkStyle(chart, chartConfig, mark);
   const timeFormatter = makeTimeFormatter(windowMs);
   const xAxisLabel = chartXAxisLabel(chart.xAxisTitle);
   const yAxisLabel = chartYAxisLabel(chart.yAxisTitle);
   const formatValue = (value: number) => {
+    if (chart.yFormat === "percent") {
+      return PERCENT_TICK_FORMATTER.format(value);
+    }
     if (percent) {
       return formatPercentChange(value);
     }
@@ -279,111 +612,57 @@ export function DatabaseTimeSeriesChart({
     };
   });
 
-  const axes = (
-    <>
-      {chart.showGrid === false ? null : (
-        <CartesianGrid vertical={chart.gridVertical === true} />
-      )}
-      <XAxis
-        allowDataOverflow
-        axisLine={false}
-        dataKey="t"
-        domain={data ? [data.from, data.to] : ["dataMin", "dataMax"]}
-        height={xAxisLabel ? X_AXIS_TITLE_HEIGHT_PX : undefined}
-        label={xAxisLabel}
-        minTickGap={32}
-        scale="time"
-        tickFormatter={timeFormatter}
-        tickLine={false}
-        tickMargin={8}
-        type="number"
-      />
-      <YAxis
-        axisLine={false}
-        domain={["auto", "auto"]}
-        label={yAxisLabel}
-        tickCount={chart.gridCount}
-        tickFormatter={formatValue}
-        tickLine={false}
-        width={yAxisLabel ? Y_AXIS_TITLE_WIDTH_PX : "auto"}
-      />
-      <ChartTooltip
-        content={
-          <ChartTooltipContent
-            formatter={(value, name, item) => {
-              const label = chartConfig[String(name)]?.label ?? String(name);
-              const swatch =
-                (item as { color?: string })?.color ??
-                `var(--color-${String(name)})`;
-              const display =
-                typeof value === "number" ? formatValue(value) : String(value);
-              return (
-                <div className="flex flex-1 items-center gap-2 leading-none">
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-[2px]"
-                    style={{ backgroundColor: swatch }}
-                  />
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="ml-auto font-medium font-mono text-foreground tabular-nums">
-                    {display}
-                  </span>
-                </div>
-              );
-            }}
-            labelFormatter={(_label, payload) => {
-              const t = payload?.[0]?.payload?.t;
-              return typeof t === "number"
-                ? TOOLTIP_LABEL_FORMAT.format(t)
-                : "";
-            }}
-          />
-        }
-      />
-      <ChartLegendSlot chart={chart} seriesCount={seriesEntries.length} />
-    </>
-  );
+  // Shared Y auto-domain (levels/prices → zoom to the data band, not floor 0),
+  // used by both the Recharts and dither-kit renderers so they agree.
+  const yDomain = resolveAutoYDomain({
+    tickCount: chart.gridCount ?? 4,
+    values: seriesEntries.flatMap((s) => s.points.map((point) => point[s.key])),
+    yMax: chart.yMax,
+    yMin: chart.yMin,
+    zeroBased: false,
+  });
 
-  const plot =
-    mark === "area" ? (
-      <AreaChart accessibilityLayer>
-        {dither.defs}
-        {axes}
-        {seriesEntries.map(({ points, key }) => (
-          <Area
-            connectNulls
-            data={points}
-            dataKey={key}
-            fill={dither.fill(key)}
-            fillOpacity={dither.enabled ? 1 : 0.3}
-            isAnimationActive={false}
-            key={key}
-            name={key}
-            stroke={`var(--color-${key})`}
-            strokeWidth={2}
-            type={dither.lineType}
-          />
-        ))}
-      </AreaChart>
-    ) : (
-      <LineChart accessibilityLayer>
-        {axes}
-        {seriesEntries.map(({ points, key }) => (
-          <Line
-            connectNulls
-            data={points}
-            dataKey={key}
-            dot={false}
-            isAnimationActive={false}
-            key={key}
-            name={key}
-            stroke={`var(--color-${key})`}
-            strokeWidth={2}
-            type={dither.lineType}
-          />
-        ))}
-      </LineChart>
+  // Dithered mode → the dither-kit engine (see DitheredTimeSeries).
+  if (dither.enabled) {
+    return (
+      <DitheredTimeSeries
+        chart={chart}
+        chartConfig={chartConfig}
+        database={database}
+        formatValue={formatValue}
+        mark={mark}
+        palette={palette}
+        seriesEntries={seriesEntries}
+        timeFormatter={timeFormatter}
+        view={view}
+        windowMs={windowMs}
+        yDomain={yDomain}
+      />
     );
+  }
+
+  const axes = renderTimeSeriesAxes({
+    chart,
+    chartConfig,
+    data,
+    formatValue,
+    seriesCount: seriesEntries.length,
+    timeFormatter,
+    xAxisLabel,
+    yDomain,
+    yAxisLabel,
+  });
+
+  const plot = renderTimeSeriesPlot({
+    axes,
+    curveType,
+    dither,
+    glow,
+    mark,
+    reveal,
+    seriesEntries,
+    softGradient,
+  });
 
   return (
     <div>
@@ -397,7 +676,9 @@ export function DatabaseTimeSeriesChart({
         className={cn(
           "aspect-auto w-full",
           CHART_HEIGHT_CLASS,
-          dither.crispClassName
+          dither.fillCrispClassName,
+          pixelated && dither.curveCrispClassName,
+          glow.strokeClassName
         )}
         config={chartConfig}
         palette={palette}

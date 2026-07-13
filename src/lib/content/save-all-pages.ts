@@ -19,6 +19,7 @@ import { preparePageDocumentForAuthorSave } from "@/lib/content/prepare-page-doc
 import { saveDatabase } from "@/lib/content/save-database.ts";
 import { saveMediaAssets } from "@/lib/content/save-media-assets.ts";
 import { savePage } from "@/lib/content/save-page.ts";
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
@@ -99,7 +100,12 @@ async function saveLocalDatabaseToSource(database: LocalDatabase): Promise<{
  */
 export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
   const pages = localPagesCollection.toArray.filter(
-    (page) => !(isLocallyDeletedPage(page) || isTemplatePageId(page.id))
+    (page) =>
+      !(
+        isLocallyDeletedPage(page) ||
+        isTemplatePageId(page.id) ||
+        isDatabaseTemplatePageId(page.id)
+      )
   );
 
   const failed: SaveAllPagesResult["failed"] = [];

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { blockSchema } from "./block.ts";
 import { blockColorSchema } from "./rich-text.ts";
 
 /**
@@ -362,6 +361,8 @@ export const databaseTableViewConfigSchema = z.object({
       seriesFieldId: z.string().optional(),
       showLegend: z.boolean().optional(),
       legendPosition: z.enum(["top", "bottom", "right"]).optional(),
+      /** Hover tooltip on cartesian/pie marks (absent = on). */
+      showTooltip: z.boolean().optional(),
       /** Chart palette id from lib/charts (absent = site default). */
       palette: z.string().optional(),
       /** Per-series color overrides: series key → chart token index 1-5. */
@@ -369,9 +370,36 @@ export const databaseTableViewConfigSchema = z.object({
       showGrid: z.boolean().optional(),
       /** Draw vertical grid lines too (absent = horizontal only). */
       gridVertical: z.boolean().optional(),
-      /** Target number of horizontal grid lines (absent = auto). 2–12. */
+      /** Target number of major horizontal grid lines (absent = auto). 2–12. */
       gridCount: z.number().int().min(2).max(12).optional(),
+      /**
+       * Minor horizontal gridlines: subdivisions drawn between each pair of
+       * major lines (absent/0 = none). Rendered fainter and dashed.
+       */
+      gridMinor: z.number().int().min(0).max(8).optional(),
+      /**
+       * Y-axis number format for ticks + tooltips. `percent` shows values as
+       * percentages (×100 with a % suffix); absent/`number` uses the Y field's
+       * own display format (or a plain grouped number).
+       */
+      yFormat: z.enum(["number", "percent"]).optional(),
+      /** Fixed Y-axis lower bound (absent = auto from the data). */
+      yMin: z.number().optional(),
+      /** Fixed Y-axis upper bound (absent = auto from the data). */
+      yMax: z.number().optional(),
       stacked: z.boolean().optional(),
+      /**
+       * Smooth the line/area curve. Absent follows the look: on (monotone) for
+       * a plain chart, off (pixel staircase) for a dithered one. When off on a
+       * plain chart, segments are straight (linear).
+       */
+      smoothing: z.boolean().optional(),
+      /**
+       * Per-chart dither override. `inherit` (default/absent) follows the
+       * workspace "Chart dither" appearance setting; `on`/`off` force this chart
+       * dithered or plain regardless of the workspace.
+       */
+      dither: z.enum(["inherit", "on", "off"]).optional(),
     })
     .optional(),
 });
@@ -446,6 +474,8 @@ export type DatabaseSource = z.infer<typeof databaseSourceSchema>;
 export const localDatabaseSchema = z.object({
   id: z.string(),
   name: z.string(),
+  /** Stable path segment for the database beneath its host page. */
+  slug: z.string().optional(),
   /** Emoji or `tabler:IconName`, matching page icons. */
   icon: z.string().optional(),
   /** The title-like field; every database has exactly one. Names row pages. */
@@ -453,13 +483,23 @@ export const localDatabaseSchema = z.object({
   /** Row origin; absent means a local (user-authored) database. */
   source: databaseSourceSchema.optional(),
   /**
-   * Shared page template for rows-as-pages: blocks (with `{{ thisPage.X }}`
-   * expression tokens in text) rendered VIRTUALLY when a row page opens.
-   * Nothing is stored per row — a real page materializes copy-on-write only
-   * when the user first edits a specific row's page. Absent = default
-   * template (title + properties section).
+   * Default cell values applied to rows created via "New row", authored in
+   * the row-template editor's properties header. Sparse — clearing a default
+   * removes its key; explicit caller values always win over defaults.
    */
-  rowTemplate: z.array(blockSchema).optional(),
+  rowDefaults: z.record(z.string(), databaseCellValueSchema).optional(),
+  /**
+   * Where row pages show their properties: the resizable side panel
+   * (default) or a section at the top of the page. Per database — the whole
+   * row-page family (rows, preview, template editor) shares it.
+   */
+  rowPropertiesPlacement: z.enum(["panel", "top"]).optional(),
+  /**
+   * Which fields appear in the row-page properties panel. Independent of
+   * per-view `visibleFieldIds`. Absent = all non-primary fields; the primary
+   * field is always the page title and never listed here.
+   */
+  rowPropertiesVisibleFieldIds: z.array(z.string()).optional(),
   fields: z.array(databaseFieldSchema),
   views: z.array(databaseViewSchema),
   /**
@@ -479,6 +519,8 @@ export type LocalDatabase = z.infer<typeof localDatabaseSchema>;
 export const localDatabaseRowSchema = z.object({
   id: z.string(),
   databaseId: z.string(),
+  /** Optional row glyph, used by the database path and virtual row page. */
+  icon: z.string().optional(),
   /** Sparse per-field values keyed by field id; missing/null = empty. */
   values: z.record(z.string(), databaseCellValueSchema),
   /**

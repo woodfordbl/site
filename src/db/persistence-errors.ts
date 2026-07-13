@@ -5,9 +5,8 @@
  * stopped saving.
  */
 
-import { toast } from "sonner";
-
-const PERSISTENCE_TOAST_ID = "persistence-error";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import { TOAST_ID_PERSISTENCE_ERROR } from "@/lib/toast/toast-ids.ts";
 
 function isQuotaError(error: unknown): boolean {
   return (
@@ -26,8 +25,8 @@ function persistenceMessage(kind: "quota" | "unknown"): string {
 export function reportPersistenceError(error: unknown): void {
   console.error("[persistence] local save failed", error);
   const kind = isQuotaError(error) ? "quota" : "unknown";
-  toast.error(persistenceMessage(kind), {
+  appToast.error(persistenceMessage(kind), {
     duration: Number.POSITIVE_INFINITY,
-    id: PERSISTENCE_TOAST_ID,
+    id: TOAST_ID_PERSISTENCE_ERROR,
   });
 }

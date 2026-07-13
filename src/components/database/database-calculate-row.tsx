@@ -3,7 +3,7 @@ import { type ReactNode, useMemo } from "react";
 import {
   aggregateFnLabel,
   type GridColumn,
-  GUTTER_LANE_SCROLL_CLASS,
+  selectColumnPinnedClass,
 } from "@/components/database/database-grid-helpers.ts";
 import {
   computeAggregate,
@@ -29,12 +29,12 @@ function isNumericAggregate(fn: DatabaseAggregateFn): boolean {
 interface DatabaseCalculateRowProps {
   calculations: Partial<Record<string, DatabaseAggregateFn>>;
   columns: readonly GridColumn[];
-  /** Skip the top rule under the select lane in gutter modes. */
-  rowSelectGutter: boolean;
   /** Leading select-lane width (always {@link SELECTION_COLUMN_WIDTH_PX}). */
   rowSelectLeadingWidth: number;
   /** The view's filtered (pre-aggregate) row set. */
   rows: readonly LocalDatabaseRow[];
+  /** Leading select column pinned when horizontal pinning is enabled. */
+  selectColumnPinned: boolean;
   totalWidth: number;
 }
 
@@ -42,9 +42,9 @@ interface DatabaseCalculateRowProps {
 export function DatabaseCalculateRow({
   calculations,
   columns,
-  rowSelectGutter,
   rowSelectLeadingWidth,
   rows,
+  selectColumnPinned,
   totalWidth,
 }: DatabaseCalculateRowProps): ReactNode {
   const results = useMemo(() => {
@@ -66,22 +66,15 @@ export function DatabaseCalculateRow({
 
   return (
     <div
-      className={cn(
-        "sticky bottom-0 z-20 flex bg-background",
-        !rowSelectGutter && "border-border border-t"
-      )}
+      className="sticky bottom-0 z-20 flex bg-background"
       style={{ width: totalWidth, minWidth: "100%" }}
     >
-      {/* Leading selection-lane spacer — sticky at the lane's viewport
-          offset (`--grid-bleed`, set on the grid root) so it stays under
-          the select header while horizontally scrolling. Gutter modes ride
-          the shared lane scroll behavior (pushed off / peek slide-in). */}
       {rowSelectLeadingWidth > 0 ? (
         <div
           aria-hidden
           className={cn(
-            "sticky left-(--grid-bleed) z-10 h-9 shrink-0",
-            rowSelectGutter ? GUTTER_LANE_SCROLL_CLASS : "bg-background"
+            "h-9 shrink-0",
+            selectColumnPinnedClass(selectColumnPinned)
           )}
           style={{ width: rowSelectLeadingWidth }}
         />
@@ -93,8 +86,7 @@ export function DatabaseCalculateRow({
         return (
           <div
             className={cn(
-              "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden px-2 py-2",
-              rowSelectGutter && "border-border border-t",
+              "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden border-border border-t px-2 py-2",
               column.showVerticalLine && "border-border/60 border-r",
               alignEnd && "justify-end",
               column.pinned && "sticky z-10 bg-background",
@@ -103,8 +95,6 @@ export function DatabaseCalculateRow({
             key={column.field.id}
             style={{
               width: column.width,
-              // Pinned offsets already include the gutter bleed and the
-              // selection column width (see the grid's `gridColumns` memo).
               left: column.left ?? undefined,
             }}
           >

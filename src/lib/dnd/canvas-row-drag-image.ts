@@ -107,14 +107,15 @@ function buildDatabaseBlockDragPreview(shell: Element): HTMLElement | null {
 
   const clone = block.cloneNode(true) as HTMLElement;
 
-  // Select-lane bleed (`-ml-12`) is for the live canvas gutter — neutralize
-  // it in the ghost so the card edges stay square.
+  // Select-lane bleed (`-ml-8`) is for the live canvas gutter — neutralize
+  // it in the ghost so the card edges stay square. Also strip legacy `-ml-12`
+  // in case a clone still carries the previous bleed class.
   for (const el of clone.querySelectorAll("*")) {
     if (!(el instanceof HTMLElement)) {
       continue;
     }
-    if (hasClassToken(el, "-ml-12")) {
-      el.classList.remove("-ml-12");
+    if (hasClassToken(el, "-ml-8") || hasClassToken(el, "-ml-12")) {
+      el.classList.remove("-ml-8", "-ml-12");
       el.style.marginLeft = "0";
     }
   }
