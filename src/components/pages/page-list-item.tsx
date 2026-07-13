@@ -8,6 +8,7 @@ import {
   useDropTarget,
 } from "@/components/dnd/use-dnd.ts";
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
+import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import {
   PageListDatabaseRows,
@@ -50,9 +51,11 @@ import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
+import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
+import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
 import type { PageListDropTarget } from "@/lib/pages/resolve-page-list-drop-target.ts";
 import {
   resolveDeleteRedirectTarget,
@@ -434,9 +437,13 @@ export function PageListItem({
 
   const {
     handleTitleChange,
+    iconPickerOpen,
+    iconPickerSeed,
     isRenaming,
     openChangeIcon,
+    previousSlugRef,
     renameInputRef,
+    setIconPickerOpen,
     startRenaming,
     stopRenaming,
     title,
@@ -450,6 +457,23 @@ export function PageListItem({
   const navTarget = resolvePageNavTarget(page.id, pages);
   const active = isActivePage(page.id, page.slug, activePage);
   const pageIcon = localPage?.icon ?? page.icon;
+
+  // "Change icon" (from either the ⋯ dropdown or the right-click menu) flips the
+  // shared hook's `iconPickerOpen`; render the controlled picker here, anchored
+  // to the row's ⋯ button, and persist the chosen glyph.
+  const handleWriteIcon = useCallback(
+    (nextIcon: string) => {
+      persistPageIcon({
+        pageId: page.id,
+        icon: nextIcon,
+        title: title.trim() === "" ? DEFAULT_PAGE_TITLE : title,
+        previousSlug: previousSlugRef.current,
+        seed: localPage ? undefined : iconPickerSeed,
+        pages,
+      });
+    },
+    [iconPickerSeed, localPage, page.id, pages, previousSlugRef, title]
+  );
 
   const dropIndicator = useDropTarget((target: PageListDropTarget | null) =>
     target?.kind === "sibling" && target.anchorPageId === page.id
@@ -643,6 +667,18 @@ export function PageListItem({
             onOpenChange={setDeleteOpen}
             open={deleteOpen}
             pageId={page.id}
+          />
+
+          <GlyphIconPicker
+            anchor={menuActionRef}
+            ariaLabel="Change page icon"
+            contentAlign="start"
+            contentSide="right"
+            hideTrigger
+            icon={pageIcon}
+            onOpenChange={setIconPickerOpen}
+            onSelect={handleWriteIcon}
+            open={iconPickerOpen}
           />
         </>
       ) : null}
