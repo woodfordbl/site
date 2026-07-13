@@ -470,6 +470,27 @@ describe("FormulaCodeEditor", () => {
       );
     });
 
+    it("completes scope roots and chains into the property list", async () => {
+      const onChange = renderEditor();
+      typeText("thi");
+
+      const open = await waitForPopup();
+      expect(optionLabels(open)).toContain("thisPage");
+      expect(optionLabels(open)).toContain("thisRow");
+      await settleInteractionDelay();
+
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith("thisPage.");
+
+      // Accepting reopens the popup; the trailing dot puts it in
+      // property-only mode, and the pick replaces the whole reference.
+      await waitForPopup();
+      typeText("pri");
+      await settleInteractionDelay();
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith('prop("f-price")');
+    });
+
     it("replaces a typed scope-root prefix along with the partial name", async () => {
       const onChange = renderEditor();
       typeText("thisPage.pri");

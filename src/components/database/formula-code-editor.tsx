@@ -5,6 +5,7 @@ import {
   type CompletionContext,
   type CompletionResult,
   completionStatus,
+  startCompletion,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { bracketMatching } from "@codemirror/language";
@@ -1007,6 +1008,35 @@ function keywordCompletions(expected: FormulaType | null): Completion[] {
   }));
 }
 
+/** Display casing for {@link FORMULA_SCOPE_ROOTS} (grammar is case-blind). */
+const SCOPE_ROOT_LABELS = ["thisPage", "thisRow"] as const;
+
+/**
+ * Scope-root references complete too — typing `thi…` lands on `thisPage.`
+ * — and accepting one immediately reopens the popup, which the trailing
+ * dot puts in property-only mode, so the property pick (which replaces the
+ * whole reference with one canonical chip) is a keystroke away.
+ */
+function scopeRootCompletions(): Completion[] {
+  return SCOPE_ROOT_LABELS.map((label) => ({
+    apply: (
+      view: EditorView,
+      _completion: Completion,
+      from: number,
+      to: number
+    ) => {
+      const insert = `${label}.`;
+      applyInsert(view, { from, to }, insert, from + insert.length);
+      startCompletion(view);
+    },
+    boost: KEYWORD_BASE_BOOST,
+    detail: "reference",
+    info: "This row's properties — picking one inserts its reference.",
+    label,
+    type: "keyword",
+  }));
+}
+
 /** Is `position` inside a string or comment (no completions there)? */
 function insideStringOrComment(source: string, position: number): boolean {
   return highlightFormula(source).some(
@@ -1054,7 +1084,7 @@ function formulaCompletionSource(
         options.push(functionCompletion(entry, expected));
       }
     }
-    options.push(...keywordCompletions(expected));
+    options.push(...keywordCompletions(expected), ...scopeRootCompletions());
   }
   return { from, options, validFor: IDENTIFIER_VALID_FOR_RE };
 }
