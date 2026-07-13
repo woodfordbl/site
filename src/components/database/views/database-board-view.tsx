@@ -210,7 +210,12 @@ function BoardEmptyState({
   );
 }
 
-/** Card body shared by the column card and the drag-overlay preview. */
+/**
+ * Card body shared by the column card and the drag-overlay preview
+ * (Linear-style): a two-line clamped title, then one wrapping meta row of
+ * property values — select options keep their own pill styling, every other
+ * type gets a bordered chip.
+ */
 function BoardCardContent({
   cardFields,
   primaryField,
@@ -223,36 +228,45 @@ function BoardCardContent({
   const title = primaryField
     ? formatCellValue(primaryField, row.values[primaryField.id])
     : "";
+  // Empty card fields render nothing — no phantom blank chips. Formula
+  // markers pre-date coercion; the shared view handles them.
+  const metaFields = cardFields.filter(
+    (field) =>
+      field.type === "formula" ||
+      !isCellEmpty(coerceCellValue(field, row.values[field.id]))
+  );
   return (
     <>
       <span
         className={cn(
-          "truncate font-medium text-sm",
+          "line-clamp-2 font-medium text-sm",
           title === "" && "text-muted-foreground"
         )}
       >
         {title === "" ? "Untitled" : title}
       </span>
-      {cardFields.map((field) => {
-        const value = row.values[field.id];
-        // Empty card fields render nothing — no phantom blank lines.
-        // Formula markers pre-date coercion; the shared view handles them.
-        if (
-          field.type !== "formula" &&
-          isCellEmpty(coerceCellValue(field, value))
-        ) {
-          return null;
-        }
-        return (
-          <span
-            className="flex min-w-0 items-center text-muted-foreground text-xs"
-            key={field.id}
-          >
-            {/* mode="edit" keeps URL cells plain text — no nested <a>. */}
-            <DatabaseCellValueView field={field} mode="edit" value={value} />
-          </span>
-        );
-      })}
+      {metaFields.length > 0 ? (
+        <span className="flex min-w-0 flex-wrap items-center gap-1">
+          {metaFields.map((field) => (
+            <span
+              className={cn(
+                "flex min-w-0 items-center text-muted-foreground text-xs",
+                field.type !== "select" &&
+                  field.type !== "multiSelect" &&
+                  "rounded-full border border-border px-1.5 py-px"
+              )}
+              key={field.id}
+            >
+              {/* mode="edit" keeps URL cells plain text — no nested <a>. */}
+              <DatabaseCellValueView
+                field={field}
+                mode="edit"
+                value={row.values[field.id]}
+              />
+            </span>
+          ))}
+        </span>
+      ) : null}
     </>
   );
 }
@@ -336,7 +350,7 @@ function BoardCard({
       <BoardCardDropLine cardId={row.id} columnKey={columnKey} />
       <Link
         className={cn(
-          "flex flex-col gap-1 rounded-md border border-border bg-card p-2 outline-none transition-colors hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          "flex flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5 shadow-xs outline-none transition-shadow hover:shadow-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
           canDrag && (showGrabbing ? "cursor-grabbing" : "cursor-pointer")
         )}
         params={{ databaseId, rowId: row.id }}
@@ -366,7 +380,12 @@ interface BoardColumnViewProps {
   primaryField: DatabaseField | undefined;
 }
 
-/** One board column: header (dot + name + count + ⋯), card stack, add "+". */
+/**
+ * One board column (Linear-style): a tinted well holding the header — status
+ * dot + name + muted count, with hover-revealed ⋯ and "+" actions on the
+ * right — and the card stack. Adding a card lives on the header "+" (no
+ * bottom strip).
+ */
 function BoardColumnView({
   canAddRow,
   canDrag,
@@ -385,10 +404,16 @@ function BoardColumnView({
 
   return (
     <div
-      className="flex w-64 shrink-0 flex-col"
+      className={cn(
+        "flex w-72 shrink-0 flex-col rounded-lg bg-muted/40 p-1.5 transition-colors",
+        isColumnTarget && "bg-selection-primary/10"
+      )}
       data-board-column-id={column.key}
     >
-      <div className="flex h-8 items-center gap-1.5 px-1" data-reveal-group="">
+      <div
+        className="flex h-8 shrink-0 items-center gap-1.5 px-1.5"
+        data-reveal-group=""
+      >
         {column.value === null ? null : (
           <span
             aria-hidden
@@ -402,40 +427,54 @@ function BoardColumnView({
         <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
           {column.rows.length}
         </span>
-        {canEditConfig ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              nativeButton
-              render={
-                <Button
-                  aria-label={`Column ${column.label} options`}
-                  className="hover-reveal ml-auto shrink-0 text-muted-foreground data-popup-open:opacity-100"
-                  size="icon-xs"
-                  type="button"
-                  variant="ghost"
-                />
-              }
-            >
-              <IconDots aria-hidden />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  onHideColumn(column.key);
-                }}
+        <span className="ml-auto flex shrink-0 items-center gap-0.5">
+          {canEditConfig ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                nativeButton
+                render={
+                  <Button
+                    aria-label={`Column ${column.label} options`}
+                    className="hover-reveal shrink-0 text-muted-foreground data-popup-open:opacity-100"
+                    size="icon-xs"
+                    type="button"
+                    variant="ghost"
+                  />
+                }
               >
-                <IconEyeOff aria-hidden />
-                Hide column
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+                <IconDots aria-hidden />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    onHideColumn(column.key);
+                  }}
+                >
+                  <IconEyeOff aria-hidden />
+                  Hide column
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          {canAddRow ? (
+            <Button
+              aria-label={`Add row to column ${column.label}`}
+              className="hover-reveal shrink-0 text-muted-foreground"
+              onClick={() => {
+                onAddCard(column);
+              }}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <IconPlus aria-hidden />
+            </Button>
+          ) : null}
+        </span>
       </div>
       <div
         className={cn(
-          "flex min-h-16 flex-col gap-2 overflow-y-auto rounded-md p-1 transition-colors",
-          COLUMN_STACK_MAX_HEIGHT_CLASS,
-          isColumnTarget && "bg-accent/40"
+          "flex min-h-12 flex-col gap-1.5 overflow-y-auto rounded-md p-0.5",
+          COLUMN_STACK_MAX_HEIGHT_CLASS
         )}
       >
         {column.rows.map((row) => (
@@ -451,20 +490,6 @@ function BoardColumnView({
         ))}
         <BoardColumnEndDropLine columnKey={column.key} />
       </div>
-      {canAddRow ? (
-        <Button
-          aria-label={`Add row to column ${column.label}`}
-          className="justify-start text-muted-foreground/70"
-          onClick={() => {
-            onAddCard(column);
-          }}
-          size="xs"
-          variant="ghost"
-        >
-          <IconPlus />
-          New
-        </Button>
-      ) : null}
     </div>
   );
 }
@@ -484,12 +509,12 @@ function BoardCardDragPreview({
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed top-0 left-0 w-60 opacity-50"
+      className="pointer-events-none fixed top-0 left-0 w-64 opacity-50"
       style={{
         transform: `translate3d(${pointer.x}px, ${pointer.y}px, 0)`,
       }}
     >
-      <div className="flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1 rounded-md border border-border bg-card p-2">
+      <div className="flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5 shadow-md">
         <BoardCardContent
           cardFields={cardFields}
           primaryField={primaryField}
@@ -511,7 +536,7 @@ function BoardScrollArea({
   const { getDropZoneProps } = useDropZone();
   return (
     <div
-      className="flex w-full min-w-0 items-start gap-3 overflow-x-auto pb-2"
+      className="flex w-full min-w-0 items-start gap-2 overflow-x-auto pb-2"
       ref={scrollRef}
       {...getDropZoneProps()}
     >

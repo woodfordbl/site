@@ -4,7 +4,7 @@ import {
   IconChartLine,
   IconChartPie,
 } from "@tabler/icons-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, KeyboardEvent, ReactNode } from "react";
 
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
@@ -21,6 +21,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
 } from "@/components/ui/dropdown-menu.tsx";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group.tsx";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import {
   CHART_PALETTE_IDS,
@@ -139,7 +140,7 @@ function PaletteSwatch({ palette }: { palette: ChartPaletteId }): ReactNode {
 /** Grid-line count choices (horizontal gridlines / Y ticks); "auto" clears. */
 const GRID_COUNT_OPTIONS: RadioSubmenuOption[] = [
   { value: "auto", label: "Auto" },
-  ...["3", "4", "5", "6", "8", "10", "12"].map((n) => ({
+  ...["2", "3", "4", "5", "6", "8", "10", "12"].map((n) => ({
     value: n,
     label: n,
   })),
@@ -155,17 +156,97 @@ function fieldOption(field: DatabaseField): RadioSubmenuOption {
   };
 }
 
-const LEGEND_POSITION_LABELS = {
-  top: "Top",
-  bottom: "Bottom",
-  right: "Right",
-} as const;
-
-type LegendPosition = keyof typeof LEGEND_POSITION_LABELS;
-
-const LEGEND_POSITIONS: LegendPosition[] = ["top", "bottom", "right"];
+/** Legend placement options, in menu order. */
+const LEGEND_POSITION_OPTIONS: RadioSubmenuOption[] = [
+  { value: "top", label: "Top" },
+  { value: "bottom", label: "Bottom" },
+  { value: "right", label: "Right" },
+];
 
 type WriteChartPatch = (patch: Partial<ChartViewConfig>) => void;
+
+/**
+ * Keep typing inside menu-embedded inputs from triggering the menu's
+ * typeahead/arrow navigation; Escape still propagates so it closes the menu.
+ */
+function stopMenuKeys(event: KeyboardEvent<HTMLInputElement>): void {
+  if (event.key !== "Escape") {
+    event.stopPropagation();
+  }
+}
+
+/** One axis-title input: commits on blur/Enter, an empty value clears. */
+function AxisTitleInput({
+  label,
+  onCommit,
+  value,
+}: {
+  label: string;
+  onCommit: (title: string | undefined) => void;
+  value: string | undefined;
+}): ReactNode {
+  const commit = (raw: string) => {
+    const trimmed = raw.trim();
+    const next = trimmed === "" ? undefined : trimmed;
+    if (next !== value) {
+      onCommit(next);
+    }
+  };
+  return (
+    <InputGroup className="h-8 pointer-coarse:h-10">
+      <InputGroupInput
+        aria-label={label}
+        autoComplete="off"
+        defaultValue={value ?? ""}
+        onBlur={(event) => {
+          commit(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          stopMenuKeys(event);
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit(event.currentTarget.value);
+          }
+        }}
+        placeholder={label}
+      />
+    </InputGroup>
+  );
+}
+
+/** X/Y axis title inputs — cartesian marks only (pie has no axes). */
+function AxisTitleInputs({
+  chart,
+  write,
+}: {
+  chart: ChartViewConfig;
+  write: WriteChartPatch;
+}): ReactNode {
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <p className="px-2 pt-1.5 pb-0.5 text-muted-foreground text-xs">
+        Axis titles
+      </p>
+      <div className="flex flex-col gap-1 p-1 pt-0">
+        <AxisTitleInput
+          label="X axis title"
+          onCommit={(title) => {
+            write({ xAxisTitle: title });
+          }}
+          value={chart.xAxisTitle}
+        />
+        <AxisTitleInput
+          label="Y axis title"
+          onCommit={(title) => {
+            write({ yAxisTitle: title });
+          }}
+          value={chart.yAxisTitle}
+        />
+      </div>
+    </>
+  );
+}
 
 /** Segmented mark control (bar / line / area / pie), embedded in the menu. */
 function MarkPicker({
@@ -227,7 +308,9 @@ function ChartToggleItems({
       {showLegend ? (
         <RadioSubmenu
           currentLabel={
-            LEGEND_POSITION_LABELS[chart.legendPosition ?? "bottom"]
+            LEGEND_POSITION_OPTIONS.find(
+              (option) => option.value === (chart.legendPosition ?? "bottom")
+            )?.label ?? "Bottom"
           }
           label="Legend position"
           onValueChange={(value) => {
@@ -235,10 +318,7 @@ function ChartToggleItems({
               legendPosition: value as ChartViewConfig["legendPosition"],
             });
           }}
-          options={LEGEND_POSITIONS.map((value) => ({
-            value,
-            label: LEGEND_POSITION_LABELS[value],
-          }))}
+          options={LEGEND_POSITION_OPTIONS}
           value={chart.legendPosition ?? "bottom"}
         />
       ) : null}
@@ -589,6 +669,7 @@ export function ChartOptionsItems({
         showLegend={showLegend}
         write={write}
       />
+      {isPie ? null : <AxisTitleInputs chart={chart} write={write} />}
       <DropdownMenuSeparator />
       <RadioSubmenu
         currentLabel={paletteId ? CHART_PALETTES[paletteId].label : "Default"}

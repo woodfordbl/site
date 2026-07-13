@@ -9,11 +9,12 @@ import {
   groupRowsForView,
   isGroupableField,
 } from "@/lib/databases/row-group.ts";
-import type {
-  DatabaseField,
-  DatabaseTableViewConfig,
-  DatabaseView,
-  LocalDatabaseRow,
+import {
+  DATABASE_CHART_Y_AGGREGATES,
+  type DatabaseField,
+  type DatabaseTableViewConfig,
+  type DatabaseView,
+  type LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
 /**
@@ -37,14 +38,9 @@ export const DEFAULT_CHART_MARK: DatabaseChartMark = "bar";
 
 export const DEFAULT_CHART_Y_AGGREGATE: DatabaseChartYAggregate = "count";
 
-/** Y aggregate menu order. */
-export const CHART_Y_AGGREGATES = [
-  "count",
-  "sum",
-  "average",
-  "min",
-  "max",
-] as const satisfies readonly DatabaseChartYAggregate[];
+/** Y aggregate menu order (the schema enum is the single source). */
+export const CHART_Y_AGGREGATES: readonly DatabaseChartYAggregate[] =
+  DATABASE_CHART_Y_AGGREGATES;
 
 export const CHART_Y_AGGREGATE_LABELS: Record<DatabaseChartYAggregate, string> =
   {

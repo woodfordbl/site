@@ -158,7 +158,6 @@ function VirtualizedListRows({
   return (
     <ScrollArea
       className={cn("w-full", LIST_MAX_HEIGHT_CLASS)}
-      fadeEdges
       viewportRef={scrollRef}
     >
       <div
