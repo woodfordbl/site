@@ -24,6 +24,10 @@ import {
 } from "@/components/ui/chart.tsx";
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
+import {
+  type ResolvedYDomain,
+  resolveAutoYDomain,
+} from "@/lib/charts/chart-y-domain.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   type DatabaseChartConfig as ChartViewConfig,
@@ -203,6 +207,7 @@ function DitheredTimeSeries({
   timeFormatter,
   view,
   windowMs,
+  yDomain,
 }: {
   chart: ChartViewConfig;
   chartConfig: ChartConfig;
@@ -213,6 +218,7 @@ function DitheredTimeSeries({
   timeFormatter: (t: number) => string;
   view: DatabaseView;
   windowMs: number;
+  yDomain: ResolvedYDomain;
 }): ReactNode {
   return (
     <div>
@@ -244,8 +250,8 @@ function DitheredTimeSeries({
             typeof value === "number" ? timeFormatter(value) : ""
           }
           yAxisTitle={chart.yAxisTitle}
-          yMax={chart.yMax}
-          yMin={chart.yMin}
+          yMax={yDomain.max}
+          yMin={yDomain.min}
         />
       </div>
     </div>
@@ -280,6 +286,7 @@ function renderTimeSeriesAxes({
   timeFormatter,
   xAxisLabel,
   yAxisLabel,
+  yDomain,
 }: {
   chart: ChartViewConfig;
   chartConfig: ChartConfig;
@@ -289,8 +296,8 @@ function renderTimeSeriesAxes({
   timeFormatter: (t: number) => string;
   xAxisLabel: ReturnType<typeof chartXAxisLabel>;
   yAxisLabel: ReturnType<typeof chartYAxisLabel>;
+  yDomain: ResolvedYDomain;
 }): ReactNode {
-  const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
   return (
     <>
       {renderCartesianGrids(chart)}
@@ -309,9 +316,9 @@ function renderTimeSeriesAxes({
         type="number"
       />
       <YAxis
-        allowDataOverflow={hasYBound}
+        allowDataOverflow
         axisLine={false}
-        domain={[chart.yMin ?? "auto", chart.yMax ?? "auto"]}
+        domain={[yDomain.min, yDomain.max]}
         label={yAxisLabel}
         tickCount={chart.gridCount}
         tickFormatter={formatValue}
@@ -587,6 +594,16 @@ export function DatabaseTimeSeriesChart({
     };
   });
 
+  // Shared Y auto-domain (levels/prices → zoom to the data band, not floor 0),
+  // used by both the Recharts and dither-kit renderers so they agree.
+  const yDomain = resolveAutoYDomain({
+    tickCount: chart.gridCount ?? 4,
+    values: seriesEntries.flatMap((s) => s.points.map((point) => point[s.key])),
+    yMax: chart.yMax,
+    yMin: chart.yMin,
+    zeroBased: false,
+  });
+
   // Dithered mode → the dither-kit engine (see DitheredTimeSeries).
   if (dither.enabled) {
     return (
@@ -600,6 +617,7 @@ export function DatabaseTimeSeriesChart({
         timeFormatter={timeFormatter}
         view={view}
         windowMs={windowMs}
+        yDomain={yDomain}
       />
     );
   }
@@ -612,6 +630,7 @@ export function DatabaseTimeSeriesChart({
     seriesCount: seriesEntries.length,
     timeFormatter,
     xAxisLabel,
+    yDomain,
     yAxisLabel,
   });
 

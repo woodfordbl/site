@@ -42,6 +42,10 @@ import {
 } from "@/components/ui/chart.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import {
+  isZeroBasedAggregate,
+  resolveAutoYDomain,
+} from "@/lib/charts/chart-y-domain.ts";
+import {
   buildChartData,
   CHART_Y_AGGREGATE_LABELS,
   type ChartData,
@@ -207,6 +211,28 @@ function CartesianChart({
   }, [data]);
 
   const seriesKeys = Object.keys(chartConfig);
+
+  // Shared Y auto-domain so the Recharts and dither-kit renderers agree. Count/
+  // sum + stacked charts anchor at 0; average/min/max zoom to the data band.
+  const stackedDomain = chart.stacked === true;
+  const yDomain = useMemo(() => {
+    const values = data.categories.map((_, categoryIndex) => {
+      const perSeries = data.series.map(
+        (series) => series.points[categoryIndex] ?? 0
+      );
+      return stackedDomain
+        ? perSeries.reduce((sum, v) => sum + (Number.isFinite(v) ? v : 0), 0)
+        : perSeries;
+    });
+    return resolveAutoYDomain({
+      tickCount: chart.gridCount ?? 4,
+      values: values.flat(),
+      yMax: chart.yMax,
+      yMin: chart.yMin,
+      zeroBased: stackedDomain || isZeroBasedAggregate(aggregate),
+    });
+  }, [data, stackedDomain, aggregate, chart.gridCount, chart.yMin, chart.yMax]);
+
   // Per-chart curve + fill options (both default on).
   // Default off: dithered charts read as a pixel staircase (the dither-kit
   // look); turn Smoothing on for a monotone curve.
@@ -258,8 +284,8 @@ function CartesianChart({
           xAxisTitle={chart.xAxisTitle}
           xKey="category"
           yAxisTitle={chart.yAxisTitle}
-          yMax={chart.yMax}
-          yMin={chart.yMin}
+          yMax={yDomain.max}
+          yMin={yDomain.min}
         />
       </div>
     );
@@ -286,13 +312,12 @@ function CartesianChart({
       tickMargin={8}
     />
   );
-  const hasYBound = chart.yMin !== undefined || chart.yMax !== undefined;
   const yAxis = (
     <YAxis
-      allowDataOverflow={hasYBound}
+      allowDataOverflow
       allowDecimals={aggregate !== "count"}
       axisLine={false}
-      domain={[chart.yMin ?? "auto", chart.yMax ?? "auto"]}
+      domain={[yDomain.min, yDomain.max]}
       label={yAxisLabel}
       tickCount={chart.gridCount}
       tickFormatter={formatValue}
