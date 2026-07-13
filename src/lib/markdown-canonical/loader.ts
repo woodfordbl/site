@@ -1,4 +1,4 @@
-import type { parsePageMarkdown } from "./parse-page.ts";
+import type { parseBlocksMarkdown, parsePageMarkdown } from "./parse-page.ts";
 import type {
   serializeBlocksMarkdown,
   serializePageMarkdown,
@@ -12,6 +12,7 @@ import type {
  */
 
 export interface MarkdownCodec {
+  parseBlocksMarkdown: typeof parseBlocksMarkdown;
   parsePageMarkdown: typeof parsePageMarkdown;
   serializeBlocksMarkdown: typeof serializeBlocksMarkdown;
   serializePageMarkdown: typeof serializePageMarkdown;
@@ -25,6 +26,7 @@ export function loadMarkdownCodec(): Promise<MarkdownCodec> {
       import("./parse-page.ts"),
       import("./serialize-page.ts"),
     ]).then(([parseModule, serializeModule]) => ({
+      parseBlocksMarkdown: parseModule.parseBlocksMarkdown,
       parsePageMarkdown: parseModule.parsePageMarkdown,
       serializeBlocksMarkdown: serializeModule.serializeBlocksMarkdown,
       serializePageMarkdown: serializeModule.serializePageMarkdown,

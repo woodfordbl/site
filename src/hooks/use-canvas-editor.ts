@@ -38,6 +38,7 @@ import {
 } from "@/lib/canvas/focusable-rows.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
 import { warnSelectionInvariants } from "@/lib/canvas/selection-invariants.ts";
+import { loadMarkdownCodec } from "@/lib/markdown-canonical/loader.ts";
 import { buildAssetMediaBlock } from "@/lib/media/paste-media.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
@@ -273,9 +274,18 @@ export function useCanvasEditor(
     setClipboard(payloadFromBlocks(blocks));
 
     try {
-      await navigator.clipboard.writeText(blocksToPlainText(blocks));
+      // Canonical markdown on the system clipboard — pastes cleanly into
+      // other tools and round-trips through the canvas markdown paste.
+      const codec = await loadMarkdownCodec();
+      await navigator.clipboard.writeText(
+        codec.serializeBlocksMarkdown(blocks)
+      );
     } catch {
-      // Local clipboard state is enough for paste within the canvas.
+      try {
+        await navigator.clipboard.writeText(blocksToPlainText(blocks));
+      } catch {
+        // Local clipboard state is enough for paste within the canvas.
+      }
     }
   }, []);
 
@@ -443,11 +453,36 @@ export function useCanvasEditor(
     [clearSelection, resolvePasteTargetRowId, rowActions]
   );
 
+  const insertMarkdownText = useCallback(
+    (text: string) => {
+      const targetRowId = resolvePasteTargetRowId();
+      if (!targetRowId) {
+        return;
+      }
+      loadMarkdownCodec()
+        .then((codec) => {
+          // A random page id salts the deterministic minting, so every paste
+          // gets fresh unique block ids.
+          const blocks = codec.parseBlocksMarkdown(text, {
+            pageId: crypto.randomUUID(),
+          });
+          if (blocks.length === 0) {
+            return;
+          }
+          rowActions.pasteAfter(targetRowId, blocks);
+          clearSelection();
+        })
+        .catch(() => undefined);
+    },
+    [clearSelection, resolvePasteTargetRowId, rowActions]
+  );
+
   const handleCanvasPaste = useCallback(
     (event: ClipboardEvent) => {
       handleCanvasPasteEvent(event, {
         clipboard: clipboardRef.current,
         copySelection,
+        insertMarkdownText,
         deleteSelection,
         insertMediaFiles,
         pasteClipboard,
@@ -458,6 +493,7 @@ export function useCanvasEditor(
     [
       copySelection,
       deleteSelection,
+      insertMarkdownText,
       insertMediaFiles,
       pasteClipboard,
       selectAll,
