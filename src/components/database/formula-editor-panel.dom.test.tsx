@@ -25,6 +25,41 @@ vi.mock("@/hooks/device-layout.ts", () => ({
   useIsCoarsePrimaryPointer: () => pointer.coarse,
 }));
 
+// The sheet layout mounts CM6 even on coarse pointers. The sheet tests flip
+// this to keep the lazy editor suspended forever, so the Suspense fallback
+// textarea stays the editing surface DETERMINISTICALLY (otherwise the lazy
+// chunk resolves mid-test and swaps surfaces under the assertions); the
+// fine-pointer block leaves it false and exercises the real CM6.
+const cm6 = vi.hoisted(() => ({ suppressMount: false }));
+vi.mock(
+  "@/components/database/formula-code-editor.tsx",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/components/database/formula-code-editor.tsx")
+      >();
+    const react = await import("react");
+    /** Never settles — suspends the editor so the fallback textarea persists. */
+    const pending = new Promise<never>(() => undefined);
+    function SuppressibleFormulaCodeEditor(
+      props: Parameters<typeof actual.FormulaCodeEditor>[0]
+    ) {
+      if (cm6.suppressMount) {
+        react.use(pending);
+      }
+      return react.createElement(actual.FormulaCodeEditor, props);
+    }
+    return { ...actual, FormulaCodeEditor: SuppressibleFormulaCodeEditor };
+  }
+);
+
+// The accessory row pins itself above the on-screen keyboard by driving a
+// per-frame transform off `visualViewport` — none of which exists in jsdom,
+// and none of which is what these tests assert. Stub the anchor hook.
+vi.mock("@/hooks/use-visual-viewport-keyboard.ts", () => ({
+  useKeyboardToolbarAnchor: () => undefined,
+}));
+
 const FIELDS: DatabaseField[] = [
   { id: "f-price", name: "Price", type: "number" },
   { id: "f-qty", name: "Unit Count", type: "number" },
@@ -40,6 +75,9 @@ const PREVIEW_ROWS = [
 const PARSE_ERROR_RE = /Unexpected end of expression/;
 
 // Status-row position expectations (display coordinates, not canonical).
+// Anchored on the "(at character N)" suffix only the status message carries,
+// so the live preview's own "⚠ abs() expects…" rendering never matches.
+const ABS_DIAG_RE = /abs\(\) expects .*\(at character \d+\)/;
 const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
 const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
 const PARSE_ERROR_AT_8_RE = /Unexpected end of expression.*\(at character 8\)/;
@@ -55,6 +93,7 @@ function flushFrames(): Promise<void> {
 
 beforeEach(() => {
   pointer.coarse = true;
+  cm6.suppressMount = false;
   vi.stubGlobal(
     "requestAnimationFrame",
     (cb: FrameRequestCallback) =>
@@ -179,16 +218,24 @@ describe("FormulaEditorPanel", () => {
     expect(onSave).toHaveBeenCalledWith("  ");
   });
 
-  it("keeps Save enabled when only checker diagnostics are present", async () => {
+  it("disables Save when checker diagnostics are present", async () => {
+    // Save/Done require a VALID formula: checker diagnostics block the write
+    // just like parse errors do (broken drafts never persist).
     const onSave = renderPanel();
     await flushFrames();
 
     const textarea = screen.getByLabelText("Formula expression");
     fireEvent.change(textarea, { target: { value: 'abs("oops")' } });
     const save = screen.getByRole("button", { name: "Save" });
+    expect(save.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+
+    // Fixing the diagnostic re-enables Save.
+    fireEvent.change(textarea, { target: { value: "abs(-2)" } });
     expect(save.hasAttribute("disabled")).toBe(false);
     fireEvent.click(save);
-    expect(onSave).toHaveBeenCalledWith('abs("oops")');
+    expect(onSave).toHaveBeenCalledWith("abs(-2)");
   });
 
   it("humanizes stored canonical expressions into the draft", async () => {
@@ -606,6 +653,165 @@ describe("FormulaEditorPanel", () => {
       } finally {
         consoleError.mockRestore();
       }
+    });
+  });
+
+  describe("sheet layout (mobile)", () => {
+    beforeEach(() => {
+      pointer.coarse = true;
+      // Keep the CM6 mount suspended so the Suspense fallback textarea is
+      // the stable editing surface (see the module mock above).
+      cm6.suppressMount = true;
+    });
+
+    function renderSheet({ expression = "" } = {}) {
+      const onCancel = vi.fn();
+      const onSave = vi.fn();
+      render(
+        <FormulaEditorPanel
+          expression={expression}
+          fields={FIELDS}
+          layout="sheet"
+          onCancel={onCancel}
+          onSave={onSave}
+          previewRows={PREVIEW_ROWS}
+        />
+      );
+      return { onCancel, onSave };
+    }
+
+    /**
+     * While the CM6 boundary is pending (the suppressed mount above), React
+     * defers committing sibling updates from discrete events to the retry
+     * tick, so every interaction that asserts re-rendered state must flush a
+     * frame first.
+     */
+    async function fire(...events: (() => void)[]): Promise<void> {
+      for (const event of events) {
+        event();
+        await flushFrames();
+      }
+    }
+
+    it("Cancel backs out without saving", async () => {
+      const { onCancel, onSave } = renderSheet();
+      await flushFrames();
+
+      await fire(() => {
+        fireEvent.change(screen.getByLabelText("Formula expression"), {
+          target: { value: "1 + 2" },
+        });
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("Done saves the canonical draft and is gated on parse errors", async () => {
+      const { onSave } = renderSheet();
+      await flushFrames();
+
+      // Done is the sheet's only save affordance — no standalone Save.
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+      const textarea = screen.getByLabelText("Formula expression");
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: "thisPage.Price * 2" } });
+      });
+      const done = screen.getByRole("button", { name: "Done" });
+      expect(done.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(done);
+      expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
+
+      // Parse errors gate Done exactly like Save in the other layouts.
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: "1 +" } });
+      });
+      expect(done.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(done);
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    it("status pill toggles the expanded diagnostic message", async () => {
+      renderSheet();
+      await flushFrames();
+
+      const textarea = screen.getByLabelText("Formula expression");
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: 'abs("oops")' } });
+      });
+
+      // Collapsed: just the issue count, no message.
+      const pill = screen.getByRole("button", { name: "1 issue" });
+      expect(screen.queryByText(ABS_DIAG_RE)).toBeNull();
+
+      await fire(() => {
+        fireEvent.click(pill);
+      });
+      expect(screen.getByText(ABS_DIAG_RE)).toBeDefined();
+      await fire(() => {
+        fireEvent.click(pill);
+      });
+      expect(screen.queryByText(ABS_DIAG_RE)).toBeNull();
+
+      // Clean drafts relabel the pill with the checked result type.
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: "1 + 2" } });
+      });
+      expect(screen.getByRole("button", { name: "✓ number" })).toBeDefined();
+    });
+
+    it("property picker searches and inserts through the property path", async () => {
+      renderSheet();
+      await flushFrames();
+
+      await fire(() => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Insert property" })
+        );
+      });
+      const search = screen.getByLabelText("Search properties");
+      await fire(() => {
+        fireEvent.change(search, { target: { value: "pri" } });
+      });
+      expect(screen.queryByText("Unit Count")).toBeNull();
+
+      await fire(() => {
+        fireEvent.click(screen.getByText("Price"));
+      });
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe("thisPage.Price");
+    });
+
+    it("accessory operator keys insert their token at the caret", async () => {
+      renderSheet();
+      await flushFrames();
+
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      await fire(
+        () => {
+          fireEvent.change(textarea, { target: { value: "1 " } });
+        },
+        () => {
+          fireEvent.click(screen.getByRole("button", { name: "Insert ==" }));
+        }
+      );
+      expect(textarea.value).toBe("1 ==");
+    });
+
+    it("renders no inline reference browser in the sheet", async () => {
+      renderSheet();
+      await flushFrames();
+
+      expect(
+        screen.queryByLabelText("Search properties, functions, and operators")
+      ).toBeNull();
+      // The accessory row stands in for it.
+      expect(screen.getByRole("toolbar")).toBeDefined();
     });
   });
 });

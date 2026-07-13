@@ -347,8 +347,9 @@ draft preview and row templates remain one-shot pure-path evaluations.
 closes the menu and opens a **wide dialog** (hosted by `DatabaseColumnMenu` so it
 outlives the menu, same pattern as the icon picker) rendering the panel's two-column
 `layout="wide"` form — taller editor, status, preview, and Save on the left; the
-reference browser and detail strip on the right. Coarse pointers keep the in-drawer
-single-column stack (the dedicated mobile sheet is a later phase). The draft state is the **canonical**
+reference browser and detail strip on the right. Coarse pointers render the panel's
+mobile `layout="sheet"` form inside the submenu drawer (see **Mobile sheet** below).
+The draft state is the **canonical**
 expression (`prop("<id>")` — exactly what gets stored), so parse/check/preview/save
 operate on it directly; Save runs one final idempotent `canonicalizeExpression` to
 catch typed name refs the editor hasn't converted yet. The plain textarea (coarse
@@ -361,15 +362,17 @@ characters into what the user SEES — `formulaDisplayOffset`
 each `prop("<id>")` span's display length (the chip's field-name label in the CM6
 editor, the humanized reference in the textarea). A live preview evaluates the draft against
 the first row through the same scope the overlay uses (other formulas resolve to
-their computed values). Save is blocked only by parse errors — checker diagnostics
-warn but save, since the overlay degrades per-cell. The searchable Properties /
-Functions / Operators reference inserts at the caret, docs sourced from the catalog.
+their computed values). Save/Done require a **valid** formula — blocked by parse
+errors and by checker diagnostics, so broken drafts never persist — while
+blank/whitespace drafts stay saveable (clearing a formula is legitimate). The
+searchable Properties / Functions / Operators reference inserts at the caret, docs
+sourced from the catalog.
 
-On fine pointers the expression input is
+On fine pointers — and on coarse ones in the sheet layout — the expression input is
 [`formula-code-editor.tsx`](../../src/components/database/formula-code-editor.tsx),
 a CodeMirror 6 editor **lazy-loaded** at the panel boundary (`React.lazy`, plain
 textarea as the Suspense fallback) so CM6 stays out of the main bundle; coarse
-pointers keep the textarea until the mobile editor phase. The CM6 doc is the
+pointers outside the sheet keep the textarea. The CM6 doc is the
 canonical text; canonical property spans (located token-level by
 `formulaPropIdSpans`) render as **atomic schema-labeled chips**:
 `Decoration.replace` widgets (TokenChip-styled DOM built without React — field-type
@@ -409,6 +412,29 @@ theme-styled via CSS variables and parents to `document.body` so the enclosing m
 popup can't clip it; while it's open, Escape closes only the popup (its bubble is
 consumed so the menu stays open), and bubbles to close the menu otherwise. The chip
 option menu and diagnostics-in-editor (squiggles) are later stages (proposal §6).
+
+### Mobile sheet
+
+On coarse pointers the "Edit property" submenu drawer hosts the panel's
+`layout="sheet"` form (proposal §7): an explicit **Cancel / "Formula" / Done**
+header (Done is the sheet's only save affordance, gated exactly like Save), the
+**CM6 editor even on coarse pointers** (its native touch caret/IME handling is the
+point — the plain textarea remains only as the Suspense fallback), a compact
+tappable **status pill** ("✓ number" / "1 issue") that toggles the full
+first-diagnostic message beneath it, and the live preview line. There is no inline
+search/reference list/detail strip — insertion moves to
+[`formula-editor-accessory-row.tsx`](../../src/components/database/formula-editor-accessory-row.tsx),
+a keyboard accessory row pinned above the on-screen keyboard via
+`useKeyboardToolbarAnchor` (portaled to `document.body`, composited-transform
+tracking on iOS — the same machinery as the canvas `MobileEditorToolbar`): a
+property button and a function button open bottom **picker drawers** (vaul
+`variant="menu"`, `modal={false}` + `onCloseAutoFocus` preventDefault so the editor
+reclaims the keyboard after an insert; each has its own search), followed by the
+operator keys `( ) , " + - * / . ==`. All insertions go through the panel's caret
+splice / `insertPropertyReference` paths (canonical `prop("<id>")` chips on CM6),
+taps fire selection haptics, and the row hides while a picker drawer is open. The
+Rollup button stays reachable below the editor and swaps in the wizard as in the
+other layouts.
 
 ### Rollup wizard
 

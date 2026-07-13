@@ -313,7 +313,7 @@ function SelectOptionRow({
             and crush the rename input); touch gets a larger hit area. */}
         <DropdownMenuSubTrigger
           aria-label={`Change color for option ${option.name}`}
-          className="pointer-coarse:size-10 size-7 shrink-0 justify-center rounded-md p-0 [&>span]:justify-center [&>svg]:hidden"
+          className="pointer-coarse:size-10 size-8 shrink-0 justify-center rounded-md p-0 [&>span]:justify-center [&>svg]:hidden"
         >
           <BlockColorSwatch color={option.color} variant="background" />
         </DropdownMenuSubTrigger>
@@ -344,10 +344,11 @@ function SelectOptionRow({
       <Button
         aria-label={`Delete option ${option.name}`}
         onClick={onDelete}
-        size="icon-xs"
+        size="icon"
         variant="ghost"
       >
-        <IconTrash />
+        {/* Explicit size: the row matches the h-8 input, the glyph stays 16px. */}
+        <IconTrash className="size-4" />
       </Button>
     </div>
   );
@@ -430,8 +431,10 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
 interface FormulaExpressionEditorProps {
   databaseId: string;
   field: DatabaseField & { type: "formula" };
-  /** Passed through to the panel: `wide` for the dialog host. */
-  layout?: "stack" | "wide";
+  /** Passed through to the panel: `wide` for the dialog host, `sheet` for the coarse-pointer submenu drawer. */
+  layout?: "sheet" | "stack" | "wide";
+  /** Sheet layout's Cancel — backs out of the host without saving. */
+  onCancel?: () => void;
   /** Closes the host (column menu or dialog) after Save. */
   onSaved: () => void;
 }
@@ -451,6 +454,7 @@ function FormulaExpressionEditor({
   databaseId,
   field,
   layout,
+  onCancel,
   onSaved,
 }: FormulaExpressionEditorProps) {
   const database = useDatabase(databaseId);
@@ -481,6 +485,7 @@ function FormulaExpressionEditor({
       expression={field.expression}
       fields={fields}
       layout={layout}
+      onCancel={onCancel}
       onSave={(expression) => {
         if (
           expression !== canonicalizeExpression(field.expression, fields).text
@@ -685,8 +690,9 @@ function EditPropertySubmenu({
 
   if (field.type === "formula") {
     // Fine pointers escalate to the wide dialog — the 360px submenu is too
-    // cramped for real formula work. Coarse pointers keep the drawer submenu
-    // (the dedicated mobile sheet is a later phase).
+    // cramped for real formula work. Coarse pointers render the panel's
+    // mobile sheet form inside the submenu drawer: CM6 editor, Cancel/Done
+    // header, and the keyboard-anchored accessory row.
     if (!coarsePointer) {
       return (
         <DropdownMenuItem onClick={onOpenFormulaEditor}>
@@ -705,6 +711,8 @@ function EditPropertySubmenu({
           <FormulaExpressionEditor
             databaseId={databaseId}
             field={field}
+            layout="sheet"
+            onCancel={onRequestClose}
             onSaved={onRequestClose}
           />
         </DropdownMenuSubContent>
