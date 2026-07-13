@@ -55,11 +55,16 @@ import {
 } from "@/lib/formula/check.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
-import { formulaDisplayOffset } from "@/lib/formula/highlight.ts";
+import {
+  formulaDbIdSpans,
+  formulaPropIdSpans,
+} from "@/lib/formula/highlight.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
+  canonicalDatabaseReference,
   canonicalizeExpression,
   canonicalPropertyReference,
+  type FormulaRefDatabase,
   humanizeExpression,
 } from "@/lib/formula/ref-rewrite.ts";
 import {
@@ -173,6 +178,7 @@ function stopMenuKeys(
 /** The panel state one {@link spliceGeneratedExpression} call works against. */
 interface SpliceGeneratedTarget {
   codeEditorRef: RefObject<FormulaCodeEditorHandle | null>;
+  databases: readonly FormulaRefDatabase[] | undefined;
   draft: string;
   fields: readonly DatabaseField[];
   insertAtCaret: (text: string, caretOffset: number) => void;
@@ -194,7 +200,7 @@ function spliceGeneratedExpression(
   generated: string,
   target: SpliceGeneratedTarget
 ): void {
-  const { codeEditorRef, draft, fields, textareaRef } = target;
+  const { codeEditorRef, databases, draft, fields, textareaRef } = target;
   const blank = draft.trim() === "";
   const editor = codeEditorRef.current;
   if (editor !== null) {
@@ -211,7 +217,7 @@ function spliceGeneratedExpression(
     editor.insertText(generated, generated.length);
     return;
   }
-  const display = humanizeExpression(generated, fields);
+  const display = humanizeExpression(generated, fields, databases);
   if (!blank) {
     target.insertAtCaret(display, display.length);
     return;
@@ -273,6 +279,44 @@ function ReferenceRow({
       {children}
     </button>
   );
+}
+
+/**
+ * Canonical-offset → display-offset mapping over BOTH reference-span kinds.
+ * `formulaDisplayOffset` (highlight.ts) walks `prop("<id>")` spans only, so
+ * the panel merges the prop and db span lists (both located by the same
+ * token-level scan the chips use) and applies the identical arithmetic:
+ * every span before the offset shifts it by (rendered label − canonical
+ * text) and an offset inside a span clamps to the span's rendered extent.
+ */
+function referenceDisplayOffset(
+  source: string,
+  offset: number,
+  propLabelLength: (id: string) => number,
+  dbLabelLength: (id: string) => number
+): number {
+  const spans = [
+    ...formulaPropIdSpans(source).map((span) => ({
+      ...span,
+      label: propLabelLength(span.id),
+    })),
+    ...formulaDbIdSpans(source).map((span) => ({
+      ...span,
+      label: dbLabelLength(span.id),
+    })),
+  ].sort((a, b) => a.start - b.start);
+  let delta = 0;
+  for (const span of spans) {
+    if (span.end <= offset) {
+      delta += span.label - (span.end - span.start);
+      continue;
+    }
+    if (span.start < offset) {
+      return span.start + delta + Math.min(offset - span.start, span.label);
+    }
+    break;
+  }
+  return offset + delta;
 }
 
 /**
@@ -445,8 +489,12 @@ export interface FormulaEditorPanelProps {
   previewRows: readonly FormulaPreviewRow[];
   /**
    * Every database (own included) for the checker's member-access typing —
-   * `r.Estimate` resolves against the relation target's schema. Omitted,
-   * relation members check optimistically (no diagnostics, unknown type).
+   * `r.Estimate` resolves against the relation target's schema — and for
+   * `db("…")` reference name↔id rewriting everywhere the panel translates
+   * (textarea display, save, status positions, the CM6 editor's db chips
+   * and completions, the chip menu's Change-database list). Omitted,
+   * relation members check optimistically (no diagnostics, unknown type)
+   * and db references pass through untranslated.
    */
   relatedDatabases?: readonly FormulaRelatedDatabase[];
   /**
@@ -889,8 +937,8 @@ export function FormulaEditorPanel({
   // round-trip to themselves), so typing never sees the text change under
   // the caret.
   const displayDraft = useMemo(
-    () => humanizeExpression(draft, fields),
-    [draft, fields]
+    () => humanizeExpression(draft, fields, relatedDatabases),
+    [draft, fields, relatedDatabases]
   );
 
   /**
@@ -912,7 +960,9 @@ export function FormulaEditorPanel({
     const end = element?.selectionEnd ?? displayDraft.length;
     const nextDisplay =
       displayDraft.slice(0, start) + text + displayDraft.slice(end);
-    setDraft(canonicalizeExpression(nextDisplay, fields).text);
+    setDraft(
+      canonicalizeExpression(nextDisplay, fields, relatedDatabases).text
+    );
     const caret = start + caretOffset;
     requestAnimationFrame(() => {
       const target = textareaRef.current;
@@ -987,11 +1037,24 @@ export function FormulaEditorPanel({
     setChipTap(null);
   };
 
+  /** Chip menu → Change database: swap the db reference in place. */
+  const swapChipDatabase = (database: FormulaRefDatabase) => {
+    if (chipTap !== null) {
+      codeEditorRef.current?.replaceRange(
+        chipTap.from,
+        chipTap.to,
+        canonicalDatabaseReference(database.id)
+      );
+    }
+    setChipTap(null);
+  };
+
   /** Wizard output lands like property references do (see the helper). */
   const insertGeneratedExpression = (generated: string) => {
     setRollupOpen(false);
     spliceGeneratedExpression(generated, {
       codeEditorRef,
+      databases: relatedDatabases,
       draft,
       fields,
       insertAtCaret,
@@ -1025,7 +1088,7 @@ export function FormulaEditorPanel({
     if (saveDisabled) {
       return;
     }
-    onSave(canonicalizeExpression(draft, fields).text);
+    onSave(canonicalizeExpression(draft, fields, relatedDatabases).text);
   };
 
   // The picked preview row, defaulting to the first (and healing a stale
@@ -1058,14 +1121,18 @@ export function FormulaEditorPanel({
   }, [parsed, fields, previewValues, relations]);
 
   // Canonical-offset → visible-offset mapping for status positions: each
-  // `prop("<id>")` span before an offset renders shorter than its canonical
-  // text — as a name-labeled chip in the CM6 editor, as the humanized
-  // `thisPage.Name` reference in the textarea (unknown ids stay canonical
-  // there; a chip shows the raw id). Keyed off which surface the layout and
-  // pointer class mount (the sheet mounts CM6 even on coarse pointers).
+  // `prop("<id>")` / `db("<id>")` span before an offset renders shorter than
+  // its canonical text — as a name-labeled chip in the CM6 editor, as the
+  // humanized `thisPage.Name` / `db("Name")` reference in the textarea
+  // (unknown ids stay canonical there; a chip shows the raw id). Keyed off
+  // which surface the layout and pointer class mount (the sheet mounts CM6
+  // even on coarse pointers).
   const displayPosition = useMemo(() => {
     const fieldsById = new Map(fields.map((field) => [field.id, field]));
-    const labelLength = (id: string): number => {
+    const databasesById = new Map(
+      (relatedDatabases ?? []).map((database) => [database.id, database])
+    );
+    const propLabelLength = (id: string): number => {
       const field = fieldsById.get(id);
       if (usesTextarea) {
         return field === undefined
@@ -1074,8 +1141,17 @@ export function FormulaEditorPanel({
       }
       return field === undefined ? id.length : field.name.length;
     };
-    return (offset: number) => formulaDisplayOffset(draft, offset, labelLength);
-  }, [draft, fields, usesTextarea]);
+    const dbLabelLength = (id: string): number => {
+      const database = databasesById.get(id);
+      if (usesTextarea) {
+        // Known ids humanize to db("Name"); unknown ones stay canonical.
+        return canonicalDatabaseReference(database?.name ?? id).length;
+      }
+      return database === undefined ? id.length : database.name.length;
+    };
+    return (offset: number) =>
+      referenceDisplayOffset(draft, offset, propLabelLength, dbLabelLength);
+  }, [draft, fields, relatedDatabases, usesTextarea]);
 
   // The Rollup template affordance shows only when a rollup is buildable: a
   // relation field whose target database the caller resolved.
@@ -1151,7 +1227,10 @@ export function FormulaEditorPanel({
         wide && cn("max-h-72 min-h-40", chromeless)
       )}
       onChange={(event) => {
-        setDraft(canonicalizeExpression(event.target.value, fields).text);
+        setDraft(
+          canonicalizeExpression(event.target.value, fields, relatedDatabases)
+            .text
+        );
       }}
       onKeyDown={stopMenuKeys}
       placeholder="thisPage.Price * 1.1"
@@ -1187,6 +1266,7 @@ export function FormulaEditorPanel({
               autoFocus
               checkContext={checkContext}
               className={wide ? chromeless : undefined}
+              databases={relatedDatabases}
               editorRef={codeEditorRef}
               fields={fields}
               onChange={setDraft}
@@ -1200,8 +1280,10 @@ export function FormulaEditorPanel({
       )}
       {usesTextarea ? null : (
         <FormulaChipMenu
+          databases={relatedDatabases}
           fields={fields}
           onClose={closeChipMenu}
+          onPickDatabase={swapChipDatabase}
           onPickProperty={swapChipReference}
           onRemove={removeChipReference}
           tap={chipTap}

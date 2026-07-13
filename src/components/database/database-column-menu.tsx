@@ -506,7 +506,9 @@ function FormulaExpressionEditor({
       onCancel={onCancel}
       onSave={(expression) => {
         if (
-          expression !== canonicalizeExpression(field.expression, fields).text
+          expression !==
+          canonicalizeExpression(field.expression, fields, relatedDatabases)
+            .text
         ) {
           updateDatabaseField(
             databaseId,

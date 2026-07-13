@@ -74,6 +74,17 @@ const PREVIEW_ROWS = [
   { id: "row-1", label: "First row", values: FIRST_ROW_VALUES },
 ];
 
+// Workspace databases for db("…") reference threading (name↔id rewriting,
+// db chips, and the chip menu's Change-database list).
+const RELATED_DATABASES: FormulaRelatedDatabase[] = [
+  {
+    fields: [{ id: "t-hours", name: "Hours", type: "number" }],
+    id: "db-tasks",
+    name: "Tasks",
+  },
+  { fields: [], id: "db-projects", name: "Projects" },
+];
+
 const PARSE_ERROR_RE = /Unexpected end of expression/;
 
 // Status-row position expectations (display coordinates, not canonical).
@@ -82,6 +93,7 @@ const PARSE_ERROR_RE = /Unexpected end of expression/;
 const ABS_DIAG_RE = /abs\(\) expects .*\(at character \d+\)/;
 const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
 const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
+const ABS_DIAG_AT_28_RE = /abs\(\) expects .*\(at character 28\)/;
 const PARSE_ERROR_AT_8_RE = /Unexpected end of expression.*\(at character 8\)/;
 const NOT_A_TASKS_PROPERTY_RE = /isn't a property of Tasks/;
 const ROLLUP_TITLE_RE = /Rollup: /;
@@ -291,6 +303,56 @@ describe("FormulaEditorPanel", () => {
     expect(textarea.value).toBe('thisPage["Unit Count"] * 2');
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).toHaveBeenCalledWith('prop("f-qty") * 2');
+  });
+
+  describe("db references (textarea path)", () => {
+    function renderWithDatabases(onSave = vi.fn(), expression = "") {
+      render(
+        <FormulaEditorPanel
+          expression={expression}
+          fields={FIELDS}
+          onSave={onSave}
+          previewRows={PREVIEW_ROWS}
+          relatedDatabases={RELATED_DATABASES}
+        />
+      );
+      return onSave;
+    }
+
+    it("displays canonical db drafts by name and re-canonicalizes on save", async () => {
+      const onSave = renderWithDatabases(vi.fn(), 'db("db-tasks").length()');
+      await flushFrames();
+
+      // The stored canonical id form humanizes to the database NAME.
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe('db("Tasks").length()');
+
+      // Typed name forms canonicalize into the draft on every change while
+      // the display keeps the name (humanize∘canonicalize is stable) …
+      fireEvent.change(textarea, {
+        target: { value: 'db("Projects").length()' },
+      });
+      expect(textarea.value).toBe('db("Projects").length()');
+
+      // … and Save hands up the canonical id form.
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSave).toHaveBeenCalledWith('db("db-projects").length()');
+    });
+
+    it("maps status positions past db spans in display coordinates", async () => {
+      renderWithDatabases();
+      await flushFrames();
+
+      // Display: db("Tasks").length() + abs("oops") — the canonical draft
+      // holds db("db-tasks") (3 characters longer), so `"oops"` sits at
+      // canonical offset 30 but DISPLAY offset 27 → character 28.
+      fireEvent.change(screen.getByLabelText("Formula expression"), {
+        target: { value: 'db("Tasks").length() + abs("oops")' },
+      });
+      expect(screen.getByText(ABS_DIAG_AT_28_RE)).toBeDefined();
+    });
   });
 
   describe("relations", () => {
@@ -659,6 +721,38 @@ describe("FormulaEditorPanel", () => {
       expect(screen.getByText(PARSE_ERROR_AT_8_RE)).toBeDefined();
     });
 
+    /** {@link renderPanel} with the workspace databases threaded through. */
+    function renderPanelWithDatabases(onSave = vi.fn(), expression = "") {
+      render(
+        <FormulaEditorPanel
+          expression={expression}
+          fields={FIELDS}
+          onSave={onSave}
+          previewRows={PREVIEW_ROWS}
+          relatedDatabases={RELATED_DATABASES}
+        />
+      );
+      return onSave;
+    }
+
+    it("renders db chips and maps status positions through their labels", async () => {
+      renderPanelWithDatabases(
+        vi.fn(),
+        'db("db-tasks").length() + abs("oops")'
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")).not.toBeNull();
+      });
+      expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+        "Tasks"
+      );
+      // Display: Tasks.length() + abs("oops") — the chip renders as the
+      // 5-char label "Tasks", so `"oops"` sits at display offset 21 →
+      // character 22 (canonical numbering would claim 31).
+      expect(screen.getByText(ABS_DIAG_AT_22_RE)).toBeDefined();
+    });
+
     describe("chip option menu", () => {
       beforeEach(() => {
         // Base UI's popover positioner observes size; jsdom lacks
@@ -733,6 +827,47 @@ describe("FormulaEditorPanel", () => {
         });
         fireEvent.click(screen.getByRole("button", { name: "Save" }));
         expect(onSave).toHaveBeenCalledWith('prop("f-qty") * 2');
+      });
+
+      it("Change database swaps a db reference in place", async () => {
+        const onSave = renderPanelWithDatabases(
+          vi.fn(),
+          'db("db-tasks").length()'
+        );
+
+        const popup = await tapChip();
+        // A db chip's menu offers the database action, not the property one.
+        expect(
+          within(popup).queryByRole("button", { name: "Change property" })
+        ).toBeNull();
+        fireEvent.click(
+          within(popup).getByRole("button", { name: "Change database" })
+        );
+        fireEvent.click(
+          within(popup).getByRole("button", { name: "Projects" })
+        );
+
+        await waitFor(() => {
+          expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+            "Projects"
+          );
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        expect(onSave).toHaveBeenCalledWith('db("db-projects").length()');
+      });
+
+      it("Remove deletes a db reference's whole canonical span", async () => {
+        const onSave = renderPanelWithDatabases(vi.fn(), 'db("db-tasks")');
+
+        const popup = await tapChip();
+        fireEvent.click(within(popup).getByRole("button", { name: "Remove" }));
+
+        await waitFor(() => {
+          expect(document.querySelector(".cm-formula-chip")).toBeNull();
+        });
+        // The emptied (blank, hence saveable) draft is what Save hands up.
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        expect(onSave).toHaveBeenCalledWith("");
       });
     });
 
@@ -930,25 +1065,34 @@ describe("FormulaEditorPanel", () => {
       pointer.coarse = true;
     });
 
-    function renderMenu() {
+    function renderMenu(
+      tap: Partial<
+        NonNullable<Parameters<typeof FormulaChipMenu>[0]["tap"]>
+      > = {}
+    ) {
       const onClose = vi.fn();
+      const onPickDatabase = vi.fn();
       const onPickProperty = vi.fn();
       const onRemove = vi.fn();
       render(
         <FormulaChipMenu
+          databases={RELATED_DATABASES}
           fields={FIELDS}
           onClose={onClose}
+          onPickDatabase={onPickDatabase}
           onPickProperty={onPickProperty}
           onRemove={onRemove}
           tap={{
             anchor: document.createElement("span"),
-            fieldId: "f-price",
             from: 0,
+            kind: "property",
+            refId: "f-price",
             to: 'prop("f-price")'.length,
+            ...tap,
           }}
         />
       );
-      return { onClose, onPickProperty, onRemove };
+      return { onClose, onPickDatabase, onPickProperty, onRemove };
     }
 
     it("presents the options as a bottom drawer and routes Remove", async () => {
@@ -987,6 +1131,34 @@ describe("FormulaEditorPanel", () => {
         id: "f-qty",
         name: "Unit Count",
       });
+    });
+
+    it("offers Change database for db-chip taps and reports the pick", async () => {
+      const { onPickDatabase, onPickProperty } = renderMenu({
+        kind: "database",
+        refId: "db-tasks",
+        to: 'db("db-tasks")'.length,
+      });
+
+      const drawer = await waitFor(() => {
+        const element = document.querySelector("[data-slot='drawer-content']");
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      // A db chip's menu swaps databases, not properties.
+      expect(
+        within(drawer).queryByRole("button", { name: "Change property" })
+      ).toBeNull();
+      fireEvent.click(
+        within(drawer).getByRole("button", { name: "Change database" })
+      );
+      fireEvent.click(within(drawer).getByRole("button", { name: "Projects" }));
+      expect(onPickDatabase).toHaveBeenCalledTimes(1);
+      expect(onPickDatabase.mock.calls[0]?.[0]).toMatchObject({
+        id: "db-projects",
+        name: "Projects",
+      });
+      expect(onPickProperty).not.toHaveBeenCalled();
     });
   });
 });

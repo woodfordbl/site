@@ -1,6 +1,7 @@
 import {
   IconCheck,
   IconChevronRight,
+  IconDatabase,
   IconReplace,
   IconTrash,
 } from "@tabler/icons-react";
@@ -9,15 +10,18 @@ import { resolveFieldIcon } from "@/components/database/database-field-icons.ts"
 import type { FormulaChipTap } from "@/components/database/formula-code-editor.tsx";
 import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { useHaptics } from "@/hooks/haptics.ts";
+import type { FormulaRefDatabase } from "@/lib/formula/ref-rewrite.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
- * Option menu for a tapped property chip in the CM6 formula editor (proposal
- * §7: "chip tap = menu, not caret gymnastics"): **Change property** swaps the
- * reference in place (a submenu-style property list with the field-type
- * icons), **Remove** deletes the whole canonical span. The host owns the
- * splices — this component only reports which action was picked.
+ * Option menu for a tapped reference chip in the CM6 formula editor (proposal
+ * §7: "chip tap = menu, not caret gymnastics"). Property chips offer
+ * **Change property** (a submenu-style property list with the field-type
+ * icons); database chips — `db("…")` references — offer **Change database**
+ * (the workspace databases, database glyphs); both offer **Remove**, which
+ * deletes the whole canonical span. The host owns the splices — this
+ * component only reports which action was picked.
  *
  * Built on the ui Popover with an imperative `anchor` (the chip's DOM node
  * from {@link FormulaChipTap}) and plain buttons rather than DropdownMenu,
@@ -61,30 +65,39 @@ function focusOnMount(node: HTMLButtonElement | null): void {
   }, 0);
 }
 
-/** The two-option root: Change property (expands) and Remove (destructive). */
+/**
+ * The two-option root: a change action (expands to the pick list — "Change
+ * property" for property chips, "Change database" for db chips) and Remove
+ * (destructive). `onChange` undefined (nothing to swap to — e.g. a db chip
+ * with no databases wired) drops the change row and leaves Remove alone.
+ */
 function ChipMenuOptions({
-  onChangeProperty,
+  changeLabel,
+  onChange,
   onRemove,
 }: {
-  onChangeProperty: () => void;
+  changeLabel: string;
+  onChange: (() => void) | undefined;
   onRemove: () => void;
 }): ReactNode {
   const haptic = useHaptics();
   return (
     <div className="flex flex-col">
-      <button
-        className={chipMenuRowClassName}
-        onClick={() => {
-          haptic("selection");
-          onChangeProperty();
-        }}
-        ref={focusOnMount}
-        type="button"
-      >
-        <IconReplace className={chipMenuIconClassName} />
-        <span className="min-w-0 flex-1 truncate">Change property</span>
-        <IconChevronRight className={chipMenuIconClassName} />
-      </button>
+      {onChange === undefined ? null : (
+        <button
+          className={chipMenuRowClassName}
+          onClick={() => {
+            haptic("selection");
+            onChange();
+          }}
+          ref={focusOnMount}
+          type="button"
+        >
+          <IconReplace className={chipMenuIconClassName} />
+          <span className="min-w-0 flex-1 truncate">{changeLabel}</span>
+          <IconChevronRight className={chipMenuIconClassName} />
+        </button>
+      )}
       <button
         className={cn(
           chipMenuRowClassName,
@@ -94,6 +107,9 @@ function ChipMenuOptions({
           haptic("selection");
           onRemove();
         }}
+        // Without a change row, Remove is the first (only) option and takes
+        // the mount focus (see focusOnMount's contract).
+        ref={onChange === undefined ? focusOnMount : undefined}
         type="button"
       >
         <IconTrash className="size-4 shrink-0 stroke-[1.5px]" />
@@ -148,7 +164,55 @@ function ChipMenuPropertyList({
   );
 }
 
+/**
+ * The Change-database list — {@link ChipMenuPropertyList}'s db-chip analog:
+ * every workspace database behind the database glyph, the currently
+ * referenced one check-marked. Picking one reports it up (the host splices
+ * the canonical `db("<id>")` reference over the chip's span).
+ */
+function ChipMenuDatabaseList({
+  currentDatabaseId,
+  databases,
+  onPick,
+}: {
+  currentDatabaseId: string | undefined;
+  databases: readonly FormulaRefDatabase[];
+  onPick: (database: FormulaRefDatabase) => void;
+}): ReactNode {
+  const haptic = useHaptics();
+  return (
+    <div className="flex max-h-64 flex-col overflow-y-auto">
+      <div className="px-2 pt-1 pb-1 font-medium text-muted-foreground text-xs">
+        Change database to
+      </div>
+      {databases.map((database, index) => (
+        <button
+          className={chipMenuRowClassName}
+          key={database.id}
+          onClick={() => {
+            haptic("selection");
+            onPick(database);
+          }}
+          ref={index === 0 ? focusOnMount : undefined}
+          type="button"
+        >
+          <IconDatabase className={chipMenuIconClassName} />
+          <span className="min-w-0 flex-1 truncate">{database.name}</span>
+          {database.id === currentDatabaseId ? (
+            <IconCheck className={chipMenuIconClassName} />
+          ) : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export interface FormulaChipMenuProps {
+  /**
+   * Workspace databases — feeds the Change-database list for db-chip taps.
+   * Omitted (or empty), a db chip's menu offers Remove only.
+   */
+  databases?: readonly FormulaRefDatabase[];
   /** Live schema — feeds the Change-property list. */
   fields: readonly DatabaseField[];
   /**
@@ -156,6 +220,11 @@ export interface FormulaChipMenuProps {
    * tap and hands focus back to the editor.
    */
   onClose: () => void;
+  /**
+   * Change database: swap the tapped db reference to this database. The
+   * host splices `canonicalDatabaseReference(database.id)` over the span.
+   */
+  onPickDatabase?: (database: FormulaRefDatabase) => void;
   /**
    * Change property: swap the tapped reference to this field. The host
    * splices `canonicalPropertyReference(field.id)` over the tap's span.
@@ -167,18 +236,51 @@ export interface FormulaChipMenuProps {
   tap: FormulaChipTap | null;
 }
 
+/** The tap-kind-specific parts of the open menu (root label + pick list). */
+function chipMenuContent(
+  mode: "change" | "options",
+  props: FormulaChipMenuProps,
+  onExpand: () => void
+): ReactNode {
+  const { databases, fields, onPickDatabase, onPickProperty, tap } = props;
+  const database = tap?.kind === "database";
+  if (mode === "options") {
+    const changeable = database
+      ? (databases?.length ?? 0) > 0 && onPickDatabase !== undefined
+      : fields.length > 0;
+    return (
+      <ChipMenuOptions
+        changeLabel={database ? "Change database" : "Change property"}
+        onChange={changeable ? onExpand : undefined}
+        onRemove={props.onRemove}
+      />
+    );
+  }
+  if (database) {
+    return (
+      <ChipMenuDatabaseList
+        currentDatabaseId={tap?.refId}
+        databases={databases ?? []}
+        onPick={(picked) => onPickDatabase?.(picked)}
+      />
+    );
+  }
+  return (
+    <ChipMenuPropertyList
+      currentFieldId={tap?.refId}
+      fields={fields}
+      onPick={onPickProperty}
+    />
+  );
+}
+
 /** The chip option menu (see module docs). */
-export function FormulaChipMenu({
-  fields,
-  onClose,
-  onPickProperty,
-  onRemove,
-  tap,
-}: FormulaChipMenuProps): ReactNode {
-  const [mode, setMode] = useState<"options" | "properties">("options");
+export function FormulaChipMenu(props: FormulaChipMenuProps): ReactNode {
+  const { onClose, tap } = props;
+  const [mode, setMode] = useState<"change" | "options">("options");
 
   // Every new tap opens at the two-option root — a previous tap may have
-  // been dismissed with the property list showing. Render-phase reset (the
+  // been dismissed with the pick list showing. Render-phase reset (the
   // React derived-state pattern) rather than an effect: the menu must never
   // paint the stale list for a frame.
   const [lastTap, setLastTap] = useState(tap);
@@ -202,20 +304,9 @@ export function FormulaChipMenu({
         className="w-56 gap-0 p-1"
         side="bottom"
       >
-        {mode === "options" ? (
-          <ChipMenuOptions
-            onChangeProperty={() => {
-              setMode("properties");
-            }}
-            onRemove={onRemove}
-          />
-        ) : (
-          <ChipMenuPropertyList
-            currentFieldId={tap?.fieldId}
-            fields={fields}
-            onPick={onPickProperty}
-          />
-        )}
+        {chipMenuContent(mode, props, () => {
+          setMode("change");
+        })}
       </PopoverContent>
     </Popover>
   );

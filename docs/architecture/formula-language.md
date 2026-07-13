@@ -246,8 +246,11 @@ naming the constraint. Canonical stored text holds the database ID
 (`db("Enrollments")`), translated by `ref-rewrite.ts` exactly as property
 references are. The highlighter classifies the whole reference as one property
 span, and `formulaDbIdSpans` ([`highlight.ts`](../../src/lib/formula/highlight.ts))
-locates db spans for the editor's future chip pass, mirroring
-`formulaPropIdSpans`.
+locates db spans token-level for the editor's chip pass, mirroring
+`formulaPropIdSpans`. In the CM6 editor a db span renders as an atomic
+**database chip** — purple tone, database glyph, current name — with database
+entries in the fused autocomplete and a Change-database chip menu; see
+[Editor panel](#editor-panel) for the full treatment.
 
 **Typing** ([`check.ts`](../../src/lib/formula/check.ts)): `db(id)` types as
 `listTypeOf(rowTypeOf(id))` — the exact type a relation cell into that database
@@ -415,16 +418,26 @@ outlives the menu, same pattern as the icon picker) rendering the panel's two-co
 reference browser and detail strip on the right. Coarse pointers render the panel's
 mobile `layout="sheet"` form inside the submenu drawer (see **Mobile sheet** below).
 The draft state is the **canonical**
-expression (`prop("<id>")` — exactly what gets stored), so parse/check/preview/save
+expression (`prop("<id>")` / `db("<id>")` — exactly what gets stored), so
+parse/check/preview/save
 operate on it directly; Save runs one final idempotent `canonicalizeExpression` to
-catch typed name refs the editor hasn't converted yet. The plain textarea (coarse
+catch typed name refs the editor hasn't converted yet. The panel's
+`relatedDatabases` prop threads into every `canonicalizeExpression` /
+`humanizeExpression` call (textarea display and change, Save, the wizard's
+generated-expression splice) so `db("…")` references translate name↔id
+exactly as property references do, and `database-column-menu.tsx` passes the
+same list to its save-comparison canonicalize so a stored name-form db ref
+can't false-positive as "changed". The plain textarea (coarse
 pointers, and the fallback on fine ones) displays `humanizeExpression(draft)` and
 re-canonicalizes on every change — humanize∘canonicalize is display-stable, so
 textarea users still only ever see names. Status line shows the first parse error or
 checker diagnostic or "✓ Valid" plus the result-type badge; positions are 1-based
-characters into what the user SEES — `formulaDisplayOffset`
-([`highlight.ts`](../../src/lib/formula/highlight.ts)) maps canonical offsets past
-each `prop("<id>")` span's display length (the chip's field-name label in the CM6
+characters into what the user SEES — the panel's `referenceDisplayOffset`
+(merging `formulaPropIdSpans` + `formulaDbIdSpans`, the same arithmetic as
+[`highlight.ts`](../../src/lib/formula/highlight.ts)'s prop-only
+`formulaDisplayOffset`) maps canonical offsets past
+each `prop("<id>")` / `db("<id>")` span's display length (the chip's
+field-name / database-name label in the CM6
 editor, the humanized reference in the textarea). A live preview evaluates the draft against
 the first row through the same scope the overlay uses (other formulas resolve to
 their computed values). Save/Done require a **valid** formula — blocked by parse
@@ -450,7 +463,27 @@ is open relabels chips in place); unknown ids render a destructive strikethrough
 the caret placed after the chip; hand-typed `thisPage.X` stays plain highlighted
 text and converts to a chip (via `canonicalPropertyRewrites`) once the doc parses,
 on a short debounce, and only when the caret isn't touching the reference's span —
-conversion never fights the caret mid-word. Soft-wrapped, autogrowing, no line
+conversion never fights the caret mid-word.
+
+`db("<dbId>")` spans are chips of the same cloth: **database chips** (purple
+TokenChip tone against the property chips' blue, the database glyph, the
+current database name) built by the same decoration pass — one shared
+`referenceChipSpans` list (prop + db spans merged) feeds decorations,
+diagnostics (chip rings + squiggle widening), and tap resolution, so the
+three can't disagree about what is a chip, and atomicity, whole-chip
+backspace, the diagnosed ring, and baseline alignment carry over unchanged.
+Labels come from a `databases` prop (`FormulaRefDatabase[]` — the panel
+threads its `relatedDatabases` through) held in a `chipDatabases` state field
+exactly like `chipFields`, so a database rename relabels open db chips live;
+ids matching no database render destructive strikethrough "Unknown database"
+chips. Because the chip pass is token-level, a hand-typed name form
+`db("Tasks")` chips the moment it completes — as an unknown chip, names not
+being ids — and the same debounced canonicalizer pass rewrites it to the id
+form once the caret leaves the span (`canonicalDatabaseRewrites`, composed in
+the editor from the lib's exported primitives with `canonicalizeExpression`'s
+exact rules: id matches kept, normalized-name matches rewritten, first
+database in list order on collisions; token-level rather than parse-gated,
+matching what already renders as a chip mid-keystroke). Soft-wrapped, autogrowing, no line
 numbers; Mod+Enter saves; every key except Escape stops propagating so the
 enclosing menu's typeahead never steals keystrokes. Caret insertion from the
 reference list goes through the editor's imperative `editorRef` handle. Syntax
@@ -467,8 +500,16 @@ atomic chip — with the field-type icon and value type as detail; a typed
 `thisPage.`-prefix narrows to properties and is replaced whole), catalog functions
 (signature as detail, description as the info card, caret placed inside the inserted
 parens — after them for zero-argument functions), and the word operators/keywords
-(`and`/`or`/`not`/`true`/`false`). It opens on typed identifiers or explicit
-Ctrl+Space; Enter/Tab accept. Ranking is **type-aware**: `formulaEnclosingCallAt`
+(`and`/`or`/`not`/`true`/`false`). When databases are wired, a `db` entry
+completes like a scope root — accepting inserts the opener `db("` and reopens
+the popup — and **database-name completions** fill the `db("` argument
+position: labeled/filtered by name (a spaces-tolerant `validFor`, not the
+identifier rule), applied as the whole canonical `db("<id>")` reference (one
+atomic chip, opener and any partial argument consumed, extent re-resolved
+from live state) with the caret after the closing paren. The db-argument
+position sits inside a string literal, which normally suppresses completions
+— it is the one deliberate carve-out, checked before the string/comment gate.
+It opens on typed identifiers or explicit Ctrl+Space; Enter/Tab accept. Ranking is **type-aware**: `formulaEnclosingCallAt`
 (token-level, works mid-keystroke) finds the innermost unclosed call and argument
 index, the catalog's typed params give the expected type, and candidates whose
 result type fits (`formulaTypeFits` — the checker's own acceptance relation) are
@@ -484,11 +525,16 @@ callee while the caret sits in a call's argument list.
 panel wires `onChipTap`, presses on a chip are intercepted (caret placement *around*
 chips and whole-chip backspace are untouched) and reported with the chip's DOM node
 plus its canonical span resolved from the current doc at tap time — never stale
-build-time offsets. The panel opens
+build-time offsets — and a `kind` (`"property" | "database"`) with the
+referenced id (`refId`). The panel opens
 [`formula-chip-menu.tsx`](../../src/components/database/formula-chip-menu.tsx)
 anchored at the chip: **Change property** (a property list with field-type icons)
 splices `canonicalPropertyReference(id)` over the span via the editor handle's
-`replaceRange`, and **Remove** deletes the whole span. It's a ui Popover with plain
+`replaceRange`, and **Remove** deletes the whole span. Database chips get the
+same menu with **Change database** instead — the workspace databases behind
+the database glyph, the current one check-marked, a pick splicing
+`canonicalDatabaseReference(id)` over the span (the change row drops out
+entirely when there is nothing to swap to, leaving Remove). It's a ui Popover with plain
 buttons — not a DropdownMenu, because the stack layout lives inside a Base UI menu
 popup where nested menus are illegal (the rollup wizard's constraint) — and on coarse
 pointers it renders as a vaul bottom drawer (`variant="menu"`) automatically, matching
@@ -582,8 +628,9 @@ errors inline as "⚠ message". Never throws.
 
 ## Deferred
 
-`db()` editor affordances (a database chip via `formulaDbIdSpans`, db entries
-in the fused autocomplete and reference list), member canonicalization, member
+`db()` entries in the panel's inline reference list (the chips, fused
+autocomplete, and chip menu shipped — see [Editor panel](#editor-panel)),
+member canonicalization, member
 autocomplete after `r.`, save-time cross-database cycle rejection, and
 type-driven picker sheets for closed-type argument placeholders (a `unit` enum
 or select option opening a picker instead of the keyboard) are planned later

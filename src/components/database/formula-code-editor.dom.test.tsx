@@ -15,12 +15,18 @@ import {
   type FormulaCodeEditorHandle,
 } from "@/components/database/formula-code-editor.tsx";
 import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
+import type { FormulaRefDatabase } from "@/lib/formula/ref-rewrite.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 const FIELDS: DatabaseField[] = [
   { id: "f-price", name: "Price", type: "number" },
   { id: "f-qty", name: "Unit Count", type: "number" },
   { id: "f-note", name: "Note", type: "text" },
+];
+
+const DATABASES: FormulaRefDatabase[] = [
+  { id: "db-tasks", name: "Tasks" },
+  { id: "db-projects", name: "Projects" },
 ];
 
 // The panel memoizes this once per schema; the editor takes it as a prop.
@@ -382,6 +388,165 @@ describe("FormulaCodeEditor", () => {
     });
   });
 
+  describe("database chips", () => {
+    function chip(): HTMLElement {
+      const element = document.querySelector(".cm-formula-chip");
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("chip not rendered");
+      }
+      return element;
+    }
+
+    it("renders db() spans as name-labeled chips that relabel on rename", () => {
+      const { rerender } = render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          databases={DATABASES}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'db("db-tasks").length()'}
+        />
+      );
+
+      // The chip shows the CURRENT database name + the database glyph; the
+      // raw id is replaced, not displayed.
+      expect(chip().textContent).toBe("Tasks");
+      expect(chip().getAttribute("aria-label")).toBe("Database Tasks");
+      expect(chip().querySelector("svg")).not.toBeNull();
+      expect(cmContent().textContent).not.toContain("db-tasks");
+
+      // A database rename while the editor is open relabels the chip.
+      rerender(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          databases={[{ id: "db-tasks", name: "Chores" }]}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'db("db-tasks").length()'}
+        />
+      );
+      expect(chip().textContent).toBe("Chores");
+    });
+
+    it("renders unknown ids as destructive Unknown-database chips", () => {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          databases={DATABASES}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value={'db("db-ghost").length()'}
+        />
+      );
+
+      expect(chip().textContent).toBe("db-ghost");
+      expect(chip().title).toBe("Unknown database");
+      expect(chip().className).toContain("text-destructive");
+      expect(chip().className).toContain("line-through");
+    });
+
+    it("is atomic: backspace removes the whole db reference", () => {
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          databases={DATABASES}
+          fields={FIELDS}
+          onChange={onChange}
+          value={'1 + db("db-tasks")'}
+        />
+      );
+
+      // Caret starts at the end; one ArrowLeft jumps across the whole chip
+      // (no intermediate positions inside the canonical text).
+      fireEvent.keyDown(cmContent(), { key: "ArrowLeft" });
+      expect(editorView().state.selection.main.head).toBe("1 + ".length);
+
+      // One Backspace at its right edge deletes the entire reference.
+      act(() => {
+        const view = editorView();
+        view.dispatch({ selection: { anchor: view.state.doc.length } });
+      });
+      fireEvent.keyDown(cmContent(), { key: "Backspace" });
+      expect(onChange).toHaveBeenLastCalledWith("1 + ");
+      expect(document.querySelector(".cm-formula-chip")).toBeNull();
+    });
+
+    it('converts a typed db("Name") reference once the caret leaves its span', async () => {
+      const editorRef = createRef<FormulaCodeEditorHandle>();
+      const onChange = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          databases={DATABASES}
+          editorRef={editorRef}
+          fields={FIELDS}
+          onChange={onChange}
+          value=""
+        />
+      );
+
+      // A completed db("…") span chips token-level whatever its argument —
+      // the NAME form renders as a destructive unknown chip (names aren't
+      // ids) — but the canonicalizer must leave the TEXT alone while the
+      // caret still abuts the reference. (Same contract as a hand-typed
+      // name-form prop("Price").)
+      act(() => {
+        editorRef.current?.insertText('db("Tasks")', 'db("Tasks")'.length);
+      });
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 250);
+          })
+      );
+      expect(chip().title).toBe("Unknown database");
+      expect(onChange).toHaveBeenLastCalledWith('db("Tasks")');
+
+      // Typing past the reference moves the caret off its span; the debounce
+      // then rewrites the name form to the canonical id form, and the chip
+      // resolves to the known database.
+      act(() => {
+        editorRef.current?.insertText(".length()", ".length()".length);
+      });
+      await waitFor(() => {
+        expect(chip().getAttribute("aria-label")).toBe("Database Tasks");
+      });
+      expect(onChange).toHaveBeenLastCalledWith('db("db-tasks").length()');
+      expect(chip().textContent).toBe("Tasks");
+    });
+
+    it("reports chip taps with kind database and the current span", () => {
+      const onChipTap = vi.fn();
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          databases={DATABASES}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          onChipTap={onChipTap}
+          value={'db("db-tasks") + 1'}
+        />
+      );
+
+      const tapped = chip();
+      fireEvent.click(tapped);
+      expect(onChipTap).toHaveBeenLastCalledWith({
+        anchor: tapped,
+        from: 0,
+        kind: "database",
+        refId: "db-tasks",
+        to: 'db("db-tasks")'.length,
+      });
+    });
+  });
+
   describe("chip option menu hook", () => {
     function chip(): HTMLElement {
       const element = document.querySelector(".cm-formula-chip");
@@ -409,8 +574,9 @@ describe("FormulaCodeEditor", () => {
       expect(onChipTap).toHaveBeenCalledTimes(1);
       expect(onChipTap).toHaveBeenLastCalledWith({
         anchor: first,
-        fieldId: "f-price",
         from: 0,
+        kind: "property",
+        refId: "f-price",
         to: 'prop("f-price")'.length,
       });
 
@@ -426,8 +592,9 @@ describe("FormulaCodeEditor", () => {
       fireEvent.click(shifted);
       expect(onChipTap).toHaveBeenLastCalledWith({
         anchor: shifted,
-        fieldId: "f-price",
         from: "10 + ".length,
+        kind: "property",
+        refId: "f-price",
         to: '10 + prop("f-price")'.length,
       });
     });
@@ -544,11 +711,16 @@ describe("FormulaCodeEditor", () => {
       );
     }
 
-    function renderEditor(onChange = vi.fn(), fields = FIELDS) {
+    function renderEditor(
+      onChange = vi.fn(),
+      fields = FIELDS,
+      databases?: readonly FormulaRefDatabase[]
+    ) {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
           checkContext={CHECK_CONTEXT}
+          databases={databases}
           fields={fields}
           onChange={onChange}
           value=""
@@ -706,6 +878,59 @@ describe("FormulaCodeEditor", () => {
     it("offers no completions inside string literals", async () => {
       renderEditor();
       typeText('"pri');
+      await act(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 250);
+          })
+      );
+      expect(popup()).toBeNull();
+    });
+
+    it("completes db and chains into the database-name list", async () => {
+      const onChange = renderEditor(vi.fn(), FIELDS, DATABASES);
+      typeText("db");
+
+      const open = await waitForPopup();
+      expect(optionLabels(open)).toContain("db");
+      await settleInteractionDelay();
+
+      // Accepting inserts the opener and reopens the popup, now filled with
+      // database names (the db-argument position sits inside a string, so
+      // this is the deliberate carve-out from the no-completions-in-strings
+      // rule).
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith('db("');
+      const names = await waitForPopup();
+      expect(optionLabels(names).sort()).toEqual(["Projects", "Tasks"]);
+    });
+
+    it("applies a database-name completion as one canonical db chip", async () => {
+      const onChange = renderEditor(vi.fn(), FIELDS, DATABASES);
+      typeText('db("Ta');
+      await waitForPopup();
+      await settleInteractionDelay();
+
+      // Tasks is the only match; Enter accepts it — the WHOLE typed
+      // reference (opener + partial name) is replaced by the canonical
+      // id form, which renders as one atomic chip, caret after it.
+      fireEvent.keyDown(cmContent(), { key: "Enter" });
+      expect(onChange).toHaveBeenLastCalledWith('db("db-tasks")');
+      await waitFor(() => {
+        expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+          "Tasks"
+        );
+      });
+      expect(editorView().state.selection.main.head).toBe(
+        'db("db-tasks")'.length
+      );
+    });
+
+    it("offers no db entry without databases", async () => {
+      // "db" matches nothing else in the catalog/schema, so with no
+      // databases wired the popup must not open at all.
+      renderEditor();
+      typeText("db");
       await act(
         () =>
           new Promise((resolve) => {

@@ -49,17 +49,21 @@ import {
   formulaPropertyValueType,
   formulaTypeBadge,
   formulaTypeFits,
+  normalizeFormulaPropertyName,
 } from "@/lib/formula/check.ts";
 import {
   type FormulaHighlightKind,
+  formulaDbIdSpans,
   formulaEnclosingCallAt,
   formulaPropIdSpans,
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
 import { FORMULA_SCOPE_ROOTS, parseFormula } from "@/lib/formula/parse.ts";
 import {
+  canonicalDatabaseReference,
   canonicalPropertyReference,
   canonicalPropertyRewrites,
+  type FormulaRefDatabase,
   type FormulaSpanRewrite,
 } from "@/lib/formula/ref-rewrite.ts";
 import {
@@ -82,18 +86,21 @@ import { cn } from "@/lib/utils.ts";
  * `React.lazy` (see formula-editor-panel.tsx) so the CM6 chunk stays out of
  * the main bundle.
  *
- * The document is the CANONICAL expression (`prop("<fieldId>")` references —
- * exactly what gets stored). Canonical property spans render as atomic
- * schema-labeled chips ({@link PropertyChipWidget}): `Decoration.replace`
+ * The document is the CANONICAL expression (`prop("<fieldId>")` /
+ * `db("<databaseId>")` references — exactly what gets stored). Canonical
+ * reference spans render as atomic labeled chips: `Decoration.replace`
  * widgets over the canonical text plus `EditorView.atomicRanges`, so arrow
  * keys skip a chip, backspace/delete removes the whole reference, and
- * selection treats it as one unit. Chip labels recompute from the live
- * schema (`fields` prop → {@link chipFields} state field), so a rename while
- * the editor is open relabels chips in place; ids matching no field render a
- * destructive "Unknown property" chip. Hand-typed display references
- * (`thisPage.X`) stay plain highlighted text while typing and are converted
- * to canonical chips shortly after the reference is complete AND the caret
- * has left its span ({@link typedReferenceCanonicalizer}).
+ * selection treats it as one unit. Property chips ({@link PropertyChipWidget})
+ * label from the live schema (`fields` prop → {@link chipFields} state
+ * field); database chips ({@link DatabaseChipWidget}, purple tone, database
+ * glyph) label from the workspace databases (`databases` prop →
+ * {@link chipDatabases}), so a rename while the editor is open relabels
+ * chips in place; ids matching nothing render a destructive
+ * "Unknown property"/"Unknown database" chip. Hand-typed display references
+ * (`thisPage.X`, `db("Name")`) stay plain highlighted text while typing and
+ * are converted to canonical chips shortly after the reference is complete
+ * AND the caret has left its span ({@link typedReferenceCanonicalizer}).
  *
  * Soft-wrapped, autogrowing (min ~3 rows, capped with internal scroll), no
  * line numbers, syntax highlighting driven by the real tokenizer
@@ -187,16 +194,21 @@ export interface FormulaCodeEditorHandle {
 /**
  * One chip press routed to the host (see the CHIP TAP module docs): the
  * chip's rendered DOM node — the anchor for the host's option menu — and the
- * canonical `prop("<id>")` span it stood for, resolved from the CURRENT doc
- * at tap time.
+ * canonical `prop("<id>")` / `db("<id>")` span it stood for, resolved from
+ * the CURRENT doc at tap time.
  */
 export interface FormulaChipTap {
   /** The chip's DOM node, for anchoring the option menu. */
   anchor: HTMLElement;
-  /** The referenced field id (may match no live field for broken chips). */
-  fieldId: string;
   /** Canonical span start (inclusive) in the current doc. */
   from: number;
+  /** Which reference kind the chip stands for. */
+  kind: "database" | "property";
+  /**
+   * The referenced field/database id per `kind` (may match nothing live for
+   * broken chips).
+   */
+  refId: string;
   /** Canonical span end (exclusive) in the current doc. */
   to: number;
 }
@@ -219,6 +231,14 @@ export interface FormulaCodeEditorProps {
    * draws the border itself.
    */
   className?: string;
+  /**
+   * Workspace databases visible to `db("…")` references: db-chip labels,
+   * the db-name autocomplete, and typed-name canonicalization all read it.
+   * Same live-currency contract as `fields` (a database rename relabels open
+   * db chips). Omitted, db spans still chip but every id reads as unknown
+   * and no db completions are offered.
+   */
+  databases?: readonly FormulaRefDatabase[];
   /** Receives the imperative handle; `null` while unmounted. */
   editorRef?: RefObject<FormulaCodeEditorHandle | null>;
   /**
@@ -228,9 +248,10 @@ export interface FormulaCodeEditorProps {
   fields: readonly DatabaseField[];
   onChange: (value: string) => void;
   /**
-   * A click/tap landed on a property chip (see the CHIP TAP module docs).
-   * When wired, chip presses are intercepted and reported instead of placing
-   * the caret; absent, chip clicks keep CM's caret-at-boundary default.
+   * A click/tap landed on a reference chip — property or database (see the
+   * CHIP TAP module docs). When wired, chip presses are intercepted and
+   * reported instead of placing the caret; absent, chip clicks keep CM's
+   * caret-at-boundary default.
    */
   onChipTap?: (tap: FormulaChipTap) => void;
   /** Mod+Enter (Cmd on mac, Ctrl elsewhere) — the panel wires Save here. */
@@ -296,6 +317,26 @@ const chipFields = StateField.define<readonly DatabaseField[]>({
   update(value, transaction) {
     for (const effect of transaction.effects) {
       if (effect.is(setChipFields)) {
+        return effect.value;
+      }
+    }
+    return value;
+  },
+});
+
+/** Set by the React side whenever the `databases` prop changes. */
+const setChipDatabases = StateEffect.define<readonly FormulaRefDatabase[]>();
+
+/**
+ * The live workspace databases inside editor state — {@link chipFields}'
+ * exact analog for `db("<id>")` chips, so a database rename relabels open
+ * db chips without recreating the view.
+ */
+const chipDatabases = StateField.define<readonly FormulaRefDatabase[]>({
+  create: () => [],
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setChipDatabases)) {
         return effect.value;
       }
     }
@@ -428,36 +469,132 @@ class PropertyChipWidget extends WidgetType {
   }
 }
 
+/**
+ * Tabler `IconDatabase` as raw node data, hand-copied like
+ * `DATABASE_FIELD_TYPE_ICON_NODES` — the db-chip widget builds DOM without
+ * React, and no field-type map entry covers "a whole database".
+ */
+const DATABASE_CHIP_ICON_NODE: TablerIconNode = [
+  ["path", { d: "M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" }],
+  ["path", { d: "M4 6v6a8 3 0 0 0 16 0v-6" }],
+  ["path", { d: "M4 12v6a8 3 0 0 0 16 0v-6" }],
+];
+
+/**
+ * Inline chip for one `db("<id>")` span — {@link PropertyChipWidget}'s
+ * database analog, sharing its baseline-alignment and unknown-id rules but
+ * with a distinct purple tone (property chips are blue) and the database
+ * glyph, so whole-database references read differently from same-row
+ * property reads at a glance.
+ */
+class DatabaseChipWidget extends WidgetType {
+  private readonly diagnosed: boolean;
+  private readonly name: string | null;
+  private readonly rawId: string;
+
+  constructor(name: string | null, rawId: string, diagnosed: boolean) {
+    super();
+    this.diagnosed = diagnosed;
+    this.name = name;
+    this.rawId = rawId;
+  }
+
+  eq(other: DatabaseChipWidget): boolean {
+    return (
+      other.rawId === this.rawId &&
+      other.diagnosed === this.diagnosed &&
+      other.name === this.name
+    );
+  }
+
+  toDOM(): HTMLElement {
+    const chip = document.createElement("span");
+    chip.className = cn(
+      tokenChipVariants({
+        tone: this.name === null ? "destructive" : "purple",
+      }),
+      // Same baseline trick as the property chip (see its toDOM comment).
+      "cm-formula-chip select-none items-baseline py-0 align-baseline",
+      this.name === null && "line-through",
+      this.diagnosed && "cm-formula-chip-diagnosed"
+    );
+    if (this.name === null) {
+      chip.title = "Unknown database";
+      chip.setAttribute("aria-label", `Unknown database ${this.rawId}`);
+    } else {
+      chip.setAttribute("aria-label", `Database ${this.name}`);
+      chip.append(tablerIconSvg(DATABASE_CHIP_ICON_NODE));
+    }
+    const label = document.createElement("span");
+    label.className = "max-w-40 truncate";
+    label.textContent = this.name ?? this.rawId;
+    chip.append(label);
+    return chip;
+  }
+
+  /** Let CM handle clicks so the caret lands at the chip boundary. */
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/**
+ * Both reference-chip span kinds of `source` in one list — everything that
+ * renders as an atomic chip. Shared by decoration building, diagnostics
+ * (chip rings + squiggle widening), and tap resolution, so the three can't
+ * disagree about what is a chip.
+ */
+function referenceChipSpans(
+  source: string
+): { end: number; id: string; kind: "database" | "property"; start: number }[] {
+  return [
+    ...formulaPropIdSpans(source).map((span) => ({
+      ...span,
+      kind: "property" as const,
+    })),
+    ...formulaDbIdSpans(source).map((span) => ({
+      ...span,
+      kind: "database" as const,
+    })),
+  ].sort((a, b) => a.start - b.start);
+}
+
 function buildChipDecorations(state: EditorState): DecorationSet {
   const fieldsById = new Map(
     state.field(chipFields).map((field) => [field.id, field])
   );
+  const databasesById = new Map(
+    state.field(chipDatabases).map((database) => [database.id, database])
+  );
   const diagnosedStarts = state.field(diagnosticsField).diagnosedChipStarts;
   const builder = new RangeSetBuilder<Decoration>();
-  for (const span of formulaPropIdSpans(state.doc.toString())) {
-    builder.add(
-      span.start,
-      span.end,
-      Decoration.replace({
-        widget: new PropertyChipWidget(
-          fieldsById.get(span.id) ?? null,
-          span.id,
-          diagnosedStarts.has(span.start)
-        ),
-      })
-    );
+  for (const span of referenceChipSpans(state.doc.toString())) {
+    const diagnosed = diagnosedStarts.has(span.start);
+    const widget =
+      span.kind === "property"
+        ? new PropertyChipWidget(
+            fieldsById.get(span.id) ?? null,
+            span.id,
+            diagnosed
+          )
+        : new DatabaseChipWidget(
+            databasesById.get(span.id)?.name ?? null,
+            span.id,
+            diagnosed
+          );
+    builder.add(span.start, span.end, Decoration.replace({ widget }));
   }
   return builder.finish();
 }
 
 /**
  * Chip rendering + atomicity: `Decoration.replace` widgets over every
- * canonical property span, provided as `atomicRanges` so cursor motion,
- * deletion, and selection treat each chip as a single unit. Rebuilds on
- * diagnostics passes too — a diagnosed chip renders its own destructive
- * ring (see {@link FormulaDiagnostics}).
+ * canonical reference span (property AND database), provided as
+ * `atomicRanges` so cursor motion, deletion, and selection treat each chip
+ * as a single unit. Rebuilds on diagnostics passes too — a diagnosed chip
+ * renders its own destructive ring (see {@link FormulaDiagnostics}).
  */
-const propertyChips = ViewPlugin.fromClass(
+const referenceChips = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
 
@@ -468,10 +605,18 @@ const propertyChips = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const fieldsChanged =
         update.startState.field(chipFields) !== update.state.field(chipFields);
+      const databasesChanged =
+        update.startState.field(chipDatabases) !==
+        update.state.field(chipDatabases);
       const diagnosticsChanged =
         update.startState.field(diagnosticsField).diagnosedChipStarts !==
         update.state.field(diagnosticsField).diagnosedChipStarts;
-      if (update.docChanged || fieldsChanged || diagnosticsChanged) {
+      if (
+        update.docChanged ||
+        fieldsChanged ||
+        databasesChanged ||
+        diagnosticsChanged
+      ) {
         this.decorations = buildChipDecorations(update.state);
       }
     }
@@ -507,14 +652,20 @@ function chipEventTarget(event: MouseEvent): HTMLElement | null {
  */
 function chipTapAt(view: EditorView, chip: HTMLElement): FormulaChipTap | null {
   const pos = view.posAtDOM(chip, 0);
-  const spans = formulaPropIdSpans(view.state.doc.toString());
+  const spans = referenceChipSpans(view.state.doc.toString());
   const span =
     spans.find((candidate) => candidate.start === pos) ??
     spans.find((candidate) => candidate.start < pos && pos <= candidate.end);
   if (span === undefined) {
     return null;
   }
-  return { anchor: chip, fieldId: span.id, from: span.start, to: span.end };
+  return {
+    anchor: chip,
+    from: span.start,
+    kind: span.kind,
+    refId: span.id,
+    to: span.end,
+  };
 }
 
 /**
@@ -571,9 +722,51 @@ function selectionTouches(
 }
 
 /**
- * Converts hand-typed display references (`thisPage.X` — and pasted
- * name-form `prop("X")`) into canonical `prop("<id>")` chips once the doc
- * parses, debounced, and ONLY for spans the caret/selection isn't touching —
+ * `db("Name")` → `db("<id>")` rewrites, applying `canonicalizeExpression`'s
+ * exact db rules (id matches kept, normalized name matches rewritten, first
+ * database in list order on collisions) span-by-span so the caret filter can
+ * skip a reference still being typed. Composed here from the lib's exported
+ * primitives because `canonicalPropertyRewrites` is property-only; unlike
+ * it, this is token-level (no parse gate) — db spans place chips token-level
+ * too, so conversion stays aligned with what already renders as a chip even
+ * while the surrounding draft is unparseable mid-keystroke.
+ */
+function canonicalDatabaseRewrites(
+  source: string,
+  databases: readonly FormulaRefDatabase[]
+): FormulaSpanRewrite[] {
+  if (databases.length === 0) {
+    return [];
+  }
+  const ids = new Set(databases.map((database) => database.id));
+  const idsByName = new Map<string, string>();
+  for (const database of databases) {
+    const key = normalizeFormulaPropertyName(database.name);
+    if (!idsByName.has(key)) {
+      idsByName.set(key, database.id);
+    }
+  }
+  const rewrites: FormulaSpanRewrite[] = [];
+  for (const span of formulaDbIdSpans(source)) {
+    if (ids.has(span.id)) {
+      continue;
+    }
+    const id = idsByName.get(normalizeFormulaPropertyName(span.id));
+    if (id !== undefined) {
+      rewrites.push({
+        end: span.end,
+        start: span.start,
+        text: canonicalDatabaseReference(id),
+      });
+    }
+  }
+  return rewrites;
+}
+
+/**
+ * Converts hand-typed display references (`thisPage.X`, name-form
+ * `db("Name")` — and pasted name-form `prop("X")`) into canonical id-form
+ * chips once complete, debounced, and ONLY for spans the caret/selection isn't touching —
  * a reference still being typed (caret inside or abutting it) is left alone,
  * so the conversion never fights the caret mid-word. Selection changes also
  * reschedule, so clicking away from a completed reference converts it.
@@ -613,10 +806,11 @@ const typedReferenceCanonicalizer = ViewPlugin.fromClass(
 
     private canonicalize() {
       const { state } = this.view;
-      const rewrites = canonicalPropertyRewrites(
-        state.doc.toString(),
-        state.field(chipFields)
-      ).filter((rewrite) => !selectionTouches(state.selection, rewrite));
+      const source = state.doc.toString();
+      const rewrites = [
+        ...canonicalPropertyRewrites(source, state.field(chipFields)),
+        ...canonicalDatabaseRewrites(source, state.field(chipDatabases)),
+      ].filter((rewrite) => !selectionTouches(state.selection, rewrite));
       if (rewrites.length === 0) {
         return;
       }
@@ -697,7 +891,7 @@ function clampSpansToChips(
   source: string,
   spans: readonly DiagnosticSpan[]
 ): DiagnosticSpan[] {
-  const chips = formulaPropIdSpans(source);
+  const chips = referenceChipSpans(source);
   const widened = spans
     .map((span) => {
       let { end, start } = span;
@@ -743,7 +937,7 @@ function buildDiagnostics(state: EditorState): FormulaDiagnostics {
   const source = state.doc.toString();
   const raw = rawDiagnosticSpans(source, state.field(checkContextState));
   const diagnosedChipStarts = new Set<number>();
-  for (const chip of formulaPropIdSpans(source)) {
+  for (const chip of referenceChipSpans(source)) {
     if (raw.some((span) => span.start < chip.end && span.end > chip.start)) {
       diagnosedChipStarts.add(chip.start);
     }
@@ -1223,8 +1417,9 @@ const completionFields = new WeakMap<Completion, DatabaseField>();
 
 /**
  * The leading icon of each completion row (replaces CM's built-in icon
- * classes): the field-type/custom icon for properties, a function glyph for
- * functions, an empty spacer for keywords so columns stay aligned.
+ * classes): the field-type/custom icon for properties, the database glyph
+ * for database options, a function glyph for functions, an empty spacer for
+ * keywords so columns stay aligned.
  */
 function renderCompletionIcon(completion: Completion): Node {
   const holder = document.createElement("span");
@@ -1233,6 +1428,8 @@ function renderCompletionIcon(completion: Completion): Node {
   const field = completionFields.get(completion);
   if (field !== undefined) {
     holder.append(chipIcon(field));
+  } else if (completion.type === "database") {
+    holder.append(tablerIconSvg(DATABASE_CHIP_ICON_NODE));
   } else if (completion.type === "function") {
     holder.textContent = "ƒ";
   }
@@ -1361,6 +1558,129 @@ function scopeRootCompletions(): Completion[] {
   }));
 }
 
+/**
+ * A `db` reference completes like a scope root: accepting inserts the
+ * opener `db("` and immediately reopens the popup, which the db-argument
+ * position ({@link dbArgumentQueryAt}) fills with database names — the
+ * canonical pick is a keystroke away. Offered only when the host supplied
+ * databases; without them the flow would strand the user in an
+ * unterminated string.
+ */
+function dbRootCompletion(): Completion {
+  return {
+    apply: (
+      view: EditorView,
+      _completion: Completion,
+      from: number,
+      to: number
+    ) => {
+      const insert = 'db("';
+      applyInsert(view, { from, to }, insert, from + insert.length);
+      startCompletion(view);
+    },
+    boost: KEYWORD_BASE_BOOST,
+    detail: "reference",
+    info: "A whole database's rows — picking one inserts its reference.",
+    label: "db",
+    type: "keyword",
+  };
+}
+
+/**
+ * Matches a `db("` opener directly before a position with the (partial)
+ * argument text after it — the caret sits in a db reference's string
+ * argument. Anchored to the position, so an already-closed string earlier
+ * in the doc can't match.
+ */
+const DB_ARGUMENT_PREFIX_RE = /\bdb\s*\(\s*"([^"\\]*)$/i;
+
+/**
+ * Keep the db-name popup open across any argument input — database names
+ * may contain spaces, so the identifier rule would close it mid-name.
+ */
+const DB_ARGUMENT_VALID_FOR_RE = /^[^"\\]*$/;
+
+/** The db-argument position at `position`, if the caret sits in one. */
+function dbArgumentQueryAt(
+  source: string,
+  position: number
+): { query: string; refStart: number } | null {
+  const match = DB_ARGUMENT_PREFIX_RE.exec(source.slice(0, position));
+  if (match === null) {
+    return null;
+  }
+  return { query: match[1], refStart: match.index };
+}
+
+/**
+ * End (exclusive) of the db reference being completed at `position`: the
+ * whole span when the reference is already complete (caret mid-argument in
+ * `db("Ta|sks")`), else the caret itself (`db("Ta` still being typed) —
+ * the apply replaces the entire reference either way.
+ */
+function dbReferenceEnd(source: string, position: number): number {
+  const span = formulaDbIdSpans(source).find(
+    (candidate) => candidate.start < position && position <= candidate.end
+  );
+  return span?.end ?? position;
+}
+
+/**
+ * One database-name option inside `db("`: labeled/filtered by the database
+ * NAME, applied as the whole canonical `db("<id>")` reference (one atomic
+ * chip) with the caret after it — the typed opener and any argument
+ * remnant are consumed. The reference extent is re-resolved from the LIVE
+ * state at apply time (same staleness rule as {@link chipTapAt}).
+ */
+function databaseCompletion(database: FormulaRefDatabase): Completion {
+  return {
+    apply: (view) => {
+      const doc = view.state.doc.toString();
+      const head = view.state.selection.main.head;
+      const argument = dbArgumentQueryAt(doc, head);
+      if (argument === null) {
+        return;
+      }
+      const insert = canonicalDatabaseReference(database.id);
+      applyInsert(
+        view,
+        { from: argument.refStart, to: dbReferenceEnd(doc, head) },
+        insert,
+        argument.refStart + insert.length
+      );
+    },
+    detail: "database",
+    label: database.name,
+    type: "database",
+  };
+}
+
+/**
+ * Completions while the caret sits inside a `db("` argument: database
+ * names, filtered from the argument's start. Names may contain spaces, so
+ * `validFor` keeps the open popup filtering on any non-quote input instead
+ * of the identifier rule. `null` outside a db argument (or with no
+ * databases to offer — an empty popup would just block the string).
+ */
+function dbArgumentCompletions(
+  context: CompletionContext,
+  doc: string
+): CompletionResult | null {
+  const argument = dbArgumentQueryAt(doc, context.pos);
+  if (argument === null) {
+    return null;
+  }
+  const databases = context.state.field(chipDatabases);
+  if (databases.length === 0) {
+    return null;
+  }
+  return {
+    from: context.pos - argument.query.length,
+    options: databases.map(databaseCompletion),
+    validFor: DB_ARGUMENT_VALID_FOR_RE,
+  };
+}
+
 /** Is `position` inside a string or comment (no completions there)? */
 function insideStringOrComment(source: string, position: number): boolean {
   return highlightFormula(source).some(
@@ -1381,9 +1701,17 @@ function insideStringOrComment(source: string, position: number): boolean {
 function formulaCompletionSource(
   context: CompletionContext
 ): CompletionResult | null {
+  const doc = context.state.doc.toString();
+  // The db-argument position sits INSIDE a string literal, which the
+  // insideStringOrComment gate below would suppress — carve it out first,
+  // deliberately: database names complete there and nowhere else inside
+  // strings.
+  const dbArgument = dbArgumentCompletions(context, doc);
+  if (dbArgument !== null) {
+    return dbArgument;
+  }
   const word = context.matchBefore(IDENTIFIER_TAIL_RE);
   const from = word?.from ?? context.pos;
-  const doc = context.state.doc.toString();
   const scopeStart = scopePrefixStart(doc.slice(0, from));
   const propertyOnly = scopeStart < from;
   if (word === null && !(context.explicit || propertyOnly)) {
@@ -1409,6 +1737,9 @@ function formulaCompletionSource(
       }
     }
     options.push(...keywordCompletions(expected), ...scopeRootCompletions());
+    if (context.state.field(chipDatabases).length > 0) {
+      options.push(dbRootCompletion());
+    }
   }
   return { from, options, validFor: IDENTIFIER_VALID_FOR_RE };
 }
@@ -1581,12 +1912,19 @@ interface EditorCallbacks {
   onSubmit?: () => void;
 }
 
+/**
+ * Stable stand-in for an omitted `databases` prop, so the push-effect's
+ * dependency never flips identity between renders.
+ */
+const NO_DATABASES: readonly FormulaRefDatabase[] = [];
+
 /** The CM6 formula editor (see module docs). */
 export function FormulaCodeEditor({
   ariaLabel,
   autoFocus = false,
   checkContext,
   className,
+  databases = NO_DATABASES,
   editorRef,
   fields,
   onChange,
@@ -1610,6 +1948,8 @@ export function FormulaCodeEditor({
   const valueRef = useRef(value);
   /** Latest schema, read at (re)create time to seed the chip state field. */
   const fieldsRef = useRef(fields);
+  /** Latest databases, read at (re)create time to seed the db-chip field. */
+  const databasesRef = useRef(databases);
   /** Latest check context, read at (re)create time to seed its state field. */
   const checkContextRef = useRef(checkContext);
 
@@ -1622,6 +1962,12 @@ export function FormulaCodeEditor({
     fieldsRef.current = fields;
     viewRef.current?.dispatch({ effects: setChipFields.of(fields) });
   }, [fields]);
+
+  // Push database-list changes in so open db chips relabel live too.
+  useEffect(() => {
+    databasesRef.current = databases;
+    viewRef.current?.dispatch({ effects: setChipDatabases.of(databases) });
+  }, [databases]);
 
   // Push check-context changes in so squiggles track the live schema.
   useEffect(() => {
@@ -1718,8 +2064,9 @@ export function FormulaCodeEditor({
           }),
           formulaHighlighter,
           chipFields.init(() => fieldsRef.current),
+          chipDatabases.init(() => databasesRef.current),
           checkContextState.init(() => checkContextRef.current),
-          propertyChips,
+          referenceChips,
           placeholderField,
           typedReferenceCanonicalizer,
           diagnosticsField,
