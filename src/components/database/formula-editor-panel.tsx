@@ -730,7 +730,12 @@ function EditorSlot({
     return surface;
   }
   return (
-    <InputGroup className="h-auto focus-within:border-ring">
+    <InputGroup
+      // The group's has-disabled dimming targets disabled INPUTS; the Save
+      // addon disabling on an invalid draft must not grey the editor — the
+      // error message and the disabled button are the whole signal.
+      className="h-auto focus-within:border-ring has-disabled:bg-input/30 has-disabled:opacity-100 dark:has-disabled:bg-input/30"
+    >
       {surface}
       <InputGroupAddon align="block-end" className="justify-end">
         {save}
