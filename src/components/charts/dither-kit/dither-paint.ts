@@ -14,7 +14,7 @@ export const BAYER = [
   [15, 7, 13, 5],
 ].map((row) => row.map((v) => (v + 0.5) / 16))
 
-export const CELL = 2 // css px per dither cell — chunky enough to read pixelated
+export const CELL = 3 // css px per dither cell — chunky enough to read pixelated
 export const MAX_COLS = 520
 export const MAX_ROWS = 200
 // Opacity of the top border outline (just under solid, so it reads as a soft
