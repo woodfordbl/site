@@ -632,8 +632,9 @@ only — no nested menus.
 Named, parameterized formulas stored once and callable from any formula in the
 workspace (proposal §9 P5 — the Sheets Named Functions model): a definition
 `weightedScore(points, weight) = points * weight * 1.1` makes
-`weightedScore(prop("f-est"), 2)` legal everywhere. The management UI is a
-later pass; the storage + language + engine core shipped.
+`weightedScore(prop("f-est"), 2)` legal everywhere. The storage + language +
+engine core shipped first; the management dialog (see **Managing
+definitions** below) followed.
 
 **Storage** — workspace-level like keybindings:
 [`localFormulaFunctionSchema`](../../src/lib/schemas/local-formula-function.ts)
@@ -716,8 +717,25 @@ in the panel's reference list under a **Custom functions** section (inserted
 like catalog functions; the textarea path keeps the caret-inside-parens
 `name()` insert). The panel takes the registry as an optional `userFunctions`
 prop; the column menu's `FormulaExpressionEditor` wires
-`useFormulaUserFunctions()`. No management UI this pass — definitions are
-created through the ops layer.
+`useFormulaUserFunctions()`.
+
+**Managing definitions** — create/edit/delete lives in
+[`formula-function-manager.tsx`](../../src/components/database/formula-function-manager.tsx):
+a dialog rendered INSIDE the desktop formula dialog's content
+(DatabaseColumnMenu), so Base UI stacks it as a true nested dialog and Escape
+closes only the manager. It opens from the Custom functions section header's
+"Manage" affordance, or the section's "New function…" empty-state row when no
+definitions exist yet (the panel's optional `onManageFunctions` prop — hosts
+that omit it, the menu popup and the mobile sheet, show neither). The list
+swaps for an inline form (the rollup wizard's pattern): name +
+comma-separated params validate live through the ops layer's
+`formulaFunctionValidationError` (the UI never reimplements a rule), the body
+edits in the shared lazy CM6 editor with an EMPTY fields list (parameters are
+bare names; `db("…")` still chips, and typed db names canonicalize to id form
+on save), and Save requires a parseable non-blank body — parse-only gating,
+because the checker can't bind parameters from outside the frozen core, so
+its unknown-name squiggles on params are cosmetic. Delete is the two-step
+confirm (the Delete-database pattern).
 
 ## Templates
 

@@ -1262,6 +1262,74 @@ describe("FormulaEditorPanel — user-defined functions", () => {
     expect(onSave).toHaveBeenCalledWith("weightedScore(2, 3)");
   });
 
+  describe("manager affordances", () => {
+    it("shows Manage when onManageFunctions is wired and opens through it", async () => {
+      const onManage = vi.fn();
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={FIELDS}
+          onManageFunctions={onManage}
+          onSave={vi.fn()}
+          previewRows={PREVIEW_ROWS}
+          userFunctions={USER_FUNCTIONS}
+        />
+      );
+      await flushFrames();
+
+      fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+      expect(onManage).toHaveBeenCalledTimes(1);
+      // Definitions exist, so the empty-state row stays hidden.
+      expect(screen.queryByText("New function…")).toBeNull();
+    });
+
+    it("shows the New function… empty-state row when no definitions exist", async () => {
+      const onManage = vi.fn();
+      render(
+        <FormulaEditorPanel
+          expression=""
+          fields={FIELDS}
+          onManageFunctions={onManage}
+          onSave={vi.fn()}
+          previewRows={PREVIEW_ROWS}
+          userFunctions={prepareUserFunctions([])}
+        />
+      );
+      await flushFrames();
+
+      // The section renders purely as an affordance…
+      expect(screen.getByText("Custom functions")).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "New function…" }));
+      expect(onManage).toHaveBeenCalledTimes(1);
+
+      // …and hides while a search is active (it is not a search result —
+      // the detail strip may still show its docs, so query the ROW).
+      fireEvent.change(
+        screen.getByLabelText("Search properties, functions, and operators"),
+        { target: { value: "zzz" } }
+      );
+      expect(
+        screen.queryByRole("button", { name: "New function…" })
+      ).toBeNull();
+    });
+
+    it("hides Manage and the empty-state row without the prop", async () => {
+      renderWithFunctions();
+      await flushFrames();
+
+      // Entries still list, but no Manage affordance…
+      expect(screen.getByText("weightedScore")).toBeDefined();
+      expect(screen.queryByRole("button", { name: "Manage" })).toBeNull();
+
+      cleanup();
+      // …and with no definitions AND no prop, no section at all.
+      renderPanel();
+      await flushFrames();
+      expect(screen.queryByText("Custom functions")).toBeNull();
+      expect(screen.queryByText("New function…")).toBeNull();
+    });
+  });
+
   describe("code editor (fine pointers)", () => {
     beforeEach(() => {
       pointer.coarse = false;

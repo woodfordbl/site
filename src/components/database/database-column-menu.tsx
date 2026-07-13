@@ -74,6 +74,7 @@ import {
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
+import { FormulaFunctionManagerDialog } from "@/components/database/formula-function-manager.tsx";
 import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -454,6 +455,8 @@ interface FormulaExpressionEditorProps {
   layout?: "sheet" | "stack" | "wide";
   /** Sheet layout's Cancel — backs out of the host without saving. */
   onCancel?: () => void;
+  /** Opens the function manager dialog; only the wide dialog host wires it. */
+  onManageFunctions?: () => void;
   /** Closes the host (column menu or dialog) after Save. */
   onSaved: () => void;
 }
@@ -474,6 +477,7 @@ function FormulaExpressionEditor({
   field,
   layout,
   onCancel,
+  onManageFunctions,
   onSaved,
 }: FormulaExpressionEditorProps) {
   const database = useDatabase(databaseId);
@@ -506,6 +510,7 @@ function FormulaExpressionEditor({
       fields={fields}
       layout={layout}
       onCancel={onCancel}
+      onManageFunctions={onManageFunctions}
       onSave={(expression) => {
         if (
           expression !==
@@ -1117,6 +1122,10 @@ export function DatabaseColumnMenu({
   // The wide formula dialog opens after the menu closes (fine pointers) —
   // hosted here so it survives the menu unmounting.
   const [formulaEditorOpen, setFormulaEditorOpen] = useState(false);
+  // The function manager stacks INSIDE the formula dialog (nested Base UI
+  // dialog: Escape closes only the manager), opened from the reference
+  // list's Custom functions section.
+  const [functionManagerOpen, setFunctionManagerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const queryClient = useQueryClient();
   const config = view.config;
@@ -1447,7 +1456,17 @@ export function DatabaseColumnMenu({
         open={iconPickerOpen}
       />
       {field.type === "formula" ? (
-        <Dialog onOpenChange={setFormulaEditorOpen} open={formulaEditorOpen}>
+        <Dialog
+          onOpenChange={(nextOpen) => {
+            setFormulaEditorOpen(nextOpen);
+            if (!nextOpen) {
+              // Closing the host also forgets a still-open manager, so
+              // reopening the formula dialog never resurrects it.
+              setFunctionManagerOpen(false);
+            }
+          }}
+          open={formulaEditorOpen}
+        >
           <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle>{field.name}</DialogTitle>
@@ -1456,9 +1475,16 @@ export function DatabaseColumnMenu({
               databaseId={databaseId}
               field={field}
               layout="wide"
+              onManageFunctions={() => {
+                setFunctionManagerOpen(true);
+              }}
               onSaved={() => {
                 setFormulaEditorOpen(false);
               }}
+            />
+            <FormulaFunctionManagerDialog
+              onOpenChange={setFunctionManagerOpen}
+              open={functionManagerOpen}
             />
           </DialogContent>
         </Dialog>

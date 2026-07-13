@@ -1,4 +1,9 @@
-import { IconMathFunction, IconSearch, IconSum } from "@tabler/icons-react";
+import {
+  IconMathFunction,
+  IconPlus,
+  IconSearch,
+  IconSum,
+} from "@tabler/icons-react";
 import {
   Component,
   type KeyboardEvent,
@@ -404,6 +409,112 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The empty-state "New function…" row shows only when NO definitions exist
+ * at all (not merely filtered out) and no search is active — it is an
+ * affordance, not a search result. Module-level purely to keep the panel
+ * component under the complexity cap.
+ */
+function shouldOfferNewFunctionRow(
+  userFunctions: FormulaPreparedUserFunctions | undefined,
+  normalizedQuery: string
+): boolean {
+  return (userFunctions?.size ?? 0) === 0 && normalizedQuery === "";
+}
+
+/** Detail-strip docs for the empty-state "New function…" row. */
+const NEW_FUNCTION_DETAIL: ReferenceDetail = {
+  description:
+    "Define a named function you can call from any formula in this workspace.",
+  title: "New function…",
+};
+
+/**
+ * The reference list's Custom functions section. With matching entries it
+ * lists them under a header that carries the "Manage" affordance (when the
+ * host wires `onManage` — only the desktop formula dialog does for now).
+ * With NO definitions at all it shows a "New function…" row instead, so the
+ * feature is discoverable before the first definition exists; `showEmptyRow`
+ * is false while a search is active (the row is an affordance, not a search
+ * result) and when definitions merely didn't match. Hosts without `onManage`
+ * keep the old behavior exactly: entries or nothing.
+ */
+function CustomFunctionsSection({
+  entries,
+  onInsert,
+  onManage,
+  onShowDetail,
+  showEmptyRow,
+}: {
+  entries: readonly (FormulaPreparedUserFunction & { signature: string })[];
+  onInsert: (def: FormulaPreparedUserFunction) => void;
+  onManage: (() => void) | undefined;
+  onShowDetail: (detail: ReferenceDetail) => void;
+  showEmptyRow: boolean;
+}): ReactNode {
+  if (entries.length === 0 && !(showEmptyRow && onManage !== undefined)) {
+    return null;
+  }
+  const header = (
+    <div className="flex items-center justify-between gap-2 px-1.5 pt-2 pb-1 first:pt-1">
+      <span className="font-medium text-muted-foreground text-xs">
+        Custom functions
+      </span>
+      {onManage === undefined ? null : (
+        <button
+          className="rounded-sm font-medium text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:text-foreground"
+          onClick={onManage}
+          type="button"
+        >
+          Manage
+        </button>
+      )}
+    </div>
+  );
+  if (entries.length === 0) {
+    return (
+      <>
+        {header}
+        <ReferenceRow
+          detail={NEW_FUNCTION_DETAIL}
+          // The guard above ensures onManage exists on this branch.
+          onInsert={onManage ?? (() => undefined)}
+          onShowDetail={onShowDetail}
+        >
+          <IconPlus className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+          <span className="truncate text-muted-foreground">New function…</span>
+        </ReferenceRow>
+      </>
+    );
+  }
+  return (
+    <>
+      {header}
+      {entries.map((def) => (
+        <ReferenceRow
+          detail={{
+            title: def.signature,
+            description:
+              def.description ?? "A custom function defined in this workspace.",
+            example: def.signature,
+          }}
+          key={def.name}
+          onInsert={() => {
+            onInsert(def);
+          }}
+          onShowDetail={onShowDetail}
+        >
+          <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+          <span className="shrink-0 font-mono text-xs">{def.name}</span>
+          <span className="truncate text-muted-foreground text-xs">
+            {def.signature.slice(def.name.length)}
+          </span>
+        </ReferenceRow>
+      ))}
+    </>
+  );
+}
+
 /** One row offered to the preview picker. */
 export interface FormulaPreviewRow {
   id: string;
@@ -484,6 +595,14 @@ export interface FormulaEditorPanelProps {
    * host drawer). Only rendered in the `sheet` layout.
    */
   onCancel?: () => void;
+  /**
+   * Opens the user-defined function manager (formula-function-manager.tsx).
+   * Wired only where a host dialog for it exists — the desktop formula
+   * dialog in DatabaseColumnMenu; absent (menu popup, mobile sheet), the
+   * reference list's Manage affordance and empty-state "New function…" row
+   * simply hide.
+   */
+  onManageFunctions?: () => void;
   /** Called with the CANONICAL text on Save (even when unchanged — the caller decides). */
   onSave: (expression: string) => void;
   /**
@@ -535,7 +654,9 @@ function ReferenceList({
   onInsertCustomFunction,
   onInsertFunction,
   onInsertProperty,
+  onManageFunctions,
   onShowDetail,
+  showNewFunctionRow,
 }: {
   /** Height override for the wide (dialog) layout. */
   className?: string;
@@ -544,7 +665,11 @@ function ReferenceList({
   onInsertCustomFunction: (def: FormulaPreparedUserFunction) => void;
   onInsertFunction: (entry: FormulaFunctionEntry) => void;
   onInsertProperty: (propertyField: DatabaseField) => void;
+  /** Opens the function manager; absent, the Manage/New affordances hide. */
+  onManageFunctions?: () => void;
   onShowDetail: (detail: ReferenceDetail) => void;
+  /** True when NO definitions exist and no search is active (see the section docs). */
+  showNewFunctionRow: boolean;
 }): ReactNode {
   const {
     customFunctionEntries,
@@ -612,31 +737,13 @@ function ReferenceList({
             </span>
           </ReferenceRow>
         ))}
-        {customFunctionEntries.length > 0 ? (
-          <SectionLabel>Custom functions</SectionLabel>
-        ) : null}
-        {customFunctionEntries.map((def) => (
-          <ReferenceRow
-            detail={{
-              title: def.signature,
-              description:
-                def.description ??
-                "A custom function defined in this workspace.",
-              example: def.signature,
-            }}
-            key={def.name}
-            onInsert={() => {
-              onInsertCustomFunction(def);
-            }}
-            onShowDetail={onShowDetail}
-          >
-            <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-            <span className="shrink-0 font-mono text-xs">{def.name}</span>
-            <span className="truncate text-muted-foreground text-xs">
-              {def.signature.slice(def.name.length)}
-            </span>
-          </ReferenceRow>
-        ))}
+        <CustomFunctionsSection
+          entries={customFunctionEntries}
+          onInsert={onInsertCustomFunction}
+          onManage={onManageFunctions}
+          onShowDetail={onShowDetail}
+          showEmptyRow={showNewFunctionRow}
+        />
         {operatorEntries.length > 0 ? (
           <SectionLabel>Operators</SectionLabel>
         ) : null}
@@ -945,6 +1052,7 @@ export function FormulaEditorPanel({
   fields,
   layout = "stack",
   onCancel,
+  onManageFunctions,
   onSave,
   previewRows,
   relatedDatabases,
@@ -1455,7 +1563,12 @@ export function FormulaEditorPanel({
         onInsertCustomFunction={insertCustomFunction}
         onInsertFunction={insertFunctionEntry}
         onInsertProperty={insertPropertyReference}
+        onManageFunctions={onManageFunctions}
         onShowDetail={setDetail}
+        showNewFunctionRow={shouldOfferNewFunctionRow(
+          userFunctions,
+          normalizedQuery
+        )}
       />
     </>
   );
