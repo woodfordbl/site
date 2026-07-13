@@ -33,6 +33,8 @@ function sexpr(node: FormulaNode): string {
       return JSON.stringify(node.value);
     case "property":
       return `prop:${node.name}`;
+    case "database":
+      return `db:${node.databaseId}`;
     case "name":
       return `name:${node.name}`;
     case "unary":
@@ -244,6 +246,78 @@ describe("parse prop references", () => {
 
   it("rejects an unclosed prop reference", () => {
     expect(errorOf('prop("a"').message).toContain('close the "prop(…)"');
+  });
+});
+
+describe("parse db references", () => {
+  it("parses db() as a database node with full and literal spans", () => {
+    const source = 'db("d_enroll")';
+    expect(astOf(source)).toEqual({
+      kind: "database",
+      databaseId: "d_enroll",
+      position: 0,
+      end: source.length,
+      idPosition: source.indexOf('"'),
+      idEnd: source.lastIndexOf('"') + 1,
+    });
+  });
+
+  it("matches db case-insensitively", () => {
+    expect(sexpr(astOf('DB("x")'))).toBe("db:x");
+    expect(sexpr(astOf('Db("x")'))).toBe("db:x");
+  });
+
+  it("accepts single-quoted ids and string escapes", () => {
+    expect(sexpr(astOf("db('abc')"))).toBe("db:abc");
+    expect(sexpr(astOf('db("a\\"b")'))).toBe('db:a"b');
+  });
+
+  it("parses db() inside chained expressions with correct spans", () => {
+    const source = 'db("d1").filter(e => e.Active).length()';
+    const ast = astOf(source);
+    expect(sexpr(ast)).toBe(
+      "(.length (.filter db:d1 (lambda (e) (member name:e Active))))"
+    );
+    let database: FormulaNode | null = null;
+    walkFormula(ast, (node) => {
+      if (node.kind === "database") {
+        database = node;
+      }
+    });
+    expect(database).toMatchObject({
+      position: 0,
+      end: source.indexOf(")") + 1,
+    });
+  });
+
+  it("keeps db usable as a lambda parameter name, like prop", () => {
+    expect(sexpr(astOf("db => 1"))).toBe("(lambda (db) 1)");
+  });
+
+  it("rejects db with no argument", () => {
+    expect(errorOf("db()").message).toContain("one quoted database name");
+  });
+
+  it("rejects db with two arguments", () => {
+    expect(errorOf('db("a", "b")').message).toContain(
+      "exactly one quoted database name"
+    );
+  });
+
+  it("rejects non-literal arguments naming the constraint", () => {
+    expect(errorOf("db(42)").message).toContain("one quoted database name");
+    expect(errorOf("db(1 + 2)").message).toContain("one quoted database name");
+    expect(errorOf("db(thisPage.X)").message).toContain(
+      "one quoted database name"
+    );
+  });
+
+  it("rejects a bare db identifier", () => {
+    expect(errorOf("db").message).toContain('"db(…)"');
+  });
+
+  it("rejects an unclosed db reference", () => {
+    expect(errorOf('db("a"').message).toContain('close the "db(…)"');
   });
 });
 

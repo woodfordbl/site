@@ -97,6 +97,10 @@ function resolverOf(
     },
     formulaValue: (databaseId, rowId, fieldId) =>
       cache.get(databaseId)?.get(rowId)?.get(fieldId)?.value ?? null,
+    rowIds: (databaseId) =>
+      databases.has(databaseId)
+        ? (rowsByDb.get(databaseId) ?? []).map((row) => row.id)
+        : null,
   };
 }
 
@@ -646,5 +650,155 @@ describe("evaluateDirtyFormulas — scale smoke", () => {
     );
     // Loose wall guard for both passes together.
     expect(performance.now() - started).toBeLessThan(2000);
+  });
+});
+
+describe("evaluateDirtyFormulas — db() whole-database rollups", () => {
+  // A sums B's Double formula through db("db-b") (an allRows edge), with a
+  // same-row dependent downstream: db() edge → sameRow edge composition.
+  const databases = new Map<string, FormulaGraphDatabase>([
+    [
+      "db-a",
+      {
+        fields: [
+          formulaField("a-sum", "Sum", 'db("db-b").map(r => r.Double).sum()'),
+          formulaField("a-grand", "Grand", 'prop("a-sum") + 1'),
+        ],
+        name: "Projects",
+      },
+    ],
+    [
+      "db-b",
+      {
+        fields: [
+          numberField("b-est", "Estimate"),
+          formulaField("b-double", "Double", 'floor(prop("b-est") / 10)'),
+        ],
+        name: "Tasks",
+      },
+    ],
+  ]);
+
+  function warm(rowsByDb: RowsByDb) {
+    const graph = buildFormulaGraph(databases);
+    const cache: FormulaValueCache = new Map();
+    evaluateDirtyFormulas(
+      graph,
+      dirtyAll(graph),
+      cache,
+      formulaRowsSnapshotOf(rowsByDb),
+      new Map(),
+      { relations: resolverOf(databases, rowsByDb, cache) }
+    );
+    return { cache, graph };
+  }
+
+  it("computes the rollup over every target row in the warm pass", () => {
+    const rowsByDb: RowsByDb = new Map([
+      ["db-a", [rowOf("db-a", "a1", {}), rowOf("db-a", "a2", {})]],
+      [
+        "db-b",
+        [
+          rowOf("db-b", "b1", { "b-est": 11 }),
+          rowOf("db-b", "b2", { "b-est": 25 }),
+        ],
+      ],
+    ]);
+    const { cache } = warm(rowsByDb);
+    // floor(11/10) + floor(25/10) = 3, for BOTH rows of A.
+    expect(cellOf(cache, "db-a", "a1", "a-sum")?.value).toBe(3);
+    expect(cellOf(cache, "db-a", "a2", "a-sum")?.value).toBe(3);
+    expect(cellOf(cache, "db-a", "a1", "a-grand")?.value).toBe(4);
+  });
+
+  it("recomputes every referencing row through the allRows edge, composing with same-row edges", () => {
+    const before: RowsByDb = new Map([
+      ["db-a", [rowOf("db-a", "a1", {}), rowOf("db-a", "a2", {})]],
+      [
+        "db-b",
+        [
+          rowOf("db-b", "b1", { "b-est": 11 }),
+          rowOf("db-b", "b2", { "b-est": 25 }),
+        ],
+      ],
+    ]);
+    const { cache, graph } = warm(before);
+
+    // 11 → 35: Double(b1) changes 1 → 3, so the allRows edge dirties the
+    // whole a-sum column, and each changed a-sum dirties its own a-grand.
+    const after: RowsByDb = new Map([
+      ["db-a", before.get("db-a") ?? []],
+      [
+        "db-b",
+        [
+          rowOf("db-b", "b1", { "b-est": 35 }),
+          rowOf("db-b", "b2", { "b-est": 25 }),
+        ],
+      ],
+    ]);
+    const counter = counterOf();
+    const dirty: FormulaDirtyMap = new Map();
+    formulaDataCellChanged(graph, new Map(), dirty, {
+      databaseId: "db-b",
+      fieldId: "b-est",
+      rowId: "b1",
+    });
+    // The data edit itself dirties ONLY the target's own formula — a-sum's
+    // db ref names member b-double, not b-est.
+    expect([...dirty.keys()]).toEqual(["db-b:b-double"]);
+    evaluateDirtyFormulas(
+      graph,
+      dirty,
+      cache,
+      formulaRowsSnapshotOf(after),
+      new Map(),
+      {
+        onEvaluate: counter.onEvaluate,
+        relations: resolverOf(databases, after, cache),
+      }
+    );
+    expect(counter.events).toEqual([
+      "db-b:b-double:b1",
+      "db-a:a-sum:a1",
+      "db-a:a-sum:a2",
+      "db-a:a-grand:a1",
+      "db-a:a-grand:a2",
+    ]);
+    expect(cellOf(cache, "db-a", "a1", "a-sum")?.value).toBe(5);
+    expect(cellOf(cache, "db-a", "a2", "a-grand")?.value).toBe(6);
+  });
+
+  it("stops at the equality cutoff before the allRows edge fires", () => {
+    const before: RowsByDb = new Map([
+      ["db-a", [rowOf("db-a", "a1", {}), rowOf("db-a", "a2", {})]],
+      ["db-b", [rowOf("db-b", "b1", { "b-est": 11 })]],
+    ]);
+    const { cache, graph } = warm(before);
+
+    // 11 → 19: floor is still 1 — the whole-database recompute never runs.
+    const after: RowsByDb = new Map([
+      ["db-a", before.get("db-a") ?? []],
+      ["db-b", [rowOf("db-b", "b1", { "b-est": 19 })]],
+    ]);
+    const counter = counterOf();
+    const dirty: FormulaDirtyMap = new Map();
+    formulaDataCellChanged(graph, new Map(), dirty, {
+      databaseId: "db-b",
+      fieldId: "b-est",
+      rowId: "b1",
+    });
+    evaluateDirtyFormulas(
+      graph,
+      dirty,
+      cache,
+      formulaRowsSnapshotOf(after),
+      new Map(),
+      {
+        onEvaluate: counter.onEvaluate,
+        relations: resolverOf(databases, after, cache),
+      }
+    );
+    expect(counter.events).toEqual(["db-b:b-double:b1"]);
+    expect(cellOf(cache, "db-a", "a1", "a-sum")?.value).toBe(1);
   });
 });

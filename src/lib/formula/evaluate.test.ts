@@ -876,6 +876,91 @@ describe("member access", () => {
       "Related rows are not available here"
     );
   });
+});
+
+describe("whole-database references (db)", () => {
+  /** Tasks (db-t): three rows with Estimate 2/5/8, the middle one Done. */
+  function dbScope(): FormulaScope {
+    const rows: Record<string, Record<string, string | number | boolean>> = {
+      r1: { "f-done": false, "f-est": 2 },
+      r2: { "f-done": true, "f-est": 5 },
+      r3: { "f-done": false, "f-est": 8 },
+    };
+    return {
+      getProperty: () => null,
+      relations: {
+        database: (databaseId) =>
+          databaseId === "db-t"
+            ? {
+                fields: [
+                  { id: "f-est", name: "Estimate", type: "number" },
+                  { id: "f-done", name: "Done", type: "checkbox" },
+                ],
+                name: "Tasks",
+                primaryFieldId: "f-est",
+                row: (rowId) => rows[rowId] ?? null,
+              }
+            : null,
+        rowIds: (databaseId) =>
+          databaseId === "db-t" ? Object.keys(rows) : null,
+      },
+    };
+  }
+
+  it("evaluates to the target database's rows as a row-ref list", () => {
+    const value = run('db("db-t")', dbScope());
+    expect(value).toEqual([
+      new FormulaRowRef("db-t", "r1"),
+      new FormulaRowRef("db-t", "r2"),
+      new FormulaRowRef("db-t", "r3"),
+    ]);
+    expect(run('db("db-t").length()', dbScope())).toBe(3);
+  });
+
+  it("composes with filter/map/member access like relation values", () => {
+    const scope = dbScope();
+    expect(run('db("db-t").map(r => r.Estimate).sum()', scope)).toBe(15);
+    expect(run('db("db-t").filter(r => r.Done).length()', scope)).toBe(1);
+    expect(run('db("db-t").first().Estimate', scope)).toBe(2);
+    expect(run('db("db-t").filter(e => e.Estimate > 4).length()', scope)).toBe(
+      2
+    );
+  });
+
+  it("errors on an unknown database id, naming it", () => {
+    expect(errorMessage(run('db("db-gone")', dbScope()))).toBe(
+      '"db-gone" isn\'t a database'
+    );
+    // The error propagates through chains like any error value.
+    expect(errorMessage(run('db("db-gone").length()', dbScope()))).toBe(
+      '"db-gone" isn\'t a database'
+    );
+  });
+
+  it("errors when no resolver (or no rowIds) is available", () => {
+    expect(errorMessage(run('db("db-t")'))).toBe(
+      "Database references are not available here"
+    );
+    const noEnumeration: FormulaScope = {
+      getProperty: () => null,
+      relations: { database: () => null },
+    };
+    expect(errorMessage(run('db("db-t")', noEnumeration))).toBe(
+      "Database references are not available here"
+    );
+  });
+
+  it("reads an empty database as the empty list, aggregating to zero", () => {
+    const scope: FormulaScope = {
+      getProperty: () => null,
+      relations: {
+        database: () => null,
+        rowIds: (databaseId) => (databaseId === "db-empty" ? [] : null),
+      },
+    };
+    expect(run('db("db-empty").length()', scope)).toBe(0);
+    expect(run('db("db-empty").map(r => r.X).sum()', scope)).toBe(0);
+  });
 
   it("still propagates receiver errors first", () => {
     expect(errorMessage(run("(1 / 0).digits"))).toBe("Division by zero");

@@ -156,6 +156,14 @@ export interface FormulaRelationResolver {
     rowId: string,
     fieldId: string
   ): FormulaValue;
+  /**
+   * Every current row id of a database, for whole-database `db("…")`
+   * references (`null` = the id names no database — an unknown-database
+   * error value, mirroring the checker's diagnostic). Optional so resolvers
+   * predating db() (pure relation stubs) stay valid; absent, db() reads as
+   * an unavailability error, never a throw.
+   */
+  rowIds?(databaseId: string): readonly string[] | null;
 }
 
 /** Error message for using a lambda anywhere except a function argument. */
@@ -175,6 +183,24 @@ export function formulaMemberOnNonRowMessage(typeName: string): string {
 export function formulaMemberOnRowListMessage(name: string): string {
   return `Use .map(r => r.${name}) to read "${name}" from each row of the list`;
 }
+
+/**
+ * A `db("…")` reference that names no database. Shared by the checker
+ * (unknown id diagnostic) and the evaluator (error value) so the message can
+ * never drift between them — the `isn't a property of` discipline.
+ */
+export function formulaUnknownDatabaseMessage(reference: string): string {
+  return `"${reference}" isn't a database`;
+}
+
+/**
+ * `db("…")` evaluated through a scope whose resolver can't enumerate rows
+ * (no resolver, or one predating `rowIds`) — a caller wiring gap, surfaced
+ * as an error value like {@link resolveFormulaRowMember}'s
+ * "Related rows are not available here".
+ */
+export const DATABASE_REF_UNAVAILABLE_MESSAGE =
+  "Database references are not available here";
 
 /**
  * The evaluation environment injected by the caller. `getProperty` resolves

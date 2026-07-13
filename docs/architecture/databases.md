@@ -35,7 +35,10 @@ contains-row), no grouping by relation, and `cellToPlainText` projects relation 
 `""` — search/countUnique/group labels don't see relation titles. In formulas a
 relation property is a `list<row<Target>>` — `prop("Rel").map(r => r.Estimate).sum()`
 rolls up target rows, target formula fields included (see
-[formula-language — Relations](./formula-language.md#relations)).
+[formula-language — Relations](./formula-language.md#relations)); `db("…")` reads a
+whole database as the same `list<row<Target>>` value without any relation field,
+with deliberately coarse recompute (see [formula-language — Whole-database
+references](./formula-language.md#whole-database-references-db)).
 
 ## Storage
 
@@ -349,7 +352,9 @@ engine parity is pinned by test). One-shot call sites pass
 `relations: localFormulaRelationResolver()`
 ([`formula-relations.ts`](../../src/lib/databases/formula-relations.ts)) so relation
 rollups read target databases (cross-database cycles degrade to named per-cell
-errors — see [formula-language — Relations](./formula-language.md#relations)):
+errors — see [formula-language — Relations](./formula-language.md#relations)); the
+resolver also implements the interface's `rowIds` extension, enumerating a
+database's live rows for whole-database `db("…")` references:
 
 - **Coercion** — `coerceCellValue`'s formula case passes scalar string/number/boolean
   through; everything else reads as empty.

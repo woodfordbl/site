@@ -32,7 +32,10 @@ import {
   VOLATILE_FORMULA_FUNCTION_NAMES,
 } from "@/lib/formula/catalog.ts";
 import { formulaValueToText } from "@/lib/formula/display.ts";
-import { resolveFormulaRowMember } from "@/lib/formula/row-scope.ts";
+import {
+  resolveFormulaDatabaseRows,
+  resolveFormulaRowMember,
+} from "@/lib/formula/row-scope.ts";
 import { formulaTypeExpectedPhrase } from "@/lib/formula/types.ts";
 import {
   FormulaDate,
@@ -299,6 +302,13 @@ class Evaluator {
         return node.value;
       case "property":
         return this.scope.getProperty(node.name);
+      case "database":
+        // db("…") — the target database's rows as a row-ref list, resolved
+        // through the same relation resolver row members read through.
+        return resolveFormulaDatabaseRows(
+          node.databaseId,
+          this.scope.relations
+        );
       case "name":
         return this.evalName(node, env);
       case "unary":

@@ -363,3 +363,92 @@ describe("formulaStaticReferences — traversals", () => {
     );
   });
 });
+
+describe("formulaStaticReferences — db() references", () => {
+  it("extracts a member-precise db reference without a traversal", () => {
+    const result = refs('db("db-b").map(r => r.Estimate).sum()');
+    expect(result.databaseRefs).toEqual([
+      { memberFieldId: "b-est", targetDatabaseId: "db-b" },
+    ]);
+    expect(result.traversals).toEqual([]);
+    expect(result.sameRowFieldIds.size).toBe(0);
+  });
+
+  it("resolves db members by exact field id before names", () => {
+    const result = refs('db("db-b").map(r => r.best).sum()');
+    expect(result.databaseRefs[0]?.memberFieldId).toBe("best");
+  });
+
+  it("emits a null-member db reference for opaque consumption", () => {
+    expect(refs('db("db-b").length()').databaseRefs).toEqual([
+      { memberFieldId: null, targetDatabaseId: "db-b" },
+    ]);
+  });
+
+  it("emits a null-member db reference when the rows escape as the result", () => {
+    expect(refs('db("db-b")').databaseRefs).toEqual([
+      { memberFieldId: null, targetDatabaseId: "db-b" },
+    ]);
+    expect(refs('db("db-b").filter(r => r.Estimate > 2)').databaseRefs).toEqual(
+      [
+        { memberFieldId: "b-est", targetDatabaseId: "db-b" },
+        { memberFieldId: null, targetDatabaseId: "db-b" },
+      ]
+    );
+  });
+
+  it("keeps db members null when the target database is unknown", () => {
+    expect(refs('db("db-gone").first().Estimate').databaseRefs).toEqual([
+      { memberFieldId: null, targetDatabaseId: "db-gone" },
+    ]);
+  });
+
+  it("chains a db-rooted relation member into an ordinary traversal", () => {
+    const result = refs(
+      'db("db-b").map(b => b.Steps.map(c => c.Hours).sum()).sum()'
+    );
+    expect(result.databaseRefs).toEqual([
+      { memberFieldId: "b-rel-c", targetDatabaseId: "db-b" },
+    ]);
+    // The second hop is a concrete relation traversal owned by db-b.
+    expect(result.traversals).toEqual([
+      {
+        memberFieldId: "c-hours",
+        relationFieldId: "b-rel-c",
+        sourceDatabaseId: "db-b",
+        targetDatabaseId: "db-c",
+      },
+    ]);
+  });
+
+  it("tracks db provenance through let bindings and if branches", () => {
+    expect(refs('let(x, db("db-b"), x.first().Estimate)').databaseRefs).toEqual(
+      [{ memberFieldId: "b-est", targetDatabaseId: "db-b" }]
+    );
+    const branches = refs(
+      'if(prop("a-price") > 0, db("db-b"), prop("a-rel")).length()'
+    );
+    expect(branches.databaseRefs).toEqual([
+      { memberFieldId: null, targetDatabaseId: "db-b" },
+    ]);
+    expect(branches.traversals).toEqual([
+      {
+        memberFieldId: null,
+        relationFieldId: "a-rel",
+        sourceDatabaseId: null,
+        targetDatabaseId: "db-b",
+      },
+    ]);
+  });
+
+  it("deduplicates repeated db references", () => {
+    const result = refs(
+      'db("db-b").map(r => r.Estimate).sum() + db("db-b").map(r => r.Estimate).max()'
+    );
+    expect(result.databaseRefs).toHaveLength(1);
+  });
+
+  it("extracts no db references from db-free formulas", () => {
+    expect(refs('prop("a-rel").length()').databaseRefs).toEqual([]);
+  });
+});

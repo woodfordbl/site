@@ -290,6 +290,128 @@ describe("formulaRowAdded / formulaRowRemoved", () => {
   });
 });
 
+describe("db() whole-database references — coarse dirtying", () => {
+  // A reads B whole (db refs, member-precise), including a chained hop:
+  // `a-deep` goes db("db-b") → relation b-rel-c → C.
+  const DB_REF_DATABASES = new Map<string, FormulaGraphDatabase>([
+    [
+      "db-a",
+      {
+        fields: [
+          numberField("a-price", "Price"),
+          formulaField(
+            "a-total",
+            "Total",
+            'db("db-b").map(r => r.Estimate).sum()'
+          ),
+          formulaField("a-names", "Names", 'db("db-b").first().Name'),
+          formulaField(
+            "a-deep",
+            "Deep",
+            'db("db-b").map(b => b.Steps.map(c => c.Hours).sum()).sum()'
+          ),
+        ],
+        name: "Projects",
+      },
+    ],
+    [
+      "db-b",
+      {
+        fields: [
+          textField("b-name", "Name"),
+          numberField("b-est", "Estimate"),
+          relationField("b-rel-c", "Steps", "db-c"),
+        ],
+        name: "Tasks",
+      },
+    ],
+    ["db-c", { fields: [numberField("c-hours", "Hours")], name: "Steps" }],
+  ]);
+
+  const DB_REF_ROWS = new Map<string, readonly LocalDatabaseRow[]>([
+    ["db-a", [rowOf("db-a", "a1", {}), rowOf("db-a", "a2", {})]],
+    [
+      "db-b",
+      [
+        rowOf("db-b", "b1", { "b-est": 3, "b-rel-c": ["c1"] }),
+        rowOf("db-b", "b2", { "b-est": 4 }),
+      ],
+    ],
+  ]);
+
+  function setupDbRefs() {
+    const graph = buildFormulaGraph(DB_REF_DATABASES);
+    const indexes = buildFormulaReverseIndexes(graph, (databaseId) =>
+      DB_REF_ROWS.get(databaseId)
+    );
+    const dirty: FormulaDirtyMap = new Map();
+    return { dirty, graph, indexes };
+  }
+
+  it("dirties every row of the referencing column on a target data edit", () => {
+    const { dirty, graph, indexes } = setupDbRefs();
+    formulaDataCellChanged(graph, indexes, dirty, {
+      databaseId: "db-b",
+      fieldId: "b-est",
+      rowId: "b1",
+    });
+    expect(dirty.get("db-a:a-total")).toBe(FORMULA_ALL_ROWS);
+    // Member precision holds: the Name reader ignores an Estimate edit.
+    expect(dirty.has("db-a:a-names")).toBe(false);
+  });
+
+  it("dirties referencing columns on target row add AND remove", () => {
+    const added = setupDbRefs();
+    formulaRowAdded(added.graph, added.indexes, added.dirty, {
+      databaseId: "db-b",
+      rowId: "b3",
+      values: { "b-est": 9 },
+    });
+    expect(added.dirty.get("db-a:a-total")).toBe(FORMULA_ALL_ROWS);
+    expect(added.dirty.get("db-a:a-names")).toBe(FORMULA_ALL_ROWS);
+
+    const removed = setupDbRefs();
+    formulaRowRemoved(removed.graph, removed.indexes, removed.dirty, {
+      databaseId: "db-b",
+      rowId: "b2",
+      values: { "b-est": 4 },
+    });
+    expect(removed.dirty.get("db-a:a-total")).toBe(FORMULA_ALL_ROWS);
+    expect(removed.dirty.get("db-a:a-names")).toBe(FORMULA_ALL_ROWS);
+  });
+
+  it("does not react to changes in unreferenced databases", () => {
+    const { dirty, graph, indexes } = setupDbRefs();
+    formulaDataCellChanged(graph, indexes, dirty, {
+      databaseId: "db-a",
+      fieldId: "a-price",
+      rowId: "a1",
+    });
+    expect(dirty.size).toBe(0);
+  });
+
+  it("coarsens a chained relation hop that crosses the db() reference", () => {
+    const { dirty, graph, indexes } = setupDbRefs();
+    formulaDataCellChanged(graph, indexes, dirty, {
+      databaseId: "db-c",
+      fieldId: "c-hours",
+      rowId: "c1",
+    });
+    // c1 ← b1 through the b-rel-c reverse index, then B → A has no relation
+    // hop (B is read whole) — the entire deep column dirties.
+    expect(dirty.get("db-a:a-deep")).toBe(FORMULA_ALL_ROWS);
+    expect([...dirty.keys()]).toEqual(["db-a:a-deep"]);
+  });
+
+  it("marks db-referencing columns all-rows on a target schema change", () => {
+    const { dirty, graph } = setupDbRefs();
+    formulaSchemaChanged(graph, dirty, "db-b");
+    expect(dirty.get("db-a:a-total")).toBe(FORMULA_ALL_ROWS);
+    expect(dirty.get("db-a:a-names")).toBe(FORMULA_ALL_ROWS);
+    expect(dirty.get("db-a:a-deep")).toBe(FORMULA_ALL_ROWS);
+  });
+});
+
 describe("formulaSchemaChanged / formulaClockTick", () => {
   it("marks the changed database's columns and inbound traversers all-rows", () => {
     const { dirty, graph } = setup();

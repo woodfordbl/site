@@ -67,8 +67,10 @@ equivalent shapes, guarded by the frozen
   followed by a string literal is member access; everything else (`[1, 2]`, `f()[0]`)
   keeps its list-literal meaning or original diagnostic.
 - **`let(name, value, body)` / `lets(…)`** — named intermediates. Evaluator special
-  forms (they bind names from raw AST nodes), not catalog entries; same for `prop`,
-  which is syntax parsing straight to a property node.
+  forms (they bind names from raw AST nodes), not catalog entries; same for `prop`
+  and `db`, which are syntax parsing straight to property/database nodes (only the
+  single-string-literal form is special — `db(expr)` is a parse error naming the
+  constraint).
 - **Lambdas** — `x => expr`, `(a, b) => expr`; body extends maximally right. Named
   parameters only — no implicit `current`. Lambda application is depth-capped
   (`MAX_CALL_DEPTH` 100) because higher-order recursion is otherwise unbounded.
@@ -92,7 +94,10 @@ which spelling was used (`via: "prop" | "scope"`).
   case-insensitive match, first field in schema order on collisions; a name-form
   `prop("Estimate")` canonicalizes too); `humanizeExpression` is the inverse for the
   editor. Unknown ids stay as visible `prop("id")` — a broken reference, not data
-  loss; unparseable input passes through unchanged.
+  loss; unparseable input passes through unchanged. Both rewriters take an optional
+  `databases` list (`FormulaRefDatabase[]`) applying the identical rules to
+  `db("…")` references: `db("Enrollments")` ⇄ `db("<dbId>")`, id matches kept,
+  unknown references left visibly broken, never reported as unresolved names.
 - [`row-scope.ts`](../../src/lib/formula/row-scope.ts) resolves at evaluation time by
   exact field id first, then normalized name (`normalizeFormulaPropertyName`, the same
   rule the checker and rewriters use — the three can never disagree). Cell → value
@@ -227,6 +232,50 @@ fallback — the relation chip rule) via `formulaValueToDisplay(value, { rowLabe
 `formulaValueToCellValue` projects rows/row lists to those titles for the merged-row
 pipeline. The type badge reads "row" / "list of rows".
 
+## Whole-database references (db)
+
+Any formula can read a whole database (proposal §4.4 tier 3):
+`db("Enrollments").filter(e => e.Status == "Active").length()`.
+
+**Syntax**: `db("…")` is syntax exactly like `prop` — the parser reserves the
+word (case-insensitively; it stays usable as a lambda parameter name) and only
+the single-string-literal form is the special form, parsing to a database node
+whose literal span feeds id-anchored diagnostics; `db(expr)` is a parse error
+naming the constraint. Canonical stored text holds the database ID
+(`db("<dbId>")`, rename-proof); the display form holds the database NAME
+(`db("Enrollments")`), translated by `ref-rewrite.ts` exactly as property
+references are. The highlighter classifies the whole reference as one property
+span, and `formulaDbIdSpans` ([`highlight.ts`](../../src/lib/formula/highlight.ts))
+locates db spans for the editor's future chip pass, mirroring
+`formulaPropIdSpans`.
+
+**Typing** ([`check.ts`](../../src/lib/formula/check.ts)): `db(id)` types as
+`listTypeOf(rowTypeOf(id))` — the exact type a relation cell into that database
+has — so member access, `.map`/`.filter`, and rollup aggregation compose
+unchanged. An id missing from `FormulaCheckContext.databases` diagnoses
+`"…" isn't a database` at the string literal's span (message shared with the
+evaluator via `formulaUnknownDatabaseMessage`); without a `databases` map the
+reference types optimistically as a list of anonymous rows.
+
+**Evaluation** ([`row-scope.ts`](../../src/lib/formula/row-scope.ts)
+`resolveFormulaDatabaseRows`): the value is the target database's rows as a
+`FormulaRowRef` list — the same shape a relation cell produces, so member
+reads, cross-database formula members, and the cross-database cycle guard
+(the resolver's visiting set) behave identically. Row ids come from the
+`FormulaRelationResolver`'s optional `rowIds(databaseId)` extension (live rows
+only — no stale ids to skip): `null` means "no such database" (error value
+naming it), and a resolver without `rowIds` reads as "Database references are
+not available here" — an error value, never a throw. Both resolvers implement
+it: `localFormulaRelationResolver` off its per-instance row scan, the engine
+shell off its row mirrors.
+
+**Dependency edges are COARSE** — the whole point of shipping db() after the
+incremental engine: any change in the target database (cell edits
+member-precise, row inserts/deletes, schema changes) dirties EVERY row of the
+referencing column (`FORMULA_ALL_ROWS`). See the engine sections below for the
+`databaseRefs` extraction, the `allRows` edge mapping, and the dirty-event
+composition.
+
 ## Incremental engine core
 
 [`src/lib/formula-engine/`](../../src/lib/formula-engine/) is the **pure core** of the
@@ -247,6 +296,11 @@ precise `(relationFieldId, memberFieldId)` traversal, and a source consumed opaq
 ("any target field"). Chained hops compose: `Rel.first().Steps.first().Hours` yields
 one traversal per hop, each knowing its owner (`sourceDatabaseId`) and target
 database. A failed walk degrades to "no traversals" — never throws.
+`db("…")` references ride the same provenance walk but come out as separate
+`databaseRefs` (`{ targetDatabaseId, memberFieldId }` — same member-precision
+rules, no relation field to map rows through); a member resolving to a
+relation field of the target chains into an ordinary relation traversal whose
+source database is the db ref's target.
 
 **Column graph** ([`graph.ts`](../../src/lib/formula-engine/graph.ts)):
 `buildFormulaGraph(databases)` — nodes are formula COLUMNS keyed
@@ -256,7 +310,11 @@ mapping**: `sameRow` (dependency in the same database) or
 changed target row maps to referrer rows via the relation's reverse index).
 Cross-database edges exist ONLY for traversals naming an explicit formula member —
 null-member traversals never edge, so opaque consumption (`Rel.length()`) can't
-manufacture false cycles. Cycles reuse the overlay's naming
+manufacture false cycles. `db("…")` references follow the same explicit-member
+rule with the coarse `allRows` mapping (any changed target row dirties every row
+of the referencing column — no reverse index exists for a whole-database read),
+and cycles built purely from db() formula members reject with the same
+db-qualified naming. Cycles reuse the overlay's naming
 ([`topo.ts`](../../src/lib/formula-engine/topo.ts) is shared by both), db-qualified
 when the cycle spans databases (`Circular reference: Projects.AF → Tasks.BRoll →
 Projects.AF`); cycle columns are excluded from the global topological order and
@@ -277,8 +335,13 @@ elsewhere, member-precise, mapping target rows back through composed reverse ind
 (chained hops C→B→A). A relation-cell change updates the index FIRST, then dirties
 like a data cell. Row add/remove implement stale-id semantics (referrers dirty on
 both; a removed row keeps its entries as a TARGET since stored cells still hold the
-id). Schema change marks the database's columns and inbound traversers all-rows (the
-caller rebuilds the graph first); the 60s clock tick marks volatile columns.
+id). Schema change marks the database's columns and inbound readers (traversals and
+db refs alike) all-rows (the caller rebuilds the graph first); the 60s clock
+tick marks volatile columns. Columns holding a `databaseRefs` entry into the
+changed database dirty `FORMULA_ALL_ROWS` on any member-matching event, and a
+chained mapping that reaches a db-referenced database short-circuits to
+all-rows too (`db("B").map(b => b.RelC…)` — a C edit maps to B rows through
+the reverse index, then coarsens).
 
 **Incremental evaluation** ([`evaluate-dirty.ts`](../../src/lib/formula-engine/evaluate-dirty.ts)):
 `evaluateDirtyFormulas` consumes the dirty map in the graph's global topological
@@ -310,8 +373,10 @@ per-database `FormulaOverlay` snapshots to React.
   cache, so the cache must be fully populated before any incremental pass. Once
   started it stays alive (HMR disposes; the next subscriber rebuilds).
 - **Resolver wiring** — passes evaluate with a resolver whose `database()` reads
-  the engine's mirrors and whose `formulaValue()` reads the **engine cache only**
-  (cache miss → blank, the stale-ref rule). It never falls back to
+  the engine's mirrors, whose `formulaValue()` reads the **engine cache only**
+  (cache miss → blank, the stale-ref rule), and whose `rowIds()` enumerates the
+  row mirrors for `db("…")` references (known-but-empty database → empty list,
+  unknown id → null). It never falls back to
   `localFormulaRelationResolver` — an on-demand recompute would bypass the graph's
   static cycle guard and re-derive values mid-pass.
 - **Event mapping** — row updates diff old/new cells per field (the previous row
@@ -517,8 +582,11 @@ errors inline as "⚠ message". Never throws.
 
 ## Deferred
 
-`db()` whole-database references, member canonicalization, member autocomplete
-after `r.`, save-time cross-database cycle rejection, and type-driven picker
-sheets for closed-type argument placeholders (a `unit` enum or select option
-opening a picker instead of the keyboard) are planned later phases —
-see the [proposal](../proposals/formula-language-v2.md) §4.4–§7.
+`db()` editor affordances (a database chip via `formulaDbIdSpans`, db entries
+in the fused autocomplete and reference list), member canonicalization, member
+autocomplete after `r.`, save-time cross-database cycle rejection, and
+type-driven picker sheets for closed-type argument placeholders (a `unit` enum
+or select option opening a picker instead of the keyboard) are planned later
+phases — see the [proposal](../proposals/formula-language-v2.md) §4.4–§7. The
+`db()` language + engine core itself shipped (see
+[Whole-database references](#whole-database-references-db)).

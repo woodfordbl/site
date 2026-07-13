@@ -204,6 +204,16 @@ function engineResolverOf(engine: FormulaEngineState): FormulaRelationResolver {
     },
     formulaValue: (databaseId, rowId, fieldId) =>
       engine.cache.get(databaseId)?.get(rowId)?.get(fieldId)?.value ?? null,
+    // Whole-database `db("…")` enumeration off the same mirrors the engine
+    // already keeps for its reverse indexes: a known database with no rows
+    // is the empty list, an unknown id is null (the unknown-database error).
+    rowIds: (databaseId) => {
+      if (!engine.databases.has(databaseId)) {
+        return null;
+      }
+      const rows = engine.rows.get(databaseId);
+      return rows === undefined ? [] : [...rows.keys()];
+    },
   };
 }
 

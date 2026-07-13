@@ -22,12 +22,20 @@
  * formula→formula edge: nothing in the language can read a target formula
  * without naming it (row labels read the target's primary DATA field), and
  * edging every target formula would manufacture false cycles.
+ *
+ * `db("…")` whole-database references follow the same explicit-member edge
+ * rule — a named formula member DOES need the formula→formula edge (both for
+ * topological ordering and so the member's recompute propagates), while a
+ * null-member db ref never edges. Their row mapping is the coarse `allRows`:
+ * with no relation field there is no reverse index, so any changed target
+ * row dirties EVERY row of the referencing column (proposal §4.4 tier 3).
  */
 
 import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
 import type { FormulaNode } from "@/lib/formula/ast.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
 import {
+  type FormulaDatabaseReference,
   type FormulaTraversal,
   formulaStaticReferences,
 } from "@/lib/formula/references.ts";
@@ -61,7 +69,9 @@ export type FormulaRowMapping =
       readonly kind: "viaRelation";
       readonly relationFieldId: string;
       readonly sourceDatabaseId: string;
-    };
+    }
+  /** Read through a `db("…")` ref: any changed row dirties every row. */
+  | { readonly kind: "allRows" };
 
 /** One formula column node. */
 export interface FormulaColumnNode {
@@ -70,6 +80,8 @@ export interface FormulaColumnNode {
   /** Named cycle error when this column is on a reference cycle. */
   readonly cycleError: FormulaError | null;
   readonly databaseId: string;
+  /** Whole-database `db("…")` references (coarse all-rows dirtying). */
+  readonly databaseRefs: readonly FormulaDatabaseReference[];
   readonly fieldId: string;
   readonly fieldName: string;
   /** `databaseId:fieldId` — the graph/dirty-set key. */
@@ -163,6 +175,7 @@ function buildColumns(
         ast,
         cycleError: null,
         databaseId,
+        databaseRefs: references?.databaseRefs ?? [],
         fieldId: field.id,
         fieldName: field.name,
         key: formulaColumnKey(databaseId, field.id),
@@ -197,8 +210,10 @@ function formulaFieldIdsByDatabase(
 
 /**
  * The formula columns `column` depends on, as `[depKey, mapping]` pairs:
- * same-row references to formula fields of its own database, plus traversals
- * whose explicit member is a formula field of the target database.
+ * same-row references to formula fields of its own database, traversals
+ * whose explicit member is a formula field of the target database, and
+ * `db("…")` references naming a formula member of the target (coarse
+ * all-rows mapping — no reverse index exists for a whole-database read).
  */
 function dependencyEdgesOf(
   column: MutableColumnNode,
@@ -226,6 +241,17 @@ function dependencyEdgesOf(
           relationFieldId: traversal.relationFieldId,
           sourceDatabaseId: traversal.sourceDatabaseId,
         },
+      ]);
+    }
+  }
+  for (const reference of column.databaseRefs) {
+    if (
+      reference.memberFieldId !== null &&
+      formulaIds.get(reference.targetDatabaseId)?.has(reference.memberFieldId)
+    ) {
+      edges.push([
+        formulaColumnKey(reference.targetDatabaseId, reference.memberFieldId),
+        { kind: "allRows" },
       ]);
     }
   }

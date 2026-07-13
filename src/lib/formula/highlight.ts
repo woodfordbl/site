@@ -9,7 +9,11 @@
  * highlight, which is the common state mid-keystroke.
  */
 
-import { FORMULA_PROP_ROOT, FORMULA_SCOPE_ROOTS } from "@/lib/formula/parse.ts";
+import {
+  FORMULA_DB_ROOT,
+  FORMULA_PROP_ROOT,
+  FORMULA_SCOPE_ROOTS,
+} from "@/lib/formula/parse.ts";
 import {
   type FormulaPunct,
   type FormulaToken,
@@ -44,6 +48,18 @@ export interface FormulaHighlightSpan {
  * argument (the raw field id). `start` inclusive, `end` exclusive.
  */
 export interface FormulaPropIdSpan {
+  end: number;
+  id: string;
+  start: number;
+}
+
+/**
+ * One `db("<id>")` reference span; `id` is the unescaped string argument
+ * (a database id in canonical text, a database name in display text).
+ * `start` inclusive, `end` exclusive — the editor's db-chip anchor, exactly
+ * as {@link FormulaPropIdSpan} anchors property chips.
+ */
+export interface FormulaDbIdSpan {
   end: number;
   id: string;
   start: number;
@@ -177,12 +193,14 @@ function classifyIdentifier(
     return classifyScopeReference(tokens, index, spans);
   }
   const [open, arg, close] = tokens.slice(index + 1, index + 4);
-  const isPropRef =
-    lower === FORMULA_PROP_ROOT &&
+  const isReferenceRef =
+    (lower === FORMULA_PROP_ROOT || lower === FORMULA_DB_ROOT) &&
     isPunct(open, "(") &&
     arg?.type === "string" &&
     isPunct(close, ")");
-  if (isPropRef) {
+  if (isReferenceRef) {
+    // db("…") classifies exactly like prop("…"): one property span over the
+    // whole reference (the parser's special-form lookahead, verbatim).
     spans.push({ start: token.position, end: close.end, kind: "property" });
     return index + 4;
   }
@@ -248,21 +266,19 @@ function lexablePrefixTokens(source: string): readonly FormulaToken[] {
 }
 
 /**
- * Locate every canonical `prop("<id>")` reference in `source` using the same
- * token-level lookahead the highlighter (and parser) applies, so chip
- * placement can't drift from what highlights as a property. Never throws;
- * on unlexable input the lexable prefix is still scanned (references stay
- * chips while an unterminated string is open later in the doc).
+ * Every `<root>("<literal>")` reference span in `source`, by the parser's
+ * own token-level lookahead — the shared core of {@link formulaPropIdSpans}
+ * and {@link formulaDbIdSpans}.
  */
-export function formulaPropIdSpans(source: string): FormulaPropIdSpan[] {
+function referenceIdSpans(
+  source: string,
+  root: string
+): { end: number; id: string; start: number }[] {
   const tokens = lexablePrefixTokens(source);
-  const spans: FormulaPropIdSpan[] = [];
+  const spans: { end: number; id: string; start: number }[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (
-      token.type !== "identifier" ||
-      token.value.toLowerCase() !== FORMULA_PROP_ROOT
-    ) {
+    if (token.type !== "identifier" || token.value.toLowerCase() !== root) {
       continue;
     }
     const [open, arg, close] = tokens.slice(index + 1, index + 4);
@@ -272,6 +288,25 @@ export function formulaPropIdSpans(source: string): FormulaPropIdSpan[] {
     }
   }
   return spans;
+}
+
+/**
+ * Locate every canonical `prop("<id>")` reference in `source` using the same
+ * token-level lookahead the highlighter (and parser) applies, so chip
+ * placement can't drift from what highlights as a property. Never throws;
+ * on unlexable input the lexable prefix is still scanned (references stay
+ * chips while an unterminated string is open later in the doc).
+ */
+export function formulaPropIdSpans(source: string): FormulaPropIdSpan[] {
+  return referenceIdSpans(source, FORMULA_PROP_ROOT);
+}
+
+/**
+ * Locate every `db("<id>")` reference in `source` — the db-chip analog of
+ * {@link formulaPropIdSpans}, same lookahead, same unlexable-prefix policy.
+ */
+export function formulaDbIdSpans(source: string): FormulaDbIdSpan[] {
+  return referenceIdSpans(source, FORMULA_DB_ROOT);
 }
 
 /**

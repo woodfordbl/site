@@ -221,6 +221,52 @@ describe("buildFormulaGraph — topological order and edges", () => {
       },
     ]);
   });
+
+  it("edges db() references naming a formula member with allRows mapping", () => {
+    const graph = graphOf({
+      "db-a": {
+        fields: [
+          formulaField("a-sum", "Sum", 'db("db-b").map(r => r.Double).sum()'),
+          formulaField("a-grand", "Grand", 'prop("a-sum") + 1'),
+          formulaField("a-count", "Count", 'db("db-b").length()'),
+        ],
+        name: "Projects",
+      },
+      "db-b": {
+        fields: [
+          numberField("b-est", "Estimate"),
+          formulaField("b-double", "Double", 'prop("b-est") * 2'),
+        ],
+        name: "Tasks",
+      },
+    });
+    // The db() ref with an explicit formula member DOES edge (ordering +
+    // propagation), with the coarse allRows mapping; the opaque `.length()`
+    // consumer gets no edge — same explicit-member rule as relations.
+    expect(
+      graph.dependents
+        .get("db-b:b-double")
+        ?.map((edge) => [edge.column.key, edge.mapping])
+    ).toEqual([["db-a:a-sum", { kind: "allRows" }]]);
+    expect(graph.columns.get("db-a:a-sum")?.databaseRefs).toEqual([
+      { memberFieldId: "b-double", targetDatabaseId: "db-b" },
+    ]);
+    expect(graph.columns.get("db-a:a-count")?.databaseRefs).toEqual([
+      { memberFieldId: null, targetDatabaseId: "db-b" },
+    ]);
+    const keys = graph.order.map((column) => column.key);
+    expect(keys.indexOf("db-b:b-double")).toBeLessThan(
+      keys.indexOf("db-a:a-sum")
+    );
+    // The db() edge composes with the downstream same-row edge.
+    expect(
+      graph.dependents
+        .get("db-a:a-sum")
+        ?.map((edge) => [edge.column.key, edge.mapping])
+    ).toEqual([["db-a:a-grand", { kind: "sameRow" }]]);
+    // db() refs register no relation field — there is no reverse index.
+    expect(graph.relationFields.size).toBe(0);
+  });
 });
 
 describe("buildFormulaGraph — cycles", () => {
@@ -307,6 +353,23 @@ describe("buildFormulaGraph — cycles", () => {
     });
     expect(graph.columns.get("db:f-self")?.cycleError?.message).toBe(
       "Circular reference: Self → Self"
+    );
+    expect(graph.order).toEqual([]);
+  });
+
+  it("names cycles built from db() formula members", () => {
+    const graph = graphOf({
+      "db-a": {
+        fields: [formulaField("a-f", "AF", 'db("db-b").first().BRoll')],
+        name: "Projects",
+      },
+      "db-b": {
+        fields: [formulaField("b-roll", "BRoll", 'db("db-a").first().AF')],
+        name: "Tasks",
+      },
+    });
+    expect(graph.columns.get("db-a:a-f")?.cycleError?.message).toBe(
+      "Circular reference: Projects.AF → Tasks.BRoll → Projects.AF"
     );
     expect(graph.order).toEqual([]);
   });

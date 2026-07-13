@@ -19,6 +19,7 @@ import type {
   FormulaBinaryNode,
   FormulaBinaryOp,
   FormulaCallNode,
+  FormulaDatabaseNode,
   FormulaLambdaNode,
   FormulaListNode,
   FormulaMemberNode,
@@ -56,6 +57,7 @@ import {
 import {
   formulaMemberOnNonRowMessage,
   formulaMemberOnRowListMessage,
+  formulaUnknownDatabaseMessage,
   LAMBDA_AS_VALUE_MESSAGE,
 } from "@/lib/formula/values.ts";
 
@@ -675,6 +677,8 @@ class Checker {
         return literalType(node.value);
       case "property":
         return this.synthProperty(node);
+      case "database":
+        return this.synthDatabase(node);
       case "name":
         return this.synthName(node, env);
       case "unary":
@@ -743,6 +747,28 @@ class Checker {
     }
     this.addUnresolvedName(node.name);
     return this.report(`Unknown property "${node.name}"`, spanOf(node));
+  }
+
+  /**
+   * `db("<databaseId>")` — a whole-database reference, typed exactly like a
+   * relation cell into that database: `list<row<target>>`, so member access,
+   * `.map`/`.filter`, and rollup aggregation all compose unchanged. Ids only
+   * (the canonical form; names canonicalize in `ref-rewrite.ts`) — an id
+   * missing from the map diagnoses at the string literal's span. Without a
+   * `databases` map the checker can't know any id, so it stays optimistic:
+   * a list of anonymous rows, whose members also check optimistically.
+   */
+  private synthDatabase(node: FormulaDatabaseNode): FormulaType {
+    if (this.databases === undefined) {
+      return listTypeOf(rowTypeOf());
+    }
+    if (this.databases.has(node.databaseId)) {
+      return listTypeOf(rowTypeOf(node.databaseId));
+    }
+    return this.report(formulaUnknownDatabaseMessage(node.databaseId), {
+      end: node.idEnd,
+      start: node.idPosition,
+    });
   }
 
   private synthName(

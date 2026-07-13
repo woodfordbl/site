@@ -47,6 +47,14 @@ export const FORMULA_SCOPE_ROOTS: ReadonlySet<string> = new Set([
 export const FORMULA_PROP_ROOT = "prop";
 
 /**
+ * The whole-database reference form `db("<databaseId>")` (lowercased).
+ * Syntax exactly like {@link FORMULA_PROP_ROOT} — it parses straight to a
+ * database node, never appears in the function catalog, and stays usable as
+ * a lambda parameter name. Exported for the highlighter.
+ */
+export const FORMULA_DB_ROOT = "db";
+
+/**
  * Words that read as literals or operators and therefore can't name a lambda
  * parameter (lowercased; identifier keywords are case-insensitive).
  */
@@ -511,6 +519,9 @@ class Parser {
     if (lower === FORMULA_PROP_ROOT) {
       return this.parsePropReference(token.position);
     }
+    if (lower === FORMULA_DB_ROOT) {
+      return this.parseDbReference(token.position);
+    }
     if (this.matchPunct("(") !== null) {
       return {
         kind: "call",
@@ -596,6 +607,40 @@ class Parser {
       position,
       end: close.end,
       via: "prop",
+    };
+  }
+
+  /**
+   * `db("<databaseId>")` — the whole-database reference. Mirrors
+   * {@link parsePropReference}: only a single string literal is the special
+   * form, so `db(expr)` is a parse error naming the constraint instead of an
+   * unknown-function call that would fail later with a worse message.
+   */
+  private parseDbReference(position: number): FormulaNode {
+    this.expectPunct("(", 'to open the "db(…)" reference');
+    const name = this.peek();
+    if (name.type !== "string") {
+      throw new FormulaParseFailure(
+        `db() expects one quoted database name, like db("Enrollments") — got ${describeToken(name)}`,
+        name.position
+      );
+    }
+    this.advance();
+    const comma = this.matchPunct(",");
+    if (comma !== null) {
+      throw new FormulaParseFailure(
+        "db() expects exactly one quoted database name",
+        comma.position
+      );
+    }
+    const close = this.expectPunct(")", 'to close the "db(…)" reference');
+    return {
+      kind: "database",
+      databaseId: name.value,
+      idEnd: name.end,
+      idPosition: name.position,
+      position,
+      end: close.end,
     };
   }
 

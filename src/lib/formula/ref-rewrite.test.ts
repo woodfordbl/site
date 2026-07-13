@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalDatabaseReference,
   canonicalizeExpression,
   canonicalPropertyReference,
   canonicalPropertyRewrites,
+  type FormulaRefDatabase,
   humanizeExpression,
 } from "@/lib/formula/ref-rewrite.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
@@ -242,5 +244,111 @@ describe("canonicalPropertyReference", () => {
   it("escapes quotes and backslashes in the id", () => {
     expect(canonicalPropertyReference("f-price")).toBe('prop("f-price")');
     expect(canonicalPropertyReference('a"b\\c')).toBe('prop("a\\"b\\\\c")');
+  });
+});
+
+describe("db() reference rewriting", () => {
+  const DATABASES: FormulaRefDatabase[] = [
+    { id: "d-enroll", name: "Enrollments" },
+    { id: "d-quote", name: 'A "B" \\C' },
+    { id: "d-dup1", name: "Roster" },
+    { id: "d-dup2", name: "roster" },
+  ];
+
+  it("canonicalizes db(name) to the database id", () => {
+    expect(
+      canonicalizeExpression('db("Enrollments").length()', FIELDS, DATABASES)
+    ).toEqual({
+      text: 'db("d-enroll").length()',
+      changed: true,
+      unresolved: [],
+    });
+  });
+
+  it("resolves names case-insensitively, first database on collisions", () => {
+    expect(
+      canonicalizeExpression('db("enrollments")', FIELDS, DATABASES).text
+    ).toBe('db("d-enroll")');
+    expect(canonicalizeExpression('db("ROSTER")', FIELDS, DATABASES).text).toBe(
+      'db("d-dup1")'
+    );
+  });
+
+  it("keeps id references, unknown references, and db-less calls as-is", () => {
+    expect(
+      canonicalizeExpression('db("d-enroll") ', FIELDS, DATABASES).changed
+    ).toBe(false);
+    // Neither id nor name: a visibly broken reference, not an unresolved
+    // name — the prop() rule.
+    expect(canonicalizeExpression('db("Ghost")', FIELDS, DATABASES)).toEqual({
+      text: 'db("Ghost")',
+      changed: false,
+      unresolved: [],
+    });
+    // Without a databases list, db references pass through untouched.
+    expect(canonicalizeExpression('db("Enrollments")', FIELDS).changed).toBe(
+      false
+    );
+  });
+
+  it("canonicalizes escaped names and mixes with property rewrites", () => {
+    expect(
+      canonicalizeExpression(
+        'thisPage.Price + db("A \\"B\\" \\\\C").length()',
+        FIELDS,
+        DATABASES
+      ).text
+    ).toBe('prop("f-price") + db("d-quote").length()');
+  });
+
+  it("humanizes db(id) to the database name, unknown ids staying canonical", () => {
+    expect(
+      humanizeExpression('db("d-enroll").length()', FIELDS, DATABASES)
+    ).toBe('db("Enrollments").length()');
+    expect(humanizeExpression('db("d-quote")', FIELDS, DATABASES)).toBe(
+      'db("A \\"B\\" \\\\C")'
+    );
+    expect(humanizeExpression('db("d-gone")', FIELDS, DATABASES)).toBe(
+      'db("d-gone")'
+    );
+    expect(humanizeExpression('db("d-enroll")', FIELDS)).toBe('db("d-enroll")');
+  });
+
+  it("round-trips: humanize∘canonicalize is display-stable", () => {
+    const displayStable = [
+      'db("Enrollments").filter(e => e.Status == "Active").length()',
+      'thisPage.Price + db("Enrollments").length()',
+      'db("A \\"B\\" \\\\C")',
+      'db("Ghost")',
+      'db("Enrollments',
+      "1 +",
+    ];
+    for (const text of displayStable) {
+      expect(
+        humanizeExpression(
+          canonicalizeExpression(text, FIELDS, DATABASES).text,
+          FIELDS,
+          DATABASES
+        )
+      ).toBe(text);
+    }
+  });
+
+  it("canonicalize∘humanize returns canonical text unchanged", () => {
+    const canonical = 'db("d-enroll").map(r => r.X).sum() + prop("f-price")';
+    expect(
+      canonicalizeExpression(
+        humanizeExpression(canonical, FIELDS, DATABASES),
+        FIELDS,
+        DATABASES
+      ).text
+    ).toBe(canonical);
+  });
+});
+
+describe("canonicalDatabaseReference", () => {
+  it("escapes quotes and backslashes in the reference", () => {
+    expect(canonicalDatabaseReference("d-enroll")).toBe('db("d-enroll")');
+    expect(canonicalDatabaseReference('a"b\\c')).toBe('db("a\\"b\\\\c")');
   });
 });

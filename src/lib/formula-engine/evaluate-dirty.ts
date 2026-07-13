@@ -176,7 +176,9 @@ function cycleErrorsOf(
 /**
  * Propagate a changed (column, row) to dependents: same-row edges dirty the
  * same row id in the dependent; via-relation edges map the changed target
- * row to the dependent's referrer rows through the reverse indexes.
+ * row to the dependent's referrer rows through the reverse indexes; allRows
+ * edges (`db("…")` reads) dirty the dependent's entire column — the coarse
+ * whole-database contract.
  */
 function propagateChange(
   pass: EvaluationPass,
@@ -186,6 +188,10 @@ function propagateChange(
   for (const edge of pass.graph.dependents.get(column.key) ?? []) {
     if (edge.mapping.kind === "sameRow") {
       addFormulaDirtyRows(pass.dirty, edge.column.key, [rowId]);
+      continue;
+    }
+    if (edge.mapping.kind === "allRows") {
+      addFormulaDirtyRows(pass.dirty, edge.column.key, FORMULA_ALL_ROWS);
       continue;
     }
     const rows = formulaReferrerRowsForColumn(

@@ -887,6 +887,65 @@ describe("relation typing", () => {
   });
 });
 
+describe("whole-database references (db)", () => {
+  it("types db(id) as a list of the target's rows, like a relation cell", () => {
+    expectTypesEqual(
+      relationTypeOf('db("db-t")'),
+      listTypeOf(rowTypeOf("db-t"))
+    );
+    expect(formulaTypeBadge(relationTypeOf('db("db-t")'))).toBe("list of rows");
+  });
+
+  it("composes with member access, rollups, and chained relations", () => {
+    expectTypesEqual(
+      relationTypeOf('db("db-t").map(r => r.Estimate).sum()'),
+      NUMBER_TYPE
+    );
+    expectTypesEqual(
+      relationTypeOf('db("db-t").filter(r => r.Done).length()'),
+      NUMBER_TYPE
+    );
+    // Formula members keep their precomputed type; relation members chain.
+    expectTypesEqual(relationTypeOf('first(db("db-t")).Total'), NUMBER_TYPE);
+    expectTypesEqual(
+      relationTypeOf('first(db("db-t")).Subtasks'),
+      listTypeOf(rowTypeOf("db-u"))
+    );
+  });
+
+  it("diagnoses unknown members through db() naming the database", () => {
+    const result = relationResultOf('first(db("db-t")).Nope');
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].message).toBe(
+      '"Nope" isn\'t a property of Tasks'
+    );
+  });
+
+  it("diagnoses an unknown database id at the string literal's span", () => {
+    const source = '1 + db("db-gone").length()';
+    const result = relationResultOf(source);
+    expect(result.diagnostics).toEqual([
+      {
+        end: source.indexOf('"db-gone"') + '"db-gone"'.length,
+        message: '"db-gone" isn\'t a database',
+        severity: "error",
+        start: source.indexOf('"db-gone"'),
+      },
+    ]);
+    // One mistake, one diagnostic: the reference synthesizes unknown, which
+    // length() accepts optimistically (its declared number return stands).
+    expect(result.resultType).toEqual(NUMBER_TYPE);
+  });
+
+  it("types optimistically when the context has no databases map", () => {
+    // db() itself is a list of anonymous rows; members stay optimistic.
+    expectTypesEqual(typeOf('db("db-anything")'), listTypeOf(rowTypeOf()));
+    expect(
+      resultOf('db("db-anything").map(r => r.X).sum()').diagnostics
+    ).toEqual([]);
+  });
+});
+
 describe("bare names", () => {
   it("resolves lambda params and let bindings case-sensitively", () => {
     expect(typeOf("map([1], x => x)")).toEqual(listTypeOf(NUMBER_TYPE));

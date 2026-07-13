@@ -31,12 +31,14 @@ import {
 } from "@/lib/databases/cell-values.ts";
 import { normalizeFormulaPropertyName } from "@/lib/formula/check.ts";
 import {
+  DATABASE_REF_UNAVAILABLE_MESSAGE,
   FormulaDate,
   type FormulaRelationResolver,
   FormulaRowRef,
   type FormulaScope,
   type FormulaValue,
   formulaError,
+  formulaUnknownDatabaseMessage,
 } from "@/lib/formula/values.ts";
 import type {
   DatabaseCellValue,
@@ -215,6 +217,32 @@ export function resolveFormulaRowMember(
     return null;
   }
   return cellToFormulaValue(field, values[field.id], relations);
+}
+
+/**
+ * Resolve `db("<databaseId>")` — a whole-database reference — to the target
+ * database's rows as a row-ref list, the same value shape a relation cell
+ * produces, so everything relation values compose with (map/filter/member
+ * access, rollup aggregation) works unchanged. Ids come from the resolver's
+ * `rowIds` enumeration of LIVE rows, so unlike relation cells there are no
+ * stale ids to skip. A resolver that can't enumerate (absent, or predating
+ * `rowIds`) reads as an unavailability error; an id naming no database reads
+ * as the checker's own unknown-database message. Never throws.
+ */
+export function resolveFormulaDatabaseRows(
+  databaseId: string,
+  relations: FormulaRelationResolver | undefined
+): FormulaValue {
+  if (relations?.rowIds === undefined) {
+    return formulaError(DATABASE_REF_UNAVAILABLE_MESSAGE);
+  }
+  const rowIds = relations.rowIds(databaseId);
+  if (rowIds === null) {
+    return formulaError(formulaUnknownDatabaseMessage(databaseId));
+  }
+  return rowIds.map(
+    (rowId): FormulaValue => new FormulaRowRef(databaseId, rowId)
+  );
 }
 
 /**

@@ -56,6 +56,27 @@ export interface FormulaPropertyNode {
 }
 
 /**
+ * Whole-database reference — `db("<databaseId>")`. Canonical stored text
+ * holds the database ID (stable across renames, mirroring `prop`); the
+ * display form holds the database NAME (`db("Enrollments")`), translated by
+ * the ref rewriters. The AST keeps only the raw string (`databaseId`) —
+ * whether it names a real database is the checker/evaluator's concern.
+ * `idPosition`/`idEnd` span the quoted string literal so diagnostics can
+ * point at the reference itself rather than the whole `db(…)` call.
+ */
+export interface FormulaDatabaseNode {
+  /** Raw string argument: a database id (canonical) or name (display form). */
+  databaseId: string;
+  end: number;
+  /** End (exclusive) of the quoted string literal, including its quotes. */
+  idEnd: number;
+  /** Start of the quoted string literal, including its opening quote. */
+  idPosition: number;
+  kind: "database";
+  position: number;
+}
+
+/**
  * Bare identifier used as a name reference — a lambda parameter or a
  * `let`/`lets` binding. The parser is permissive: whether the name actually
  * resolves to a binding is the checker/evaluator's concern.
@@ -158,6 +179,7 @@ export interface FormulaListNode {
 export type FormulaNode =
   | FormulaLiteralNode
   | FormulaPropertyNode
+  | FormulaDatabaseNode
   | FormulaNameNode
   | FormulaUnaryNode
   | FormulaBinaryNode
@@ -174,6 +196,7 @@ export function formulaNodeChildren(node: FormulaNode): readonly FormulaNode[] {
   switch (node.kind) {
     case "literal":
     case "property":
+    case "database":
     case "name":
       return [];
     case "unary":

@@ -14,6 +14,13 @@
  * reaches a column of database A whose traversal chain runs A→B→C by mapping
  * C-rows → B-rows through the second hop's reverse index, then B-rows →
  * A-rows through the first hop's ({@link formulaReferrerRowsForColumn}).
+ *
+ * `db("…")` references are the deliberately COARSE hop (proposal §4.4
+ * tier 3): with no relation field there is no reverse index, so any change
+ * in the referenced database — including one reached through a downstream
+ * relation chain (`db("B").map(b => b.RelC…)`) — dirties every row of the
+ * referencing column ({@link FORMULA_ALL_ROWS}). Member precision still
+ * applies: a member-named db ref ignores changes to other target fields.
  */
 
 import type {
@@ -104,14 +111,17 @@ function referrersThroughTraversal(
  * Map rows of `fromDatabaseId` to the column's own rows by walking the
  * column's traversal chain backwards through the reverse indexes (chained
  * hops compose; a worklist per database handles diamonds, and per-database
- * processed sets bound cyclic relation structures).
+ * processed sets bound cyclic relation structures). A database the column
+ * references WHOLE (`db("…")`) short-circuits to {@link FORMULA_ALL_ROWS}:
+ * there is no relation hop to map its rows back through, so a change there
+ * coarsely dirties the entire column.
  */
 function mapSourceRowsToColumn(
   column: FormulaColumnNode,
   fromDatabaseId: string,
   rows: ReadonlySet<string>,
   indexes: FormulaReverseIndexes
-): Set<string> {
+): FormulaDirtyRows {
   const result = new Set<string>();
   const processed = new Map<string, Set<string>>();
   const queue: [string, ReadonlySet<string>][] = [[fromDatabaseId, rows]];
@@ -129,6 +139,13 @@ function mapSourceRowsToColumn(
         result.add(rowId);
       }
       continue;
+    }
+    if (
+      column.databaseRefs.some(
+        (reference) => reference.targetDatabaseId === databaseId
+      )
+    ) {
+      return FORMULA_ALL_ROWS;
     }
     for (const traversal of column.traversals) {
       if (traversal.targetDatabaseId !== databaseId) {
@@ -150,14 +167,16 @@ function mapSourceRowsToColumn(
 /**
  * The column's own rows affected by a change to `targetRowIds` reached
  * through one traversal hop: map through the hop's reverse index, then
- * compose the remaining chain back to the column's database.
+ * compose the remaining chain back to the column's database (which may
+ * coarsen to {@link FORMULA_ALL_ROWS} when the chain crosses a `db("…")`
+ * reference).
  */
 export function formulaReferrerRowsForColumn(
   column: FormulaColumnNode,
   hop: { relationFieldId: string; sourceDatabaseId: string },
   targetRowIds: Iterable<string>,
   indexes: FormulaReverseIndexes
-): Set<string> {
+): FormulaDirtyRows {
   const sourceRows = new Set<string>();
   for (const targetRowId of targetRowIds) {
     for (const sourceRowId of formulaReferrersOf(
@@ -176,7 +195,24 @@ export function formulaReferrerRowsForColumn(
   );
 }
 
-/** Dirty every column traversing into `databaseId` for target rows. */
+/** `null` members match anything — the same rule on both event and reference. */
+function memberFieldMatches(
+  referenceMember: string | null,
+  eventMember: string | null
+): boolean {
+  return (
+    referenceMember === null ||
+    eventMember === null ||
+    referenceMember === eventMember
+  );
+}
+
+/**
+ * Dirty every column reading `databaseId` from elsewhere: traversing columns
+ * map the changed row to referrer rows through the reverse indexes; columns
+ * referencing the database WHOLE (`db("…")`) dirty all rows — the coarse
+ * contract — when the member matches.
+ */
 function dirtyTraversalReferrers(
   graph: FormulaGraph,
   indexes: FormulaReverseIndexes,
@@ -187,10 +223,10 @@ function dirtyTraversalReferrers(
 ): void {
   for (const column of graph.columns.values()) {
     for (const traversal of column.traversals) {
-      const memberMatches =
-        traversal.memberFieldId === null ||
-        memberFieldId === null ||
-        traversal.memberFieldId === memberFieldId;
+      const memberMatches = memberFieldMatches(
+        traversal.memberFieldId,
+        memberFieldId
+      );
       if (traversal.targetDatabaseId !== databaseId || !memberMatches) {
         continue;
       }
@@ -201,6 +237,14 @@ function dirtyTraversalReferrers(
         indexes
       );
       addFormulaDirtyRows(dirty, column.key, rows);
+    }
+    for (const reference of column.databaseRefs) {
+      if (
+        reference.targetDatabaseId === databaseId &&
+        memberFieldMatches(reference.memberFieldId, memberFieldId)
+      ) {
+        addFormulaDirtyRows(dirty, column.key, FORMULA_ALL_ROWS);
+      }
     }
   }
 }
@@ -351,8 +395,9 @@ export function formulaRowRemoved(
 /**
  * A database's schema changed — the coarse path: the caller has already
  * REBUILT the graph (and reverse indexes); every formula column of the
- * changed database and every column traversing into it re-evaluates fully
- * (the {@link FORMULA_ALL_ROWS} sentinel).
+ * changed database and every column reading into it (traversals and
+ * `db("…")` references alike) re-evaluates fully (the
+ * {@link FORMULA_ALL_ROWS} sentinel).
  */
 export function formulaSchemaChanged(
   graph: FormulaGraph,
@@ -360,10 +405,14 @@ export function formulaSchemaChanged(
   databaseId: string
 ): void {
   for (const column of graph.columns.values()) {
-    const traverses = column.traversals.some(
-      (traversal) => traversal.targetDatabaseId === databaseId
-    );
-    if (column.databaseId === databaseId || traverses) {
+    const reads =
+      column.traversals.some(
+        (traversal) => traversal.targetDatabaseId === databaseId
+      ) ||
+      column.databaseRefs.some(
+        (reference) => reference.targetDatabaseId === databaseId
+      );
+    if (column.databaseId === databaseId || reads) {
       addFormulaDirtyRows(dirty, column.key, FORMULA_ALL_ROWS);
     }
   }

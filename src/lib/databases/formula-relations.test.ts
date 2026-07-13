@@ -174,6 +174,13 @@ describe("localFormulaRelationResolver", () => {
       "Circular reference: Tasks.Calc → Projects.Rollup → Tasks.Calc"
     );
   });
+
+  it("enumerates row ids for db() references, null for unknown databases", () => {
+    const resolver = localFormulaRelationResolver();
+    expect(resolver.rowIds?.("db-b")).toEqual(["t1", "t2"]);
+    expect(resolver.rowIds?.("db-a")).toEqual(["p1"]);
+    expect(resolver.rowIds?.("db-nope")).toBeNull();
+  });
 });
 
 describe("relation rollups over the collections", () => {
@@ -208,6 +215,66 @@ describe("relation rollups over the collections", () => {
     const overlay = computeFormulaOverlay(projects.fields, projectRows, {
       relations: localFormulaRelationResolver(),
     });
+    const cell = overlay.get("p1")?.["a-roll"];
+    expect(cell?.isError).toBe(true);
+    expect(cell?.display).toBe(
+      "⚠ Circular reference: Tasks.Calc → Projects.Rollup → Tasks.Calc"
+    );
+  });
+});
+
+describe("db() whole-database rollups over the collections", () => {
+  it("computes a db() rollup end-to-end, formula members included", () => {
+    const projects = store.databases[0];
+    const withDbRollup: DatabaseField[] = [
+      ...projects.fields,
+      {
+        expression: 'db("db-b").map(r => r.Double).sum()',
+        id: "a-db-roll",
+        name: "AllTasks",
+        type: "formula",
+      },
+    ];
+    const projectRows = store.rows.filter((row) => row.databaseId === "db-a");
+    const overlay = computeFormulaOverlay(withDbRollup, projectRows, {
+      relations: localFormulaRelationResolver(),
+    });
+    // Every Tasks row, linked or not: 3*2 + 4*2.
+    expect(overlay.get("p1")?.["a-db-roll"]?.cellValue).toBe(14);
+  });
+
+  it("guards two-database db() cycles with the same visiting set", () => {
+    // A.Rollup reads B.Calc via db(); B.Calc reads A.Rollup via db() — no
+    // relation fields anywhere, so only the db() path can recurse.
+    store.databases = [
+      database("db-a", "Projects", "a-name", [
+        { id: "a-name", name: "Name", type: "text" },
+        {
+          expression: 'db("db-b").map(t => t.Calc).sum()',
+          id: "a-roll",
+          name: "Rollup",
+          type: "formula",
+        },
+      ]),
+      database("db-b", "Tasks", "b-name", [
+        { id: "b-name", name: "Name", type: "text" },
+        {
+          expression: 'db("db-a").map(p => p.Rollup).sum()',
+          id: "b-calc",
+          name: "Calc",
+          type: "formula",
+        },
+      ]),
+    ];
+    store.rows = [
+      dbRow("p1", "db-a", { "a-name": "Site" }),
+      dbRow("t1", "db-b", { "b-name": "Design" }),
+    ];
+    const overlay = computeFormulaOverlay(
+      store.databases[0].fields,
+      store.rows.filter((row) => row.databaseId === "db-a"),
+      { relations: localFormulaRelationResolver() }
+    );
     const cell = overlay.get("p1")?.["a-roll"];
     expect(cell?.isError).toBe(true);
     expect(cell?.display).toBe(

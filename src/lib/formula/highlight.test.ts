@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   type FormulaHighlightSpan,
+  formulaDbIdSpans,
   formulaDisplayOffset,
   formulaEnclosingCallAt,
   formulaPropIdSpans,
@@ -59,6 +60,20 @@ describe("highlightFormula", () => {
 
   it("treats prop without a quoted argument as a plain call", () => {
     expect(spansOf("prop(1)")).toEqual(["function:prop", "number:1"]);
+  });
+
+  it("spans a whole db() reference like a prop() reference", () => {
+    expect(spansOf('db("d-enroll").length() + 1')).toEqual([
+      'property:db("d-enroll")',
+      "operator:.",
+      "function:length",
+      "operator:+",
+      "number:1",
+    ]);
+  });
+
+  it("treats db without a quoted argument as a plain call", () => {
+    expect(spansOf("db(1)")).toEqual(["function:db", "number:1"]);
   });
 
   it("classifies member access and chained method calls", () => {
@@ -162,6 +177,41 @@ describe("formulaPropIdSpans", () => {
   it("matches unparseable-but-lexable drafts (mid-keystroke chips)", () => {
     expect(formulaPropIdSpans('prop("f-a") +')).toEqual([
       { start: 0, end: 11, id: "f-a" },
+    ]);
+  });
+
+  it("does not match db() references (they have their own span scan)", () => {
+    expect(formulaPropIdSpans('db("d-a") + prop("f-a")')).toEqual([
+      { start: 12, end: 23, id: "f-a" },
+    ]);
+  });
+});
+
+describe("formulaDbIdSpans", () => {
+  it("locates db() spans with unescaped ids, case-insensitively", () => {
+    const source = 'db("d-a").length() + DB("d-b\\"c")';
+    expect(formulaDbIdSpans(source)).toEqual([
+      { start: 0, end: 9, id: "d-a" },
+      { start: 21, end: source.length, id: 'd-b"c' },
+    ]);
+  });
+
+  it("skips incomplete or non-string db calls and prop() references", () => {
+    expect(formulaDbIdSpans('db("open')).toEqual([]);
+    expect(formulaDbIdSpans("db(name)")).toEqual([]);
+    expect(formulaDbIdSpans('db("a", "b")')).toEqual([]);
+    expect(formulaDbIdSpans('prop("f-a")')).toEqual([]);
+  });
+
+  it("still scans the lexable prefix of unlexable input", () => {
+    expect(formulaDbIdSpans('db("d-a") + "open')).toEqual([
+      { start: 0, end: 9, id: "d-a" },
+    ]);
+  });
+
+  it("matches unparseable-but-lexable drafts (mid-keystroke chips)", () => {
+    expect(formulaDbIdSpans('db("d-a") +')).toEqual([
+      { start: 0, end: 9, id: "d-a" },
     ]);
   });
 });

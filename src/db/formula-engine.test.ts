@@ -261,6 +261,82 @@ describe("formula engine — incremental updates", () => {
   });
 });
 
+describe("formula engine — db() whole-database references", () => {
+  const DASH_FIELDS = [
+    textField("d-name", "Name"),
+    formulaField("d-total", "Total", 'db("tasks").map(r => r.Double).sum()'),
+  ];
+
+  /** Tasks (Estimate + Double) ← Dash (db("tasks") rollup, no relation). */
+  function seedDbRefWorkspace(): void {
+    fixture.seed(
+      [
+        databaseOf("tasks", "Tasks", TASK_FIELDS, "t-title"),
+        databaseOf("dash", "Dash", DASH_FIELDS, "d-name"),
+      ],
+      [
+        rowOf("tasks", "task-1", { "t-est": 3 }),
+        rowOf("tasks", "task-2", { "t-est": 5 }),
+        rowOf("dash", "dash-1", {}),
+      ]
+    );
+  }
+
+  function totalValue(): unknown {
+    return formulaOverlaySnapshot("dash").get("dash-1")?.["d-total"]?.cellValue;
+  }
+
+  it("computes the whole-database rollup in the warm pass", () => {
+    seedDbRefWorkspace();
+    const stop = subscribeFormulaEngine("dash", vi.fn());
+    // Every Tasks row, no relation links anywhere: 3*2 + 5*2.
+    expect(totalValue()).toBe(16);
+    stop();
+  });
+
+  it("recomputes when ANY target row's value changes", async () => {
+    seedDbRefWorkspace();
+    const onDash = vi.fn();
+    const stop = subscribeFormulaEngine("dash", onDash);
+    expect(totalValue()).toBe(16);
+
+    fixture.updateRowValues("task-2", { "t-est": 50 });
+    await flushEngine();
+    expect(onDash).toHaveBeenCalledTimes(1);
+    expect(totalValue()).toBe(106);
+    stop();
+  });
+
+  it("recomputes on target row insert AND delete, evicting deleted cells", async () => {
+    seedDbRefWorkspace();
+    const stop = subscribeFormulaEngine("dash", vi.fn());
+    expect(totalValue()).toBe(16);
+
+    fixture.insertRow(rowOf("tasks", "task-3", { "t-est": 7 }));
+    await flushEngine();
+    expect(totalValue()).toBe(30);
+
+    fixture.removeRow("task-1");
+    await flushEngine();
+    // The deleted row's cached formula cells are evicted, not just stale.
+    expect(formulaOverlaySnapshot("tasks").has("task-1")).toBe(false);
+    expect(totalValue()).toBe(24);
+    stop();
+  });
+
+  it("ignores target edits to fields the db() member does not read", async () => {
+    seedDbRefWorkspace();
+    const stop = subscribeFormulaEngine("dash", vi.fn());
+    const before = formulaOverlaySnapshot("dash");
+
+    fixture.updateRowValues("task-1", { "t-title": "Renamed" });
+    await flushEngine();
+    // t-title feeds neither Double nor the db() member — stable snapshot.
+    expect(formulaOverlaySnapshot("dash")).toBe(before);
+    stop();
+  });
+});
+
 describe("formula engine — volatile clock", () => {
   it("re-evaluates volatile columns every minute while subscribed", () => {
     vi.useFakeTimers();
