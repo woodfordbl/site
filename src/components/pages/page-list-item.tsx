@@ -1,14 +1,4 @@
-import {
-  IconCaretRightFilled,
-  IconCopy,
-  IconCopyOff,
-  IconEdit,
-  IconLayoutGrid,
-  IconRefresh,
-  IconStar,
-  IconStarOff,
-  IconTrash,
-} from "@tabler/icons-react";
+import { IconCaretRightFilled } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -18,15 +8,13 @@ import {
   useDropTarget,
 } from "@/components/dnd/use-dnd.ts";
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
-import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import {
   PageListDatabaseRows,
   useHostedDatabases,
 } from "@/components/pages/page-list-database-rows.tsx";
 import { PageListRowDropdown } from "@/components/pages/page-list-row-menu.tsx";
-import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
+import { PageRowMenuContent } from "@/components/pages/page-row-menu-content.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   Collapsible,
@@ -37,14 +25,6 @@ import { ConfirmDialogFooter } from "@/components/ui/confirm-dialog-footer.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuGroup,
-  ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
 import {
@@ -54,11 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
-import {
-  MenuIconRenameInput,
-  shouldCancelMenuCloseForIconPicker,
-} from "@/components/ui/menu-icon-rename-input.tsx";
-import { Shortcut } from "@/components/ui/shortcut.tsx";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -75,16 +50,9 @@ import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
-import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
-import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
-import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
-import {
-  type PageMetadataSeed,
-  persistPageMetadata,
-} from "@/lib/pages/persist-page-metadata.ts";
 import type { PageListDropTarget } from "@/lib/pages/resolve-page-list-drop-target.ts";
 import {
   resolveDeleteRedirectTarget,
@@ -449,7 +417,6 @@ export function PageListItem({
   const dispatch = usePageDispatch(pages);
   const reposition = usePageReposition(pages, dispatch);
   const navigate = useNavigate();
-  const { setTemplatePageId } = useTemplatePage();
   const activePage = useActivePageRef();
   const saveAsTemplate = useSavePageAsTemplate(page);
   const localPage = useLocalPageById(page.id);
@@ -463,22 +430,13 @@ export function PageListItem({
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [contextDraftName, setContextDraftName] = useState(page.title);
-  const [contextIconPickerOpen, setContextIconPickerOpen] = useState(false);
-  const [contextPickerSeed, setContextPickerSeed] = useState<
-    PageMetadataSeed | undefined
-  >();
   const menuActionRef = useRef<HTMLButtonElement>(null);
 
   const {
-    ensureSeed,
     handleTitleChange,
-    iconPickerSeed,
     isRenaming,
     openChangeIcon,
-    previousSlugRef,
     renameInputRef,
-    seedRef,
     startRenaming,
     stopRenaming,
     title,
@@ -492,9 +450,6 @@ export function PageListItem({
   const navTarget = resolvePageNavTarget(page.id, pages);
   const active = isActivePage(page.id, page.slug, activePage);
   const pageIcon = localPage?.icon ?? page.icon;
-  const previousSlug = previousSlugRef.current;
-  const activeSeed =
-    contextPickerSeed ?? iconPickerSeed ?? seedRef.current ?? undefined;
 
   const dropIndicator = useDropTarget((target: PageListDropTarget | null) =>
     target?.kind === "sibling" && target.anchorPageId === page.id
@@ -525,88 +480,18 @@ export function PageListItem({
     }
   }, [isAnyDragging]);
 
-  const commitContextRename = useCallback(() => {
-    const nextTitle =
-      contextDraftName.trim() === "" ? DEFAULT_PAGE_TITLE : contextDraftName;
-    if (nextTitle === title && contextDraftName.trim() !== "") {
+  const handleContextMenuOpenChange = useCallback((next: boolean) => {
+    // A touch drag-reorder shares the press-and-hold gesture Base UI treats as a
+    // context-menu long-press; refuse to open while a drag is active or has just
+    // settled so dragging a row never pops its actions menu.
+    if (
+      next &&
+      (wasDraggingRef.current || Date.now() - dragEndedAtRef.current < 400)
+    ) {
       return;
     }
-    persistPageMetadata({
-      pageId: page.id,
-      previousSlug,
-      title: nextTitle,
-      pages,
-      seed: activeSeed,
-      syncUrl: true,
-    });
-  }, [activeSeed, contextDraftName, page.id, pages, previousSlug, title]);
-
-  const handleContextMenuOpenChange = useCallback(
-    (
-      next: boolean,
-      eventDetails?: {
-        cancel: () => void;
-        event: Event;
-        reason: string;
-      }
-    ) => {
-      if (
-        next &&
-        (wasDraggingRef.current || Date.now() - dragEndedAtRef.current < 400)
-      ) {
-        return;
-      }
-      if (
-        shouldCancelMenuCloseForIconPicker(
-          next,
-          contextIconPickerOpen,
-          eventDetails
-        )
-      ) {
-        return;
-      }
-      if (next) {
-        setContextDraftName(title);
-        setContextIconPickerOpen(false);
-      } else {
-        commitContextRename();
-        setContextIconPickerOpen(false);
-      }
-      setContextMenuOpen(next);
-    },
-    [commitContextRename, contextIconPickerOpen, title]
-  );
-
-  const openContextIconPicker = useCallback(() => {
-    const openPicker = (nextSeed?: PageMetadataSeed) => {
-      if (nextSeed) {
-        setContextPickerSeed(nextSeed);
-      }
-      setContextIconPickerOpen(true);
-    };
-
-    ensureSeed()
-      .then((nextSeed) => {
-        openPicker(nextSeed ?? undefined);
-      })
-      .catch(() => openPicker());
-  }, [ensureSeed]);
-
-  const writeContextIcon = useCallback(
-    (nextIcon: string) => {
-      const resolvedTitle =
-        contextDraftName.trim() === "" ? DEFAULT_PAGE_TITLE : contextDraftName;
-      persistPageIcon({
-        pageId: page.id,
-        icon: nextIcon,
-        title: resolvedTitle,
-        previousSlug,
-        seed: activeSeed,
-        pages,
-      });
-    },
-    [activeSeed, contextDraftName, page.id, pages, previousSlug]
-  );
+    setContextMenuOpen(next);
+  }, []);
 
   const handleResetToRemote = useCallback(() => {
     dispatch({ type: "page.resetToRemote", pageId: page.id });
@@ -698,113 +583,23 @@ export function PageListItem({
       <ContextMenuTrigger className="block w-full">
         {rowContent}
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-64 min-w-64">
-        <MenuIconRenameInput
-          ariaLabelIcon="Change page icon"
-          ariaLabelName="Page name"
-          draftName={contextDraftName}
-          fallbackIcon={
-            <PageIconDisplay className="[&_svg]:size-4" icon={undefined} />
-          }
-          icon={pageIcon}
-          iconPickerOpen={contextIconPickerOpen}
-          onCommit={commitContextRename}
-          onDraftNameChange={setContextDraftName}
-          onIconPickerOpenChange={(next) => {
-            if (next) {
-              openContextIconPicker();
-            } else {
-              setContextIconPickerOpen(false);
-            }
-          }}
-          onIconSelect={writeContextIcon}
-          onSubmit={() => {
-            commitContextRename();
-            setContextMenuOpen(false);
-          }}
-          placeholder="Page name"
+      <ContextMenuContent>
+        <PageRowMenuContent
+          canDelete={canDeleteRow}
+          canResetToRemote={canResetToRemote}
+          isFavorite={isFavorite}
+          onChangeIcon={openChangeIcon}
+          onDelete={() => setDeleteOpen(true)}
+          onDuplicate={handleDuplicate}
+          onMoveTo={handleMoveTo}
+          onRename={startRenaming}
+          onResetToRemote={handleResetToRemote}
+          onSaveAsTemplate={saveAsTemplate.request}
+          onToggleFavorite={handleToggleFavorite}
+          pageId={page.id}
+          pages={pages}
+          variant="context"
         />
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          <ContextMenuLabel>Page</ContextMenuLabel>
-          <ContextMenuItem onClick={handleToggleFavorite}>
-            {isFavorite ? <IconStarOff /> : <IconStar />}
-            {isFavorite ? "Remove from favorites" : "Add to favorites"}
-            <ContextMenuShortcut>
-              <Shortcut command="toggle-favorite" />
-            </ContextMenuShortcut>
-          </ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <IconCopy />
-              Duplicate page
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              <ContextMenuItem
-                onClick={() => {
-                  handleDuplicate(true);
-                }}
-              >
-                <IconCopy />
-                With content
-                <ContextMenuShortcut>
-                  <Shortcut command="duplicate-page" />
-                </ContextMenuShortcut>
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() => {
-                  handleDuplicate(false);
-                }}
-              >
-                <IconCopyOff />
-                Without content
-              </ContextMenuItem>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <PageMenuMoveSubmenu
-            onMoveTo={handleMoveTo}
-            pageId={page.id}
-            pages={pages}
-            variant="context"
-          />
-          <ContextMenuItem onClick={saveAsTemplate.request}>
-            <IconLayoutGrid />
-            Save as template
-            <ContextMenuShortcut>
-              <Shortcut command="save-as-template" />
-            </ContextMenuShortcut>
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => {
-              openTemplateEditor(navigate, setTemplatePageId);
-            }}
-          >
-            <IconEdit />
-            Edit template
-            <ContextMenuShortcut>
-              <Shortcut command="edit-template" />
-            </ContextMenuShortcut>
-          </ContextMenuItem>
-          {canResetToRemote ? (
-            <ContextMenuItem onClick={handleResetToRemote}>
-              <IconRefresh />
-              Reset to site version
-            </ContextMenuItem>
-          ) : null}
-          <ContextMenuItem
-            disabled={!canDeleteRow}
-            onClick={() => setDeleteOpen(true)}
-            variant="destructive"
-          >
-            <IconTrash />
-            Delete
-            <ContextMenuShortcut>
-              <Shortcut command="delete-page" />
-            </ContextMenuShortcut>
-          </ContextMenuItem>
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <PageActivityPanel pageId={page.id} />
       </ContextMenuContent>
     </ContextMenu>
   );
