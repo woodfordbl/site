@@ -59,17 +59,19 @@ describe("canDropPageIntoCanvas", () => {
   });
 
   it("rejects drops that would exceed the max depth", () => {
-    // proj sits at depth 2 (/work/projects). Dropping `alpha` — which already has
-    // a one-level subtree (`beta`) — under it would reach depth 4 (> MAX 3).
+    // `d` sits at depth 4 (/a/b/c/d). Dropping `alpha` — which already has a
+    // one-level subtree (`beta`) — under it would reach depth 6 (> MAX 5).
     const deepPages = [
-      page("work", "/work"),
-      page("proj", "/work/projects", "work"),
+      page("a", "/a"),
+      page("b", "/a/b", "a"),
+      page("c", "/a/b/c", "b"),
+      page("d", "/a/b/c/d", "c"),
       page("alpha", "/alpha"),
       page("beta", "/alpha/beta", "alpha"),
     ];
     expect(
       canDropPageIntoCanvas({
-        currentPageId: "proj",
+        currentPageId: "d",
         droppedPageId: "alpha",
         pages: deepPages,
       })

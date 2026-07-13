@@ -105,13 +105,15 @@ describe("planPageReposition", () => {
       page("a", "/a", "A"),
       page("b", "/a/b", "B", "a"),
       page("c", "/a/b/c", "C", "b"),
-      page("d", "/d", "D"),
+      page("d", "/a/b/c/d", "D", "c"),
+      page("e", "/a/b/c/d/e", "E", "d"),
+      page("f", "/f", "F"),
     ];
 
     expect(() =>
       planPageReposition({
-        pageId: "d",
-        parentId: "c",
+        pageId: "f",
+        parentId: "e",
         pages,
       })
     ).toThrow(`${MAX_PAGE_DEPTH}`);
