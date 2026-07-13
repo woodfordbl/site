@@ -169,7 +169,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "new-page",
     label: "New page",
     group: "Pages",
-    defaultHotkey: "C",
+    defaultHotkey: "Mod+Shift+P",
     customizable: true,
     scope: "global",
   },
@@ -177,10 +177,14 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "new-subpage",
     label: "New sub-page",
     group: "Pages",
-    defaultHotkey: "Shift+C",
+    defaultHotkey: "Mod+Alt+P",
     customizable: true,
     scope: "global",
   },
+  // Page actions use standard Ctrl/Cmd chords and intentionally omit
+  // `ignoreInputs` so they fire even while the caret is in a canvas field — a
+  // modifier chord can't be typed as text, and forcing the field-guard on made
+  // every one of these dead while editing (their most common invocation point).
   {
     id: "duplicate-page",
     label: "Duplicate page",
@@ -188,22 +192,20 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     defaultHotkey: "Mod+Shift+D",
     customizable: true,
     scope: "global",
-    ignoreInputs: true,
   },
   {
     id: "delete-page",
     label: "Delete page",
     group: "Pages",
-    defaultHotkey: "D",
+    defaultHotkey: "Mod+Shift+Backspace",
     customizable: true,
     scope: "global",
-    ignoreInputs: true,
   },
   {
     id: "edit-template",
     label: "Edit page template",
     group: "Pages",
-    defaultHotkey: "S",
+    defaultHotkey: "Mod+Shift+E",
     customizable: true,
     scope: "global",
   },
@@ -214,16 +216,14 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     defaultHotkey: "Mod+Shift+T",
     customizable: true,
     scope: "global",
-    ignoreInputs: true,
   },
   {
     id: "toggle-favorite",
     label: "Toggle favorite",
     group: "Pages",
-    defaultHotkey: "F",
+    defaultHotkey: "Mod+Shift+S",
     customizable: true,
     scope: "global",
-    ignoreInputs: true,
   },
   {
     id: "copy-page-link",
@@ -232,7 +232,6 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     defaultHotkey: "Mod+Shift+C",
     customizable: true,
     scope: "global",
-    ignoreInputs: true,
   },
   {
     id: "next-page",
