@@ -1,6 +1,7 @@
 import type { CanvasClipboardPayload } from "@/lib/canvas/clipboard.ts";
 import { isCanvasTextField } from "@/lib/editor/caret-navigation.ts";
 import { handleBlockModifierArrowKeyDown } from "@/lib/editor/field-keydown.ts";
+import { looksLikeMarkdownBlocks } from "@/lib/markdown-canonical/detect.ts";
 import { extractMediaFiles } from "@/lib/media/paste-media.ts";
 
 export interface CanvasSelectionArrowHandlers {
@@ -20,6 +21,8 @@ export interface CanvasKeyboardHandlers extends CanvasSelectionArrowHandlers {
 }
 
 export interface CanvasPasteHandlers extends CanvasKeyboardHandlers {
+  /** Parses markdown-shaped external clipboard text into blocks and inserts them. */
+  insertMarkdownText?: (text: string) => void;
   /** Stores pasted image/video files as assets and inserts media blocks. */
   insertMediaFiles: (files: File[]) => void;
 }
@@ -89,11 +92,19 @@ export function handleCanvasPasteEvent(
     return;
   }
 
-  if ((handlers.clipboard?.blocks.length ?? 0) === 0) {
+  // The in-memory payload wins (exact block fidelity for internal copies);
+  // markdown-shaped text from other apps parses into real blocks.
+  if ((handlers.clipboard?.blocks.length ?? 0) > 0) {
+    event.preventDefault();
+    event.stopPropagation();
+    handlers.pasteClipboard();
     return;
   }
 
-  event.preventDefault();
-  event.stopPropagation();
-  handlers.pasteClipboard();
+  const text = event.clipboardData?.getData("text/plain") ?? "";
+  if (handlers.insertMarkdownText && looksLikeMarkdownBlocks(text)) {
+    event.preventDefault();
+    event.stopPropagation();
+    handlers.insertMarkdownText(text);
+  }
 }

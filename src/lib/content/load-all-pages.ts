@@ -9,5 +9,5 @@ import type { Page } from "@/lib/schemas/page.ts";
  * self-contained snapshot.
  */
 export const loadAllPages = createServerFn({ method: "GET" }).handler(
-  (): Promise<Page[]> => Promise.resolve(getShippedPages())
+  (): Promise<Page[]> => getShippedPages()
 );

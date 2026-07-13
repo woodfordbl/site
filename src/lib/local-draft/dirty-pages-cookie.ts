@@ -1,3 +1,4 @@
+import { isDevDiskMode } from "@/lib/content/dev-disk/dev-disk-mode.ts";
 import {
   readDocumentCookie,
   writeDocumentCookie,
@@ -47,6 +48,9 @@ export function writeDirtyPageIdsToDocument(ids: Set<string>): void {
 }
 
 export function markPageDirty(pageId: string): void {
+  if (isDevDiskMode()) {
+    return; // disk is the source of truth — there is no dirty overlay
+  }
   const ids = readDirtyPageIdsFromDocument();
   if (ids.has(pageId)) {
     return;

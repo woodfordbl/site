@@ -1,14 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { slugToRelativePath } from "@/lib/content/page-path.ts";
-import { getShippedPageByRelativePath } from "@/lib/content/page-store.server.ts";
+import { getShippedPageBySlug } from "@/lib/content/page-store.server.ts";
+import { normalizePageSlug } from "@/lib/pages/slugify.ts";
 
 export const loadPage = createServerFn({ method: "GET" })
   .validator((data: { slug: string }) => data)
-  .handler(({ data }) => {
-    const page = getShippedPageByRelativePath(slugToRelativePath(data.slug));
+  .handler(async ({ data }) => {
+    const page = await getShippedPageBySlug(normalizePageSlug(data.slug));
     if (!page) {
       throw new Error(`Unknown page slug: ${data.slug}`);
     }
-    return Promise.resolve(page);
+    return page;
   });

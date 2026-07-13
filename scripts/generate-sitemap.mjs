@@ -1,12 +1,13 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readdir, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveSiteOrigin } from "./resolve-origin.mjs";
 
 /**
  * Generates public/sitemap.xml (and a robots.txt referencing it) for shipped
  * pages. Runs only when a production origin is known — on Vercel builds via
- * VERCEL_PROJECT_PRODUCTION_URL, or locally via SITE_ORIGIN.
+ * VERCEL_PROJECT_PRODUCTION_URL, or locally via SITE_ORIGIN. Slugs derive
+ * from the markdown file paths (`a/index.md` and `a.md` → `/a`).
  */
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -19,11 +20,22 @@ async function collectPageFiles(directory) {
     const entryPath = join(directory, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await collectPageFiles(entryPath)));
-    } else if (entry.isFile() && entry.name.endsWith(".json")) {
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
       files.push(entryPath);
     }
   }
   return files;
+}
+
+const INDEX_SUFFIX_RE = /(?:^|\/)index$/;
+const MD_EXTENSION_RE = /\.md$/;
+
+function slugFromPageFile(filePath) {
+  const relativePath = relative(pagesDir, filePath).replaceAll("\\", "/");
+  const stem = relativePath
+    .replace(MD_EXTENSION_RE, "")
+    .replace(INDEX_SUFFIX_RE, "");
+  return stem.length === 0 ? "/" : `/${stem}`;
 }
 
 const origin = resolveSiteOrigin();
@@ -35,13 +47,7 @@ if (!origin) {
 }
 
 const files = await collectPageFiles(pagesDir);
-const slugs = [];
-for (const file of files) {
-  const parsed = JSON.parse(await readFile(file, "utf8"));
-  if (typeof parsed.slug === "string") {
-    slugs.push(parsed.slug);
-  }
-}
+const slugs = [...new Set(files.map((file) => slugFromPageFile(file)))];
 slugs.sort();
 
 const urls = slugs

@@ -11,7 +11,8 @@ Start here for canvas, pages, and data-layer behavior.
 - [Pages](./architecture/pages.md) — user pages, empty canvas, routing
 - [Site settings](./architecture/site-settings.md) — `/settings` shell, theme, analytics, dev actions
 - [Local-first persistence](./architecture/local-first-persistence.md) — server JSON vs local page documents, lazy seed, hash/revert
-- [Author dev mode](./architecture/author-dev-mode.md) — save to `content/pages/*.json`
+- [Author dev mode](./architecture/author-dev-mode.md) — dev disk mode, save to `content/`
+- [Markdown content format](./architecture/markdown-content-format.md) — the `content/` file format, codec, dev disk mode, clipboard
 - [Block types](./architecture/block-types.md) — BlockSpec / ContainerSpec; how-to: [Adding a block type](./architecture/block-types.md#adding-a-block-type)
 - [Table blocks](./architecture/table-blocks.md) — grid model, keyboard, row/column DnD
 - [Databases](./architecture/databases.md) — typed fields, views, sharded rows, table grid, filter bar
@@ -24,6 +25,10 @@ Start here for canvas, pages, and data-layer behavior.
 - [Canvas commands](./reference/canvas-commands.md)
 - [Page commands](./reference/page-commands.md)
 - [Structural actions](./reference/structural-actions.md)
+
+## Proposals
+
+- [Markdown-native content format](./proposals/markdown-native-content.md) — exploration: store pages/databases as markdown with frontmatter + index files
 
 ## Contributing
 

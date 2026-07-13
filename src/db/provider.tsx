@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "@/db/collections/local-collections.ts";
 import "@/db/sync/database-sync-engine.ts";
 import { PrefetchPageCanvasEditorEffect } from "@/components/canvas/prefetch-page-canvas-editor-effect.tsx";
+import { DevContentSyncEffect } from "@/components/pages/dev-content-sync-effect.tsx";
 import { MigrateUserPageRoutesEffect } from "@/components/pages/migrate-user-page-routes-effect.tsx";
 import { OrphanLocalPagesEffect } from "@/components/pages/orphan-local-pages-effect.tsx";
 import { SeedShippedDatabasesEffect } from "@/components/pages/seed-shipped-databases-effect.tsx";
@@ -28,6 +29,7 @@ interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps) {
   return (
     <>
+      <DevContentSyncEffect />
       <MigrateUserPageRoutesEffect />
       <SyncPagesCatalogRevisionEffect />
       <SyncPageListLocalPreviewEffect />

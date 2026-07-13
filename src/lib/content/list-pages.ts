@@ -22,8 +22,8 @@ export interface PageSummary {
 }
 
 export const listPages = createServerFn({ method: "GET" }).handler(
-  (): Promise<PageSummary[]> => {
-    const pages = getShippedPages().map((page) => ({
+  async (): Promise<PageSummary[]> => {
+    const pages = (await getShippedPages()).map((page) => ({
       id: page.id,
       slug: page.slug,
       title: page.title,
@@ -33,12 +33,10 @@ export const listPages = createServerFn({ method: "GET" }).handler(
       contentHash: hashPageBlocks(page.blocks),
     }));
 
-    return Promise.resolve(
-      pages.sort((left, right) =>
-        left.title.localeCompare(right.title, undefined, {
-          sensitivity: "base",
-        })
-      )
+    return pages.sort((left, right) =>
+      left.title.localeCompare(right.title, undefined, {
+        sensitivity: "base",
+      })
     );
   }
 );

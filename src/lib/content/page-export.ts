@@ -1,7 +1,11 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { flattenRows } from "@/lib/blocks/block-tree.ts";
 import type { Block } from "@/lib/schemas/block.ts";
-import type { PageFont, PageTextScale } from "@/lib/schemas/page-settings.ts";
+import type {
+  PageFont,
+  PageHeaderImage,
+  PageTextScale,
+} from "@/lib/schemas/page-settings.ts";
 
 export function exportPageBlocks(rows: CanvasRow[]): Block[] {
   const flat = flattenRows(rows);
@@ -13,9 +17,11 @@ export function exportPageDocument(
   meta: {
     font?: PageFont;
     fullWidth?: boolean;
+    headerImage?: PageHeaderImage;
     icon?: string;
     id: string;
     parentId: string | null;
+    sidebarOrder?: number;
     slug: string;
     textScale?: PageTextScale;
     title: string;
@@ -32,6 +38,12 @@ export function exportPageDocument(
       : { font: meta.font }),
     ...(meta.textScale ? { textScale: meta.textScale } : {}),
     ...(meta.fullWidth ? { fullWidth: true } : {}),
+    ...(meta.headerImage === undefined
+      ? {}
+      : { headerImage: meta.headerImage }),
+    ...(meta.sidebarOrder === undefined
+      ? {}
+      : { sidebarOrder: meta.sidebarOrder }),
     blocks: exportPageBlocks(rows),
   };
 }

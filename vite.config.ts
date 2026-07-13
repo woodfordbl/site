@@ -9,6 +9,7 @@ import type { NitroModule } from "nitro/types";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 import { resolveSiteOrigin } from "./scripts/resolve-origin.mjs";
+import { contentWatchPlugin } from "./vite-plugins/content-watch.ts";
 
 // Bake the canonical origin in at build time so canonical links and OG image
 // URLs render identically on the server and client. Falls back to localhost
@@ -103,12 +104,19 @@ const config = defineConfig({
     // Honor an externally-assigned port (e.g. a preview harness sets PORT);
     // otherwise default to 3000. Vite auto-increments if the port is taken.
     port: Number(process.env.PORT) || 3000,
+    // Dev disk mode flushes every edit to content/*.md; keeping content/ out
+    // of the module-graph watcher stops those writes from invalidating the
+    // eager glob (reload churn while typing). The content-watch plugin below
+    // delivers targeted site:content-changed events instead, and dev reads
+    // come fresh from the filesystem (page-store.server.ts).
+    watch: { ignored: ["**/content/**"] },
   },
   resolve: {
     tsconfigPaths: true,
   },
   plugins: [
     devtools(),
+    contentWatchPlugin(),
     // Register the dynamic OG endpoint as an explicit Nitro route so it is
     // bundled into the Vercel function output (filesystem scanning of root
     // `routes/` isn't wired in this TanStack Start dev integration).

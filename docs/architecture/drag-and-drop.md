@@ -132,3 +132,11 @@ Reposition and canvas structural drops persist through the same paths that sched
 ## Scope
 
 This document covers the shared DnD toolkit only. Other modules under `src/components/pages/` (for example the icon picker) are documented in [pages](./pages.md) and do not use this DnD layer. Other coarse-pointer canvas surfaces that are **not** DnD — the long-press [`MobileBlockActionsDrawer`](../../src/components/canvas/mobile-block-actions-drawer.tsx) and the above-keyboard [`MobileEditorToolbar`](../../src/components/canvas/mobile-editor-toolbar.tsx) — are covered in [canvas-editor](./canvas-editor.md) and [keyboard-toolbar](./keyboard-toolbar.md).
+
+## OS file drops
+
+Native file drags (drag type `Files`) never enter the internal DnD channel:
+the sidebar nav and the canvas drop zone branch on `dragHasFiles` BEFORE the
+internal handlers. `.md` files import as new pages (sidebar) or insert parsed
+blocks at the drop position (canvas); image/video files insert media blocks.
+See [markdown-content-format — Clipboard & file drops](./markdown-content-format.md#clipboard--file-drops).

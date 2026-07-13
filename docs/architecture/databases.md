@@ -346,8 +346,11 @@ before rebuilding `views`; regression-tested with proxied drafts in
 
 ## Shipped content
 
-Databases ship as repo JSON — `content/databases/{databaseId}.json`
-([`database-document.ts`](../../src/lib/schemas/database-document.ts): definition minus
+Databases ship as one repo FOLDER per database — `content/databases/{databaseId}/`
+with `index.md` (definition as YAML frontmatter, row template as the body) plus an
+optional `rows.csv` ([markdown-content-format](./markdown-content-format.md#file-layout--databases),
+[`database-folder.ts`](../../src/lib/content/database-folder.ts); document shape:
+[`database-document.ts`](../../src/lib/schemas/database-document.ts) — definition minus
 local timestamps/baseline, rows minus `databaseId`/`pageId`/`externalId`/timestamps) —
 written by the dev **Save all** flow ([`exportDatabaseDocument`](../../src/lib/content/database-export.ts),
 [`saveDatabase`](../../src/lib/content/save-database.ts); connector-synced rows are

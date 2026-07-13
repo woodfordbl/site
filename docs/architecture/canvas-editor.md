@@ -239,3 +239,20 @@ The workspace [`PageSidebar`](../../src/components/pages/page-sidebar.tsx) rende
 | Sidebar pages | `[data-page-list-row-id]` row chrome | [`setEmptyDragImage`](../../src/lib/dnd/drag-image.ts) + [`DragOverlay`](../../src/components/dnd/drag-overlay.tsx) / [`PageListDragPreview`](../../src/components/pages/page-list-drag-preview.tsx) | [`resolve-page-list-drop-target.ts`](../../src/lib/pages/resolve-page-list-drop-target.ts) — top/middle/bottom bands (sibling vs nest) + horizontal unnest |
 
 Sidebar drops dispatch **`page.reposition`** via [`usePageDispatch`](../../src/hooks/use-page-dispatch.ts) (`pageReducer` → `page.reposition` effect), not `CanvasCommand`. [`PageListLive`](../../src/components/pages/page-list.tsx) wraps the tree in [`DndSurface`](../../src/components/dnd/dnd-surface.tsx); the list `<nav>` spreads `useDropZone` props. Rects come from [`collectRects`](../../src/lib/dnd/rects.ts) on `[data-page-list-row-id]`. Failed planning returns no effects. Nest drops can append a child `pageLink` on the parent page’s canvas; between-row drops update `parentId` and `sidebarOrder` only. Visible rows respect `expandedIds` via [`flattenVisiblePageRows`](../../src/lib/pages/flatten-visible-page-rows.ts). Row indent updates only after drop. Full UX: [pages — Sidebar drag-and-drop](./pages.md#sidebar-drag-and-drop) and [page-commands — `page.reposition`](../reference/page-commands.md#page-reposition).
+
+## Markdown clipboard
+
+Block copy writes **canonical markdown** to the system clipboard (internal
+paste still uses the exact in-memory block payload). Pasting markdown-shaped
+multi-line text outside a text field parses it into real blocks through the
+lazy codec — see
+[markdown-content-format — Clipboard](./markdown-content-format.md#clipboard).
+Detection ([`detect.ts`](../../src/lib/markdown-canonical/detect.ts)) is
+conservative so plain prose pastes keep their existing behavior; the handler
+order in
+[`canvas-keyboard-shortcuts.ts`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts)
+is media files → field-focus guard → internal payload → markdown text.
+OS file DROPS follow the same taxonomy in `CanvasDropZone`: `.md` files parse
+to blocks at the drop position (`resolveTopLevelInsertEdge`), image/video
+files insert media blocks — see
+[markdown-content-format](./markdown-content-format.md#clipboard--file-drops).
