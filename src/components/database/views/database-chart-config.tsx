@@ -422,6 +422,19 @@ const Y_FORMAT_OPTIONS: RadioSubmenuOption[] = [
   { value: "percent", label: "Percent" },
 ];
 
+/** Per-chart dither override choices. */
+const DITHER_OPTIONS: RadioSubmenuOption[] = [
+  { value: "inherit", label: "Inherit" },
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+
+const DITHER_LABEL: Record<string, string> = {
+  inherit: "Inherit",
+  on: "On",
+  off: "Off",
+};
+
 /**
  * Stacking only means something with 2+ overlaid series on a bar/area mark;
  * it's hidden for single-series, line, pie, and the time axis (not stackable).
@@ -483,6 +496,15 @@ function ChartToggleItems({
       >
         Tooltip
       </DropdownMenuSwitchItem>
+      <RadioSubmenu
+        currentLabel={DITHER_LABEL[chart.dither ?? "inherit"]}
+        label="Dither"
+        onValueChange={(value) => {
+          write({ dither: value as ChartViewConfig["dither"] });
+        }}
+        options={DITHER_OPTIONS}
+        value={chart.dither ?? "inherit"}
+      />
       {canStack ? (
         <DropdownMenuSwitchItem
           checked={chart.stacked === true}

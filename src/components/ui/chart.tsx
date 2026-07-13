@@ -336,6 +336,26 @@ function ChartDitherPattern({
   );
 }
 
+/** Per-chart dither override; `inherit` falls back to the workspace setting. */
+export type ChartDitherOverride = "inherit" | "on" | "off";
+
+/**
+ * Resolve a chart's effective dither state: an explicit `on`/`off` wins,
+ * otherwise inherit the workspace "Chart dither" appearance setting.
+ */
+export function useResolvedChartDither(
+  override?: ChartDitherOverride
+): boolean {
+  const { chartDitherEnabled } = useSiteAppearance();
+  if (override === "on") {
+    return true;
+  }
+  if (override === "off") {
+    return false;
+  }
+  return chartDitherEnabled;
+}
+
 /**
  * Returns dither `<defs>` (drop them inside the Recharts chart) and a `fill`
  * helper that resolves a config key to its `url(#…)` pattern reference.

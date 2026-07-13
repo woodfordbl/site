@@ -21,6 +21,7 @@ import {
   useChartGlow,
   useChartGradientDither,
   useChartReveal,
+  useResolvedChartDither,
 } from "@/components/ui/chart.tsx";
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
@@ -129,6 +130,7 @@ function useTimeSeriesMarkStyle(
   const smoothing = chart.smoothing === true;
   const gradient = chart.gradient !== false;
   const dither = useChartGradientDither(chartConfig, {
+    enabled: useResolvedChartDither(chart.dither),
     gamma: mark === "area" && !gradient ? 0 : undefined,
   });
   const softGradient = useAreaSoftGradient(chartConfig, {

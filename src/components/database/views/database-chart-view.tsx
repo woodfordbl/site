@@ -39,6 +39,7 @@ import {
   useChartGlow,
   useChartGradientDither,
   useChartReveal,
+  useResolvedChartDither,
 } from "@/components/ui/chart.tsx";
 import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import {
@@ -239,8 +240,11 @@ function CartesianChart({
   const smoothing = chart.smoothing === true;
   const gradient = chart.gradient !== false;
   // Flatten the dither fade for areas when the gradient is off (gamma 0 =
-  // uniform density); other marks keep the default fade.
+  // uniform density); other marks keep the default fade. The per-chart dither
+  // override (on/off) wins over the workspace setting; inherit follows it.
+  const ditherEnabled = useResolvedChartDither(chart.dither);
   const dither = useChartGradientDither(chartConfig, {
+    enabled: ditherEnabled,
     gamma: mark === "area" && !gradient ? 0 : undefined,
   });
   // Non-dithered area fade, for when the workspace dither is off but the
@@ -471,7 +475,9 @@ function PieMarkChart({
     return { chartConfig: config, pieRows: rowsData };
   }, [chart, data]);
 
-  const dither = useChartDither(chartConfig);
+  const dither = useChartDither(chartConfig, {
+    enabled: useResolvedChartDither(chart.dither),
+  });
   const formatValue = (value: number) =>
     formatChartYValue(aggregate, yField, value, chart.yFormat);
   const tooltipFormatter = makeTooltipFormatter(chartConfig, formatValue);

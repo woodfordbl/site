@@ -389,6 +389,12 @@ export const databaseTableViewConfigSchema = z.object({
        * off the fill is flat. Follows dither and palette like every other fill.
        */
       gradient: z.boolean().optional(),
+      /**
+       * Per-chart dither override. `inherit` (default/absent) follows the
+       * workspace "Chart dither" appearance setting; `on`/`off` force this chart
+       * dithered or plain regardless of the workspace.
+       */
+      dither: z.enum(["inherit", "on", "off"]).optional(),
     })
     .optional(),
 });
