@@ -5,6 +5,7 @@ import {
   cloneElement,
   createContext,
   isValidElement,
+  type Key,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
@@ -34,6 +35,35 @@ type MenuPresentation = "popover" | "drawer";
 /** Resolves which presentation a menu/popover should use right now. */
 export function useResolvedMenuPresentation(): MenuPresentation {
   return useIsCoarsePrimaryPointer() ? "drawer" : "popover";
+}
+
+/**
+ * Keeps popover menu rows on a single line: bare text labels are wrapped in a
+ * truncating span (long labels get an ellipsis instead of wrapping to a second
+ * line), while icons, shortcut hints, and other element children keep their
+ * intrinsic width. Callers pass their label as a plain string between the icon
+ * and shortcut, so wrapping only string/number nodes leaves every other child
+ * untouched.
+ */
+export function truncateMenuItemLabel(children: ReactNode): ReactNode {
+  const nodes = Array.isArray(children) ? children : [children];
+  // Preserve any keys the caller set; fall back to the index (the child list is
+  // static per render, so positional keys are stable).
+  return nodes.map((child, index) => {
+    const key: Key =
+      isValidElement(child) && child.key != null ? child.key : index;
+    if (typeof child === "string" || typeof child === "number") {
+      return (
+        <span className="min-w-0 flex-1 truncate" key={key}>
+          {child}
+        </span>
+      );
+    }
+    if (isValidElement(child)) {
+      return cloneElement(child, { key });
+    }
+    return child;
+  });
 }
 
 // --- Root open-state context (read by triggers + content) -------------------

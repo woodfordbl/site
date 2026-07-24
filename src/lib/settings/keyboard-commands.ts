@@ -77,12 +77,15 @@ export type CommandGroup =
  * Where a command is registered.
  * - `global`  → app root via {@link useCommandHotkeys} (e.g. toggle sidebar).
  * - `canvas`  → page canvas editor via {@link useCommandHotkeys}, scoped to the canvas.
+ * - `menu`    → only while a row/page action menu is open, via useMenuCommandKeys.
+ *               Bare single keys that act on that menu's target (see the sidebar
+ *               row menus and the page header menu); never registered globally.
  * - `field`   → matched natively inside the editor key handlers (caret-coupled or
  *               typing-driven; see field-keydown.ts / editable-surface.tsx); never
  *               dispatched by TanStack. Listed for display only, with the
  *               keyboard-commands.test.ts drift guard pinning the combos in sync.
  */
-export type CommandScope = "global" | "canvas" | "field";
+export type CommandScope = "global" | "canvas" | "menu" | "field";
 
 export interface KeyboardCommand {
   /** Additional combos that also trigger this command (e.g. Delete alongside Backspace). */
@@ -169,7 +172,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "new-page",
     label: "New page",
     group: "Pages",
-    defaultHotkey: "C",
+    defaultHotkey: "Mod+Shift+P",
     customizable: true,
     scope: "global",
   },
@@ -177,44 +180,45 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "new-subpage",
     label: "New sub-page",
     group: "Pages",
-    defaultHotkey: "Shift+C",
+    defaultHotkey: "Mod+Alt+P",
     customizable: true,
     scope: "global",
   },
+  // Row/page actions are bare single keys because they are *menu-scoped*: the
+  // binding is only live while the row's action menu is open (see
+  // useMenuCommandKeys), so it acts on that menu's target and never competes
+  // with typing. Global commands keep modifier chords; these deliberately don't.
   {
     id: "duplicate-page",
     label: "Duplicate page",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+D",
+    defaultHotkey: "D",
     customizable: true,
-    scope: "global",
-    ignoreInputs: true,
+    scope: "menu",
   },
   {
     id: "delete-page",
     label: "Delete page",
     group: "Pages",
-    defaultHotkey: "D",
+    defaultHotkey: "Backspace",
     customizable: true,
-    scope: "global",
-    ignoreInputs: true,
+    scope: "menu",
   },
   {
     id: "edit-template",
     label: "Edit page template",
     group: "Pages",
-    defaultHotkey: "S",
+    defaultHotkey: "E",
     customizable: true,
-    scope: "global",
+    scope: "menu",
   },
   {
     id: "save-as-template",
     label: "Save page as template",
     group: "Pages",
-    defaultHotkey: "Mod+Shift+T",
+    defaultHotkey: "T",
     customizable: true,
-    scope: "global",
-    ignoreInputs: true,
+    scope: "menu",
   },
   {
     id: "toggle-favorite",
@@ -222,8 +226,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     group: "Pages",
     defaultHotkey: "F",
     customizable: true,
-    scope: "global",
-    ignoreInputs: true,
+    scope: "menu",
   },
   {
     id: "copy-page-link",
@@ -232,7 +235,6 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     defaultHotkey: "Mod+Shift+C",
     customizable: true,
     scope: "global",
-    ignoreInputs: true,
   },
   {
     id: "next-page",
