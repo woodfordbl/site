@@ -53,7 +53,7 @@
       "indent": 0,
       "type": "text",
       "props": {
-        "text": "\n",
+        "text": "",
         "marks": []
       }
     },
@@ -65,37 +65,6 @@
       "props": {
         "text": "more coming soon...",
         "marks": []
-      }
-    },
-    {
-      "id": "8d11fa6e-4d6c-4292-a1b5-27c8d8ed8b34",
-      "parentId": null,
-      "type": "text",
-      "props": {
-        "text": "hi, i'm blake"
-      }
-    },
-    {
-      "id": "bfc53e13-2b96-4c0a-ab19-6124623224f5",
-      "parentId": null,
-      "indent": 0,
-      "type": "divider",
-      "props": {}
-    },
-    {
-      "id": "ebb7ecbd-1f41-41f5-b0e1-004c27fc8cfa",
-      "parentId": null,
-      "indent": 0,
-      "type": "text",
-      "props": {
-        "text": ""
-      }
-    },
-    {
-      "id": "f764d27d-08da-46b0-b693-f6bc680f4862",
-      "type": "text",
-      "props": {
-        "text": ""
       }
     }
   ]
