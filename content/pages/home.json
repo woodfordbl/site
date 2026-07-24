@@ -1,21 +1,98 @@
 {
   "id": "home",
   "slug": "/",
-  "title": "Home",
-  "icon": "tabler:IconHome2Filled",
+  "title": "Blake Woodford",
+  "icon": "tabler:IconUser",
   "parentId": null,
   "blocks": [
     {
-      "id": "0f314bf7-727b-4f41-8344-0983901261b5",
+      "id": "3182267b-7c17-4600-82a7-78659158cf5c",
       "type": "text",
       "props": {
         "text": ""
       }
     },
     {
-      "id": "036955d8-8076-46ff-9c02-86a19a811b07",
+      "id": "3a12bd3e-cddf-4e2f-afc7-91d6d5b2d90a",
       "parentId": null,
       "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "currently ceo/co-founder @altitude",
+        "marks": [
+          {
+            "type": "link",
+            "start": 25,
+            "end": 34,
+            "href": "https://altitude.so"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3e6f1a43-a48f-4696-95d9-4b5dbf08702a",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "3e8814c0-e832-40d9-a671-ca90d1e13be3",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "i like space, engineering, and ai"
+      }
+    },
+    {
+      "id": "6aa1f0fd-4bc0-4f2e-8fff-a90ab4157399",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "\n",
+        "marks": []
+      }
+    },
+    {
+      "id": "6cad0ee8-0a1b-4746-8f3c-53238d61c0e7",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "more coming soon...",
+        "marks": []
+      }
+    },
+    {
+      "id": "8d11fa6e-4d6c-4292-a1b5-27c8d8ed8b34",
+      "parentId": null,
+      "type": "text",
+      "props": {
+        "text": "hi, i'm blake"
+      }
+    },
+    {
+      "id": "bfc53e13-2b96-4c0a-ab19-6124623224f5",
+      "parentId": null,
+      "indent": 0,
+      "type": "divider",
+      "props": {}
+    },
+    {
+      "id": "ebb7ecbd-1f41-41f5-b0e1-004c27fc8cfa",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "f764d27d-08da-46b0-b693-f6bc680f4862",
       "type": "text",
       "props": {
         "text": ""
