@@ -992,8 +992,9 @@
 
 /*
  * Grouped drawer menu (touch presentation of dropdown/context menus). Runs of
- * adjacent item rows read as one iOS/Linear "grouped list" card: shared muted
- * background, rounded only at the run's outer corners, hairline dividers
+ * adjacent item rows read as one iOS/Linear "grouped list" card: shared --card
+ * background over the drawer's recessed --sidebar surface, rounded only at the
+ * run's outer corners, hairline dividers
  * between rows. Any non-item sibling — search input, section label, stats
  * footer, or a `data-menu-card-break` separator — breaks the run and stays
  * plain. Done in CSS (not by wrapping rows) so it sees through caller wrapper
@@ -1001,7 +1002,7 @@
  * sibling in the scroll body.
  */
 .cn-drawer-menu-group [data-menu-card-item] {
-  background-color: var(--muted);
+  background-color: var(--card);
   border-radius: 0;
 }
 .cn-drawer-menu-group [data-menu-card-item]:first-child,
@@ -1017,9 +1018,9 @@
 .cn-drawer-menu-group [data-menu-card-item] + [data-menu-card-item] {
   border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
 }
-/* Press feedback layered over the muted card (plain `bg-accent` == muted). */
+/* Press feedback layered over the card (row's own `bg-accent` sits below it). */
 .cn-drawer-menu-group [data-menu-card-item]:active {
-  background-color: color-mix(in oklch, var(--foreground) 10%, var(--muted));
+  background-color: color-mix(in oklch, var(--foreground) 10%, var(--card));
 }
 /* Separator between cards collapses to a pure gap — no hairline. */
 .cn-drawer-menu-group [data-menu-card-break] {
