@@ -14,6 +14,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer.tsx";
 import {
+  DRAWER_MENU_GROUP_CLASS,
   DrawerMenuRow,
   DrawerMenuSectionLabel as SectionLabel,
 } from "@/components/ui/menu-presentation.tsx";
@@ -22,6 +23,7 @@ import {
   type PageCanvasFooterActionsInput,
   usePageCanvasFooterActions,
 } from "@/hooks/use-page-canvas-footer-actions.ts";
+import { cn } from "@/lib/utils.ts";
 
 interface PageCanvasActionsDrawerProps extends PageCanvasFooterActionsInput {
   triggerHost: HTMLElement | null;
@@ -96,7 +98,11 @@ export function PageCanvasActionsDrawer({
               <DrawerDescription>{saveStatus}</DrawerDescription>
             ) : null}
           </DrawerHeader>
-          <div className="flex flex-col px-2 pb-4">
+          {/* Grouped-list treatment: rows sit on --card cards over the
+              drawer's --sidebar surface, matching every other menu drawer. */}
+          <div
+            className={cn(DRAWER_MENU_GROUP_CLASS, "flex flex-col px-2 pb-4")}
+          >
             {hasUpdates ? (
               <>
                 <SectionLabel>Site update</SectionLabel>

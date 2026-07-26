@@ -282,7 +282,9 @@ function DrawerContent({
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          "group/drawer-content fixed z-50 flex flex-col bg-popover bg-clip-padding text-popover-foreground",
+          // The drawer surface sits a step back from its content: --sidebar
+          // recessed, with grouped item cards on --card above it.
+          "group/drawer-content fixed z-50 flex flex-col bg-sidebar bg-clip-padding text-popover-foreground",
           "inset-x-0 bottom-0 rounded-t-2xl border-t",
           variant === "menu"
             ? "mt-12 h-[88svh] max-h-[88svh]"
