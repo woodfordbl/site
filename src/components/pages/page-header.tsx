@@ -1,6 +1,7 @@
 "use client";
 
 import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
+import { motion } from "motion/react";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
@@ -26,27 +27,35 @@ interface PageHeaderProps extends PageCanvasFooterActionsInput {
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */
 function PageHeaderSidebarToggle() {
   const isNarrowViewport = useIsNarrowViewport();
-  const { isCollapsed, pinSidebar } = usePageSidebarChrome();
+  const { isCollapsed, isCollapsing, pinSidebar } = usePageSidebarChrome();
 
   if (isNarrowViewport) {
     return <SidebarTrigger className="shrink-0 text-muted-foreground" />;
   }
 
-  if (!isCollapsed) {
+  if (!(isCollapsed || isCollapsing)) {
     return null;
   }
 
   return (
-    <Button
-      aria-label="Expand sidebar"
+    <motion.div
+      animate={{ opacity: 1, transform: "translateX(0px)" }}
       className="shrink-0"
-      onClick={pinSidebar}
-      size="icon-sm"
-      type="button"
-      variant="ghost"
+      initial={
+        isCollapsing ? { opacity: 0, transform: "translateX(-6px)" } : false
+      }
+      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
     >
-      <IconLayoutSidebar aria-hidden />
-    </Button>
+      <Button
+        aria-label="Expand sidebar"
+        onClick={pinSidebar}
+        size="icon-sm"
+        type="button"
+        variant="ghost"
+      >
+        <IconLayoutSidebar aria-hidden />
+      </Button>
+    </motion.div>
   );
 }
 
