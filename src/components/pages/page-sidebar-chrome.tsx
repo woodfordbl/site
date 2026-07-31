@@ -1,10 +1,14 @@
 import { useRouteContext } from "@tanstack/react-router";
+import { animate } from "motion";
+import { useReducedMotion } from "motion/react";
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { type PanelSize, usePanelRef } from "react-resizable-panels";
@@ -21,13 +25,15 @@ import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import {
   clampSidebarWidthRem,
   PAGE_MAIN_PANEL_ID,
-  PAGE_SIDEBAR_MAX_WIDTH_REM,
-  PAGE_SIDEBAR_MIN_WIDTH_REM,
+  PAGE_SIDEBAR_COLLAPSED_GUTTER_REM,
   PAGE_SIDEBAR_PANEL_ID,
   pixelsToRem,
   readRootFontSizePx,
   resolveSidebarPointerResize,
   type SidebarPointerResizeResult,
+  sidebarPanelMaxSizeCss,
+  sidebarPanelMinSizeCss,
+  sidebarVisualWidthRemToCss,
   sidebarWidthRemToCss,
   writePageSidebarWidthToDocument,
 } from "@/lib/pages/page-sidebar-layout-cookie.ts";
@@ -38,10 +44,37 @@ import {
 
 const PAGE_SIDEBAR_LAYOUT_GROUP_ID = "page-workspace";
 
+/** Subtle spring when releasing past a rubber-band limit (Emil duration/bounce). */
+const SIDEBAR_SETTLE_SPRING = {
+  type: "spring" as const,
+  duration: 0.45,
+  bounce: 0.2,
+};
+
+/** Full pointer-triggered collapse: quick, restrained, and lightly springy. */
+const SIDEBAR_COLLAPSE_SPRING = {
+  type: "spring" as const,
+  duration: 0.34,
+  bounce: 0.05,
+};
+
+const SIDEBAR_CONTENT_EXIT = {
+  duration: 0.18,
+  ease: [0.23, 1, 0.32, 1] as const,
+};
+
+/** Treat near-limit visuals as already settled (skip spring). */
+const SIDEBAR_SETTLE_EPSILON_REM = 0.01;
+
+interface SidebarSettleAnimation {
+  stop: () => void;
+}
+
 interface PageSidebarChromeContextValue {
-  collapseSidebar: () => void;
+  collapseSidebar: (animated?: boolean) => void;
   commitSidebarWidth: () => void;
   isCollapsed: boolean;
+  isCollapsing: boolean;
   pin: PageSidebarPin;
   pinSidebar: () => void;
   resizeSidebarToPointerX: (clientX: number) => SidebarPointerResizeResult;
@@ -77,23 +110,106 @@ export function PageSidebarChromeProvider({
 }: PageSidebarChromeProviderProps) {
   const { sidebarPrefs } = useRouteContext({ from: "__root__" });
   const isNarrowViewport = useIsNarrowViewport();
+  const shouldReduceMotion = useReducedMotion();
   const sidebarPanelRef = usePanelRef();
+  const settleAnimationRef = useRef<SidebarSettleAnimation | null>(null);
+  const contentAnimationRef = useRef<SidebarSettleAnimation | null>(null);
+  const sidebarContentRef = useRef<HTMLDivElement>(null);
+  const isSettlingRef = useRef(false);
   const [pin, setPin] = useState<PageSidebarPin>(sidebarPrefs.pin);
+  const [isCollapsing, setIsCollapsing] = useState(false);
   const [sidebarWidthRem, setSidebarWidthRem] = useState(sidebarPrefs.widthRem);
 
-  const pinSidebar = useCallback(() => {
-    setPin("pinned");
-    writePageSidebarPinToDocument("pinned");
+  const cancelSidebarSettle = useCallback((resetCollapsing = true) => {
+    settleAnimationRef.current?.stop();
+    contentAnimationRef.current?.stop();
+    settleAnimationRef.current = null;
+    contentAnimationRef.current = null;
+    isSettlingRef.current = false;
+    if (resetCollapsing) {
+      setIsCollapsing(false);
+    }
+
+    const content = sidebarContentRef.current;
+    if (content) {
+      content.style.removeProperty("filter");
+      content.style.removeProperty("opacity");
+    }
   }, []);
 
-  const collapseSidebar = useCallback(() => {
-    setPin("collapsed");
-    writePageSidebarPinToDocument("collapsed");
+  useEffect(() => () => cancelSidebarSettle(false), [cancelSidebarSettle]);
+
+  const persistSidebarWidth = useCallback((rem: number) => {
+    const clamped = clampSidebarWidthRem(rem);
+    setSidebarWidthRem(clamped);
+    writePageSidebarWidthToDocument(clamped);
   }, []);
+
+  const pinSidebar = useCallback(() => {
+    const wasCollapsing = isCollapsing;
+    cancelSidebarSettle();
+    if (wasCollapsing) {
+      sidebarPanelRef.current?.resize(sidebarWidthRemToCss(sidebarWidthRem));
+    }
+    setPin("pinned");
+    writePageSidebarPinToDocument("pinned");
+  }, [cancelSidebarSettle, isCollapsing, sidebarPanelRef, sidebarWidthRem]);
+
+  const collapseSidebar = useCallback(
+    (animated = true) => {
+      cancelSidebarSettle();
+
+      const panel = sidebarPanelRef.current;
+      const content = sidebarContentRef.current;
+      const shouldAnimate = animated && !shouldReduceMotion && panel !== null;
+
+      if (!shouldAnimate) {
+        setIsCollapsing(false);
+        setPin("collapsed");
+        writePageSidebarPinToDocument("collapsed");
+        return;
+      }
+
+      const visualRem = pixelsToRem(panel.getSize().inPixels);
+      isSettlingRef.current = true;
+      setIsCollapsing(true);
+
+      if (content) {
+        contentAnimationRef.current = animate(
+          content,
+          {
+            opacity: 0,
+            filter: "blur(4px)",
+          },
+          SIDEBAR_CONTENT_EXIT
+        );
+      }
+
+      const collapsedGutterRem = PAGE_SIDEBAR_COLLAPSED_GUTTER_REM;
+      settleAnimationRef.current = animate(visualRem, collapsedGutterRem, {
+        ...SIDEBAR_COLLAPSE_SPRING,
+        onUpdate: (value) => {
+          panel.resize(
+            sidebarVisualWidthRemToCss(Math.max(collapsedGutterRem, value))
+          );
+        },
+        onComplete: () => {
+          settleAnimationRef.current = null;
+          contentAnimationRef.current = null;
+          isSettlingRef.current = false;
+          setIsCollapsing(false);
+          setPin("collapsed");
+          writePageSidebarPinToDocument("collapsed");
+        },
+      });
+    },
+    [cancelSidebarSettle, shouldReduceMotion, sidebarPanelRef]
+  );
 
   const toggleSidebar = useCallback(() => {
     if (pin === "pinned") {
-      collapseSidebar();
+      // Keyboard-initiated actions stay immediate.
+      collapseSidebar(false);
     } else {
       pinSidebar();
     }
@@ -101,17 +217,18 @@ export function PageSidebarChromeProvider({
 
   const resizeSidebarToPointerX = useCallback(
     (clientX: number): SidebarPointerResizeResult => {
+      cancelSidebarSettle();
       const panel = sidebarPanelRef.current;
       const result = resolveSidebarPointerResize(clientX, readRootFontSizePx());
 
       if (panel) {
-        panel.resize(sidebarWidthRemToCss(result.widthRem));
+        panel.resize(sidebarVisualWidthRemToCss(result.visualWidthRem));
       }
 
       setSidebarWidthRem(result.widthRem);
       return result;
     },
-    [sidebarPanelRef]
+    [cancelSidebarSettle, sidebarPanelRef]
   );
 
   const commitSidebarWidth = useCallback(() => {
@@ -120,10 +237,39 @@ export function PageSidebarChromeProvider({
       return;
     }
 
-    const rem = clampSidebarWidthRem(pixelsToRem(panel.getSize().inPixels));
-    setSidebarWidthRem(rem);
-    writePageSidebarWidthToDocument(rem);
-  }, [sidebarPanelRef]);
+    const visualRem = pixelsToRem(panel.getSize().inPixels);
+    const targetRem = clampSidebarWidthRem(visualRem);
+    const shouldSnap =
+      shouldReduceMotion ||
+      Math.abs(visualRem - targetRem) < SIDEBAR_SETTLE_EPSILON_REM;
+
+    if (shouldSnap) {
+      cancelSidebarSettle();
+      panel.resize(sidebarWidthRemToCss(targetRem));
+      persistSidebarWidth(targetRem);
+      return;
+    }
+
+    cancelSidebarSettle();
+    isSettlingRef.current = true;
+    settleAnimationRef.current = animate(visualRem, targetRem, {
+      ...SIDEBAR_SETTLE_SPRING,
+      onUpdate: (value) => {
+        panel.resize(sidebarVisualWidthRemToCss(value));
+      },
+      onComplete: () => {
+        settleAnimationRef.current = null;
+        isSettlingRef.current = false;
+        panel.resize(sidebarWidthRemToCss(targetRem));
+        persistSidebarWidth(targetRem);
+      },
+    });
+  }, [
+    cancelSidebarSettle,
+    persistSidebarWidth,
+    shouldReduceMotion,
+    sidebarPanelRef,
+  ]);
 
   const handleSidebarResize = useCallback(
     (
@@ -131,7 +277,9 @@ export function PageSidebarChromeProvider({
       _id: string | number | undefined,
       prevSize: PanelSize | undefined
     ) => {
-      if (prevSize === undefined) {
+      // Skip the initial mount report and spring-settle frames — persistence
+      // is owned by commitSidebarWidth / resizeSidebarToPointerX.
+      if (prevSize === undefined || isSettlingRef.current) {
         return;
       }
 
@@ -140,11 +288,9 @@ export function PageSidebarChromeProvider({
         return;
       }
 
-      const rem = pixelsToRem(panel.getSize().inPixels);
-      setSidebarWidthRem(rem);
-      writePageSidebarWidthToDocument(rem);
+      persistSidebarWidth(pixelsToRem(panel.getSize().inPixels));
     },
-    [sidebarPanelRef]
+    [persistSidebarWidth, sidebarPanelRef]
   );
 
   useCommandHotkeys({ "toggle-sidebar": toggleSidebar });
@@ -155,6 +301,7 @@ export function PageSidebarChromeProvider({
     () => ({
       pin,
       isCollapsed,
+      isCollapsing,
       pinSidebar,
       collapseSidebar,
       toggleSidebar,
@@ -165,6 +312,7 @@ export function PageSidebarChromeProvider({
       collapseSidebar,
       commitSidebarWidth,
       isCollapsed,
+      isCollapsing,
       pin,
       pinSidebar,
       resizeSidebarToPointerX,
@@ -207,13 +355,15 @@ export function PageSidebarChromeProvider({
           defaultSize={sidebarDefaultSize}
           groupResizeBehavior="preserve-pixel-size"
           id={PAGE_SIDEBAR_PANEL_ID}
-          maxSize={sidebarWidthRemToCss(PAGE_SIDEBAR_MAX_WIDTH_REM)}
-          minSize={sidebarWidthRemToCss(PAGE_SIDEBAR_MIN_WIDTH_REM)}
+          maxSize={sidebarPanelMaxSizeCss()}
+          minSize={sidebarPanelMinSizeCss()}
           onResize={handleSidebarResize}
           panelRef={sidebarPanelRef}
           style={{ overflow: "hidden" }}
         >
-          {sidebar}
+          <div className="h-full min-h-0 w-full" ref={sidebarContentRef}>
+            {sidebar}
+          </div>
         </ResizablePanel>
         <ResizablePanel
           className="h-full min-h-0 min-w-0 overflow-hidden"

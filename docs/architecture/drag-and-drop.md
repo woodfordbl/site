@@ -115,7 +115,7 @@ Previously, every row re-rendered on each `dragover` because `dropTarget` lived 
 
 ## Out of scope
 
-- Column resize and sidebar rail resize (pointer gestures, not HTML5 DnD).
+- Column resize and sidebar rail resize (pointer gestures, not HTML5 DnD). Desktop sidebar width rubber-bands past 12–24rem then springs back via Motion; drag-to-collapse only at the left screen edge, followed by a spring that preserves the normal `0.5rem` inset and a content blur/fade — see [pages — Workspace layout](./pages.md#workspace-layout).
 - The database table grid ([databases](./databases.md)) — no `DndSurface`; row drag-reorder is deferred.
 - Keyboard-accessible reorder (would need a separate sensor).
 - Third-party DnD libraries.

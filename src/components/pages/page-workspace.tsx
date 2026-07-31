@@ -201,8 +201,8 @@ function PageWorkspaceBody({
 }) {
   const isNarrowViewport = useIsNarrowViewport();
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
-  const { isCollapsed } = usePageSidebarChrome();
-  const showSidebarRail = !(isNarrowViewport || isCollapsed);
+  const { isCollapsed, isCollapsing } = usePageSidebarChrome();
+  const showSidebarRail = !(isNarrowViewport || isCollapsed || isCollapsing);
   const { font, fullWidth, headerImage, setHeaderImage, textScale } =
     usePageSettings({
       pageId: page.id,
