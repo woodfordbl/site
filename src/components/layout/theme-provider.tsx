@@ -9,6 +9,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  refreshBrowserChromeTint,
+  releaseBrowserChromeTintToCanvas,
+} from "@/lib/appearance/browser-chrome-tint.ts";
 import type { SiteAppearanceHints } from "@/lib/appearance/read-site-appearance.server.ts";
 import {
   readSystemPrefersDark,
@@ -40,17 +44,6 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-/**
- * Rest iOS Safari bar tint per theme — the `--background` token as hex (see
- * styles.css). Rendered as `prefers-color-scheme` media metas in __root so iOS
- * picks the right one natively; not set from JS (iOS doesn't reliably re-read a
- * JS-updated `theme-color`, and a JS write would clobber the media variants).
- */
-export const THEME_COLOR_BY_APPEARANCE = {
-  dark: "#181611",
-  light: "#f9f9f5",
-} as const;
 
 function applyResolvedTheme(resolvedTheme: ResolvedTheme): void {
   document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
@@ -104,7 +97,17 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
 
   useEffect(() => {
     applyResolvedTheme(resolvedTheme);
+    // Safari only re-samples the canvas off touch-driven paints, so a theme flip
+    // nobody touched would leave the chrome bands on the old theme's color —
+    // a light page in black bands. Nudge it (see browser-chrome-tint.ts).
+    refreshBrowserChromeTint(resolvedTheme);
   }, [resolvedTheme]);
+
+  // After first paint, let the iOS Safari chrome bands track the document canvas
+  // instead of the frozen SSR `theme-color` (see browser-chrome-tint.ts).
+  useEffect(() => {
+    releaseBrowserChromeTintToCanvas();
+  }, []);
 
   useEffect(() => {
     applyTextScale(textScale);
