@@ -4,6 +4,7 @@ import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useSiteContentUpdates } from "@/hooks/use-site-content-updates.ts";
+import { publishSavedPageToClient } from "@/lib/content/publish-saved-page-to-client.ts";
 import { saveAllLocalPages } from "@/lib/content/save-all-pages.ts";
 import { refreshSiteContent } from "@/lib/pages/refresh-site-content.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
@@ -73,7 +74,17 @@ export function usePageCanvasFooterActions({
   const handleSaveAll = async () => {
     setSaveStatus("Saving all pages…");
     try {
-      const result = await saveAllLocalPages();
+      const result = await saveAllLocalPages({
+        beforeClearLocal: (savedPages) => {
+          // Seed the Infinity-staleTime RQ caches the open route subscribes to.
+          // Do not await router.invalidate() — Start SSR-revalidates and can
+          // hang on client-only trees; publish alone is enough for a seamless
+          // handoff before local overlays tear down.
+          for (const page of savedPages) {
+            publishSavedPageToClient(page);
+          }
+        },
+      });
       const pageNoun = result.saved === 1 ? "page" : "pages";
       const databasePart =
         result.savedDatabases > 0

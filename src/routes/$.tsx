@@ -22,6 +22,7 @@ import {
   buildPageMeta,
 } from "@/lib/content/page-head.ts";
 import { pageBySlugQueryOptions } from "@/lib/content/page-query.ts";
+import { useShippedDatabasesSettled } from "@/lib/databases/shipped-databases-settled.ts";
 import {
   hasAnyLocalDrafts,
   pageHasLocalDraft,
@@ -37,6 +38,7 @@ import {
   isLocallyDeletedPage,
   isUserCreatedPage,
 } from "@/lib/schemas/local-page.ts";
+import type { Page } from "@/lib/schemas/page.ts";
 
 export const Route = createFileRoute("/$")({
   loader: async ({ context, params }) => {
@@ -81,8 +83,7 @@ function SplatPage() {
   if (loaderData.kind === "server") {
     return (
       <SiteShell>
-        <PageWorkspace
-          kind="server"
+        <ServerSlugPage
           page={loaderData.page}
           pageHasLocalDraft={loaderData.pageHasLocalDraft}
         />
@@ -94,6 +95,31 @@ function SplatPage() {
     <SiteShell>
       <PendingSlugPage slug={loaderData.slug} />
     </SiteShell>
+  );
+}
+
+function ServerSlugPage({
+  page: loaderPage,
+  pageHasLocalDraft,
+}: {
+  page: Page;
+  pageHasLocalDraft: boolean;
+}) {
+  // Live RQ subscription so Save all can publish the persisted document before
+  // local overlays clear — without awaiting a full router invalidate/SSR pass.
+  // Home is the literal `"home"` key; splat routes use the leading-slash slug.
+  const querySlug = loaderPage.slug === "/" ? "home" : loaderPage.slug;
+  const { data: page = loaderPage } = useQuery({
+    ...pageBySlugQueryOptions(querySlug),
+    initialData: loaderPage,
+  });
+
+  return (
+    <PageWorkspace
+      kind="server"
+      page={page}
+      pageHasLocalDraft={pageHasLocalDraft}
+    />
   );
 }
 
@@ -119,6 +145,7 @@ function PendingSlugPageClient({ slug }: { slug: string }) {
   const { pages: serverPages } = usePageListItems();
   const navigate = useNavigate();
   const databasePath = useDatabaseSlugPath(slug);
+  const shippedDatabasesSettled = useShippedDatabasesSettled();
 
   useSyncPageUrl(
     localPage &&
@@ -198,6 +225,11 @@ function PendingSlugPageClient({ slug }: { slug: string }) {
       return renderResolvedDatabasePath(databasePath);
     }
     if (isLocalPagesSettling) {
+      return null;
+    }
+    // Shipped databases seed after boot; their hub/row slugs are unresolvable
+    // until then, so a cold load must wait rather than 404.
+    if (!shippedDatabasesSettled) {
       return null;
     }
 
