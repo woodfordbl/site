@@ -64,6 +64,57 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
 `ensureDatabaseRowPage`, shared by the row page and grid row menu), and the default seed
 (`database-defaults.ts`).
 
+## Deleting a database
+
+Every destructive surface routes through one helper,
+[`deleteDatabasesEverywhere`](../../src/lib/databases/delete-database-everywhere.ts),
+so a database never survives in one sidebar surface after being deleted from
+another. Per database it:
+
+1. Deletes the pages that exist only to host it — the hub page
+   (`databaseSource`) and every materialized row page (`databaseRowSource`).
+   [`resolveDatabaseOwnedPageDeleteRoots`](../../src/lib/databases/database-owned-pages.ts)
+   reduces that set to its roots because `page.delete` already cascades
+   descendants (and deleting a hard-deleted page twice would re-insert it as a
+   tombstone). The `page.delete` dispatch also strips `pageLink` blocks
+   pointing at those pages via `deletePageLinkReferences`.
+2. Deletes the definition, its rows, captured field history, and the row
+   template ([`deleteDatabase`](../../src/db/queries/database-collection-ops.ts));
+   a seeded shipped database is tombstoned so the seeder never resurrects it.
+3. Strips every linked `database` block that referenced that `databaseId` from
+   every page
+   ([`deleteDatabaseBlockReferences`](../../src/lib/databases/delete-database-block-references.ts)):
+   local shards are rewritten via
+   [`applyPageBlockDiff`](../../src/db/queries/block-collection-ops.ts) and
+   never-edited shipped hosts are seeded locally with the cleaned content —
+   the same shape as the
+   [`deletePageLinkReferences`](../../src/lib/pages/delete-page-link-references.ts)
+   cascade on `page.delete`. Pages left without a trailing empty text row are
+   normalized via `normalizeEditablePageBlocks`.
+
+Steps 2 and 3 clear both sidebar surfaces: the workspace **Databases** section
+reads the definitions collection, and the hosted-database child rows read
+`database` blocks per host page. The delete is **not** undoable, so every entry
+point confirms first:
+
+| Entry point | Confirmation |
+|-------------|--------------|
+| Sidebar row ⋯ / right-click (workspace **Databases** section and hosted rows) | [`DeleteDatabaseConfirmDialog`](../../src/components/pages/delete-database-confirm-dialog.tsx); navigates home when the deleted hub was active |
+| Database ⋯ settings menu → **Delete database** | Two-step menu item |
+| Canvas `database` block — gutter menu Delete, mobile actions drawer, Delete/Backspace on a selected block | [`DatabaseBlockDeleteDialog`](../../src/components/canvas/database-block-delete-dialog.tsx) |
+
+Canvas deletes are intercepted in
+[`page-canvas-editor.tsx`](../../src/components/canvas/page-canvas-editor.tsx),
+which wraps both `deleteRow` and `deleteSelection` — the same seam the nested
+`pageLink` "Delete page?" confirmation uses.
+[`resolveDeletedDatabaseIds`](../../src/lib/databases/resolve-database-block-deletion.ts)
+walks the rows about to be removed **and everything nested under them** (a
+selected `columns` container can hold a linked view) and returns the distinct
+linked `databaseId`s; unlinked placeholder blocks resolve to nothing and delete
+silently. On confirm the canvas rows are removed first, then the cascade runs —
+so linked views of the same database on other pages disappear too. Hub and row
+URLs already render a not-found shell once the definition is gone.
+
 ## Table view
 
 [`components/database/`](../../src/components/database/) renders the grid:
@@ -141,7 +192,7 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   **Column resizing** ([`use-database-column-resize.ts`](../../src/components/database/use-database-column-resize.ts) +
   [`database-column-resize-zone.tsx`](../../src/components/database/database-column-resize-zone.tsx)):
   edge hit zones (wider on coarse pointers, `touch-none` scoped to the zone), hover-reveal
-  `bg-primary` dividers scoped to each zone's own `data-reveal-group` (300ms delay —
+  `w-1 bg-selection-primary` dividers scoped to each zone's own `data-reveal-group` (300ms delay —
   not the whole grid, so hovering the table does not light every boundary), live rAF widths committed to `view.config.columnWidths`,
   double-click/tap reset. **Header drag-reorder**
   ([`use-database-column-drag.ts`](../../src/components/database/use-database-column-drag.ts) +
@@ -207,12 +258,8 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   rows, plus Size — the row shard's UTF-8 byte size — and "Loads in" — the shard's
   JSON parse time measured fresh on each menu open). The per-view sections (Properties
   visibility, Group, Vertical separators) all write to the ACTIVE view threaded from the
-  title row — never `views[0]`. **Delete database** (`deleteDatabase`) removes the
-  definition + rows, then invokes the block's `onDeleted` hook so the hosting `database`
-  block removes ITSELF through the canvas command bus (an undoable `row.delete`) rather
-  than leaving a "not found" shell — a deleted database has nothing to render. Blocks
-  referencing a database deleted elsewhere (another block/tab) show a "This database was
-  deleted." state with a **Remove** action (edit mode) instead of a bare message.
+  title row — never `views[0]`. **Delete database** runs the shared
+  [`deleteDatabasesEverywhere`](#deleting-a-database) cascade.
 
 ### Per-view options (in the ⋯ menu)
 
@@ -393,8 +440,8 @@ keystrokes inside grid cells must never delete the block. A linked block mounts
 whole page render — and shipped pages DO server-render database blocks now. An unlinked block shows the
 shared placeholder trigger opening the creation popover (New / Linked / Synced —
 see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirroring the
-media/embed pickers. Deleting a database block does **not**
-delete the database entity (blocks are references; entity lifecycle UI is future work).
+media/embed pickers. Deleting a linked database block **deletes the database
+entity** after a confirmation — see [Deleting a database](#deleting-a-database).
 `props.viewId` holds the block's saved-view pick (absent/stale → first view): the edit
 component persists switcher changes through `onChange`, the view component passes
 `viewId` read-only — several blocks can show DIFFERENT views of the SAME database.
@@ -437,6 +484,18 @@ with a linked `database` block as its body, then rendered through normal
 title, header menu, and page settings as any other page. Optional persisted
 `database.slug` (else `slugifyPageSegment(name)`) forms the leaf segment.
 Legacy `/db/$databaseId` URLs client-redirect to the slug path.
+
+**Host page resolution**
+([`findDatabaseHostPageId`](../../src/lib/databases/resolve-database-host-page.ts))
+skips pages marked `databaseSource` / `databaseRowSource`. The hub embeds its
+own linked `database` block, so treating it as a host candidate would let a
+UUID hub id win over a shipped host like `home` — and the row slug path
+(`{host}/{db}/{row}`) would stop resolving the moment the hub seeded mid-open.
+When only the hub remains (host block deleted), the hub's parent is used so
+slug paths stay stable. Splat routes also wait for
+[`useShippedDatabasesSettled`](../../src/lib/databases/shipped-databases-settled.ts)
+before throwing not-found for unresolved slugs, so a cold load of a shipped
+database path never 404s while the seed pass is still in flight.
 
 **Sidebar navigation:** two entry points open the same hub path:
 
@@ -500,7 +559,17 @@ explicitly set. The editor header edits **row defaults**
 `useRowPageWorkspaceChrome` /
 [`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx);
 placement is `database.rowPropertiesPlacement` (`top` under the title
-by default, or `panel` side rail). Row-page show/hide writes
+by default, or `panel` side rail). While the band renders under the title, the
+same hook returns `topLevelBlockAlign: "content-edge"`, which every row-page
+surface passes into `PageWorkspace` / `CanvasBlocksReadOnly` so the page's
+top-level canvas blocks anchor to the content column's left edge — body text
+lines up with the property rows instead of the page title text, and the block
+gutter moves fully into the scroll padding
+([`resolveTopLevelRowAlign`](../../src/lib/canvas/top-level-row-align.ts), see
+[canvas-editor](./canvas-editor.md#page-footer)). Side-panel placement and a
+template whose database has only the primary field (no band) keep the ordinary
+title-text alignment; narrow viewports are flush either way (the title indent is
+`md:` only). Row-page show/hide writes
 `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of per-view
 `visibleFieldIds`). Database rename + hub subtree slug cascade live in
 [`database-page-ops.ts`](../../src/db/queries/database-page-ops.ts) (re-exported

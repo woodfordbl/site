@@ -78,7 +78,6 @@ import {
   SelectValue,
 } from "@/components/ui/select.tsx";
 import {
-  deleteDatabase,
   duplicateDatabaseView,
   removeDatabaseField,
   removeDatabaseView,
@@ -89,6 +88,8 @@ import {
 } from "@/db/queries/database-collection-ops.ts";
 import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { requestImmediateSync } from "@/db/sync/database-sync-engine.ts";
+import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { useSyncStatus } from "@/hooks/use-sync-status.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import {
@@ -101,6 +102,7 @@ import type {
   ConnectorConfigOption,
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
+import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import {
   deleteRowTemplate,
@@ -1342,11 +1344,6 @@ export interface DatabaseSettingsMenuProps {
   /** Whether the hosting block currently hides the title row text. */
   hideTitle?: boolean;
   /**
-   * Runs AFTER `deleteDatabase` on confirm — lets the hosting block remove
-   * itself so a deleted database leaves no empty shell. Absent outside a block.
-   */
-  onDeleted?: () => void;
-  /**
    * Toggles the block's `hideTitle` prop. When absent (no block context to
    * write to) the "Hide title" switch row is not rendered.
    */
@@ -1361,8 +1358,8 @@ export interface DatabaseSettingsMenuProps {
  * The ⋯ trigger + dropdown for one database, mounted in the title row in edit
  * mode. The trigger reveals on title-row hover/focus on fine pointers and
  * stays visible on coarse pointers (`.hover-reveal` under the title's
- * `data-reveal-group`). Deleting only removes the database entity — blocks
- * are references and fall back to their "not found" empty state.
+ * `data-reveal-group`). Deleting removes the database entity and every linked
+ * `database` block that referenced it.
  */
 /** Fallback when a chart view's dataset hasn't been threaded in. */
 const EMPTY_CHART_DATA: ChartData = {
@@ -1376,7 +1373,6 @@ export function DatabaseSettingsMenu({
   chartData,
   database,
   hideTitle = false,
-  onDeleted,
   onHideTitleChange,
   onViewIdChange,
   rowCount,
@@ -1386,6 +1382,8 @@ export function DatabaseSettingsMenu({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadStats, setLoadStats] = useState<DatabaseLoadStats | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const { pages } = useMergedPageListItems();
+  const dispatchPage = usePageDispatch(pages);
 
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
@@ -1437,11 +1435,12 @@ export function DatabaseSettingsMenu({
       setConfirmingDelete(true);
       return;
     }
-    deleteDatabase(database.id);
+    deleteDatabasesEverywhere({
+      databaseIds: [database.id],
+      dispatchPage,
+      pages,
+    });
     setOpen(false);
-    // Remove the now-empty hosting block (if any) so the deletion leaves no
-    // "not found" shell behind.
-    onDeleted?.();
   };
 
   const writeIcon = (nextIcon: string | undefined) => {
