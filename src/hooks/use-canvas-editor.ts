@@ -5,8 +5,10 @@ import {
   usePageCanvas,
 } from "@/db/queries/use-page-canvas.ts";
 import { useCanvasRowActions } from "@/hooks/use-canvas-row-actions.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
+import { withBlockRichText } from "@/lib/blocks/rich-text.ts";
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import { applyCanvasEffects } from "@/lib/canvas/apply-effects.ts";
 import { tryApplyCanvasFocus } from "@/lib/canvas/apply-pending-focus.ts";
@@ -36,9 +38,15 @@ import {
   findFocusableAdjacentRowId,
   flattenCanvasRows,
 } from "@/lib/canvas/focusable-rows.ts";
+import {
+  buildPastedPageLinkBlock,
+  planInlinePageLinkInsertion,
+  resolvePageLinkPastePlacement,
+} from "@/lib/canvas/paste-page-link.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
 import { warnSelectionInvariants } from "@/lib/canvas/selection-invariants.ts";
 import { buildAssetMediaBlock } from "@/lib/media/paste-media.ts";
+import { resolvePageIdFromUrl } from "@/lib/pages/resolve-page-from-url.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 /** Stores pasted files as content-addressed assets, returning media blocks in order. */
@@ -74,6 +82,9 @@ export function useCanvasEditor(
     null
   );
   const pasteInFlightRef = useRef(false);
+  const { pages } = useMergedPageListItems();
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
 
   const canvasRef = useRef(canvas);
   canvasRef.current = canvas;
@@ -443,6 +454,97 @@ export function useCanvasEditor(
     [clearSelection, resolvePasteTargetRowId, rowActions]
   );
 
+  const tryPastePageLink = useCallback(
+    (url: string) => {
+      const pageId = resolvePageIdFromUrl(
+        url,
+        pagesRef.current,
+        window.location.origin
+      );
+      if (!pageId) {
+        return false;
+      }
+
+      const targetRowId = resolvePasteTargetRowId();
+      if (!targetRowId) {
+        return false;
+      }
+
+      const row = findRowById(getRows(), targetRowId);
+      if (!row) {
+        return false;
+      }
+
+      const placement = resolvePageLinkPastePlacement(row.effectiveBlock);
+      switch (placement) {
+        case "skip":
+          return false;
+        case "convert":
+          dispatch({
+            type: "slash.convert",
+            rowId: targetRowId,
+            to: "pageLink",
+            pageId,
+            pageLinkVariant: "linked",
+          });
+          dispatch({
+            type: "focus.set",
+            rowId: targetRowId,
+            placement: "start",
+          });
+          clearSelection();
+          return true;
+        case "inline": {
+          // With the field focused, RichTextArea inserts the mark at the caret
+          // (and keeps the DOM selection); otherwise apply it to the model so a
+          // page URL never lands as an extra row below text.
+          const active = document.activeElement;
+          if (
+            active instanceof HTMLElement &&
+            active.matches("[data-rich-text-field]")
+          ) {
+            return false;
+          }
+          const block = row.effectiveBlock;
+          const insertion = planInlinePageLinkInsertion(block, {
+            href: url,
+            pageId,
+            title:
+              pagesRef.current
+                .find((page) => page.id === pageId)
+                ?.title.trim() || "Untitled",
+          });
+          if (!insertion) {
+            return false;
+          }
+          dispatch({
+            type: "row.update",
+            rowId: targetRowId,
+            block: withBlockRichText(block, insertion.text, insertion.marks),
+          });
+          dispatch({
+            type: "focus.set",
+            rowId: targetRowId,
+            offset: insertion.caret,
+          });
+          clearSelection();
+          return true;
+        }
+        case "insert":
+          rowActions.pasteAfter(targetRowId, [
+            buildPastedPageLinkBlock(pageId),
+          ]);
+          clearSelection();
+          return true;
+        default: {
+          const _exhaustive: never = placement;
+          return _exhaustive;
+        }
+      }
+    },
+    [clearSelection, dispatch, getRows, resolvePasteTargetRowId, rowActions]
+  );
+
   const handleCanvasPaste = useCallback(
     (event: ClipboardEvent) => {
       handleCanvasPasteEvent(event, {
@@ -453,6 +555,7 @@ export function useCanvasEditor(
         pasteClipboard,
         selectAll,
         selectedCount: selectionRef.current.selectedRowIds.length,
+        tryPastePageLink,
       });
     },
     [
@@ -461,6 +564,7 @@ export function useCanvasEditor(
       insertMediaFiles,
       pasteClipboard,
       selectAll,
+      tryPastePageLink,
     ]
   );
 

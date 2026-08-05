@@ -7,6 +7,7 @@ import {
 import { useHeadingCollapse } from "@/components/canvas/heading-collapse-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
 import { EditableSurface } from "@/components/editor/editable-surface.tsx";
+import { RichTextContent } from "@/components/editor/rich-text.tsx";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import {
   headingSurfaceClassName,
@@ -63,14 +64,15 @@ export function ToggleHeadingView({ row, mode }: BlockContainerProps) {
               // after it; hold room for the placeholder while empty.
               "w-fit! max-w-full empty:min-w-52"
             )}
+            marks={block.props.marks ?? []}
             onAutoFocusHandled={clearFocus}
-            onChange={(next) =>
+            onChange={(next, nextMarks) =>
               dispatch({
                 type: "row.update",
                 rowId: row.rowId,
                 block: {
                   ...block,
-                  props: { ...block.props, text: next, marks: undefined },
+                  props: { ...block.props, text: next, marks: nextMarks },
                 },
               })
             }
@@ -100,7 +102,11 @@ export function ToggleHeadingView({ row, mode }: BlockContainerProps) {
               headingTypographyClassNames[level]
             )}
           >
-            {text || " "}
+            {text ? (
+              <RichTextContent marks={block.props.marks} text={text} />
+            ) : (
+              " "
+            )}
           </Tag>
         )}
         <HeadingCollapseChevron

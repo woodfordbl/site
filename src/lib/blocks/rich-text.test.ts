@@ -139,20 +139,48 @@ describe("segmentRichText", () => {
       { text: " home", marks: [] },
     ]);
   });
+
+  it("carries pageId onto inline page-link segments", () => {
+    expect(
+      segmentRichText("Notes", [
+        {
+          type: "link",
+          start: 0,
+          end: 5,
+          href: "https://site.test/notes",
+          pageId: "page-1",
+        },
+      ])
+    ).toEqual([
+      {
+        text: "Notes",
+        marks: ["link"],
+        href: "https://site.test/notes",
+        pageId: "page-1",
+      },
+    ]);
+  });
 });
 
 describe("link marks", () => {
-  const link = (start: number, end: number, href: string) => ({
+  const link = (start: number, end: number, href: string, pageId?: string) => ({
     type: "link" as const,
     start,
     end,
     href,
+    ...(pageId === undefined ? {} : { pageId }),
   });
 
   it("keeps adjacent links with different hrefs separate", () => {
     expect(normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "b")], 6)).toEqual(
       [link(0, 3, "a"), link(3, 6, "b")]
     );
+  });
+
+  it("keeps adjacent page links with different pageIds separate", () => {
+    expect(
+      normalizeInlineMarks([link(0, 3, "a", "p1"), link(3, 6, "a", "p2")], 6)
+    ).toEqual([link(0, 3, "a", "p1"), link(3, 6, "a", "p2")]);
   });
 
   it("merges adjacent links sharing an href", () => {
@@ -165,6 +193,12 @@ describe("link marks", () => {
     expect(setLinkInRange([link(0, 6, "old")], 0, 6, "new", 6)).toEqual([
       link(0, 6, "new"),
     ]);
+  });
+
+  it("setLinkInRange stores pageId for inline page links", () => {
+    expect(
+      setLinkInRange([], 0, 5, "https://x.dev/p", 5, { pageId: "page-1" })
+    ).toEqual([link(0, 5, "https://x.dev/p", "page-1")]);
   });
 
   it("removeLinkInRange drops the link and keeps its href off the rest", () => {

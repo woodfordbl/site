@@ -45,6 +45,22 @@ describe("parseUrlPreviewFromHtml", () => {
     });
   });
 
+  it("extracts site name and favicon", () => {
+    const html = `
+      <html>
+        <head>
+          <meta property="og:site_name" content="Example Co" />
+          <link rel="icon" href="/favicon.png" />
+        </head>
+      </html>
+    `;
+
+    expect(parseUrlPreviewFromHtml(html, "https://example.com/page")).toEqual({
+      siteName: "Example Co",
+      faviconUrl: "https://example.com/favicon.png",
+    });
+  });
+
   it("falls back to document title", () => {
     const html = "<html><head><title>Page title</title></head></html>";
     expect(parseUrlPreviewFromHtml(html, "https://example.com")).toEqual({
