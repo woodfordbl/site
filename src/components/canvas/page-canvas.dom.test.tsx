@@ -87,7 +87,10 @@ function canvas(pageHasLocalDraft: boolean) {
   return (
     <QueryClientProvider client={queryClient}>
       <DeviceLayoutProvider
-        initialHints={{ isCoarsePrimaryPointer: false, isNarrowViewport: false }}
+        initialHints={{
+          isCoarsePrimaryPointer: false,
+          isNarrowViewport: false,
+        }}
       >
         <PageCanvas
           fullWidth={false}
