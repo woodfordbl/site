@@ -129,6 +129,15 @@ export const pageCanvasGutterMobileClassName = "-left-7";
  */
 export const pageCanvasGutterPullClassName = "-ml-6";
 
+/**
+ * Desktop gutter pull that moves the whole gutter (insert + grip, two `icon-xs`
+ * buttons / 3rem) out of the content column, so top-level row content starts at
+ * the column's left edge instead of after the gutter's remainder. Used for
+ * `content-edge` alignment (database row pages / row templates), where blocks
+ * line up with the properties band rather than the title text.
+ */
+export const pageCanvasGutterOutsetPullClassName = "-ml-12";
+
 /** Responsive trigger sizing for {@link PageIconPicker} beside H1 (`text-2xl` / `sm:text-3xl`). */
 export const pageTitleIconButtonClassName = cn(
   "size-8",

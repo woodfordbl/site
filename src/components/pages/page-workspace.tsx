@@ -34,6 +34,7 @@ import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
+import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import type { PageSnapshotDescriptor } from "@/lib/pages/page-snapshot-types.ts";
@@ -69,6 +70,12 @@ type PageWorkspaceProps = {
    * row-template editor's locked title + properties header.
    */
   titleSlot?: ReactNode;
+  /**
+   * Left-edge anchor for top-level canvas blocks. Defaults to the page title
+   * text; row pages whose `titleSlot` ends in a properties band pass
+   * `"content-edge"` so blocks line up with those properties.
+   */
+  topLevelBlockAlign?: TopLevelBlockAlign;
 } & (
   | {
       kind: "server";
@@ -165,6 +172,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
       serverPage={serverPage}
       titleSeed={titleSeed}
       titleSlot={props.titleSlot}
+      topLevelBlockAlign={props.topLevelBlockAlign}
     />
   );
 
@@ -190,6 +198,7 @@ function PageWorkspaceBody({
   serverPage,
   titleSeed,
   titleSlot,
+  topLevelBlockAlign,
 }: {
   contentWrapper?: (content: ReactNode) => ReactNode;
   initialBlocks: Page["blocks"];
@@ -198,6 +207,7 @@ function PageWorkspaceBody({
   serverPage: Page | null;
   titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
   titleSlot?: ReactNode;
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }) {
   const isNarrowViewport = useIsNarrowViewport();
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
@@ -312,6 +322,7 @@ function PageWorkspaceBody({
             />
           )
         }
+        topLevelBlockAlign={topLevelBlockAlign}
       />
     </div>
   );

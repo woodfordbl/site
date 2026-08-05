@@ -13,6 +13,7 @@ import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { buildBlockTree, type CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { rewriteLegacyEditorBlockIds } from "@/lib/blocks/ensure-minimum-blocks.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
+import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import {
   pageContentColumnClassName,
   resolveUseFullPanelCanvasWidth,
@@ -36,6 +37,8 @@ interface CanvasBlocksReadOnlyProps {
   mode?: BlockMode;
   pageId: string;
   titleSlot?: ReactNode;
+  /** Left-edge anchor for top-level rows (default: the page title text). */
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }
 
 const noop = () => undefined;
@@ -88,6 +91,7 @@ export function CanvasBlocksReadOnly({
   mode = "edit",
   pageId,
   titleSlot,
+  topLevelBlockAlign,
 }: CanvasBlocksReadOnlyProps) {
   const rows = useMemo(
     () => buildBlockTree(rewriteLegacyEditorBlockIds(blocks)),
@@ -107,7 +111,10 @@ export function CanvasBlocksReadOnly({
       <CanvasMenuProvider>
         <BlockActionsMenuProvider>
           <ReadOnlyHeadingCollapseProvider>
-            <PageContentLayoutProvider useFullPanelWidth={useFullPanelWidth}>
+            <PageContentLayoutProvider
+              topLevelBlockAlign={topLevelBlockAlign}
+              useFullPanelWidth={useFullPanelWidth}
+            >
               <div className="flex flex-col max-md:flex-none md:min-h-0 md:flex-1 md:overflow-hidden">
                 <div
                   className={cn(
@@ -152,6 +159,7 @@ interface PageCanvasServerProps {
   isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }
 
 export function PageCanvasServer({
@@ -161,6 +169,7 @@ export function PageCanvasServer({
   isNarrowViewport,
   serverPage,
   titleSlot,
+  topLevelBlockAlign,
 }: PageCanvasServerProps) {
   return (
     <CanvasBlocksReadOnly
@@ -171,6 +180,7 @@ export function PageCanvasServer({
       isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}
+      topLevelBlockAlign={topLevelBlockAlign}
     />
   );
 }

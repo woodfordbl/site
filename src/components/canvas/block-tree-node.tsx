@@ -22,36 +22,13 @@ import { blockColorClassName } from "@/lib/blocks/block-colors.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
+import {
+  resolveTopLevelRowAlign,
+  type TopLevelRowAlignClassNames,
+} from "@/lib/canvas/top-level-row-align.ts";
 import { usePageContentLayout } from "@/lib/pages/page-content-layout-context.tsx";
-import { pageTitleBlockAlignClassName } from "@/lib/pages/page-title-layout.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
 import { cn } from "@/lib/utils.ts";
-
-/** Minimal inset when the block gutter sits beside the row in edit mode. */
-const topLevelPageTitleGutterAlignClassName = "pl-1";
-
-function getTopLevelContentClassName(
-  alignWithPageTitle: boolean,
-  showGutter: boolean,
-  isMobile: boolean,
-  useFullPanelWidth: boolean
-): string | undefined {
-  if (!alignWithPageTitle) {
-    return;
-  }
-
-  if (showGutter && !isMobile) {
-    return topLevelPageTitleGutterAlignClassName;
-  }
-
-  // Full-width / mobile: share the page-icon left edge inside scroll padding.
-  // Constrained column only: indent to the title text column (`md:pl-9`).
-  if (useFullPanelWidth) {
-    return;
-  }
-
-  return pageTitleBlockAlignClassName;
-}
 
 interface BlockTreeNodeProps {
   /** Gutter pull override for this row, set by a parent container (e.g. callout). */
@@ -65,21 +42,20 @@ interface BlockTreeNodeProps {
 /** Gutter / gesture flags shared by container and leaf rows. */
 interface RowChromeProps {
   enableTouchGesture: boolean;
-  isMobile: boolean;
+  /** Left-edge chrome for this row (top-level rows only). */
+  rowAlign: TopLevelRowAlignClassNames;
   showGutter: boolean;
-  useFullPanelWidth: boolean;
 }
 
 function ContainerRowNode({
   Container,
   enableTouchGesture,
   gutterPullClassName,
-  isMobile,
   mode,
   parentType,
   row,
+  rowAlign,
   showGutter,
-  useFullPanelWidth,
 }: RowChromeProps & {
   Container: ComponentType<{ mode: BlockMode; row: CanvasRow }>;
   gutterPullClassName?: string;
@@ -88,23 +64,16 @@ function ContainerRowNode({
   row: CanvasRow;
 }) {
   const isCallout = row.effectiveBlock.type === "callout";
-  const isTopLevel = !row.effectiveBlock.parentId;
-  const alignWithPageTitle = isTopLevel;
 
   return (
     <CanvasRowShell
       contentClassName={cn(
-        getTopLevelContentClassName(
-          alignWithPageTitle,
-          showGutter,
-          isMobile,
-          useFullPanelWidth
-        ),
+        rowAlign.contentClassName,
         blockColorClassName(row.effectiveBlock, parentType)
       )}
       enableTouchGesture={enableTouchGesture}
       gutter={showGutter ? <RowGutter row={row} /> : null}
-      gutterPullClassName={gutterPullClassName}
+      gutterPullClassName={gutterPullClassName ?? rowAlign.gutterPullClassName}
       keepGutterOnNestedHover={isCallout}
       row={row}
     >
@@ -116,12 +85,11 @@ function ContainerRowNode({
 function LeafRowNode({
   enableTouchGesture,
   gutterPullClassName,
-  isMobile,
   mode,
   parentType,
   row,
+  rowAlign,
   showGutter,
-  useFullPanelWidth,
 }: RowChromeProps & {
   gutterPullClassName?: string;
   mode: BlockMode;
@@ -135,7 +103,6 @@ function LeafRowNode({
   const block = row.effectiveBlock;
   const isDivider = block.type === "divider";
   const isContainerChild = Boolean(block.parentId);
-  const alignWithPageTitle = !isContainerChild;
   const ownsShellSpacing = mode === "edit" && !isContainerChild;
 
   let contentSpacingClassName: string | undefined;
@@ -148,17 +115,12 @@ function LeafRowNode({
 
   return (
     <CanvasRowShell
-      contentClassName={getTopLevelContentClassName(
-        alignWithPageTitle,
-        showGutter,
-        isMobile,
-        useFullPanelWidth
-      )}
+      contentClassName={rowAlign.contentClassName}
       contentSpacingClassName={contentSpacingClassName}
       enableTouchGesture={enableTouchGesture}
       gutter={showGutter ? <RowGutter row={row} /> : null}
       gutterAlignCenter={isDivider}
-      gutterPullClassName={gutterPullClassName}
+      gutterPullClassName={gutterPullClassName ?? rowAlign.gutterPullClassName}
       row={row}
     >
       <BlockRenderer
@@ -183,16 +145,22 @@ function BlockTreeNodeImpl({
 }: BlockTreeNodeProps) {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
   const isNarrowViewport = useIsNarrowViewport();
-  const { useFullPanelWidth } = usePageContentLayout();
+  const { topLevelBlockAlign, useFullPanelWidth } = usePageContentLayout();
 
   // On coarse pointers the gutter is removed; block actions and reordering move
   // to a long-press drawer / touch drag on the block body instead.
   const editable = mode === "edit";
+  const showGutter = editable && !isCoarsePrimaryPointer;
   const chrome: RowChromeProps = {
     enableTouchGesture: editable && isCoarsePrimaryPointer,
-    isMobile: isNarrowViewport,
-    showGutter: editable && !isCoarsePrimaryPointer,
-    useFullPanelWidth,
+    rowAlign: resolveTopLevelRowAlign({
+      align: topLevelBlockAlign,
+      isNarrowViewport,
+      isTopLevelRow: !row.effectiveBlock.parentId,
+      showGutter,
+      useFullPanelWidth,
+    }),
+    showGutter,
   };
 
   const spec = getBlockSpec(row.effectiveBlock.type);
