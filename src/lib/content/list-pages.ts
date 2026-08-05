@@ -5,6 +5,8 @@ import { getShippedPages } from "@/lib/content/page-store.server.ts";
 export interface PageSummary {
   /** `hashPageBlocks(page.blocks)` of the shipped page; absent for local-only rows. Drives global stale detection. */
   contentHash?: string;
+  /** Authored creation time from shipped JSON; absent on older content. */
+  createdAt?: string;
   /**
    * Present on pages materialized from a database row: excluded from the
    * sidebar tree (the database owns the sidebar entry) but resolvable
@@ -21,6 +23,8 @@ export interface PageSummary {
   sidebarOrder?: number;
   slug: string;
   title: string;
+  /** Authored last-edit time from shipped JSON; absent on older content. */
+  updatedAt?: string;
 }
 
 export const listPages = createServerFn({ method: "GET" }).handler(
@@ -32,6 +36,8 @@ export const listPages = createServerFn({ method: "GET" }).handler(
       parentId: page.parentId,
       sidebarOrder: page.sidebarOrder,
       icon: page.icon,
+      createdAt: page.createdAt,
+      updatedAt: page.updatedAt,
       contentHash: hashPageBlocks(page.blocks),
     }));
 

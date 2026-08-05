@@ -1,0 +1,3 @@
+{
+  "ignoreCommand": "bash -c 'echo \"$VERCEL_GIT_COMMIT_MESSAGE\" | grep -Fq \"[skip deploy]\" && exit 0 || exit 1'"
+}

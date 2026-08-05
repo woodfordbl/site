@@ -180,7 +180,11 @@ function pageSettingsRow(page: Page): Partial<LocalPage> {
   };
 }
 
-/** Imported pages become local rows that win over shipped content (user-owned). */
+/**
+ * Imported pages become local rows that win over shipped content (user-owned).
+ * Only `createdAt` round-trips: restoring rewrites every block row, and archive
+ * blocks carry no per-block timestamps, so last-edited is genuinely the import.
+ */
 function writeImportedPage(page: Page, exists: boolean): void {
   const now = new Date().toISOString();
   const row: LocalPage = {
@@ -190,7 +194,7 @@ function writeImportedPage(page: Page, exists: boolean): void {
     parentId: page.parentId,
     serverBaselineHash: null,
     blockOrder: page.blocks.map((block) => block.id),
-    createdAt: now,
+    createdAt: page.createdAt ?? now,
     updatedAt: now,
     ...(page.icon === undefined ? {} : { icon: page.icon }),
     ...(page.sidebarOrder === undefined

@@ -1,4 +1,5 @@
 import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
+import { ensureShippedPagesCache } from "@/lib/content/shipped-pages-cache.ts";
 import { type Page, pageSchema } from "@/lib/schemas/page.ts";
 
 /**
@@ -14,22 +15,18 @@ const pageModules = import.meta.glob("../../../content/pages/**/*.json", {
 
 const CONTENT_PREFIX = "content/pages/";
 
-let cachedPagesByPath: Map<string, Page> | null = null;
-
 function getPagesByRelativePath(): Map<string, Page> {
-  if (cachedPagesByPath) {
-    return cachedPagesByPath;
-  }
-
-  cachedPagesByPath = new Map(
-    Object.entries(pageModules).map(([modulePath, moduleData]) => {
-      const relativePath = modulePath.slice(
-        modulePath.indexOf(CONTENT_PREFIX) + CONTENT_PREFIX.length
-      );
-      return [relativePath, pageSchema.parse(moduleData)];
-    })
+  return ensureShippedPagesCache(
+    () =>
+      new Map(
+        Object.entries(pageModules).map(([modulePath, moduleData]) => {
+          const relativePath = modulePath.slice(
+            modulePath.indexOf(CONTENT_PREFIX) + CONTENT_PREFIX.length
+          );
+          return [relativePath, pageSchema.parse(moduleData)];
+        })
+      )
   );
-  return cachedPagesByPath;
 }
 
 export function getShippedPages(): Page[] {
