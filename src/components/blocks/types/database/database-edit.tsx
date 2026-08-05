@@ -1,5 +1,5 @@
 import { IconDatabase } from "@tabler/icons-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   DatabaseBlockLoading,
@@ -14,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover.tsx";
+import { useDatabase } from "@/db/queries/use-database.ts";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
@@ -48,18 +49,19 @@ export function DatabaseEdit({
   // Gate mounting the table view: SSR safety (useLiveQuery has no server
   // snapshot) + the shipped-database seed window on first visit.
   const tableReady = useDatabaseBlockReady();
+  const database = useDatabase(props.databaseId);
 
-  // Deleting the database (or opening a block whose database was deleted
-  // elsewhere) removes this hosting block rather than leaving a "not found"
-  // shell — the block only holds a `databaseId` reference, so once the
-  // database is gone the block has nothing to show. Goes through the canvas
-  // command bus so the removal is a normal, undoable structural edit.
-  const removeSelf = useCallback(() => {
+  // Legacy orphan: a block whose database was deleted before cascade cleanup
+  // existed. Drop it once the gate is open so we never flash a dead shell.
+  useEffect(() => {
+    if (!(tableReady && hasDatabase) || database !== undefined) {
+      return;
+    }
     const rowId = row?.rowId;
     if (rowId) {
       canvas.dispatch({ type: "row.delete", rowId });
     }
-  }, [canvas, row?.rowId]);
+  }, [canvas, database, hasDatabase, row?.rowId, tableReady]);
 
   const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
@@ -124,6 +126,10 @@ export function DatabaseEdit({
     );
   }
 
+  if (tableReady && database === undefined) {
+    return null;
+  }
+
   return (
     // Focusable group for structural keys (cannot be a <button> — the grid
     // hosts interactive children). No focus ring: a ring around the whole
@@ -145,9 +151,7 @@ export function DatabaseEdit({
           databaseId={props.databaseId}
           hideTitle={props.hideTitle}
           mode="edit"
-          onDeleteDatabase={removeSelf}
           onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
-          onRemoveBlock={removeSelf}
           onViewIdChange={(viewId) => onChange({ ...props, viewId })}
           viewId={props.viewId}
         />

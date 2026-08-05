@@ -13,6 +13,7 @@ import { useResolvedUserPage } from "@/hooks/use-resolved-page.ts";
 import { useSlugPageResolution } from "@/hooks/use-slug-page-resolution.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
+import { useShippedDatabasesSettled } from "@/lib/databases/shipped-databases-settled.ts";
 import { pagePathFromParam, pageSlugsEqual } from "@/lib/pages/slugify.ts";
 import {
   isLocallyDeletedPage,
@@ -42,6 +43,7 @@ function UserPageBySlugClient({ slug }: { slug: string }) {
   const userPage = useSlugPageResolution(slug, userPageBySlug);
   const isLocalPagesSettling = useLocalPagesSettling();
   const databasePath = useDatabaseSlugPath(slug);
+  const shippedDatabasesSettled = useShippedDatabasesSettled();
 
   const slugMatchesResolvedPage =
     userPage != null && pageSlugsEqual(userPage.slug, slug);
@@ -70,6 +72,12 @@ function UserPageBySlugClient({ slug }: { slug: string }) {
           <DatabaseSlugPathPage splat={slug} />
         </SiteShell>
       );
+    }
+
+    // Shipped databases seed after boot; their hub/row slugs are unresolvable
+    // until then, so a cold load must wait rather than 404.
+    if (!shippedDatabasesSettled) {
+      return null;
     }
 
     throw notFound();

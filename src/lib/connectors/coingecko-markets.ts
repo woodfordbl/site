@@ -12,7 +12,7 @@ import {
 
 /**
  * CoinGecko markets transport: the price / market-cap / real-currency plumbing
- * behind the unified "Live" connector's `crypto` type (see `live-markets.ts`).
+ * behind the unified "Stocks and Crypto" connector's `crypto` type (see `live-markets.ts`).
  * One row per configured ticker, resolved by CoinGecko's `symbols` filter and
  * quoted in an arbitrary `vs_currency` (true conversion, unlike the Binance
  * live tick). Binance streaming overlays live price updates on top, keyed by

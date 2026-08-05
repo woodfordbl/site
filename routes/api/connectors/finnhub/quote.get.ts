@@ -3,8 +3,8 @@ import { getQuery, setResponseHeader, setResponseStatus } from "nitro/h3";
 
 /**
  * `GET /api/connectors/finnhub/quote?symbols=AAPL,MSFT` — server-side proxy for
- * Finnhub's per-symbol `/quote` endpoint, used to seed the "Live stocks"
- * connector (and as the unwatched-refresh fallback).
+ * Finnhub's per-symbol `/quote` endpoint, used to seed the "Stocks and Crypto"
+ * stocks connector (and as the unwatched-refresh fallback).
  *
  * The Finnhub API key lives only in `FINNHUB_API_KEY` (server env) and never
  * reaches the browser — the client calls this same-origin route instead.

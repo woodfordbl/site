@@ -20,7 +20,7 @@ import {
 } from "@/lib/connectors/types.ts";
 
 /**
- * Unified "Live" connector: one synced source for either crypto or stocks,
+ * Unified "Stocks and Crypto" connector: one synced source for either crypto or stocks,
  * chosen via a `type` selector and driven by simple base tickers (BTC, ETH /
  * AAPL, MSFT). The provider is picked under the hood:
  *
@@ -64,7 +64,7 @@ const CURRENCY_OPTIONS = [
 function parseConfig(config: Record<string, unknown>): LiveConfig {
   const parsed = liveConfigSchema.safeParse(config);
   if (!parsed.success) {
-    throw new ConnectorError("Invalid Live connector config", {
+    throw new ConnectorError("Invalid Stocks and Crypto connector config", {
       kind: "config",
       cause: parsed.error,
     });
@@ -186,7 +186,7 @@ async function fetchHistory(
 /** Unified live crypto/stocks connector definition. */
 export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
   id: "live-markets",
-  title: "Live",
+  title: "Stocks and Crypto",
   description:
     "Real-time price, change, and market cap for crypto or stock tickers.",
   icon: "tabler:IconActivityHeartbeat",

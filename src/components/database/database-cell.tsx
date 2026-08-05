@@ -29,6 +29,13 @@ import { cn } from "@/lib/utils.ts";
 const MAX_VISIBLE_OPTION_PILLS = 3;
 
 /**
+ * Single-line ellipsis for grid (and other) cell values. `min-w-0 max-w-full`
+ * lets the value shrink inside flex/grid cells whose width is set in px;
+ * without that, `truncate` alone never activates and the cell only hard-clips.
+ */
+export const CELL_VALUE_TRUNCATE_CLASS = "block min-w-0 max-w-full truncate";
+
+/**
  * One select/multi-select option pill. Colored options reuse the block color
  * tokens (`BLOCK_COLOR_DEFS`) for both the pill background and the leading
  * dot; colorless options stay muted. Shared with the popover option editors.
@@ -42,7 +49,9 @@ export function DatabaseOptionPill({
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-foreground text-xs",
+        // `max-w-full` caps a lone select pill to the cell; `shrink-0` keeps
+        // multi-select pills from squashing — the row clips via overflow.
+        "inline-flex max-w-full shrink-0 items-center gap-1.5 overflow-hidden rounded-md px-1.5 py-0.5 text-foreground text-xs",
         color ? color.bgClass : "bg-muted"
       )}
     >
@@ -53,7 +62,7 @@ export function DatabaseOptionPill({
           color ? color.textClass : "text-muted-foreground"
         )}
       />
-      <span className="truncate">{option.name}</span>
+      <span className="min-w-0 truncate">{option.name}</span>
     </span>
   );
 }
@@ -100,7 +109,10 @@ function DatabaseFormulaCellValue({
   const errorDisplay = formulaCellErrorDisplay(value);
   if (errorDisplay !== null) {
     return (
-      <span className="truncate text-muted-foreground" title={errorDisplay}>
+      <span
+        className={cn(CELL_VALUE_TRUNCATE_CLASS, "text-muted-foreground")}
+        title={errorDisplay}
+      >
         {errorDisplay}
       </span>
     );
@@ -110,13 +122,17 @@ function DatabaseFormulaCellValue({
   }
   if (typeof value === "number") {
     return (
-      <span className="ml-auto truncate text-right tabular-nums">
+      <span
+        className={cn(CELL_VALUE_TRUNCATE_CLASS, "text-right tabular-nums")}
+      >
         {exprValueToDisplay(value)}
       </span>
     );
   }
   const display = exprValueToDisplay(value);
-  return display === "" ? null : <span className="truncate">{display}</span>;
+  return display === "" ? null : (
+    <span className={CELL_VALUE_TRUNCATE_CLASS}>{display}</span>
+  );
 }
 
 /**
@@ -136,7 +152,9 @@ function DatabaseDateCellValue({
 }): ReactNode {
   const opts = now === undefined ? undefined : { now: () => now };
   return (
-    <span className="truncate">{formatCellValue(field, value, opts)}</span>
+    <span className={CELL_VALUE_TRUNCATE_CLASS}>
+      {formatCellValue(field, value, opts)}
+    </span>
   );
 }
 
@@ -155,7 +173,7 @@ function DatabaseNumberFlowCell({
 }): ReactNode {
   return (
     <NumberFlow
-      className="truncate tabular-nums"
+      className={cn(CELL_VALUE_TRUNCATE_CLASS, "tabular-nums")}
       format={
         numberFormatOptions(
           field.format ?? "plain",
@@ -187,7 +205,7 @@ function DatabaseNumberCellValue({
     return <DatabaseNumberFlowCell field={field} value={value} />;
   }
   return (
-    <span className="truncate tabular-nums">
+    <span className={cn(CELL_VALUE_TRUNCATE_CLASS, "tabular-nums")}>
       {formatCellValue(field, value)}
     </span>
   );
@@ -217,7 +235,7 @@ export function DatabaseCellValueView({
   switch (field.type) {
     case "text":
       return (
-        <span className="truncate">
+        <span className={CELL_VALUE_TRUNCATE_CLASS}>
           {typeof coerced === "string" ? coerced : ""}
         </span>
       );
@@ -226,7 +244,10 @@ export function DatabaseCellValueView({
       if (mode === "view") {
         return (
           <a
-            className="truncate text-primary underline-offset-2 hover:underline"
+            className={cn(
+              CELL_VALUE_TRUNCATE_CLASS,
+              "text-primary underline-offset-2 hover:underline"
+            )}
             href={urlCellHref(text)}
             rel="noopener noreferrer"
             target="_blank"
@@ -236,7 +257,11 @@ export function DatabaseCellValueView({
         );
       }
       // In edit mode the click edits the cell, so render plain link styling.
-      return <span className="truncate text-primary">{text}</span>;
+      return (
+        <span className={cn(CELL_VALUE_TRUNCATE_CLASS, "text-primary")}>
+          {text}
+        </span>
+      );
     }
     case "number":
       return <DatabaseNumberCellValue field={field} value={coerced} />;
@@ -261,7 +286,7 @@ export function DatabaseCellValueView({
       const visible = options.slice(0, MAX_VISIBLE_OPTION_PILLS);
       const overflow = options.length - visible.length;
       return (
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+        <span className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
           {visible.map((option) => (
             <DatabaseOptionPill key={option.id} option={option} />
           ))}

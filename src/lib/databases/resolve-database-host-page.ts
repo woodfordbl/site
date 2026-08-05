@@ -29,6 +29,13 @@ function blockDatabaseId(props: unknown): string | undefined {
   return typeof databaseId === "string" ? databaseId : undefined;
 }
 
+/** Hub and materialized row pages are owned BY a database, never hosts of one. */
+function isDatabaseOwnedPage(page: PageSummary): boolean {
+  return (
+    page.databaseSource !== undefined || page.databaseRowSource !== undefined
+  );
+}
+
 /**
  * The database's **host page** id — the page whose blocks contain a
  * `database` block referencing this database.
@@ -37,9 +44,16 @@ function blockDatabaseId(props: unknown): string | undefined {
  *   blocks in shipped JSON reachable through an async per-slug server fn, so
  *   they are deliberately out of scope here — every UI flow that reaches a
  *   row page has the host's blocks in the local shard.
+ * - **Database-owned pages are skipped.** A hub page embeds a linked
+ *   `database` block for its own database, so it would otherwise compete for
+ *   host with the real page — and win, because hub ids are UUIDs that sort
+ *   ahead of shipped ids like `home`. Seeding a hub mid-open would then
+ *   invalidate the very row URL being opened.
  * - **Multiple hosts** (linked views render one database from several pages):
  *   the candidate with the lexicographically smallest `pageId` wins, so the
  *   choice is deterministic across renders and tabs.
+ * - When only the hub is left (the host's `database` block was deleted but the
+ *   database kept), the hub's parent takes over so hub/row URLs stay stable.
  * - Returns `null` when no host page exists in `pages`.
  */
 export function findDatabaseHostPageId(
@@ -59,10 +73,21 @@ export function findDatabaseHostPageId(
         .map((block) => block.pageId)
     ),
   ]
-    .filter((pageId) => pageMap.has(pageId))
+    .filter((pageId) => {
+      const page = pageMap.get(pageId);
+      return page !== undefined && !isDatabaseOwnedPage(page);
+    })
     .sort();
 
-  return hostPageIds[0] ?? null;
+  if (hostPageIds[0]) {
+    return hostPageIds[0];
+  }
+
+  const hub = pages.find(
+    (page) => page.databaseSource?.databaseId === databaseId
+  );
+  const hubParentId = hub?.parentId;
+  return hubParentId && pageMap.has(hubParentId) ? hubParentId : null;
 }
 
 /**
