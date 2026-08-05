@@ -4,12 +4,24 @@
   "title": "Blake Woodford",
   "icon": "tabler:IconUser",
   "parentId": null,
+  "createdAt": "2026-07-31T02:30:32.819Z",
+  "updatedAt": "2026-07-31T03:25:24.835Z",
   "blocks": [
     {
       "id": "3182267b-7c17-4600-82a7-78659158cf5c",
       "type": "text",
       "props": {
         "text": ""
+      }
+    },
+    {
+      "id": "ff988d3f-de0b-4a9c-8fc7-79d6aaa4dc03",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "hi i'm blake",
+        "marks": []
       }
     },
     {
@@ -53,18 +65,41 @@
       "indent": 0,
       "type": "text",
       "props": {
-        "text": "",
-        "marks": []
+        "text": "\n"
       }
     },
     {
-      "id": "6cad0ee8-0a1b-4746-8f3c-53238d61c0e7",
+      "id": "10cced2c-b6fd-4b9f-9825-897ad0fd6711",
       "parentId": null,
       "indent": 0,
       "type": "text",
       "props": {
-        "text": "more coming soon...",
-        "marks": []
+        "text": "more to come soon"
+      }
+    },
+    {
+      "id": "58449015-4334-45dc-b5c5-ccf49904d49b",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "7fd53f0b-d3b8-4884-85b4-ae22dfb85e1f",
+      "parentId": null,
+      "indent": 0,
+      "type": "database",
+      "props": {
+        "databaseId": "282bddac-7bb0-4ee7-9313-ee99a933eeb1"
+      }
+    },
+    {
+      "id": "8a03d41c-3b9c-42aa-a3a4-65b966e6be8a",
+      "type": "text",
+      "props": {
+        "text": ""
       }
     }
   ]

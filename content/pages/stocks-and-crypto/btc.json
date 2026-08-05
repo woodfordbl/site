@@ -1,0 +1,62 @@
+{
+  "id": "91a26a38-88c8-4c86-9b68-d24b614805c4",
+  "slug": "/stocks-and-crypto/btc",
+  "title": "BTC",
+  "icon": "tabler:IconCoinBitcoinFilled",
+  "parentId": "ca52e732-751f-4998-88b3-19f2ccd169de",
+  "createdAt": "2026-07-31T03:28:08.723Z",
+  "updatedAt": "2026-07-31T03:46:04.311Z",
+  "blocks": [
+    {
+      "id": "1691f7d0-36a3-490e-a4ef-a4f46ee09ef4",
+      "parentId": null,
+      "indent": 0,
+      "type": "heading",
+      "props": {
+        "level": 3,
+        "text": "Ideas "
+      }
+    },
+    {
+      "id": "914158bf-e183-4b58-bd10-a748d1a60ae5",
+      "parentId": null,
+      "indent": 0,
+      "type": "list",
+      "props": {
+        "variant": "bullet"
+      }
+    },
+    {
+      "id": "f5219637-c767-4356-b61b-a29c8c25e3fa",
+      "parentId": "914158bf-e183-4b58-bd10-a748d1a60ae5",
+      "type": "text",
+      "props": {
+        "text": "bitcoin should be better"
+      }
+    },
+    {
+      "id": "4bcaa324-17bd-4ae2-a67a-f34b33a2f515",
+      "parentId": null,
+      "indent": 0,
+      "type": "checklist",
+      "props": {}
+    },
+    {
+      "id": "2a7152e8-3584-4e75-ae14-a369dcb5dfc9",
+      "parentId": "4bcaa324-17bd-4ae2-a67a-f34b33a2f515",
+      "type": "checklistItem",
+      "props": {
+        "checked": true,
+        "text": "item",
+        "marks": []
+      }
+    },
+    {
+      "id": "382d57e4-7a25-4fe6-8f3a-cf2d77caadbf",
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    }
+  ]
+}
