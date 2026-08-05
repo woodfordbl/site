@@ -22,7 +22,7 @@ Search params ([`settings-search.ts`](../../src/lib/settings/settings-search.ts)
 
 | Section | Panel | Notes |
 |---------|-------|-------|
-| Appearance | [`AppearancePanel`](../../src/components/settings/panels/appearance-panel.tsx) | Interface theme dropdown + **Text size** (Small / Default / Large) — the site-wide default page text size (`SettingsItemField` + `SettingsItemSelect`) |
+| Appearance | [`AppearancePanel`](../../src/components/settings/panels/appearance-panel.tsx) | Interface theme dropdown, **Text size** (Small / Default / Large), **Tooltip style** (Normal / Inverted), chart palette + dither — the site-wide defaults (`SettingsItemField` + `SettingsItemSelect`) |
 | Keyboard shortcuts | [`KeyboardShortcutsPanel`](../../src/components/settings/panels/keyboard-shortcuts-panel.tsx) | Rebindable rows from the [`keyboard-commands.ts`](../../src/lib/settings/keyboard-commands.ts) registry (single source of truth — includes `undo-edit` / `redo-edit`, Mod+Z / Mod+Shift+Z, which claim the event conditionally so native field undo survives outside canvas history; [canvas-editor — Undo / redo](./canvas-editor.md#undo--redo)); user overrides persisted in TanStack DB (`localKeybindingsCollection`) via [`use-keybindings.ts`](../../src/lib/settings/use-keybindings.ts) |
 | Analytics | [`AnalyticsPanel`](../../src/components/settings/panels/analytics-panel.tsx) | Greyscale charts (`palette="grey"`) from IndexedDB activity log |
 | Backup | [`BackupPanel`](../../src/components/settings/panels/backup-panel.tsx) | Export the full local workspace to `.zip` or import an archive (**Replace** clears local state first; **Merge** overlays by page id) via [`useWorkspaceArchive`](../../src/hooks/use-workspace-archive.ts) — see [local-first-persistence — Workspace backup](./local-first-persistence.md#workspace-backup) |
@@ -30,14 +30,14 @@ Search params ([`settings-search.ts`](../../src/lib/settings/settings-search.ts)
 
 Dev/sync actions were removed from [`PageCanvasFooter`](../../src/components/canvas/page-canvas-footer.tsx) (footer strip removed from workspace) and from the header menu.
 
-## Appearance / theme / text size
+## Appearance / theme / text size / tooltips
 
-- Schema: [`site-appearance.ts`](../../src/lib/schemas/site-appearance.ts) (`theme`: `light` \| `dark` \| `system`; `textScale`: `small` \| `default` \| `large`).
+- Schema: [`site-appearance.ts`](../../src/lib/schemas/site-appearance.ts) (`theme`: `light` \| `dark` \| `system`; `textScale`: `small` \| `default` \| `large`; `tooltipStyle`: `normal` \| `inverted`; plus chart palette/dither).
 - Cookie: `site-appearance` via [`site-appearance-cookie.ts`](../../src/lib/appearance/site-appearance-cookie.ts) (carries the whole appearance object).
-- SSR: [`loadSiteAppearance`](../../src/lib/appearance/load-site-appearance.ts) in root `beforeLoad`; `html.dark` class and `html[data-page-text-scale]` seeded from [`readSiteAppearanceFromRequest`](../../src/lib/appearance/read-site-appearance.server.ts) (no flash).
-- Client: [`ThemeProvider`](../../src/components/layout/theme-provider.tsx) applies `document.documentElement.classList` (theme) and `dataset.pageTextScale` (text size), and listens to `prefers-color-scheme` when theme is `system`.
+- SSR: [`loadSiteAppearance`](../../src/lib/appearance/load-site-appearance.ts) in root `beforeLoad`; `html.dark` class, `html[data-page-text-scale]`, and `html[data-tooltip-style]` seeded from [`readSiteAppearanceFromRequest`](../../src/lib/appearance/read-site-appearance.server.ts) (no flash).
+- Client: [`ThemeProvider`](../../src/components/layout/theme-provider.tsx) applies `document.documentElement.classList` (theme), `dataset.pageTextScale` (text size), and `dataset.tooltipStyle`, and listens to `prefers-color-scheme` when theme is `system`.
 - The `data-page-text-scale` attribute sets the `--page-text-scale` multiplier that each block's `font-size: calc(<rem> * var(--page-text-scale))` reads (`styles.css`); per-page overrides set the same attribute on the page content wrapper and win via the cascade. (The multiplier must be read directly in `font-size`, not via an intermediate token declared on `:root`, or descendant overrides are ignored.)
-
+- **Tooltip style:** `normal` (default) uses the shared popover surface (`bg-popover text-popover-foreground`, soft shadow, **no** border/ring). `inverted` flips relative to page chrome — dark tooltips in light mode and light tooltips in dark (`bg-foreground text-background`); nested filled `Kbd` keycaps use a translucent opposite fill so contrast stays correct. [`TooltipContent`](../../src/components/ui/tooltip.tsx) reads `html[data-tooltip-style]` — no per-call-site forks.
 ## Analytics
 
 IndexedDB store [`page-activity-store.ts`](../../src/db/activity/page-activity-store.ts) records per-page events ([`PageActivityEvent`](../../src/lib/pages/page-activity-events.ts)). [`readAllPageActivityEvents`](../../src/db/activity/page-activity-store.ts) merges across pages (cap `SITE_ACTIVITY_EVENT_CAP` = 2000); aggregators in [`page-activity-analytics.ts`](../../src/lib/pages/page-activity-analytics.ts); [`useSiteActivityAnalytics`](../../src/hooks/use-site-activity-analytics.ts) feeds Recharts panels. Charts use `palette="grey"` on [`ChartContainer`](../../src/components/ui/chart.tsx).

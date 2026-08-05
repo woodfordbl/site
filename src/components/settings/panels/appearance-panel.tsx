@@ -19,7 +19,10 @@ import {
   type ChartPaletteId,
 } from "@/lib/charts/chart-palettes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
-import type { ThemePreference } from "@/lib/schemas/site-appearance.ts";
+import type {
+  ThemePreference,
+  TooltipStyle,
+} from "@/lib/schemas/site-appearance.ts";
 
 const THEME_OPTIONS: Array<{ label: string; value: ThemePreference }> = [
   { value: "light", label: "Light" },
@@ -31,6 +34,11 @@ const TEXT_SIZE_OPTIONS: Array<{ label: string; value: PageTextScale }> = [
   { value: "small", label: "Small" },
   { value: "default", label: "Default" },
   { value: "large", label: "Large" },
+];
+
+const TOOLTIP_STYLE_OPTIONS: Array<{ label: string; value: TooltipStyle }> = [
+  { value: "normal", label: "Normal" },
+  { value: "inverted", label: "Inverted" },
 ];
 
 const PALETTE_SWATCH_TOKENS = [
@@ -80,8 +88,10 @@ export function AppearancePanel() {
     setChartPalette,
     setTextScale,
     setTheme,
+    setTooltipStyle,
     textScale,
     theme,
+    tooltipStyle,
   } = useSiteAppearance();
   const section = getSettingsSection("appearance");
 
@@ -112,6 +122,17 @@ export function AppearancePanel() {
           }
           description="Default text size for pages. Individual pages can override this."
           title="Text size"
+        />
+        <SettingsItemField
+          action={
+            <SettingsItemSelect
+              onValueChange={setTooltipStyle}
+              options={TOOLTIP_STYLE_OPTIONS}
+              value={tooltipStyle}
+            />
+          }
+          description="Normal matches menus and dialogs. Inverted uses the opposite of the page chrome (dark tooltips in light mode, light in dark)."
+          title="Tooltip style"
         />
         <SettingsItemField
           action={

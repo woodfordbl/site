@@ -1659,11 +1659,11 @@ function TableSection() {
 function KbdSection() {
   return (
     <Section
-      description="Outline keycaps everywhere; default variant for inline confirm actions; char + char sequences use then."
+      description="Filled muted keycaps everywhere (no outline); default variant for inline confirm actions; char + char sequences use then."
       title="Keyboard hints"
     >
       <div className="flex flex-col gap-6">
-        <TabVariantColumn label="Outline (default)">
+        <TabVariantColumn label="Filled (default)">
           <div className="flex flex-wrap items-center gap-2">
             <Kbd>⌘</Kbd>
             <Kbd>K</Kbd>
