@@ -12,7 +12,7 @@ import {
 
 /**
  * Binance live-tick transport: the keyless price streaming/backfill plumbing
- * behind the unified "Live" connector's `crypto` type (see `live-markets.ts`).
+ * behind the unified "Stocks and Crypto" connector's `crypto` type (see `live-markets.ts`).
  * CoinGecko seeds the rows (price + market cap in the chosen currency); Binance
  * overlays live price updates. Config symbols are BASE tickers (e.g. "BTC") —
  * the trading pair is composed from the display `currency` (USD→USDT, EUR→EUR,

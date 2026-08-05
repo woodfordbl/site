@@ -13,7 +13,7 @@ import {
 
 /**
  * Finnhub stocks transport: the price/daily-change plumbing behind the unified
- * "Live" connector's `stocks` type (see `live-markets.ts`). One row per
+ * "Stocks and Crypto" connector's `stocks` type (see `live-markets.ts`). One row per
  * configured symbol (e.g. AAPL), seeded from the `/quote` REST endpoint and
  * streamed in real time from Finnhub's `trade` WebSocket.
  *

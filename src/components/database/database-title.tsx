@@ -38,8 +38,6 @@ interface DatabaseTitleProps {
   /** Hide the name; the row keeps only right-aligned controls. */
   hideTitle?: boolean;
   mode: "view" | "edit";
-  /** Settings menu "Delete database" hook — removes the hosting block after. */
-  onDeleteDatabase?: () => void;
   /** Threads the block's `hideTitle` toggle into the settings menu. */
   onHideTitleChange?: (hideTitle: boolean) => void;
   /** Activates a view (settings menu Add/Duplicate switch to the new view). */
@@ -138,7 +136,6 @@ export function DatabaseTitle({
   database,
   hideTitle = false,
   mode,
-  onDeleteDatabase,
   onHideTitleChange,
   onViewIdChange,
   totalRowCount,
@@ -260,7 +257,6 @@ export function DatabaseTitle({
             chartData={chartData}
             database={database}
             hideTitle={hideTitle}
-            onDeleted={onDeleteDatabase}
             onHideTitleChange={onHideTitleChange}
             onViewIdChange={onViewIdChange}
             rowCount={totalRowCount}

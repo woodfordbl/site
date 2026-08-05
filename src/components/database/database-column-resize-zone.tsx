@@ -59,7 +59,7 @@ export function DatabaseColumnResizeZone({
       >
         <span
           aria-hidden
-          className="hover-reveal absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary"
+          className="hover-reveal absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-selection-primary"
         />
       </button>
     </div>

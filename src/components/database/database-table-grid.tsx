@@ -1767,13 +1767,14 @@ function renderGridCellContent({
   }
 
   // Same icon resolver as the row page (per-row → template → DEFAULT_PAGE_ICON).
+  // Value sits in `min-w-0 flex-1` so title icons stay fixed and text ellipsizes.
   const label = showPageIcon ? (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 max-w-full items-center gap-1.5">
       <PageIconDisplay
         className="size-4 shrink-0 text-muted-foreground/70 [&_svg]:size-4"
         icon={resolveDatabaseRowIcon(row)}
       />
-      {valueView}
+      <span className="min-w-0 flex-1 overflow-hidden">{valueView}</span>
     </span>
   ) : (
     valueView
@@ -1783,7 +1784,7 @@ function renderGridCellContent({
     return (
       <button
         className={cn(
-          "flex size-full min-w-0 cursor-default items-center overflow-hidden text-left outline-none",
+          "flex size-full min-w-0 max-w-full cursor-default items-center overflow-hidden text-left outline-none",
           field.type === "number" && "justify-end"
         )}
         onClick={() => {
@@ -1831,7 +1832,16 @@ function GridCell({
       />
     </span>
   ) : (
-    <DatabaseCellValueView field={field} mode={mode} now={now} value={value} />
+    // Constrain the flex child so display-mode truncate/ellipsis can activate;
+    // the inline editor overlays the cell and is not clipped by this wrapper.
+    <span className="min-w-0 max-w-full">
+      <DatabaseCellValueView
+        field={field}
+        mode={mode}
+        now={now}
+        value={value}
+      />
+    </span>
   );
 
   const content = renderGridCellContent({
@@ -1871,7 +1881,7 @@ function GridCell({
       style={{ width: column.width, left: column.left ?? undefined }}
     >
       {inlineEditable ? (
-        <div className="size-full px-2">{content}</div>
+        <div className="size-full min-w-0 px-2">{content}</div>
       ) : (
         content
       )}
