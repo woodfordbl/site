@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { EditableInlineLinkPreview } from "@/components/editor/link-preview.tsx";
 import { RichTextArea } from "@/components/editor/rich-text-area.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
@@ -447,19 +448,22 @@ export function EditableSurface({
 
   if (isRich) {
     return (
-      <RichTextArea
-        ariaLabel={ariaLabel}
-        className={cn(fieldClassName, richPlaceholderClassName)}
-        fieldRef={richRef}
-        marks={marks}
-        multiline={multiline}
-        onBlur={handleBlur}
-        onFocus={handleFocus}
-        onInput={handleRichInput}
-        onKeyDown={handleKeyDown}
-        placeholder={showPlaceholder ? placeholder : undefined}
-        value={value}
-      />
+      <>
+        <RichTextArea
+          ariaLabel={ariaLabel}
+          className={cn(fieldClassName, richPlaceholderClassName)}
+          fieldRef={richRef}
+          marks={marks}
+          multiline={multiline}
+          onBlur={handleBlur}
+          onFocus={handleFocus}
+          onInput={handleRichInput}
+          onKeyDown={handleKeyDown}
+          placeholder={showPlaceholder ? placeholder : undefined}
+          value={value}
+        />
+        <EditableInlineLinkPreview fieldRef={richRef} />
+      </>
     );
   }
 

@@ -86,7 +86,7 @@ Native HTML5 DnD never starts on touch, so on coarse primary pointers (`(pointer
 
 Drop indicators:
 
-- Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight. Synthetic hosted-database rows ([`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx)) carry no `data-page-list-row-id`, so they are invisible to drag sources and drop resolution — pages-only DnD; click navigates to the database hub slug path instead.
+- Sidebar: [`PageListItem`](../../src/components/pages/page-list-item.tsx) uses `useDropTarget` for sibling lines and nest highlight. Synthetic hosted-database rows ([`page-list-database-rows.tsx`](../../src/components/pages/page-list-database-rows.tsx)) carry no `data-page-list-row-id`, so they are invisible to drag sources and drop resolution — pages-only DnD; click navigates to the database hub slug path instead. Row ⋯ / right-click menus ([`PageRowMenuContent`](../../src/components/pages/page-row-menu-content.tsx), including **Copy link**) stop propagation on their triggers so opening an action never starts a page-list drag.
 - Canvas: [`CanvasRowShell`](../../src/components/canvas/canvas-row-shell.tsx), [`ColumnView`](../../src/components/blocks/types/columns/column-view.tsx), [`TabView`](../../src/components/blocks/types/tabs/tab-view.tsx) (tab content shares the column-child drop model), [`ToggleHeadingView`](../../src/components/blocks/types/toggle-heading/toggle-heading-view.tsx) (its `data-toggle-content` region shows the `atScopeStart` line), and [`TableView`](../../src/components/blocks/types/table/table-view.tsx) use `useDropTarget` / `useCanvasRowDropTarget` for insertion lines (`bg-selection-primary` horizontal/vertical lines).
 - **Toggle heading drops:** a toggle heading's children render inline, so the generic `resolveVerticalRowDrop` already resolves drops between them. `resolveToggleHeadingDrop` in [`resolve-drop-target.ts`](../../src/lib/canvas/resolve-drop-target.ts) adds the empty-toggle case (drop becomes the first child, `atScopeStart`). A **collapsed** toggle hides its children, so it is treated as an ordinary before/after target — no nesting, no auto-expand.
 
@@ -99,7 +99,7 @@ When the pointer is inside `[data-table-layout]`, [`resolveTableLayoutDrop`](../
 
 Full grid model, structure handles, and keyboard map: [table-blocks](./table-blocks.md).
 
-Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows on fine pointers — same grab button composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) for tap/click-to-open and `useDragSource` for drag reorder) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
+Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (canvas rows on fine pointers — same grab button composes [`BlockActionsMenu`](../../src/components/canvas/block-actions-menu.tsx) for tap/click-to-open — whose open menu also routes its own Delete / Mod+D keys, see [canvas-commands — Gutter block menu](../reference/canvas-commands.md#gutter-block-menu) — and `useDragSource` for drag reorder) and [`TableStructureHandle`](../../src/components/blocks/types/table/table-structure-handle.tsx) (table row/column handles) call `useDragSource` on their grab buttons.
 
 ## Drop bands & zones
 
@@ -107,7 +107,7 @@ Grip sources: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) (can
 - **Canvas** — the [`CanvasDropZone`](../../src/components/canvas/page-canvas-editor.tsx) fills the scroll area (`flex-1`) so the empty space below the last block still receives native `dragover`/`drop`; a pointer past the last row resolves to `after` the last top-level row.
 - **Sidebar → canvas (cross-surface)** — the surfaces are MIME-isolated, but the canvas drop zone additionally sniffs the sidebar's `PAGE_DRAG_MIME_TYPE` (`application/x-page-id`) on `dragover`/`drop`. Dropping a sidebar page onto a canvas inserts a child `pageLink` at the drop position ([`resolveTopLevelInsertEdge`](../../src/lib/canvas/resolve-drop-target.ts) → `row.insert` with `pageId`) and re-nests the page under the open page ([`usePageReposition`](../../src/hooks/use-page-reposition.ts), `appendPageLinkOnParent:false` since the link is placed here), guarded by [`canDropPageIntoCanvas`](../../src/lib/pages/page-canvas-drop.ts) (self / cycle / depth via `assertCanReposition`).
 
-External image/video **files** are not a drop path — the canvas drop zone only resolves row/page MIME channels. Inserting media from outside the app is handled on **paste** instead ([`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) → `media` blocks; see [canvas-commands.md](../reference/canvas-commands.md)).
+External image/video **files** and page **URLs** are not drop paths — the canvas drop zone only resolves row/page MIME channels. Inserting media or page links from outside the app is handled on **paste** instead ([`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) → `media` / `pageLink` / inline page-link marks; see [canvas-commands.md](../reference/canvas-commands.md) and [pages — Page links](./pages.md#page-links)).
 
 ## Performance
 
