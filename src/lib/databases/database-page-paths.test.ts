@@ -73,6 +73,58 @@ describe("database page paths", () => {
     ).toMatchObject({ kind: "hub", database, host: pages[0] });
   });
 
+  it("returns null for an unknown row slug", () => {
+    expect(
+      resolveDatabasePathFromSplat("work/projects/project-tracker/missing", {
+        blocks,
+        databases: [database],
+        pages,
+        rows: [row],
+      })
+    ).toBeNull();
+  });
+
+  it("keeps resolving the row path once the hub page is seeded", () => {
+    // The hub page carries its own linked `database` block, and its id sorts
+    // ahead of a shipped host id like `home`. Seeding it mid-open must not
+    // hijack host resolution and drop the in-flight row URL to not-found.
+    const hostPage = {
+      id: "home",
+      slug: "/",
+      title: "Home",
+      parentId: null,
+      routeBy: "slug" as const,
+    };
+    const hubPage = {
+      id: "0a3f-hub",
+      slug: "/project-tracker",
+      title: "Project tracker",
+      parentId: "home",
+      databaseSource: { databaseId: database.id },
+      routeBy: "id" as const,
+    };
+
+    expect(
+      resolveDatabasePathFromSplat("project-tracker/launch-site", {
+        blocks: [
+          {
+            pageId: "home",
+            type: "database",
+            props: { databaseId: database.id },
+          },
+          {
+            pageId: hubPage.id,
+            type: "database",
+            props: { databaseId: database.id },
+          },
+        ],
+        databases: [database],
+        pages: [hostPage, hubPage],
+        rows: [row],
+      })
+    ).toMatchObject({ kind: "row", host: hostPage, row });
+  });
+
   it("resolves template and row paths", () => {
     expect(
       resolveDatabasePathFromSplat("work/projects/project-tracker/template", {

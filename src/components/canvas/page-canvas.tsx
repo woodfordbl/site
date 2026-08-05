@@ -6,8 +6,10 @@ import {
   useState,
 } from "react";
 
+import { WarmInlineLinkPreviewsEffect } from "@/components/canvas/warm-inline-link-previews-effect.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
+import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 
 import { PageCanvasLocalView } from "./page-canvas-local-view.tsx";
 import { PageCanvasServer } from "./page-canvas-server.tsx";
@@ -23,6 +25,12 @@ interface PageCanvasProps {
   serverPage: ServerPageSource;
   /** Rendered at the top of the scroll region, above the blocks (page title). */
   titleSlot?: ReactNode;
+  /**
+   * Left-edge anchor for top-level blocks — defaults to the page title text.
+   * Row-page surfaces pass `"content-edge"` so blocks line up with the
+   * properties band above them.
+   */
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }
 
 type PageCanvasEditorComponent = ComponentType<PageCanvasProps>;
@@ -50,12 +58,11 @@ function PageCanvasClient(props: PageCanvasProps) {
       });
   }, []);
 
+  let canvas: ReactNode;
   if (Editor) {
-    return <Editor {...props} />;
-  }
-
-  if (showLocal) {
-    return (
+    canvas = <Editor {...props} />;
+  } else if (showLocal) {
+    canvas = (
       <PageCanvasLocalView
         coverSlot={props.coverSlot}
         fullWidth={props.fullWidth}
@@ -63,19 +70,31 @@ function PageCanvasClient(props: PageCanvasProps) {
         isNarrowViewport={props.isNarrowViewport}
         serverPage={props.serverPage}
         titleSlot={props.titleSlot}
+        topLevelBlockAlign={props.topLevelBlockAlign}
+      />
+    );
+  } else {
+    canvas = (
+      <PageCanvasServer
+        coverSlot={props.coverSlot}
+        fullWidth={props.fullWidth}
+        headerSlot={props.headerSlot}
+        isNarrowViewport={props.isNarrowViewport}
+        serverPage={props.serverPage}
+        titleSlot={props.titleSlot}
+        topLevelBlockAlign={props.topLevelBlockAlign}
       />
     );
   }
 
   return (
-    <PageCanvasServer
-      coverSlot={props.coverSlot}
-      fullWidth={props.fullWidth}
-      headerSlot={props.headerSlot}
-      isNarrowViewport={props.isNarrowViewport}
-      serverPage={props.serverPage}
-      titleSlot={props.titleSlot}
-    />
+    <>
+      <WarmInlineLinkPreviewsEffect
+        pageId={props.serverPage.id}
+        serverBlocks={props.serverPage.blocks}
+      />
+      {canvas}
+    </>
   );
 }
 
@@ -87,6 +106,7 @@ export function PageCanvas({
   pageHasLocalDraft,
   serverPage,
   titleSlot,
+  topLevelBlockAlign,
 }: PageCanvasProps) {
   const isClient = useIsClient();
 
@@ -107,6 +127,7 @@ export function PageCanvas({
         isNarrowViewport={isNarrowViewport}
         serverPage={serverPage}
         titleSlot={titleSlot}
+        topLevelBlockAlign={topLevelBlockAlign}
       />
     );
   }
@@ -120,6 +141,7 @@ export function PageCanvas({
       pageHasLocalDraft={pageHasLocalDraft}
       serverPage={serverPage}
       titleSlot={titleSlot}
+      topLevelBlockAlign={topLevelBlockAlign}
     />
   );
 }

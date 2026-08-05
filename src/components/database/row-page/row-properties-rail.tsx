@@ -40,6 +40,7 @@ import {
   setDatabaseRowPropertiesVisibleFieldIds,
 } from "@/db/queries/database-collection-ops.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import { pageCanvasDesktopScrollTopInsetClassName } from "@/lib/pages/page-title-layout.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -77,22 +78,39 @@ export function useRowPropertiesRail(
  * Shared PageWorkspace chrome for the row-page family: side-panel
  * `contentWrapper` when placement is panel, otherwise title hosts own the
  * under-title band via `RowPropertiesUnderTitleBand`.
+ *
+ * `topLevelBlockAlign` follows the band: while properties sit under the title,
+ * the page's top-level blocks anchor to the content column edge so body text
+ * lines up with the property rows instead of the title text.
  */
 export function useRowPageWorkspaceChrome(
   database: LocalDatabase | undefined,
   options: {
+    /**
+     * False when the under-title band would render nothing (e.g. a template
+     * whose database has only the primary field) — blocks keep title alignment.
+     */
+    hasProperties?: boolean;
     propertiesPanel: ReactNode;
   }
 ): RowPropertiesRailState & {
   contentWrapper?: (canvasRegion: ReactNode) => ReactNode;
+  topLevelBlockAlign: TopLevelBlockAlign;
 } {
   const rail = useRowPropertiesRail(database);
+  const showsUnderTitleBand =
+    !rail.panelMode && (options.hasProperties ?? true) && Boolean(database);
+  const topLevelBlockAlign: TopLevelBlockAlign = showsUnderTitleBand
+    ? "content-edge"
+    : "title-text";
+  const chrome = { ...rail, topLevelBlockAlign };
+
   if (!(database && rail.panelMode)) {
-    return rail;
+    return chrome;
   }
 
   return {
-    ...rail,
+    ...chrome,
     contentWrapper: (canvasRegion) => (
       <RowPropertiesRailLayout
         database={database}

@@ -3,6 +3,7 @@
 import { IconSearch } from "@tabler/icons-react";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
+import { MENU_COMMAND_SEARCH_ATTRIBUTE } from "@/components/keyboard/use-menu-command-keys.ts";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu.tsx";
 import {
   Empty,
@@ -75,6 +76,7 @@ export function ActionMenuSearch({
         <InputGroupInput
           aria-label="Search actions"
           autoComplete="off"
+          {...{ [MENU_COMMAND_SEARCH_ATTRIBUTE]: "" }}
           onChange={(event) => {
             onQueryChange(event.target.value);
           }}
@@ -93,6 +95,16 @@ export function ActionMenuSearch({
 interface FilteredActionMenuItemsProps {
   items: ActionMenuEntry[];
   query: string;
+}
+
+function ActionMenuItemShortcut({ item }: { item: ActionMenuEntry }) {
+  if (item.command) {
+    return <Shortcut className="ml-auto" command={item.command} />;
+  }
+  if (item.keys) {
+    return <Shortcut className="ml-auto" keys={item.keys} />;
+  }
+  return null;
 }
 
 export function FilteredActionMenuItems({
@@ -127,9 +139,7 @@ export function FilteredActionMenuItems({
     >
       {item.icon}
       {item.label}
-      {item.command ? (
-        <Shortcut className="ml-auto" command={item.command} />
-      ) : null}
+      <ActionMenuItemShortcut item={item} />
     </DropdownMenuItem>
   ));
 }

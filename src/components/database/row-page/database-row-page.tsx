@@ -146,6 +146,7 @@ export function DatabaseRowPageWorkspace({
       page={page}
       pageHasLocalDraft
       titleSlot={<RowPageTitleSlot database={database} page={page} row={row} />}
+      topLevelBlockAlign={chrome.topLevelBlockAlign}
     />
   );
 }

@@ -1,11 +1,78 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { findRowById } from "@/lib/blocks/block-tree.ts";
+import { selectsChildrenAsUnit } from "@/lib/canvas/block-container-config.ts";
 import {
   type CanvasContentScope,
   collectCanvasScopeRects,
   rowContentScopes,
 } from "@/lib/canvas/canvas-scopes.ts";
+import { isFocusableCanvasRow } from "@/lib/canvas/focusable-rows.ts";
 import { resolveScopeRowAtY } from "@/lib/canvas/resolve-column-row-at-y.ts";
 import { collectCanvasRowRects } from "@/lib/canvas/resolve-drop-target.ts";
+
+/** Depth-first last focusable leaf under `row` (list/checklist items, nested scopes). */
+function lastFocusableDescendantId(row: CanvasRow): string | null {
+  for (let index = row.children.length - 1; index >= 0; index -= 1) {
+    const child = row.children[index];
+    if (!child) {
+      continue;
+    }
+    if (isFocusableCanvasRow(child)) {
+      return child.rowId;
+    }
+    const nested = lastFocusableDescendantId(child);
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
+function hasMountedChildRect(
+  row: CanvasRow,
+  rowRects: ReadonlyMap<string, DOMRect>
+): boolean {
+  return row.children.some((child) => rowRects.has(child.rowId));
+}
+
+/**
+ * Map a resolved overclick candidate to a focusable leaf. Unit containers
+ * (list/checklist) never take a caret — pick the child at Y, or the last
+ * focusable descendant when the pointer is below every child. Other containers
+ * may own chrome fields (toggle heading); keep them unless the click is below
+ * the container and children are mounted.
+ */
+export function resolveFocusableOverclickRow(
+  rows: CanvasRow[],
+  rowId: string,
+  clientY: number,
+  rowRects: ReadonlyMap<string, DOMRect>
+): string | null {
+  const row = findRowById(rows, rowId);
+  if (!row) {
+    return null;
+  }
+  if (isFocusableCanvasRow(row)) {
+    return row.rowId;
+  }
+
+  const type = row.effectiveBlock.type;
+  const rowRect = rowRects.get(row.rowId);
+  const belowContainer = rowRect != null && clientY > rowRect.bottom;
+  const unitContainer = selectsChildrenAsUnit(type);
+  const childrenMounted = hasMountedChildRect(row, rowRects);
+
+  if (!(unitContainer || (belowContainer && childrenMounted))) {
+    return row.rowId;
+  }
+
+  const childId = resolveScopeRowAtY(row.children, clientY, rowRects);
+  if (childId && (unitContainer || rowRects.has(childId))) {
+    return resolveFocusableOverclickRow(rows, childId, clientY, rowRects);
+  }
+
+  return lastFocusableDescendantId(row) ?? row.rowId;
+}
 
 /** Resolve which top-level row to select from pointer Y (page-level overclick). */
 export function resolveTopLevelOverclickRow(
@@ -149,9 +216,11 @@ export function resolveOverclickRowFromPointer(
     rowRects,
     scopeRects
   );
-  if (scopedRow) {
-    return scopedRow;
+  const candidate =
+    scopedRow ?? resolveTopLevelOverclickRow(rows, clientY, rowRects);
+  if (!candidate) {
+    return null;
   }
 
-  return resolveTopLevelOverclickRow(rows, clientY, rowRects);
+  return resolveFocusableOverclickRow(rows, candidate, clientY, rowRects);
 }

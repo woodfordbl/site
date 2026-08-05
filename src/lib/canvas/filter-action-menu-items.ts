@@ -3,10 +3,13 @@ import type { ReactNode } from "react";
 import type { CommandId } from "@/lib/settings/keyboard-commands.ts";
 
 export interface ActionMenuEntry {
+  /** Registered command whose live binding renders as a trailing shortcut. */
   command?: CommandId;
   destructive?: boolean;
   icon?: ReactNode;
   id: string;
+  /** Ad-hoc combo (e.g. "Delete") when no registered command should be shown. */
+  keys?: string;
   keywords?: string[];
   label: string;
   onSelect: () => void;

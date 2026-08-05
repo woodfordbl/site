@@ -30,6 +30,7 @@ import { CanvasMenuProvider } from "@/components/canvas/canvas-menu-context.tsx"
 import { CanvasMenuRoot } from "@/components/canvas/canvas-menu-root.tsx";
 import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
+import { DatabaseBlockDeleteDialog } from "@/components/canvas/database-block-delete-dialog.tsx";
 import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
@@ -56,7 +57,10 @@ import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageReposition } from "@/hooks/use-page-reposition.ts";
 import { publishCanvasDevtoolsState } from "@/lib/canvas/canvas-devtools-store.ts";
-import { isNonCanvasEditableFocused } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
+import {
+  handleSelectAllBlocksKeyDown,
+  isNonCanvasEditableFocused,
+} from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 import { resolveDuplicateRowTargetFromFocus } from "@/lib/canvas/duplicate-row-target.ts";
 import { getPageLastEditRecordedAt } from "@/lib/canvas/page-edit-history.ts";
 import {
@@ -66,6 +70,7 @@ import {
   resolveDropTargetFromPointer,
   resolveTopLevelInsertEdge,
 } from "@/lib/canvas/resolve-drop-target.ts";
+import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import {
   getLastDatabaseViewEditRecordedAt,
   getLastSessionUndoKind,
@@ -73,6 +78,8 @@ import {
   tryRedoDatabaseViewEdit,
   tryUndoDatabaseViewEdit,
 } from "@/lib/databases/database-view-edit-history.ts";
+import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
+import { resolveDeletedDatabaseIds } from "@/lib/databases/resolve-database-block-deletion.ts";
 import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import { cloneNodeWithFieldValues } from "@/lib/dnd/drag-image.ts";
@@ -102,6 +109,8 @@ interface PageCanvasEditorProps {
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
+  /** Left-edge anchor for top-level rows (default: the page title text). */
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }
 
 /** HTML5 drag channel for canvas rows. */
@@ -166,6 +175,13 @@ function measureCanvasRowDragPreview(
 
 type CanvasEditorState = ReturnType<typeof useCanvasEditor>;
 
+interface PendingDatabaseDelete {
+  /** Databases the pending delete removes (distinct, in document order). */
+  databaseIds: string[];
+  /** Removes the canvas rows once the delete is confirmed. */
+  deleteRows: () => void;
+}
+
 function CanvasOverclickListener({
   scrollRootRef,
 }: {
@@ -183,6 +199,7 @@ function PageCanvasEditorBody({
   isNarrowViewport,
   serverPage,
   titleSlot,
+  topLevelBlockAlign,
 }: {
   coverSlot?: ReactNode;
   editor: CanvasEditorState;
@@ -191,6 +208,7 @@ function PageCanvasEditorBody({
   isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
   const useFullPanelWidth = resolveUseFullPanelCanvasWidth({
@@ -259,21 +277,53 @@ function PageCanvasEditorBody({
     string | null
   >(null);
 
+  // Deleting a `database` block deletes the workspace database it renders, so
+  // it confirms first and then runs the same cascade as the sidebar delete.
+  const [pendingDatabaseDelete, setPendingDatabaseDelete] =
+    useState<PendingDatabaseDelete | null>(null);
+
+  // Latest-value ref: reading selection at event time keeps the delete
+  // callbacks identity-stable, so selecting a block never re-renders every row.
+  const selectedRowIdsRef = useRef(editor.selectedRowIds);
+  selectedRowIdsRef.current = editor.selectedRowIds;
+
   const deleteSelection = useCallback(() => {
-    runAfterBlockActionsMenuClose(editor.deleteSelection);
-  }, [editor.deleteSelection, runAfterBlockActionsMenuClose]);
+    const databaseIds = resolveDeletedDatabaseIds(
+      editor.getRows(),
+      selectedRowIdsRef.current
+    );
+    runAfterBlockActionsMenuClose(() => {
+      if (databaseIds.length > 0) {
+        setPendingDatabaseDelete({
+          databaseIds,
+          deleteRows: editor.deleteSelection,
+        });
+        return;
+      }
+      editor.deleteSelection();
+    });
+  }, [editor.deleteSelection, editor.getRows, runAfterBlockActionsMenuClose]);
 
   const deleteRow = useCallback(
     (rowId: string) => {
+      const rows = editor.getRows();
       const nestedPageId = resolveNestedSubpageDeletion(
-        editor.getRows(),
+        rows,
         rowId,
         pages,
         currentPageId
       );
+      const databaseIds = resolveDeletedDatabaseIds(rows, [rowId]);
       runAfterBlockActionsMenuClose(() => {
         if (nestedPageId) {
           setPendingPageDeletePageId(nestedPageId);
+          return;
+        }
+        if (databaseIds.length > 0) {
+          setPendingDatabaseDelete({
+            databaseIds,
+            deleteRows: () => editor.deleteRow(rowId),
+          });
           return;
         }
         editor.deleteRow(rowId);
@@ -296,6 +346,21 @@ function PageCanvasEditorBody({
     }
     setPendingPageDeletePageId(null);
   }, [dispatchPage, pendingPageDeletePageId]);
+
+  // Rows first (they may include non-database blocks), then the entity cascade,
+  // which also strips linked views of the same database on other pages.
+  const handleConfirmDatabaseDelete = useCallback(() => {
+    setPendingDatabaseDelete(null);
+    if (!pendingDatabaseDelete) {
+      return;
+    }
+    pendingDatabaseDelete.deleteRows();
+    deleteDatabasesEverywhere({
+      databaseIds: pendingDatabaseDelete.databaseIds,
+      dispatchPage,
+      pages,
+    });
+  }, [dispatchPage, pages, pendingDatabaseDelete]);
 
   const hasSelection = editor.selectedRowIds.length > 0;
 
@@ -348,7 +413,9 @@ function PageCanvasEditorBody({
       event.preventDefault();
       editor.redoEdit();
     },
-    "select-all-blocks": editor.selectAll,
+    "select-all-blocks": (event) => {
+      handleSelectAllBlocksKeyDown(event, editor.selectAll);
+    },
     "copy-blocks": () => {
       if (hasSelection) {
         editor.copySelection().catch(() => undefined);
@@ -590,6 +657,7 @@ function PageCanvasEditorBody({
                   </DragOverlay>
                   <CanvasRowDndBridge>
                     <PageContentLayoutProvider
+                      topLevelBlockAlign={topLevelBlockAlign}
                       useFullPanelWidth={useFullPanelWidth}
                     >
                       <div className="relative flex flex-col max-md:flex-none md:min-h-0 md:flex-1 md:overflow-hidden">
@@ -603,6 +671,11 @@ function PageCanvasEditorBody({
                             // document is the scroller, so this is normal flow and
                             // body/html `overscroll-behavior: none` owns chain control.
                             "relative flex flex-col max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overscroll-contain",
+                            // While a marquee drag is active (`data-canvas-marquee`
+                            // from useCanvasMarquee) the cursor stays the default
+                            // arrow everywhere under the scroll root, overriding
+                            // field I-beams and gutter grab cursors for the drag.
+                            "[&[data-canvas-marquee]_*]:cursor-default",
                             isCoarsePrimaryPointer
                               ? pageCanvasTouchScrollClassName
                               : pageCanvasMobileScrollClassName
@@ -616,14 +689,20 @@ function PageCanvasEditorBody({
                           {coverSlot}
                           {/* Header + body share one block wrapper so `position: sticky` on
                               the header slot is not a direct flex child of this scroll
-                              region (sticky breaks when the flex item is only header-tall). */}
-                          <div className="min-w-0">
+                              region (sticky breaks when the flex item is only header-tall).
+                              `min-h-[90vh]` + flex grow stretch the drop zone through the
+                              empty space below the last block so overclick / native drops
+                              still hit `data-canvas-drop-zone`. */}
+                          <div className="flex min-h-[90vh] min-w-0 flex-1 flex-col">
                             {headerSlot}
                             <div
-                              className={pageContentColumnClassName({
-                                fullWidth,
-                                isNarrowViewport,
-                              })}
+                              className={cn(
+                                pageContentColumnClassName({
+                                  fullWidth,
+                                  isNarrowViewport,
+                                }),
+                                "flex flex-1 flex-col"
+                              )}
                             >
                               {titleSlot}
                               <CanvasDropZone
@@ -648,6 +727,13 @@ function PageCanvasEditorBody({
                           onCancel={() => setPendingPageDeletePageId(null)}
                           onConfirm={handleConfirmPageDelete}
                           pageId={pendingPageDeletePageId}
+                        />
+                        <DatabaseBlockDeleteDialog
+                          databaseIds={
+                            pendingDatabaseDelete?.databaseIds ?? null
+                          }
+                          onCancel={() => setPendingDatabaseDelete(null)}
+                          onConfirm={handleConfirmDatabaseDelete}
                         />
                       </div>
                     </PageContentLayoutProvider>
@@ -745,6 +831,7 @@ export function PageCanvasEditor({
   pageHasLocalDraft,
   serverPage,
   titleSlot,
+  topLevelBlockAlign,
 }: PageCanvasEditorProps) {
   const editor = useCanvasEditor(serverPage, pageHasLocalDraft);
 
@@ -759,6 +846,7 @@ export function PageCanvasEditor({
           isNarrowViewport={isNarrowViewport}
           serverPage={serverPage}
           titleSlot={titleSlot}
+          topLevelBlockAlign={topLevelBlockAlign}
         />
       </BlockActionsMenuProvider>
     </CanvasMenuProvider>

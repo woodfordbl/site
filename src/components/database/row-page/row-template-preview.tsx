@@ -81,6 +81,7 @@ export function RowTemplatePreviewBody({
             showProperties={!chrome.panelMode}
           />
         }
+        topLevelBlockAlign={chrome.topLevelBlockAlign}
       />
     </div>
   );

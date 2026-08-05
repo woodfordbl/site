@@ -1,4 +1,5 @@
 import { useBlockGutterMenu } from "@/components/canvas/block-gutter-menu/block-gutter-menu-context.tsx";
+import { DropdownMenuSeparator } from "@/components/ui/dropdown-menu.tsx";
 import { useLocalBlockTimestamps } from "@/db/queries/use-local-block-timestamps.ts";
 import { formatRelativeTime } from "@/lib/pages/format-relative-time.ts";
 
@@ -21,15 +22,18 @@ export function BlockGutterMenuTimestamps() {
   }
 
   return (
-    <div className="space-y-1.5 px-2 py-2">
-      <TimestampRow
-        label="Added"
-        value={createdAt ? formatRelativeTime(createdAt) : "Unknown"}
-      />
-      <TimestampRow
-        label="Last edited"
-        value={updatedAt ? formatRelativeTime(updatedAt) : "Unknown"}
-      />
-    </div>
+    <>
+      <DropdownMenuSeparator />
+      <div className="space-y-1.5 px-2 py-2">
+        <TimestampRow
+          label="Added"
+          value={createdAt ? formatRelativeTime(createdAt) : "Unknown"}
+        />
+        <TimestampRow
+          label="Last edited"
+          value={updatedAt ? formatRelativeTime(updatedAt) : "Unknown"}
+        />
+      </div>
+    </>
   );
 }
