@@ -15,6 +15,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
@@ -25,6 +26,7 @@ interface PageListRowDropdownProps {
   isFavorite: boolean;
   menuActionRef: RefObject<HTMLButtonElement | null>;
   onChangeIcon: () => void;
+  onCopyLink: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
   onMoveTo: (parentId: string | null) => void;
@@ -43,6 +45,7 @@ export function PageListRowDropdown({
   isFavorite,
   menuActionRef,
   onChangeIcon,
+  onCopyLink,
   onDelete,
   onDuplicate,
   onMoveTo,
@@ -63,6 +66,7 @@ export function PageListRowDropdown({
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
       canDelete,
+      onCopyLink,
       onDelete,
       onDuplicate,
       onEditTemplate,
@@ -100,6 +104,7 @@ export function PageListRowDropdown({
       />
       <DropdownMenuContent
         align="start"
+        className={standardActionMenuWidthClassName}
         onKeyDownCapture={onMenuKeyDown}
         side="bottom"
       >
@@ -108,6 +113,7 @@ export function PageListRowDropdown({
           canResetToRemote={canResetToRemote}
           isFavorite={isFavorite}
           onChangeIcon={onChangeIcon}
+          onCopyLink={onCopyLink}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
           onEditTemplate={onEditTemplate}

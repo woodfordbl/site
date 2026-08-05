@@ -1026,3 +1026,32 @@
 .cn-drawer-menu-group [data-menu-card-break] {
   background-color: transparent;
 }
+
+/*
+ * Menu separators must never paint as leading, trailing, or adjacent bands.
+ * Call sites often pair an unconditional <Separator /> with a section that
+ * returns null; React Fragments add no DOM node, so sibling selectors see the
+ * real layout and suppress the orphans. Covers dropdown, context, and drawer
+ * presentations of the shared menu primitives.
+ */
+[data-slot="dropdown-menu-separator"]:first-child,
+[data-slot="context-menu-separator"]:first-child,
+[data-menu-card-break]:first-child {
+  display: none;
+}
+
+[data-slot="dropdown-menu-separator"] + [data-slot="dropdown-menu-separator"],
+[data-slot="context-menu-separator"] + [data-slot="context-menu-separator"],
+[data-menu-card-break] + [data-menu-card-break] {
+  display: none;
+}
+
+[data-slot="dropdown-menu-separator"]:not(
+  :has(~ :not([data-slot="dropdown-menu-separator"]))
+),
+[data-slot="context-menu-separator"]:not(
+  :has(~ :not([data-slot="context-menu-separator"]))
+),
+[data-menu-card-break]:not(:has(~ :not([data-menu-card-break]))) {
+  display: none;
+}

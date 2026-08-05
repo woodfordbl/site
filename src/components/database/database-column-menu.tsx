@@ -20,7 +20,6 @@ import {
   IconTextWrap,
   IconTrash,
 } from "@tabler/icons-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { format as formatDate } from "date-fns/format";
 import {
   type KeyboardEvent,
@@ -72,7 +71,6 @@ import {
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
-import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -95,6 +93,11 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import {
+  MenuIconRenameInput,
+  shouldCancelMenuCloseForIconPicker,
+} from "@/components/ui/menu-icon-rename-input.tsx";
+import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
 import {
   addDatabaseField,
@@ -112,7 +115,6 @@ import {
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import { compareManualOrder } from "@/lib/databases/row-sort.ts";
-import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import {
   type DatabaseAggregateFn,
   type DatabaseDateFormat,
@@ -207,6 +209,7 @@ function stopMenuKeys(
 interface ColumnRenameInputProps {
   draftName: string;
   field: DatabaseField;
+  iconPickerOpen: boolean;
   /**
    * Blur commit for hosts without a menu-close commit path (the settings
    * menu's per-property submenu). The column menu itself commits on menu
@@ -214,72 +217,53 @@ interface ColumnRenameInputProps {
    */
   onCommit?: () => void;
   onDraftNameChange: (name: string) => void;
-  /** Opens the field icon picker (page-breadcrumb pattern: icon button beside the name). */
-  onIconClick: () => void;
-  onIconIntent?: () => void;
+  onIconPickerOpenChange: (open: boolean) => void;
+  onIconRemove: () => void;
+  onIconSelect: (icon: string) => void;
   onSubmit: () => void;
 }
 
-/** Autofocused rename row: icon button + name input (same layout as page crumb editors). */
+/** Autofocused rename row: leading field-icon picker + name, type label below. */
 function ColumnRenameInput({
   draftName,
   field,
+  iconPickerOpen,
   onCommit,
   onDraftNameChange,
-  onIconClick,
-  onIconIntent,
+  onIconPickerOpenChange,
+  onIconRemove,
+  onIconSelect,
   onSubmit,
 }: ColumnRenameInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Mounted only while the menu is open — steal focus from the popup after
-  // Base UI's initial focus pass (same rAF pattern as the action search).
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-
   const FieldIcon = resolveFieldIcon(field);
+  const synced = isSyncedField(field);
 
   return (
-    <div className="flex items-center gap-1.5 p-1 pb-2">
-      <Button
-        aria-label={`Change icon for ${field.name}`}
-        className="shrink-0 text-muted-foreground"
-        onClick={onIconClick}
-        onPointerEnter={onIconIntent}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        <FieldIcon className="size-4 stroke-[1.5px]" />
-      </Button>
-      <InputGroup className="h-8 pointer-coarse:h-10 min-w-0 flex-1">
-        <InputGroupInput
-          aria-label="Property name"
-          autoComplete="off"
-          onBlur={onCommit}
-          onChange={(event) => {
-            onDraftNameChange(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            stopMenuKeys(event);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onSubmit();
-            }
-          }}
-          placeholder="Property name"
-          ref={inputRef}
-          value={draftName}
-        />
-      </InputGroup>
-    </div>
+    <>
+      <MenuIconRenameInput
+        ariaLabelIcon={`Change icon for ${field.name}`}
+        ariaLabelName="Property name"
+        draftName={draftName}
+        fallbackIcon={<FieldIcon className="size-4 stroke-[1.5px]" />}
+        icon={field.icon}
+        iconPickerOpen={iconPickerOpen}
+        onCommit={onCommit}
+        onDraftNameChange={onDraftNameChange}
+        onIconPickerOpenChange={onIconPickerOpenChange}
+        onIconRemove={onIconRemove}
+        onIconSelect={onIconSelect}
+        onSubmit={onSubmit}
+        placeholder="Property name"
+      />
+      <DropdownMenuGroup>
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <span className="min-w-0 truncate">
+            {FIELD_TYPE_DEFS[field.type].label}
+          </span>
+          {synced ? <SyncedFieldBadge /> : null}
+        </DropdownMenuLabel>
+      </DropdownMenuGroup>
+    </>
   );
 }
 
@@ -792,6 +776,7 @@ export function DatabasePropertyEditItems({
   onRequestClose,
 }: DatabasePropertyEditItemsProps): ReactNode {
   const [draftName, setDraftName] = useState(field.name);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const synced = isSyncedField(field);
   const hasPropertyConfig = showsEditPropertySubmenu(field, synced);
 
@@ -807,22 +792,21 @@ export function DatabasePropertyEditItems({
       <ColumnRenameInput
         draftName={draftName}
         field={field}
+        iconPickerOpen={iconPickerOpen}
         onCommit={commitRename}
         onDraftNameChange={setDraftName}
-        onIconClick={() => undefined}
+        onIconPickerOpenChange={setIconPickerOpen}
+        onIconRemove={() => {
+          updateDatabaseField(databaseId, field.id, { icon: undefined });
+        }}
+        onIconSelect={(icon) => {
+          updateDatabaseField(databaseId, field.id, { icon });
+        }}
         onSubmit={() => {
           commitRename();
           onRequestClose();
         }}
       />
-      <DropdownMenuGroup>
-        <DropdownMenuLabel className="flex items-center gap-2">
-          <span className="min-w-0 truncate">
-            {FIELD_TYPE_DEFS[field.type].label}
-          </span>
-          {synced ? <SyncedFieldBadge /> : null}
-        </DropdownMenuLabel>
-      </DropdownMenuGroup>
       {hasPropertyConfig || !synced ? <DropdownMenuSeparator /> : null}
       {hasPropertyConfig ? (
         <EditPropertySubmenu
@@ -921,11 +905,8 @@ export function DatabaseColumnMenu({
   const showViewActions = actions === "all";
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(field.name);
-  // The picker opens anchored to the header cell after the menu closes —
-  // same controlled `hideTrigger` pattern as the sidebar "Change icon".
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const queryClient = useQueryClient();
   const config = view.config;
   const viewId = view.id;
 
@@ -937,16 +918,35 @@ export function DatabaseColumnMenu({
   }, [databaseId, draftName, field.id, field.name]);
 
   const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
+    (
+      nextOpen: boolean,
+      eventDetails?: {
+        cancel: () => void;
+        event: Event;
+        reason: string;
+      }
+    ) => {
+      if (
+        shouldCancelMenuCloseForIconPicker(
+          nextOpen,
+          iconPickerOpen,
+          eventDetails
+        )
+      ) {
+        return;
+      }
+
       if (nextOpen) {
         setDraftName(field.name);
+        setIconPickerOpen(false);
       } else {
         // Closing commits a pending rename (covers outside click / Escape).
         commitRename();
+        setIconPickerOpen(false);
       }
       setOpen(nextOpen);
     },
-    [commitRename, field.name]
+    [commitRename, field.name, iconPickerOpen]
   );
 
   useEffect(() => {
@@ -1038,217 +1038,189 @@ export function DatabaseColumnMenu({
   };
 
   return (
-    <>
-      <DropdownMenu onOpenChange={handleOpenChange} open={open}>
-        <DropdownMenuTrigger
-          render={
-            <button
-              className={triggerClassName}
-              ref={triggerRef}
-              type="button"
-            />
-          }
-        >
-          {children}
-          {parseError ? (
-            <span
-              className="ml-auto inline-flex shrink-0 text-(--block-text-yellow)"
-              title={`Formula error: ${parseError}`}
-            >
-              <IconAlertTriangle aria-hidden className="size-3.5" />
-              <span className="sr-only">Formula error: {parseError}</span>
-            </span>
-          ) : null}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-64 min-w-64">
-          <ColumnRenameInput
-            draftName={draftName}
+    <DropdownMenu onOpenChange={handleOpenChange} open={open}>
+      <DropdownMenuTrigger
+        render={
+          <button className={triggerClassName} ref={triggerRef} type="button" />
+        }
+      >
+        {children}
+        {parseError ? (
+          <span
+            className="ml-auto inline-flex shrink-0 text-(--block-text-yellow)"
+            title={`Formula error: ${parseError}`}
+          >
+            <IconAlertTriangle aria-hidden className="size-3.5" />
+            <span className="sr-only">Formula error: {parseError}</span>
+          </span>
+        ) : null}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className={standardActionMenuWidthClassName}>
+        <ColumnRenameInput
+          draftName={draftName}
+          field={field}
+          iconPickerOpen={iconPickerOpen}
+          onDraftNameChange={setDraftName}
+          onIconPickerOpenChange={setIconPickerOpen}
+          onIconRemove={() => {
+            writeIcon(undefined);
+          }}
+          onIconSelect={writeIcon}
+          onSubmit={() => {
+            commitRename();
+            setOpen(false);
+          }}
+        />
+        {showsEditPropertySubmenu(field, synced) ? (
+          <EditPropertySubmenu
+            databaseId={databaseId}
+            displayOnly={synced}
             field={field}
-            onDraftNameChange={setDraftName}
-            onIconClick={() => {
+            onRequestClose={() => {
               handleOpenChange(false);
-              setIconPickerOpen(true);
-            }}
-            onIconIntent={() => {
-              ensurePageIconPickerReady(queryClient);
-            }}
-            onSubmit={() => {
-              commitRename();
-              setOpen(false);
             }}
           />
-          <DropdownMenuGroup>
-            <DropdownMenuLabel className="flex items-center gap-2">
-              <span className="min-w-0 truncate">
-                {FIELD_TYPE_DEFS[field.type].label}
-              </span>
-              {synced ? <SyncedFieldBadge /> : null}
-            </DropdownMenuLabel>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          {showsEditPropertySubmenu(field, synced) ? (
-            <EditPropertySubmenu
-              databaseId={databaseId}
-              displayOnly={synced}
+        ) : null}
+        {synced ? null : (
+          <ChangeTypeSubmenu databaseId={databaseId} field={field} />
+        )}
+        {showViewActions ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                applySort("asc");
+              }}
+            >
+              <IconSortAscending />
+              Sort ascending
+              <ItemCheck
+                checked={sortEntry?.direction === "asc"}
+                priority={fieldSortPriority}
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                applySort("desc");
+              }}
+            >
+              <IconSortDescending />
+              Sort descending
+              <ItemCheck
+                checked={sortEntry?.direction === "desc"}
+                priority={fieldSortPriority}
+              />
+            </DropdownMenuItem>
+            {isGroupableField(field) ? (
+              <DropdownMenuItem onClick={toggleGroupBy}>
+                <IconLayoutGrid />
+                Group by
+                <ItemCheck checked={isGroupedByField} />
+              </DropdownMenuItem>
+            ) : null}
+            <CalculateSubmenu
+              activeFn={config.calculations?.[field.id]}
               field={field}
-              onRequestClose={() => {
-                handleOpenChange(false);
+              onSelect={(fn) => {
+                patchConfig({
+                  calculations: calculationsWithSelection(
+                    config.calculations,
+                    field.id,
+                    fn
+                  ),
+                });
               }}
             />
-          ) : null}
-          {synced ? null : (
-            <ChangeTypeSubmenu databaseId={databaseId} field={field} />
-          )}
-          {showViewActions ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  applySort("asc");
-                }}
-              >
-                <IconSortAscending />
-                Sort ascending
-                <ItemCheck
-                  checked={sortEntry?.direction === "asc"}
-                  priority={fieldSortPriority}
-                />
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  applySort("desc");
-                }}
-              >
-                <IconSortDescending />
-                Sort descending
-                <ItemCheck
-                  checked={sortEntry?.direction === "desc"}
-                  priority={fieldSortPriority}
-                />
-              </DropdownMenuItem>
-              {isGroupableField(field) ? (
-                <DropdownMenuItem onClick={toggleGroupBy}>
-                  <IconLayoutGrid />
-                  Group by
-                  <ItemCheck checked={isGroupedByField} />
-                </DropdownMenuItem>
-              ) : null}
-              <CalculateSubmenu
-                activeFn={config.calculations?.[field.id]}
-                field={field}
-                onSelect={(fn) => {
-                  patchConfig({
-                    calculations: calculationsWithSelection(
-                      config.calculations,
-                      field.id,
-                      fn
-                    ),
-                  });
-                }}
-              />
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  patchConfig({
-                    pinnedFieldIds: frozenHere ? undefined : freezePrefix,
-                  });
-                }}
-              >
-                {frozenHere ? <IconPinnedOff /> : <IconPinned />}
-                {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isPrimary}
-                onClick={() => {
-                  updateDatabaseView(databaseId, viewId, {
-                    visibleFieldIds: visibleFieldIdsAfterHide(
-                      view.visibleFieldIds,
-                      displayFieldIds,
-                      field.id
-                    ),
-                  });
-                }}
-              >
-                <IconEyeOff />
-                Hide property
-              </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                patchConfig({
+                  pinnedFieldIds: frozenHere ? undefined : freezePrefix,
+                });
+              }}
+            >
+              {frozenHere ? <IconPinnedOff /> : <IconPinned />}
+              {frozenHere ? "Unfreeze columns" : "Freeze up to this column"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isPrimary}
+              onClick={() => {
+                updateDatabaseView(databaseId, viewId, {
+                  visibleFieldIds: visibleFieldIdsAfterHide(
+                    view.visibleFieldIds,
+                    displayFieldIds,
+                    field.id
+                  ),
+                });
+              }}
+            >
+              <IconEyeOff />
+              Hide property
+            </DropdownMenuItem>
+            <DropdownMenuSwitchItem
+              checked={config.wrapFieldIds?.includes(field.id) ?? false}
+              onCheckedChange={() => {
+                patchConfig({
+                  wrapFieldIds: toggledWrapFieldIds(
+                    config.wrapFieldIds,
+                    field.id
+                  ),
+                });
+              }}
+            >
+              <IconTextWrap />
+              Wrap content
+            </DropdownMenuSwitchItem>
+            {isPrimary ? (
               <DropdownMenuSwitchItem
-                checked={config.wrapFieldIds?.includes(field.id) ?? false}
-                onCheckedChange={() => {
-                  patchConfig({
-                    wrapFieldIds: toggledWrapFieldIds(
-                      config.wrapFieldIds,
-                      field.id
-                    ),
-                  });
+                checked={config.showPageIcons !== false}
+                onCheckedChange={(next) => {
+                  patchConfig({ showPageIcons: next });
                 }}
               >
-                <IconTextWrap />
-                Wrap content
+                <IconFileText />
+                Show page icon
               </DropdownMenuSwitchItem>
-              {isPrimary ? (
-                <DropdownMenuSwitchItem
-                  checked={config.showPageIcons !== false}
-                  onCheckedChange={(next) => {
-                    patchConfig({ showPageIcons: next });
-                  }}
-                >
-                  <IconFileText />
-                  Show page icon
-                </DropdownMenuSwitchItem>
-              ) : null}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  insertField("left");
-                }}
-              >
-                <IconColumnInsertLeft />
-                Insert left
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  insertField("right");
-                }}
-              >
-                <IconColumnInsertRight />
-                Insert right
-              </DropdownMenuItem>
-            </>
-          ) : null}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              duplicateDatabaseField(databaseId, field.id);
-            }}
-          >
-            <IconCopy />
-            Duplicate property
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={isPrimary || synced}
-            onClick={() => {
-              removeDatabaseField(databaseId, field.id);
-            }}
-            variant="destructive"
-          >
-            <IconTrash />
-            Delete property
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <GlyphIconPicker
-        anchor={triggerRef}
-        ariaLabel={`Change icon for ${field.name}`}
-        hideTrigger
-        icon={field.icon}
-        onOpenChange={setIconPickerOpen}
-        onRemove={() => {
-          writeIcon(undefined);
-        }}
-        onSelect={writeIcon}
-        open={iconPickerOpen}
-      />
-    </>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                insertField("left");
+              }}
+            >
+              <IconColumnInsertLeft />
+              Insert left
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                insertField("right");
+              }}
+            >
+              <IconColumnInsertRight />
+              Insert right
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            duplicateDatabaseField(databaseId, field.id);
+          }}
+        >
+          <IconCopy />
+          Duplicate property
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={isPrimary || synced}
+          onClick={() => {
+            removeDatabaseField(databaseId, field.id);
+          }}
+          variant="destructive"
+        >
+          <IconTrash />
+          Delete property
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

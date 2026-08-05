@@ -40,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
 import {
   SidebarMenuButton,
   SidebarMenuItem,
@@ -56,6 +57,7 @@ import { useSavePageAsTemplate } from "@/hooks/use-save-page-as-template.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import type { PageRow } from "@/lib/pages/build-page-tree.ts";
+import { copyPageLink } from "@/lib/pages/copy-page-link.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
 import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
@@ -119,6 +121,7 @@ interface PageListRowLinkProps {
   menuActionRef: React.RefObject<HTMLButtonElement | null>;
   navTarget: PageNavTarget;
   onChangeIcon: () => void;
+  onCopyLink: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
   onMoveTo: (parentId: string | null) => void;
@@ -148,6 +151,7 @@ function PageListRowLink({
   menuActionRef,
   navTarget,
   onChangeIcon,
+  onCopyLink,
   onDelete,
   onDuplicate,
   onMoveTo,
@@ -268,6 +272,7 @@ function PageListRowLink({
           isFavorite={isFavorite}
           menuActionRef={menuActionRef}
           onChangeIcon={onChangeIcon}
+          onCopyLink={onCopyLink}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
           onMoveTo={onMoveTo}
@@ -551,6 +556,11 @@ export function PageListItem({
     toggleFavorite(page.id);
   }, [page.id, toggleFavorite]);
 
+  // Copies straight from the click so the write keeps its user activation.
+  const handleCopyLink = useCallback(() => {
+    copyPageLink(page.id, pages).catch(() => undefined);
+  }, [page.id, pages]);
+
   const handleDelete = useCallback(() => {
     dispatch({ type: "page.delete", pageId: page.id });
     setDeleteOpen(false);
@@ -581,6 +591,7 @@ export function PageListItem({
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
       canDelete: canDeleteRow,
+      onCopyLink: handleCopyLink,
       onDelete: () => setDeleteOpen(true),
       onDuplicate: handleDuplicate,
       onEditTemplate: handleEditTemplate,
@@ -615,6 +626,7 @@ export function PageListItem({
       menuActionRef={menuActionRef}
       navTarget={navTarget}
       onChangeIcon={openChangeIcon}
+      onCopyLink={handleCopyLink}
       onDelete={() => setDeleteOpen(true)}
       onDuplicate={handleDuplicate}
       onMoveTo={handleMoveTo}
@@ -640,12 +652,16 @@ export function PageListItem({
       <ContextMenuTrigger className="block w-full">
         {rowContent}
       </ContextMenuTrigger>
-      <ContextMenuContent onKeyDownCapture={onMenuKeyDown}>
+      <ContextMenuContent
+        className={standardActionMenuWidthClassName}
+        onKeyDownCapture={onMenuKeyDown}
+      >
         <PageRowMenuContent
           canDelete={canDeleteRow}
           canResetToRemote={canResetToRemote}
           isFavorite={isFavorite}
           onChangeIcon={openChangeIcon}
+          onCopyLink={handleCopyLink}
           onDelete={() => setDeleteOpen(true)}
           onDuplicate={handleDuplicate}
           onEditTemplate={handleEditTemplate}

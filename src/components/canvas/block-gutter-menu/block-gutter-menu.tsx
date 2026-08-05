@@ -12,10 +12,7 @@ import { BlockGutterMenuRowActions } from "@/components/canvas/block-gutter-menu
 import { BlockGutterMenuTableActions } from "@/components/canvas/block-gutter-menu/block-gutter-menu-table-actions.tsx";
 import { BlockGutterMenuTimestamps } from "@/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx";
 import { BlockGutterMenuTurnInto } from "@/components/canvas/block-gutter-menu/block-gutter-menu-turn-into.tsx";
-import {
-  DropdownMenuGroup,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu.tsx";
+import { DropdownMenuGroup } from "@/components/ui/dropdown-menu.tsx";
 
 function BlockGutterMenuContent() {
   const { actionItems, menuOpen, rowId } = useBlockGutterMenu();
@@ -33,7 +30,6 @@ function BlockGutterMenuContent() {
         <BlockGutterMenuEmbedActions />
         <BlockGutterMenuTableActions />
         <BlockGutterMenuRowActions />
-        <DropdownMenuSeparator />
         <BlockGutterMenuTimestamps />
       </ActionMenuSearchSection>
     </DropdownMenuGroup>
