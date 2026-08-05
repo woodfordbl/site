@@ -52,6 +52,11 @@ async function fetchHtml(url: URL): Promise<string> {
   }
 }
 
+/**
+ * Server-side Open Graph / Twitter unfurl for embed bookmarks and inline link
+ * previews. Rejects private/local URLs; caps response size and fetch time.
+ * @see docs/architecture/canvas-editor.md
+ */
 export const unfurlEmbedUrl = createServerFn({ method: "POST" })
   .validator((data: unknown) => unfurlInputSchema.parse(data))
   .handler(async ({ data }) => {
