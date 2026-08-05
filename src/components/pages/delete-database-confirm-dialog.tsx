@@ -13,18 +13,45 @@ import {
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 
 interface DeleteDatabaseConfirmDialogProps {
-  databaseName: string;
+  databaseNames: string[];
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }
 
+const CASCADE_COPY =
+  "Linked database blocks on every page will be removed, along with the database's own page.";
+
+function describeDatabases(names: string[]): {
+  description: string;
+  title: string;
+} {
+  const subject =
+    names.length === 0
+      ? "This database"
+      : names.map((name) => `"${name}"`).join(", ");
+
+  if (names.length > 1) {
+    return {
+      description: `${subject} and all of their rows will be permanently deleted. ${CASCADE_COPY}`,
+      title: `Delete ${names.length} databases?`,
+    };
+  }
+
+  return {
+    description: `${subject} and all of its rows will be permanently deleted. ${CASCADE_COPY}`,
+    title: "Delete database?",
+  };
+}
+
 /**
- * Shared "Delete database?" confirmation for sidebar overflow and context
- * menus. Enter confirms; Escape cancels (same as Cancel).
+ * Shared "Delete database?" confirmation for the sidebar overflow and context
+ * menus and for deleting a `database` block from a page canvas. Enter
+ * confirms; Escape cancels (same as Cancel). Multiple names describe a canvas
+ * selection that spans more than one linked database.
  */
 export function DeleteDatabaseConfirmDialog({
-  databaseName,
+  databaseNames,
   onConfirm,
   onOpenChange,
   open,
@@ -32,6 +59,8 @@ export function DeleteDatabaseConfirmDialog({
   const handleCancel = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
+
+  const { description, title } = describeDatabases(databaseNames);
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -43,10 +72,8 @@ export function DeleteDatabaseConfirmDialog({
         showCloseButton={false}
       >
         <DialogHeader>
-          <DialogTitle>Delete database?</DialogTitle>
-          <DialogDescription>
-            {`"${databaseName}" and all of its rows will be permanently deleted. Linked database blocks will show as not found.`}
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <ConfirmDialogFooter
           confirmLabel="Delete"
