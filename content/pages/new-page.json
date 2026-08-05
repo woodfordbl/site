@@ -1,0 +1,98 @@
+{
+  "id": "4cc3d2e9-1c31-4235-bd8c-aca12078e4f4",
+  "slug": "/new-page",
+  "title": "New Page",
+  "icon": "tabler:IconHome2Filled",
+  "parentId": null,
+  "createdAt": "2026-07-31T03:24:25.090Z",
+  "updatedAt": "2026-07-31T03:24:25.091Z",
+  "blocks": [
+    {
+      "id": "99129f7e-2ade-4fdb-8fb6-3b2a20e5a23b",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "e04c7695-cd2c-447f-ac47-1058c86f9773",
+      "parentId": null,
+      "indent": 0,
+      "type": "divider",
+      "props": {}
+    },
+    {
+      "id": "d49c89b6-e206-421c-8475-e7764dad5c91",
+      "parentId": null,
+      "type": "text",
+      "props": {
+        "text": "This is a new head",
+        "marks": []
+      }
+    },
+    {
+      "id": "734b14fb-b027-4c5c-8a65-96099136425d",
+      "parentId": null,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "0acf1cf1-db11-4e61-8d88-ab732b320304",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "84522619-567e-451c-802f-40935934bfb4",
+      "parentId": null,
+      "indent": 0,
+      "type": "database",
+      "props": {
+        "databaseId": "cd0ede4c-4b9c-4290-8d69-a3214266b5e4"
+      }
+    },
+    {
+      "id": "2f196405-866e-40b6-be51-fe68ab176e07",
+      "parentId": null,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "940a06bb-f31e-448b-9001-0b21990b0f1f",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "bcf0d8d8-f7c9-4c63-a4cf-ac67481cfc4e",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "\n",
+        "marks": []
+      }
+    },
+    {
+      "id": "3db8eb17-5490-40f0-98fa-412fd0ff1e9f",
+      "parentId": null,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    }
+  ],
+  "fullWidth": true
+}
