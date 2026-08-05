@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,18 @@ import type { Block } from "@/lib/schemas/block.ts";
 // identical markup after paint) and needs the full app provider tree — stub it.
 vi.mock("@/components/canvas/page-canvas-editor.tsx", () => ({
   PageCanvasEditor: () => <div data-testid="page-canvas-editor" />,
+}));
+
+// OG warm-up needs live collections; orthogonal to the flash guarantee.
+vi.mock("@/components/canvas/warm-inline-link-previews-effect.tsx", () => ({
+  WarmInlineLinkPreviewsEffect: () => null,
+}));
+
+// Inline page-link chrome reads the page catalog via the root loader.
+// Flash tests only need plain text block content.
+vi.mock("@/hooks/use-page-list.ts", () => ({
+  useMergedPageListItems: () => ({ catalog: [], pages: [] }),
+  usePageListItems: () => ({ pages: [] }),
 }));
 
 const PAGE_ID = "home";
@@ -68,17 +81,22 @@ function seedLocalDraft() {
 }
 
 function canvas(pageHasLocalDraft: boolean) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return (
-    <DeviceLayoutProvider
-      initialHints={{ isCoarsePrimaryPointer: false, isNarrowViewport: false }}
-    >
-      <PageCanvas
-        fullWidth={false}
-        isNarrowViewport={false}
-        pageHasLocalDraft={pageHasLocalDraft}
-        serverPage={serverPage}
-      />
-    </DeviceLayoutProvider>
+    <QueryClientProvider client={queryClient}>
+      <DeviceLayoutProvider
+        initialHints={{ isCoarsePrimaryPointer: false, isNarrowViewport: false }}
+      >
+        <PageCanvas
+          fullWidth={false}
+          isNarrowViewport={false}
+          pageHasLocalDraft={pageHasLocalDraft}
+          serverPage={serverPage}
+        />
+      </DeviceLayoutProvider>
+    </QueryClientProvider>
   );
 }
 
