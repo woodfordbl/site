@@ -1,4 +1,8 @@
 import type { CanvasClipboardPayload } from "@/lib/canvas/clipboard.ts";
+import {
+  extractPrimaryPastedUrl,
+  hasNonCollapsedCanvasFieldSelection,
+} from "@/lib/canvas/paste-url.ts";
 import { isCanvasTextField } from "@/lib/editor/caret-navigation.ts";
 import { handleBlockModifierArrowKeyDown } from "@/lib/editor/field-keydown.ts";
 import { extractMediaFiles } from "@/lib/media/paste-media.ts";
@@ -22,6 +26,12 @@ export interface CanvasKeyboardHandlers extends CanvasSelectionArrowHandlers {
 export interface CanvasPasteHandlers extends CanvasKeyboardHandlers {
   /** Stores pasted image/video files as assets and inserts media blocks. */
   insertMediaFiles: (files: File[]) => void;
+  /**
+   * Same-origin page URL paste. Returns true when claimed as a `pageLink` block
+   * (empty-row convert or insert-after). Returns false for inline page links so
+   * the rich-text field can insert a `link` mark with `pageId`.
+   */
+  tryPastePageLink?: (url: string) => boolean;
 }
 
 function isBlockFieldFocused(event?: KeyboardEvent): boolean {
@@ -70,6 +80,25 @@ export function handleCanvasSelectionArrowKeyDown(
   return handled;
 }
 
+/**
+ * Canvas-level Mod+A. Block selection replaces the browser's document select
+ * all, so the keystroke is claimed and any live range is dropped — otherwise a
+ * native text highlight stays painted under the block selection chrome. With a
+ * block field focused the keystroke belongs to that field's own select all.
+ */
+export function handleSelectAllBlocksKeyDown(
+  event: KeyboardEvent,
+  selectAll: () => void
+): void {
+  if (isBlockFieldFocused(event)) {
+    return;
+  }
+
+  event.preventDefault();
+  window.getSelection()?.removeAllRanges();
+  selectAll();
+}
+
 export function handleCanvasPasteEvent(
   event: ClipboardEvent,
   handlers: CanvasPasteHandlers
@@ -82,6 +111,22 @@ export function handleCanvasPasteEvent(
     event.preventDefault();
     event.stopPropagation();
     handlers.insertMediaFiles(mediaFiles);
+    return;
+  }
+
+  // Same-origin page URLs: empty text rows convert to a `pageLink` block;
+  // non-empty rich-text fields insert an inline page link (tryPastePageLink
+  // returns false so RichTextArea handles it). A non-collapsed selection always
+  // wraps as an inline link instead.
+  const primaryUrl = extractPrimaryPastedUrl(event.clipboardData);
+  if (
+    primaryUrl &&
+    handlers.tryPastePageLink &&
+    !hasNonCollapsedCanvasFieldSelection() &&
+    handlers.tryPastePageLink(primaryUrl)
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
     return;
   }
 

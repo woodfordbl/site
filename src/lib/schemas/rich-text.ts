@@ -25,6 +25,11 @@ export const inlineMarkSchema = z.object({
   end: z.number().int().min(0),
   /** Destination for `type: "link"` marks; unused by the styling marks. */
   href: z.string().optional(),
+  /**
+   * When set on a `link` mark, the run is an inline page link (icon + title +
+   * arrow) targeting this workspace page id rather than a plain URL.
+   */
+  pageId: z.string().optional(),
 });
 
 export type InlineMark = z.infer<typeof inlineMarkSchema>;
