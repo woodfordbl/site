@@ -120,6 +120,14 @@ export function RowTemplateDefaultsList({
   );
 }
 
+/**
+ * True when the template header has default-value rows to show — the
+ * under-title properties band renders only for non-primary fields.
+ */
+export function hasRowTemplateDefaultFields(database: LocalDatabase): boolean {
+  return database.fields.some((field) => field.id !== database.primaryFieldId);
+}
+
 export interface RowTemplateTitleSectionProps {
   database: LocalDatabase;
   /** Trailing affordance in the properties block (rail expand button). */
@@ -141,9 +149,7 @@ export function RowTemplateTitleSection({
   const primaryField = database.fields.find(
     (field) => field.id === database.primaryFieldId
   );
-  const hasPanelFields = database.fields.some(
-    (field) => field.id !== database.primaryFieldId
-  );
+  const hasPanelFields = hasRowTemplateDefaultFields(database);
 
   const defaultName = database.rowDefaults?.[database.primaryFieldId];
 

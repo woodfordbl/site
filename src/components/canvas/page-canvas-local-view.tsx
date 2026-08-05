@@ -3,6 +3,7 @@ import { type ReactNode, useMemo } from "react";
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
 import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
+import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 
 interface PageCanvasLocalViewProps {
   coverSlot?: ReactNode;
@@ -11,6 +12,7 @@ interface PageCanvasLocalViewProps {
   isNarrowViewport: boolean;
   serverPage: ServerPageSource;
   titleSlot?: ReactNode;
+  topLevelBlockAlign?: TopLevelBlockAlign;
 }
 
 /**
@@ -25,6 +27,7 @@ export function PageCanvasLocalView({
   isNarrowViewport,
   serverPage,
   titleSlot,
+  topLevelBlockAlign,
 }: PageCanvasLocalViewProps) {
   const blocks = useMemo(() => {
     const bootstrap = readBootstrapPageBlocks(serverPage.id);
@@ -40,6 +43,7 @@ export function PageCanvasLocalView({
       isNarrowViewport={isNarrowViewport}
       pageId={serverPage.id}
       titleSlot={titleSlot}
+      topLevelBlockAlign={topLevelBlockAlign}
     />
   );
 }

@@ -1166,7 +1166,15 @@ export function setDatabaseRowPageId(rowId: string, pageId: string): void {
   commitDatabaseTransaction(tx);
 }
 
-/** Delete a database definition and all of its rows in one transaction. */
+/**
+ * Delete a database definition and all of its rows in one transaction.
+ *
+ * Callers must also run `deleteDatabaseBlockReferences` so every linked
+ * `database` block across pages is removed (mirrors the page-link cascade on
+ * `page.delete`). Hub/row pages already render a not-found shell when the
+ * definition is gone.
+ * @see docs/architecture/databases.md
+ */
 export function deleteDatabase(databaseId: string): void {
   const database = localDatabasesCollection.get(databaseId);
   const rowIds = localDatabaseRowsCollection.toArray

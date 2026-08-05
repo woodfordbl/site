@@ -247,6 +247,7 @@ export function useBlockGutterMenuItems(
       keywords: ["remove", "trash"],
       icon: <IconTrash />,
       destructive: true,
+      keys: "Delete",
       onSelect: handleDelete,
     });
 

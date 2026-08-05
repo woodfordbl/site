@@ -26,15 +26,14 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
 import { localBlocksCollection } from "@/db/collections/local-collections.ts";
-import {
-  deleteDatabase,
-  setDatabaseIcon,
-} from "@/db/queries/database-collection-ops.ts";
+import { setDatabaseIcon } from "@/db/queries/database-collection-ops.ts";
 import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalDatabasesSnapshot } from "@/hooks/use-local-databases.ts";
+import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { databaseHubNavTarget } from "@/lib/databases/database-page-paths.ts";
+import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -76,6 +75,7 @@ export function DatabaseSidebarRow({
   const isClient = useIsClient();
   const databases = useLocalDatabasesSnapshot();
   const { pages } = useMergedPageListItems();
+  const dispatchPage = usePageDispatch(pages);
   const currentDatabase = databases.find((entry) => entry.id === database.id);
   const navTarget = currentDatabase
     ? databaseHubNavTarget(
@@ -136,13 +136,17 @@ export function DatabaseSidebarRow({
   );
 
   const handleDelete = useCallback(() => {
-    deleteDatabase(database.id);
+    deleteDatabasesEverywhere({
+      databaseIds: [database.id],
+      dispatchPage,
+      pages,
+    });
     setDeleteOpen(false);
 
     if (active) {
       navigate({ to: "/" });
     }
-  }, [active, database.id, navigate]);
+  }, [active, database.id, dispatchPage, navigate, pages]);
 
   const navigateToDatabase = useCallback(() => {
     if (navTarget) {
@@ -240,7 +244,7 @@ export function DatabaseSidebarRow({
 
       {isClient ? (
         <DeleteDatabaseConfirmDialog
-          databaseName={database.name}
+          databaseNames={[database.name]}
           onConfirm={handleDelete}
           onOpenChange={setDeleteOpen}
           open={deleteOpen}

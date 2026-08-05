@@ -14,6 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
 import { cn } from "@/lib/utils.ts";
 
 interface BlockActionsMenuContextValue {
@@ -110,6 +111,7 @@ function BlockActionsMenuContent({
     <DropdownMenuContent
       align={align}
       className={cn(
+        standardActionMenuWidthClassName,
         "duration-0 data-closed:animate-none data-closed:duration-0",
         className
       )}

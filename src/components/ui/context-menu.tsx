@@ -140,7 +140,7 @@ function ContextMenuContent({
       >
         <ContextMenuPrimitive.Popup
           className={cn(
-            "overlay-popover-surface z-50 max-h-(--available-height) w-56 min-w-56 overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 data-closed:overflow-hidden",
+            "overlay-popover-surface z-50 max-h-(--available-height) w-56 min-w-0 max-w-(--available-width) overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 data-closed:overflow-hidden",
             className
           )}
           data-slot="context-menu-content"
@@ -474,6 +474,8 @@ function ContextMenuSeparator({
   if (presentation === "drawer") {
     return <DrawerMenuSeparator />;
   }
+  // Orphan / adjacent separators are suppressed in styles.css — see
+  // `[data-slot=context-menu-separator]` rules (same as DropdownMenuSeparator).
   return (
     <ContextMenuPrimitive.Separator
       className={cn("-mx-1 my-1 h-px bg-border", className)}
