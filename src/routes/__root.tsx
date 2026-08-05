@@ -149,6 +149,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       className={isDark ? "dark" : undefined}
       data-chart-palette={siteAppearance.appearance.chartPalette}
       data-page-text-scale={siteAppearance.appearance.textScale}
+      data-tooltip-style={siteAppearance.appearance.tooltipStyle}
       lang="en"
     >
       <head>

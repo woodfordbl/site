@@ -102,7 +102,7 @@ export function SequenceShortcut({
 /**
  * Renders a keyboard shortcut as platform-aware `<Kbd>` tokens. Pass `command`
  * to render the user's current binding (reactive, DB-synced) or `keys` for a
- * one-off combo. Drops straight into tooltips with outline `Kbd` keycaps.
+ * one-off combo. Drops straight into tooltips with filled muted `Kbd` keycaps.
  *
  * @example
  * Toggle sidebar <Shortcut command="toggle-sidebar" />
