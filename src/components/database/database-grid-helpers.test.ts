@@ -382,6 +382,18 @@ describe("isInlineEditableField", () => {
     expect(isSyncedField({ sourceKey: "name" })).toBe(true);
     expect(isSyncedField({})).toBe(false);
   });
+
+  it("allows live-markets Symbol and Asset class identity fields", () => {
+    expect(
+      isInlineEditableField({ ...field("text"), sourceKey: "symbol" })
+    ).toBe(true);
+    expect(
+      isInlineEditableField({
+        ...field("select"),
+        sourceKey: "assetClass",
+      })
+    ).toBe(true);
+  });
 });
 
 describe("nextEditTarget", () => {

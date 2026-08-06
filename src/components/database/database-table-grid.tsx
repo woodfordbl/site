@@ -82,7 +82,7 @@ import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area.tsx";
 import {
   addDatabaseField,
-  insertDatabaseRow,
+  addDatabaseRow,
   updateDatabaseCell,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
@@ -342,9 +342,12 @@ interface DatabaseTableGridProps {
    * renders the flat ungrouped grid. Collapsed groups render header-only.
    */
   groups?: readonly DatabaseRowGroup[] | null;
+  /** Stocks and Crypto connector — enables New row on an otherwise synced table. */
+  isLiveMarkets?: boolean;
   /**
    * Connector-synced database: the "New row" strip is hidden (rows come from
-   * the source). Local columns stay first-class — add-field remains enabled.
+   * the source) — except Stocks/Crypto (`isLiveMarkets`), which adds pending
+   * watchlist rows. Local columns stay first-class — add-field remains enabled.
    */
   isSyncedDatabase?: boolean;
   mode: "view" | "edit";
@@ -369,6 +372,7 @@ export function DatabaseTableGrid({
   fillHeight = false,
   groups = null,
   isSyncedDatabase = false,
+  isLiveMarkets = false,
   mode,
   now,
   pinnedFields,
@@ -844,13 +848,17 @@ export function DatabaseTableGrid({
   }, []);
 
   const groupByFieldId = view.groupBy?.fieldId;
+  const canAddRow = mode === "edit" && (!isSyncedDatabase || isLiveMarkets);
   const handleAddRowToGroup = useCallback(
     (group: DatabaseRowGroup) => {
       // Insert after the group's last row so manual-order views keep the new
       // row inside the bucket; seed the group-by cell so sorted/grouped
       // views bucket it correctly (the empty group inserts a blank row).
       const lastRow = group.rows.at(-1);
-      const row = insertDatabaseRow(databaseId, { after: lastRow?.id });
+      const row = addDatabaseRow(databaseId, { after: lastRow?.id });
+      if (!row) {
+        return;
+      }
       let values = row.values;
       if (groupByFieldId !== undefined && group.value !== null) {
         updateDatabaseCell(row.id, groupByFieldId, group.value);
@@ -1073,7 +1081,7 @@ export function DatabaseTableGrid({
                           onToggle={handleToggleGroup}
                           rowIndex={virtualRow.index}
                           selectColumnPinned={selectColumnPinned}
-                          showAddRow={mode === "edit" && !isSyncedDatabase}
+                          showAddRow={canAddRow}
                           showMenu={mode === "edit"}
                           top={virtualRow.start}
                         />
@@ -1131,7 +1139,7 @@ export function DatabaseTableGrid({
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
-        {mode === "edit" && !isSyncedDatabase ? (
+        {canAddRow ? (
           <DatabaseAddRow
             databaseId={databaseId}
             onRowInserted={handleRowInserted}

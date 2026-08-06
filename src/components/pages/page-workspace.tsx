@@ -36,6 +36,7 @@ import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
+import { pageContentColumnClassName } from "@/lib/pages/page-content-layout.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import type { PageSnapshotDescriptor } from "@/lib/pages/page-snapshot-types.ts";
 import {
@@ -57,6 +58,12 @@ import { cn } from "@/lib/utils.ts";
 
 type PageWorkspaceProps = {
   pageHasLocalDraft: boolean;
+  /**
+   * Replaces {@link PageCanvas} while keeping the page shell (sidebar, header,
+   * cover, footer). Used by database hub pages so the body is a full-page
+   * `DatabaseTableView` with no block editor.
+   */
+  bodySlot?: ReactNode;
   /**
    * Wraps the canvas scroll region only — e.g. the row-template editor's
    * properties rail splits content + side panel while the page header stays
@@ -165,6 +172,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 
   const body = (
     <PageWorkspaceBody
+      bodySlot={props.bodySlot}
       contentWrapper={props.contentWrapper}
       initialBlocks={initialBlocks}
       page={page}
@@ -191,6 +199,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 }
 
 function PageWorkspaceBody({
+  bodySlot,
   contentWrapper,
   initialBlocks,
   page,
@@ -200,6 +209,7 @@ function PageWorkspaceBody({
   titleSlot,
   topLevelBlockAlign,
 }: {
+  bodySlot?: ReactNode;
   contentWrapper?: (content: ReactNode) => ReactNode;
   initialBlocks: Page["blocks"];
   page: Page | LocalPage;
@@ -282,49 +292,43 @@ function PageWorkspaceBody({
       </div>
     ) : null;
 
+  const coverSlot = headerImage ? (
+    <PageCover
+      className={
+        isCoarsePrimaryPointer
+          ? pageCoverTouchClassName
+          : pageCoverMobileClassName
+      }
+      headerImage={headerImage}
+      key={headerImage.src}
+    />
+  ) : null;
+
+  const resolvedTitleSlot = resolveWorkspaceTitleSlot({
+    bodySlot,
+    page,
+    pageHasLocalDraft,
+    titleSeed,
+    titleSlot,
+  });
+
   const canvasContent = (
-    <div
-      className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none",
-        typographyClassName
-      )}
-      {...typographyDataProps}
-    >
-      <PageCanvas
-        coverSlot={
-          headerImage ? (
-            <PageCover
-              className={
-                isCoarsePrimaryPointer
-                  ? pageCoverTouchClassName
-                  : pageCoverMobileClassName
-              }
-              headerImage={headerImage}
-              key={headerImage.src}
-            />
-          ) : null
-        }
-        fullWidth={fullWidth}
-        headerSlot={headerSlot}
-        isNarrowViewport={isNarrowViewport}
-        key={`${page.id}:${canvasNonce}`}
-        pageHasLocalDraft={pageHasLocalDraft}
-        serverPage={toServerPageSource(page, initialBlocks)}
-        titleSlot={
-          titleSlot ?? (
-            <PageTitleEditor
-              icon={page.icon}
-              pageHasLocalDraft={pageHasLocalDraft}
-              pageId={page.id}
-              seed={titleSeed}
-              slug={page.slug}
-              title={page.title}
-            />
-          )
-        }
-        topLevelBlockAlign={topLevelBlockAlign}
-      />
-    </div>
+    <WorkspaceMainContent
+      bodySlot={bodySlot}
+      canvasNonce={canvasNonce}
+      coverSlot={coverSlot}
+      fullWidth={fullWidth}
+      headerSlot={headerSlot}
+      initialBlocks={initialBlocks}
+      isCoarsePrimaryPointer={isCoarsePrimaryPointer}
+      isNarrowViewport={isNarrowViewport}
+      page={page}
+      pageHasLocalDraft={pageHasLocalDraft}
+      titleSlot={resolvedTitleSlot}
+      topLevelBlockAlign={topLevelBlockAlign}
+      typographyClassName={typographyClassName}
+      typographyDataProps={typographyDataProps}
+    />
   );
 
   const canvasRegion = (
@@ -392,5 +396,156 @@ function PageWorkspaceBody({
         </div>
       </VersionPreviewProvider>
     </PageCoverProvider>
+  );
+}
+
+/**
+ * Canvas-free page body used by database hubs: same cover / header / title /
+ * scroll chrome as {@link PageCanvas}, but the caller's `bodySlot` fills the
+ * content column (typically a `fillHeight` database table view).
+ */
+function PageWorkspaceCustomBody({
+  bodySlot,
+  coverSlot,
+  fullWidth,
+  headerSlot,
+  isCoarsePrimaryPointer,
+  isNarrowViewport,
+  titleSlot,
+}: {
+  bodySlot: ReactNode;
+  coverSlot: ReactNode;
+  fullWidth: boolean;
+  headerSlot: ReactNode;
+  isCoarsePrimaryPointer: boolean;
+  isNarrowViewport: boolean;
+  titleSlot: ReactNode;
+}) {
+  // Same insets as the canvas scroll tokens, but desktop uses overflow-hidden
+  // so fillHeight tables get a bounded flex host (mobile keeps document scroll).
+  const scrollInsetClassName = isCoarsePrimaryPointer
+    ? "no-scrollbar pr-4 pb-[50vh] pl-3 md:px-12 md:pt-16 md:pb-12"
+    : "no-scrollbar pr-4 pb-[50vh] pl-7 md:px-12 md:pt-16 md:pb-12";
+
+  return (
+    <div className="relative flex flex-col max-md:flex-none md:min-h-0 md:flex-1 md:overflow-hidden">
+      <div
+        className={cn(
+          "relative flex flex-col max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden md:overscroll-contain",
+          scrollInsetClassName
+        )}
+        data-scroll-restoration-id="page-canvas-scroll"
+        {...(fullWidth || isNarrowViewport
+          ? { "data-page-full-width": "" }
+          : {})}
+      >
+        {coverSlot}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col max-md:min-h-[90vh]">
+          {headerSlot}
+          <div
+            className={cn(
+              pageContentColumnClassName({ fullWidth, isNarrowViewport }),
+              "flex min-h-0 flex-1 flex-col gap-4"
+            )}
+          >
+            {titleSlot}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {bodySlot}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function resolveWorkspaceTitleSlot(options: {
+  bodySlot?: ReactNode;
+  page: Page | LocalPage;
+  pageHasLocalDraft: boolean;
+  titleSeed: { blocks: Page["blocks"]; serverBaselineHash: string } | undefined;
+  titleSlot?: ReactNode;
+}): ReactNode {
+  if (options.titleSlot !== undefined) {
+    return options.titleSlot;
+  }
+  if (options.bodySlot) {
+    return null;
+  }
+  return (
+    <PageTitleEditor
+      icon={options.page.icon}
+      pageHasLocalDraft={options.pageHasLocalDraft}
+      pageId={options.page.id}
+      seed={options.titleSeed}
+      slug={options.page.slug}
+      title={options.page.title}
+    />
+  );
+}
+
+function WorkspaceMainContent({
+  bodySlot,
+  canvasNonce,
+  coverSlot,
+  fullWidth,
+  headerSlot,
+  initialBlocks,
+  isCoarsePrimaryPointer,
+  isNarrowViewport,
+  page,
+  pageHasLocalDraft,
+  titleSlot,
+  topLevelBlockAlign,
+  typographyClassName,
+  typographyDataProps,
+}: {
+  bodySlot?: ReactNode;
+  canvasNonce: number;
+  coverSlot: ReactNode;
+  fullWidth: boolean;
+  headerSlot: ReactNode;
+  initialBlocks: Page["blocks"];
+  isCoarsePrimaryPointer: boolean;
+  isNarrowViewport: boolean;
+  page: Page | LocalPage;
+  pageHasLocalDraft: boolean;
+  titleSlot: ReactNode;
+  topLevelBlockAlign?: TopLevelBlockAlign;
+  typographyClassName?: string;
+  typographyDataProps: Record<string, unknown>;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none",
+        typographyClassName
+      )}
+      {...typographyDataProps}
+    >
+      {bodySlot ? (
+        <PageWorkspaceCustomBody
+          bodySlot={bodySlot}
+          coverSlot={coverSlot}
+          fullWidth={fullWidth}
+          headerSlot={headerSlot}
+          isCoarsePrimaryPointer={isCoarsePrimaryPointer}
+          isNarrowViewport={isNarrowViewport}
+          titleSlot={titleSlot}
+        />
+      ) : (
+        <PageCanvas
+          coverSlot={coverSlot}
+          fullWidth={fullWidth}
+          headerSlot={headerSlot}
+          isNarrowViewport={isNarrowViewport}
+          key={`${page.id}:${canvasNonce}`}
+          pageHasLocalDraft={pageHasLocalDraft}
+          serverPage={toServerPageSource(page, initialBlocks)}
+          titleSlot={titleSlot}
+          topLevelBlockAlign={topLevelBlockAlign}
+        />
+      )}
+    </div>
   );
 }

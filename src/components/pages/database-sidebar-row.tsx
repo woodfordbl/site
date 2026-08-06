@@ -2,8 +2,16 @@
 
 import { IconDatabase, IconTrash } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+} from "react";
 
+import { DndContext } from "@/components/dnd/dnd-surface.tsx";
+import { useDragSource } from "@/components/dnd/use-dnd.ts";
 import { DatabaseSidebarRowMenu } from "@/components/pages/database-sidebar-row-menu.tsx";
 import { DeleteDatabaseConfirmDialog } from "@/components/pages/delete-database-confirm-dialog.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
@@ -32,6 +40,7 @@ import { useIsClient } from "@/hooks/use-is-client.ts";
 import { useLocalDatabasesSnapshot } from "@/hooks/use-local-databases.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { databaseListDragSourceId } from "@/lib/databases/database-list-drag.ts";
 import { databaseHubNavTarget } from "@/lib/databases/database-page-paths.ts";
 import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
@@ -46,7 +55,11 @@ export interface DatabaseSidebarRowEntry {
 interface DatabaseSidebarRowProps {
   database: DatabaseSidebarRowEntry;
   depth?: number;
+  /** When true (hosted page-list rows), enable nest-under-page drag. */
+  draggable?: boolean;
 }
+
+const DATABASE_LIST_DRAG_HOLD_MS = 50;
 
 function DatabaseSidebarRowIcon({ icon }: { icon?: string }): ReactNode {
   return (
@@ -64,11 +77,13 @@ function DatabaseSidebarRowIcon({ icon }: { icon?: string }): ReactNode {
  * Shared sidebar row for a workspace database. Used by the workspace
  * **Databases** section and hosted-database child rows under pages. Click
  * opens its host-page slug path; right-click and the row ⋯ menu share rename +
- * icon (InputGroup) and Delete.
+ * icon (InputGroup) and Delete. Hosted rows inside the page-list
+ * {@link DndSurface} can be drag-nested under another page to rehost.
  */
 export function DatabaseSidebarRow({
   database,
   depth = 0,
+  draggable = false,
 }: DatabaseSidebarRowProps): ReactNode {
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,6 +91,14 @@ export function DatabaseSidebarRow({
   const databases = useLocalDatabasesSnapshot();
   const { pages } = useMergedPageListItems();
   const dispatchPage = usePageDispatch(pages);
+  const dndContext = useContext(DndContext);
+  const canDrag = draggable && dndContext != null;
+  const dragSourceId = databaseListDragSourceId(database.id);
+  const { getSourceProps, isDragging, showGrabbing, shouldSuppressClick } =
+    useDragSource({
+      id: dragSourceId,
+      holdMs: canDrag ? DATABASE_LIST_DRAG_HOLD_MS : undefined,
+    });
   const currentDatabase = databases.find((entry) => entry.id === database.id);
   const navTarget = currentDatabase
     ? databaseHubNavTarget(
@@ -149,11 +172,14 @@ export function DatabaseSidebarRow({
   }, [active, database.id, dispatchPage, navigate, pages]);
 
   const navigateToDatabase = useCallback(() => {
+    if (shouldSuppressClick()) {
+      return;
+    }
     if (navTarget) {
       navigate(navTarget);
     }
     (document.activeElement as HTMLElement | null)?.blur();
-  }, [navigate, navTarget]);
+  }, [navigate, navTarget, shouldSuppressClick]);
 
   const writeIcon = useCallback(
     (icon: string | undefined) => {
@@ -165,13 +191,23 @@ export function DatabaseSidebarRow({
   const rowBody = (
     <div
       className={cn(
-        "group/database-row relative w-full",
-        "focus-within:[&_[data-database-sidebar-row-content]]:pr-8 hover:[&_[data-database-sidebar-row-content]]:bg-sidebar-accent hover-none:[&_[data-database-sidebar-row-content]]:pr-8 hover:[&_[data-database-sidebar-row-content]]:pr-8 hover:[&_[data-database-sidebar-row-content]]:text-sidebar-accent-foreground has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-database-sidebar-row-content]]:bg-sidebar-accent has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-database-sidebar-row-content]]:pr-8 has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-database-sidebar-row-content]]:text-sidebar-accent-foreground"
+        "group/database-row relative w-full [&_*]:[-webkit-user-drag:none]",
+        showGrabbing && "cursor-grabbing",
+        isDragging && "text-muted-foreground",
+        !isDragging &&
+          "focus-within:[&_[data-database-sidebar-row-content]]:pr-8 hover:[&_[data-database-sidebar-row-content]]:bg-sidebar-accent hover-none:[&_[data-database-sidebar-row-content]]:pr-8 hover:[&_[data-database-sidebar-row-content]]:pr-8 hover:[&_[data-database-sidebar-row-content]]:text-sidebar-accent-foreground has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-database-sidebar-row-content]]:bg-sidebar-accent has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-database-sidebar-row-content]]:pr-8 has-[[data-sidebar=menu-action][aria-expanded=true]]:[&_[data-database-sidebar-row-content]]:text-sidebar-accent-foreground"
       )}
+      data-database-sidebar-depth={depth}
+      data-database-sidebar-row-id={database.id}
       data-reveal-group=""
+      {...(canDrag ? getSourceProps() : {})}
     >
       <SidebarMenuButton
-        className={pageListRowPaddingLeft(depth)}
+        className={cn(
+          pageListRowPaddingLeft(depth),
+          isDragging &&
+            "text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
+        )}
         data-database-sidebar-row-content=""
         isActive={active}
         onClick={navigateToDatabase}
@@ -182,15 +218,17 @@ export function DatabaseSidebarRow({
           {database.name}
         </span>
       </SidebarMenuButton>
-      <DatabaseSidebarRowMenu
-        databaseId={database.id}
-        icon={database.icon}
-        menuActionRef={menuActionRef}
-        name={database.name}
-        onDelete={() => {
-          setDeleteOpen(true);
-        }}
-      />
+      {isDragging ? null : (
+        <DatabaseSidebarRowMenu
+          databaseId={database.id}
+          icon={database.icon}
+          menuActionRef={menuActionRef}
+          name={database.name}
+          onDelete={() => {
+            setDeleteOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 

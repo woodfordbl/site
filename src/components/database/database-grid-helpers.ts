@@ -1,3 +1,4 @@
+import { isLiveMarketIdentityField } from "@/lib/databases/live-markets-instruments.ts";
 import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
 import type {
   DatabaseAggregateFn,
@@ -425,7 +426,9 @@ export function resolveColumnDropSpot(
 /**
  * Whether a field's values are written by the connector sync engine (it
  * carries the provider-side `sourceKey`). Synced fields are read-only in the
- * grid — the next sync pass would overwrite any local edit.
+ * grid — the next sync pass would overwrite any local edit — except
+ * live-markets Symbol / Asset class identity fields, which rewrite the
+ * watchlist and trigger a resync of derived columns.
  */
 export function isSyncedField(
   field: Pick<DatabaseField, "sourceKey">
@@ -439,16 +442,20 @@ export function isSyncedField(
  * select/multi-select/date open popover editors. Checkbox is the exception —
  * it toggles in place with no editing state. Formula cells are computed at
  * read time and strictly read-only (edit the expression via the column
- * menu). Synced fields (`sourceKey`) are never editable — this is the single
- * edit-mode gate, so excluded cells also drop out of keyboard Tab/Enter
- * navigation; view-mode rendering is unaffected.
+ * menu). Synced fields (`sourceKey`) are never editable — except live-markets
+ * Symbol / Asset class (`isLiveMarketIdentityField`), which stay editable so
+ * the watchlist can change from the grid. This is the single edit-mode gate,
+ * so excluded cells also drop out of keyboard Tab/Enter navigation; view-mode
+ * rendering is unaffected.
  */
 export function isInlineEditableField(field: DatabaseField): boolean {
-  return (
-    field.type !== "checkbox" &&
-    field.type !== "formula" &&
-    !isSyncedField(field)
-  );
+  if (field.type === "checkbox" || field.type === "formula") {
+    return false;
+  }
+  if (isLiveMarketIdentityField(field)) {
+    return true;
+  }
+  return !isSyncedField(field);
 }
 
 /** One virtualized grid item: a group header row or a data row. */

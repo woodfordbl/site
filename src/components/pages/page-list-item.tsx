@@ -20,7 +20,6 @@ import {
   PageRowMenuContent,
   rowMenuCommandHandlers,
 } from "@/components/pages/page-row-menu-content.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
 import {
   Collapsible,
@@ -60,7 +59,6 @@ import type { PageRow } from "@/lib/pages/build-page-tree.ts";
 import { copyPageLink } from "@/lib/pages/copy-page-link.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { duplicatePage } from "@/lib/pages/duplicate-page.ts";
-import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 import { canDeletePage } from "@/lib/pages/page-delete.ts";
 import { pageListRowPaddingLeft } from "@/lib/pages/page-list-preview-depth.ts";
 import { persistPageIcon } from "@/lib/pages/persist-page-icon.ts";
@@ -431,7 +429,6 @@ export function PageListItem({
   const dispatch = usePageDispatch(pages);
   const reposition = usePageReposition(pages, dispatch);
   const navigate = useNavigate();
-  const { setTemplatePageId } = useTemplatePage();
   const activePage = useActivePageRef();
   const saveAsTemplate = useSavePageAsTemplate(page);
   const localPage = useLocalPageById(page.id);
@@ -573,10 +570,6 @@ export function PageListItem({
     }
   }, [activePage, dispatch, navigate, page.id, page.slug, pages]);
 
-  const handleEditTemplate = useCallback(() => {
-    openTemplateEditor(navigate, setTemplatePageId);
-  }, [navigate, setTemplatePageId]);
-
   // Entering inline rename swaps the row (and its ⋯ button) out. Close both the
   // controlled context menu and the icon picker first so neither lingers anchored
   // to an unmounted element on top of the rename field.
@@ -586,7 +579,7 @@ export function PageListItem({
     startRenaming();
   }, [setIconPickerOpen, startRenaming]);
 
-  // Single-key shortcuts (F/D/Backspace/E/T) are live only while this right-click
+  // Single-key shortcuts (F/D/Backspace/T) are live only while this right-click
   // menu is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
@@ -594,7 +587,6 @@ export function PageListItem({
       onCopyLink: handleCopyLink,
       onDelete: () => setDeleteOpen(true),
       onDuplicate: handleDuplicate,
-      onEditTemplate: handleEditTemplate,
       onSaveAsTemplate: saveAsTemplate.request,
       onToggleFavorite: handleToggleFavorite,
     })
@@ -664,7 +656,6 @@ export function PageListItem({
           onCopyLink={handleCopyLink}
           onDelete={() => setDeleteOpen(true)}
           onDuplicate={handleDuplicate}
-          onEditTemplate={handleEditTemplate}
           onMoveTo={handleMoveTo}
           onRename={handleStartRenaming}
           onResetToRemote={handleResetToRemote}

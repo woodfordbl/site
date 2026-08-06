@@ -1,7 +1,7 @@
 import { IconPlus } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
-import { insertDatabaseRow } from "@/db/queries/database-collection-ops.ts";
+import { addDatabaseRow } from "@/db/queries/database-collection-ops.ts";
 import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
 
 interface DatabaseAddRowProps {
@@ -12,7 +12,8 @@ interface DatabaseAddRowProps {
 
 /**
  * Edit-mode bottom strip: a full-width ghost "New row" button appended after
- * the grid body. Muted at rest, stronger on hover.
+ * the grid body. Muted at rest, stronger on hover. Live-markets routes through
+ * `addDatabaseRow` (pending watchlist row); capacity refusals return null.
  */
 export function DatabaseAddRow({
   databaseId,
@@ -22,8 +23,10 @@ export function DatabaseAddRow({
     <button
       className="flex h-9 w-full shrink-0 items-center gap-1.5 px-2 text-muted-foreground/70 text-sm outline-none transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground"
       onClick={() => {
-        const row = insertDatabaseRow(databaseId);
-        onRowInserted?.(row);
+        const row = addDatabaseRow(databaseId);
+        if (row) {
+          onRowInserted?.(row);
+        }
       }}
       type="button"
     >

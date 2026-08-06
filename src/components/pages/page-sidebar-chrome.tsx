@@ -334,6 +334,7 @@ export function PageSidebarChromeProvider({
     if (isCollapsed) {
       return (
         <PageSidebarHoverReveal
+          onPin={pinSidebar}
           sidebar={sidebar}
           sidebarWidthRem={sidebarWidthRem}
         >

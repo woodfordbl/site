@@ -22,10 +22,11 @@ import type { LocalBlock } from "@/lib/schemas/local-block.ts";
  * child row per hosted database (icon + name) under it in the page tree.
  * Materialized row pages are hidden from the sidebar (`databaseRowSource`),
  * so this entry is the database's navigation surface. Click opens the
- * standalone database page at `/db/$databaseId` (same as the workspace
- * Databases section). Synthetic rows only — nothing is inserted into the
- * page collections; no drag or chevron. Right-click and the row ⋯ menu
- * mirror the workspace **Databases** section via {@link DatabaseSidebarRow}.
+ * host-relative hub slug path. Synthetic rows only — nothing is inserted into
+ * the page collections. Hosted rows are drag sources inside the page-list
+ * {@link DndSurface}: drop onto a page nests the database under that host
+ * ({@link moveDatabaseHost}). Right-click and the row ⋯ menu mirror the
+ * workspace **Databases** section via {@link DatabaseSidebarRow}.
  *
  * Client-only data: the scan reads the local block/database collections, so
  * SSR paints no database rows and they appear after hydration (`useIsClient`
@@ -194,6 +195,11 @@ export function PageListDatabaseRows({
   }
 
   return entries.map((database) => (
-    <DatabaseSidebarRow database={database} depth={depth} key={database.id} />
+    <DatabaseSidebarRow
+      database={database}
+      depth={depth}
+      draggable
+      key={database.id}
+    />
   ));
 }

@@ -3,6 +3,7 @@ import { getQuery, setResponseHeader, setResponseStatus } from "nitro/h3";
 
 import {
   finnhubMarketCapFromMillions,
+  finnhubSharesFromMillions,
   normalizeFinnhubCompanyName,
 } from "@/lib/connectors/finnhub-profile.ts";
 
@@ -12,8 +13,8 @@ import {
  * "Stocks and Crypto" equity rows (and as the unwatched-refresh fallback).
  *
  * Each response entry carries live quote fields (`c`/`dp`/`t`) plus company
- * enrichment (`name`, `marketCap` in absolute currency units — Finnhub's
- * profile `marketCapitalization` is in millions and is scaled here).
+ * enrichment (`name`, absolute-unit `marketCap` and `float` / shares outstanding —
+ * Finnhub's profile millions values are scaled here).
  *
  * The Finnhub API key lives only in `FINNHUB_API_KEY` (server env) and never
  * reaches the browser — the client calls this same-origin route instead.
@@ -32,6 +33,7 @@ const HTTP_BAD_GATEWAY = 502;
 interface ProxyQuote {
   c: number;
   dp: number | null;
+  float: number | null;
   marketCap: number | null;
   name: string | null;
   symbol: string;
@@ -47,6 +49,7 @@ interface RawFinnhubQuote {
 interface RawFinnhubProfile {
   marketCapitalization?: number;
   name?: string;
+  shareOutstanding?: number;
 }
 
 function firstString(value: unknown): string {
@@ -121,6 +124,7 @@ export default defineHandler(
           t: Number(quote.t),
           name: normalizeFinnhubCompanyName(profile.name),
           marketCap: finnhubMarketCapFromMillions(profile.marketCapitalization),
+          float: finnhubSharesFromMillions(profile.shareOutstanding),
         };
       })
     );

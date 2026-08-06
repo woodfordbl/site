@@ -1,4 +1,6 @@
 import type { PageSummary } from "@/lib/content/list-pages.ts";
+import { canNestDatabaseUnder } from "@/lib/databases/can-nest-database-under.ts";
+import type { HostScanBlock } from "@/lib/databases/resolve-database-host-page.ts";
 import { resolveBand } from "@/lib/dnd/band.ts";
 import {
   assertPageCanHaveChild,
@@ -292,11 +294,16 @@ function resolveRowDropTarget(
 
 /**
  * Resolves sidebar page DnD from pointer Y (nest vs sibling bands).
+ * When `draggingDatabaseId` is set, only nest-under-page targets are
+ * returned (hosted-database rehost) — sibling reorder does not apply.
  * @see docs/architecture/pages.md#sidebar-drag-and-drop
+ * @see docs/architecture/drag-and-drop.md
  */
 export function resolvePageListDropTargetFromPointer(options: {
+  blocks?: readonly HostScanBlock[];
   clientX?: number;
   clientY: number;
+  draggingDatabaseId?: string | null;
   draggingPageId: string | null;
   navRect?: DOMRect | null;
   pages: PageSummary[];
@@ -304,8 +311,10 @@ export function resolvePageListDropTargetFromPointer(options: {
   visibleRows: FlatVisiblePageRow[];
 }): PageListDropTarget | null {
   const {
+    blocks = [],
     clientX,
     clientY,
+    draggingDatabaseId,
     draggingPageId,
     navRect,
     pages,
@@ -313,7 +322,22 @@ export function resolvePageListDropTargetFromPointer(options: {
     visibleRows,
   } = options;
 
-  if (!draggingPageId || visibleRows.length === 0) {
+  if (visibleRows.length === 0) {
+    return null;
+  }
+
+  if (draggingDatabaseId) {
+    return resolveDatabaseNestDropTarget({
+      blocks,
+      clientY,
+      databaseId: draggingDatabaseId,
+      pages,
+      rowRects,
+      visibleRows,
+    });
+  }
+
+  if (!draggingPageId) {
     return null;
   }
 
@@ -381,6 +405,49 @@ export function resolvePageListDropTargetFromPointer(options: {
     if (rowTarget) {
       return withPreviewDepth(rowTarget);
     }
+  }
+
+  return null;
+}
+
+/**
+ * Database sidebar drags only nest under a page (whole-row hit target). Sibling
+ * reorder among hosted databases is not supported — the host is derived from
+ * canvas blocks, not sidebar order.
+ */
+function resolveDatabaseNestDropTarget(options: {
+  blocks: readonly HostScanBlock[];
+  clientY: number;
+  databaseId: string;
+  pages: PageSummary[];
+  rowRects: Map<string, DOMRect>;
+  visibleRows: FlatVisiblePageRow[];
+}): PageListDropTarget | null {
+  const { blocks, clientY, databaseId, pages, rowRects, visibleRows } = options;
+
+  for (let index = visibleRows.length - 1; index >= 0; index -= 1) {
+    const row = visibleRows[index];
+    if (!row) {
+      continue;
+    }
+
+    const rect = rowRects.get(row.pageId);
+    if (!rect || clientY < rect.top || clientY > rect.bottom) {
+      continue;
+    }
+
+    if (
+      !canNestDatabaseUnder({
+        blocks,
+        databaseId,
+        pages,
+        parentPageId: row.pageId,
+      })
+    ) {
+      return null;
+    }
+
+    return { kind: "nest", parentPageId: row.pageId };
   }
 
   return null;

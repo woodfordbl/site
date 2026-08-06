@@ -15,6 +15,7 @@ import type {
   ConnectorFieldDef,
   ConnectorRow,
 } from "@/lib/connectors/types.ts";
+import { marketCapFromFloatAndPrice } from "@/lib/databases/series-values.ts";
 import type {
   DatabaseCellValue,
   LocalDatabase,
@@ -386,11 +387,38 @@ export function applyStreamTick(
   const batchByExternalId = new Map(
     connectorRows.map((row) => [row.externalId, row])
   );
+  const floatFieldId = fieldIdBySourceKey.get("float");
+  const marketCapFieldId = fieldIdBySourceKey.get("marketCap");
+  const priceFieldId = fieldIdBySourceKey.get("price");
+
   for (const [externalId, connectorRow] of batchByExternalId) {
-    const syncedValues = toSyncedValues(
-      connectorRow.values,
-      fieldIdBySourceKey
-    );
+    // Live ticks usually carry price only — recompute marketCap = float × price
+    // from the existing row's float so Market cap tracks ticks without waiting
+    // for the next poll.
+    let rowValues = connectorRow.values;
+    if (
+      marketCapFieldId &&
+      floatFieldId &&
+      priceFieldId &&
+      rowValues.marketCap === undefined
+    ) {
+      const existing = rowsByExternalId.get(externalId);
+      const price =
+        typeof rowValues.price === "number"
+          ? rowValues.price
+          : existing
+            ? existing.values[priceFieldId]
+            : null;
+      const floatShares = existing ? existing.values[floatFieldId] : null;
+      const derived = marketCapFromFloatAndPrice(
+        typeof floatShares === "number" ? floatShares : null,
+        typeof price === "number" ? price : null
+      );
+      if (derived !== null) {
+        rowValues = { ...rowValues, marketCap: derived };
+      }
+    }
+    const syncedValues = toSyncedValues(rowValues, fieldIdBySourceKey);
     const existing = rowsByExternalId.get(externalId);
     if (!existing) {
       appendOrder += ORDER_STEP;

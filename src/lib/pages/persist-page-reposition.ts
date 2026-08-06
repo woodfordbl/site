@@ -7,8 +7,7 @@ import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { PageRepositionPlan } from "@/lib/pages/reposition-page.ts";
-import { normalizePageSlug, pageSlugsEqual } from "@/lib/pages/slugify.ts";
-import { syncPageUrl } from "@/lib/pages/sync-url.ts";
+import { normalizePageSlug } from "@/lib/pages/slugify.ts";
 
 interface RepositionWriteContext {
   now: string;
@@ -98,6 +97,9 @@ function applyDescendantSlugUpdate(
 
 /**
  * Writes `page.reposition` metadata (`parentId`, `sidebarOrder`, slug) to `localPagesCollection`.
+ * Callers that need the address bar to follow a slug change (active tab on the
+ * moved page or a descendant) should navigate via TanStack Router after this
+ * write — see `resolve-slug-prefix-redirect.ts`.
  * @see docs/reference/page-commands.md#page-reposition
  */
 export function persistPageReposition(options: {
@@ -108,7 +110,6 @@ export function persistPageReposition(options: {
 }): void {
   const { plan, pages, seed, seedsByPageId } = options;
   const now = new Date().toISOString();
-  const existingPage = pages.find((page) => page.id === plan.pageId);
   const slug = normalizePageSlug(plan.slug);
   const ctx: RepositionWriteContext = {
     now,
@@ -125,10 +126,6 @@ export function persistPageReposition(options: {
 
   for (const update of plan.descendantSlugUpdates) {
     applyDescendantSlugUpdate(update, now);
-  }
-
-  if (existingPage && !pageSlugsEqual(plan.previousSlug, slug)) {
-    syncPageUrl(slug, { userPage: existingPage.routeBy === "id" });
   }
 
   schedulePageSnapshotCapture(plan.pageId);

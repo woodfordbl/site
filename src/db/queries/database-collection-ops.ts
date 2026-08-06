@@ -8,6 +8,21 @@ import {
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
+import {
+  ASSET_CLASS_EQUITY,
+  MAX_LIVE_MARKET_INSTRUMENTS,
+} from "@/lib/connectors/live-markets.ts";
+import {
+  isLiveMarketIdentityField,
+  isLiveMarketsDatabase,
+  LIVE_MARKET_ASSET_CLASS_SOURCE_KEY,
+  LIVE_MARKET_SYMBOL_SOURCE_KEY,
+  type LiveMarketIdentityFailure,
+  liveMarketFieldId,
+  planLiveMarketIdentityCommit,
+  planLiveMarketRowDelete,
+  readLiveMarketInstruments,
+} from "@/lib/databases/live-markets-instruments.ts";
 import { resolveRowDefaultValues } from "@/lib/databases/row-defaults.ts";
 import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
 import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
@@ -24,6 +39,13 @@ import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import { appToast } from "@/lib/toast/app-toast.ts";
+import {
+  TOAST_ID_LIVE_MARKET_AT_CAPACITY,
+  TOAST_ID_LIVE_MARKET_DUPLICATE_SYMBOL,
+  TOAST_ID_LIVE_MARKET_INVALID_SYMBOL,
+  TOAST_ID_LIVE_MARKET_KEEP_ONE,
+} from "@/lib/toast/toast-ids.ts";
 
 /** Below this gap between neighboring sparse orders, midpoints stop being safe. */
 const MIN_ORDER_GAP = 1e-6;
@@ -45,6 +67,8 @@ function createDatabaseTransaction(): DatabaseTransaction {
     mutationFn: async ({ transaction }) => {
       localDatabasesCollection.utils.acceptMutations(transaction);
       localDatabaseRowsCollection.utils.acceptMutations(transaction);
+      // Row/hub page icon mirrors write pages in the same tx.
+      localPagesCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },
   });
@@ -270,8 +294,198 @@ export function insertDatabaseRow(
   return row;
 }
 
+function toastLiveMarketIdentityFailure(
+  reason: LiveMarketIdentityFailure
+): void {
+  switch (reason) {
+    case "invalid-symbol":
+      appToast.error("Enter a valid symbol", {
+        id: TOAST_ID_LIVE_MARKET_INVALID_SYMBOL,
+      });
+      break;
+    case "duplicate-symbol":
+      appToast.error("Symbol already in watchlist", {
+        id: TOAST_ID_LIVE_MARKET_DUPLICATE_SYMBOL,
+      });
+      break;
+    case "at-capacity":
+      appToast.info("Maximum of 30 instruments", {
+        id: TOAST_ID_LIVE_MARKET_AT_CAPACITY,
+      });
+      break;
+    case "keep-at-least-one":
+      appToast.info("Keep at least one instrument", {
+        id: TOAST_ID_LIVE_MARKET_KEEP_ONE,
+      });
+      break;
+    default: {
+      const _exhaustive: never = reason;
+      throw new Error(`Unhandled live-market identity failure: ${_exhaustive}`);
+    }
+  }
+}
+
+/**
+ * Insert a pending Stocks/Crypto row (no `externalId` yet): seeds Asset class
+ * to equity and leaves Symbol empty for inline focus. Returns `null` when the
+ * watchlist is already at capacity (committed instruments only).
+ */
+export function insertLiveMarketRow(
+  databaseId: string,
+  options?: { after?: string }
+): LocalDatabaseRow | null {
+  const database = localDatabasesCollection.get(databaseId);
+  if (!(database && isLiveMarketsDatabase(database))) {
+    return null;
+  }
+  if (
+    readLiveMarketInstruments(database).length >= MAX_LIVE_MARKET_INSTRUMENTS
+  ) {
+    toastLiveMarketIdentityFailure("at-capacity");
+    return null;
+  }
+
+  const siblings = sortedDatabaseRows(databaseId);
+  const afterIndex = options?.after
+    ? siblings.findIndex((row) => row.id === options.after)
+    : -1;
+  const targetIndex = afterIndex >= 0 ? afterIndex + 1 : siblings.length;
+  const plan = planRowOrderAt(siblings, targetIndex);
+
+  const timestamp = nowIso();
+  const values = resolveRowDefaultValues(database);
+  const assetClassFieldId = liveMarketFieldId(
+    database,
+    LIVE_MARKET_ASSET_CLASS_SOURCE_KEY
+  );
+  if (assetClassFieldId !== undefined) {
+    values[assetClassFieldId] = ASSET_CLASS_EQUITY;
+  }
+
+  const row: LocalDatabaseRow = {
+    id: crypto.randomUUID(),
+    databaseId,
+    values,
+    order: plan.order,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    applyRowOrderRenumber(plan);
+    localDatabaseRowsCollection.insert(row);
+  });
+  commitDatabaseTransaction(tx);
+
+  return row;
+}
+
+/**
+ * Local or live-markets insert: routes Stocks/Crypto to
+ * {@link insertLiveMarketRow}, everything else to {@link insertDatabaseRow}.
+ * Returns `null` only when a live-markets insert is refused (at capacity).
+ */
+export function addDatabaseRow(
+  databaseId: string,
+  options?: { after?: string }
+): LocalDatabaseRow | null {
+  const database = localDatabasesCollection.get(databaseId);
+  if (database && isLiveMarketsDatabase(database)) {
+    return insertLiveMarketRow(databaseId, options);
+  }
+  return insertDatabaseRow(databaseId, options);
+}
+
+/**
+ * Commit Symbol and/or Asset class on a live-markets row: rewrite
+ * `source.config.instruments`, set `externalId` once a symbol is present, and
+ * let the sync engine refetch derived fields. Returns false on validation
+ * failure (toast already shown); true when the write landed or was a no-op.
+ */
+export function commitLiveMarketIdentity(
+  rowId: string,
+  patch: {
+    assetClass?: DatabaseCellValue;
+    symbol?: DatabaseCellValue;
+  }
+): boolean {
+  const row = localDatabaseRowsCollection.get(rowId);
+  if (!row) {
+    return false;
+  }
+  const database = localDatabasesCollection.get(row.databaseId);
+  if (!(database && isLiveMarketsDatabase(database))) {
+    return false;
+  }
+
+  const symbolFieldId = liveMarketFieldId(
+    database,
+    LIVE_MARKET_SYMBOL_SOURCE_KEY
+  );
+  const assetClassFieldId = liveMarketFieldId(
+    database,
+    LIVE_MARKET_ASSET_CLASS_SOURCE_KEY
+  );
+  const planned = planLiveMarketIdentityCommit({
+    assetClassFieldId,
+    assetClassPatch: patch.assetClass,
+    instruments: readLiveMarketInstruments(database),
+    row,
+    symbolFieldId,
+    symbolPatch: patch.symbol,
+  });
+  if (!planned.ok) {
+    toastLiveMarketIdentityFailure(planned.reason);
+    return false;
+  }
+
+  const { plan } = planned;
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabaseRowsCollection.update(rowId, (draft) => {
+      const nextValues = { ...draft.values };
+      if (symbolFieldId !== undefined) {
+        nextValues[symbolFieldId] = plan.symbol;
+      }
+      if (assetClassFieldId !== undefined) {
+        nextValues[assetClassFieldId] = plan.assetClass;
+      }
+      draft.values = nextValues;
+      draft.externalId = plan.nextExternalId;
+      draft.updatedAt = timestamp;
+    });
+
+    if (plan.instrumentsChanged && database.source?.kind === "connector") {
+      localDatabasesCollection.update(row.databaseId, (draft) => {
+        if (draft.source?.kind !== "connector") {
+          return;
+        }
+        const prior = toPlain(draft.source) as ConnectorDatabaseSource;
+        draft.source = {
+          ...prior,
+          kind: "connector",
+          config: {
+            ...prior.config,
+            instruments: plan.instruments,
+          },
+        };
+        draft.updatedAt = timestamp;
+      });
+    }
+  });
+
+  commitDatabaseTransaction(tx);
+  return true;
+}
+
 /**
  * Merge one cell value into `row.values` and bump the row's `updatedAt`.
+ *
+ * Live-markets Symbol / Asset class writes route through
+ * {@link commitLiveMarketIdentity} so the watchlist config stays in sync.
  *
  * A missing row is a silent no-op: the row can vanish between the editor
  * opening and the commit (sync-engine tombstone in this or another tab,
@@ -284,8 +498,23 @@ export function updateDatabaseCell(
   fieldId: string,
   value: DatabaseCellValue
 ): void {
-  if (!localDatabaseRowsCollection.get(rowId)) {
+  const row = localDatabaseRowsCollection.get(rowId);
+  if (!row) {
     return;
+  }
+
+  const database = localDatabasesCollection.get(row.databaseId);
+  if (database && isLiveMarketsDatabase(database)) {
+    const field = database.fields.find((entry) => entry.id === fieldId);
+    if (field && isLiveMarketIdentityField(field)) {
+      commitLiveMarketIdentity(
+        rowId,
+        field.sourceKey === LIVE_MARKET_SYMBOL_SOURCE_KEY
+          ? { symbol: value }
+          : { assetClass: value }
+      );
+      return;
+    }
   }
 
   const timestamp = nowIso();
@@ -308,6 +537,7 @@ export function updateDatabaseCell(
  * from the provider snapshot — so v1 disables synced-row deletion at the op
  * level. Whole-database deletion (`deleteDatabase`) still removes synced
  * rows, and the sync engine's own tombstone path never goes through here.
+ * Stocks/Crypto rows use {@link deleteLiveMarketRows} instead.
  *
  * Ids with no matching row are skipped too (stale selection, double-fire,
  * cross-tab delete): `collection.delete` on a missing key throws mid-
@@ -327,6 +557,74 @@ export function deleteDatabaseRows(rowIds: string[]): void {
   tx.mutate(() => {
     for (const rowId of deletable) {
       localDatabaseRowsCollection.delete(rowId);
+    }
+  });
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Delete Stocks/Crypto rows and drop their tickers from the watchlist. Refuses
+ * when removing them would leave zero instruments (Settings parity). Pending
+ * blank rows (no symbol) delete without touching config.
+ */
+export function deleteLiveMarketRows(rowIds: string[]): void {
+  const rows: LocalDatabaseRow[] = [];
+  let database: LocalDatabase | undefined;
+  for (const rowId of rowIds) {
+    const row = localDatabaseRowsCollection.get(rowId);
+    if (!row) {
+      continue;
+    }
+    const owner = localDatabasesCollection.get(row.databaseId);
+    if (!(owner && isLiveMarketsDatabase(owner))) {
+      continue;
+    }
+    database ??= owner;
+    if (row.databaseId !== database.id) {
+      continue;
+    }
+    rows.push(row);
+  }
+  if (!(database && rows.length > 0)) {
+    return;
+  }
+
+  const symbolFieldId = liveMarketFieldId(
+    database,
+    LIVE_MARKET_SYMBOL_SOURCE_KEY
+  );
+  const planned = planLiveMarketRowDelete({
+    instruments: readLiveMarketInstruments(database),
+    rows,
+    symbolFieldId,
+  });
+  if (!planned.ok) {
+    toastLiveMarketIdentityFailure(planned.reason);
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const rowId of planned.rowIds) {
+      localDatabaseRowsCollection.delete(rowId);
+    }
+    if (planned.instrumentsChanged && database.source?.kind === "connector") {
+      localDatabasesCollection.update(database.id, (draft) => {
+        if (draft.source?.kind !== "connector") {
+          return;
+        }
+        const prior = toPlain(draft.source) as ConnectorDatabaseSource;
+        draft.source = {
+          ...prior,
+          kind: "connector",
+          config: {
+            ...prior.config,
+            instruments: planned.instruments,
+          },
+        };
+        draft.updatedAt = timestamp;
+      });
     }
   });
   commitDatabaseTransaction(tx);
@@ -1070,15 +1368,35 @@ export function setDatabaseRowPropertiesVisibleFieldIds(
 
 /**
  * Set (or clear, with `undefined`) a database's icon — an emoji or
- * `tabler:IconName`, matching page icons — and bump its `updatedAt`.
+ * `tabler:IconName`, matching page icons — and bump its `updatedAt`. Mirrors
+ * onto the hub page icon when a hub exists.
  */
 export function setDatabaseIcon(
   databaseId: string,
   icon: string | undefined
 ): void {
-  patchDatabase(databaseId, (draft) => {
-    draft.icon = icon;
+  if (!localDatabasesCollection.get(databaseId)) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const hub = localPagesCollection.toArray.find(
+    (page) => page.databaseSource?.databaseId === databaseId
+  );
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.icon = icon;
+      draft.updatedAt = timestamp;
+    });
+    if (hub) {
+      localPagesCollection.update(hub.id, (draft) => {
+        draft.icon = icon;
+        draft.updatedAt = timestamp;
+      });
+    }
   });
+  commitDatabaseTransaction(tx);
 }
 
 /**

@@ -15,3 +15,14 @@ export function finnhubMarketCapFromMillions(value: unknown): number | null {
   }
   return Math.round(value * MARKET_CAP_MILLIONS);
 }
+
+/**
+ * Convert Finnhub's `shareOutstanding` (millions of shares) to absolute share
+ * count — same scale factor as {@link finnhubMarketCapFromMillions}.
+ */
+export function finnhubSharesFromMillions(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value * MARKET_CAP_MILLIONS;
+}

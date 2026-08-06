@@ -58,7 +58,6 @@ describe("PageRowMenuContent separators", () => {
               onCopyLink={() => undefined}
               onDelete={() => undefined}
               onDuplicate={() => undefined}
-              onEditTemplate={() => undefined}
               onMoveTo={() => undefined}
               onRename={() => undefined}
               onResetToRemote={() => undefined}

@@ -1,3 +1,5 @@
+import { createTransaction } from "@tanstack/react-db";
+
 import {
   localBlocksCollection,
   localPagesCollection,
@@ -8,6 +10,7 @@ import {
   commitPageBlockTransaction,
   deletePageBlocksInTx,
   insertPageBlockAt,
+  updatePageBlockInTx,
 } from "@/db/queries/block-collection-ops.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import type { PageCommand } from "@/lib/canvas/commands.ts";
@@ -21,7 +24,11 @@ import {
   dedupePageSegment,
   siblingPages,
 } from "@/lib/pages/build-page-tree.ts";
+import type { Block } from "@/lib/schemas/block.ts";
+import type { DatabaseProps } from "@/lib/schemas/block-props.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
+import type { LocalBlock } from "@/lib/schemas/local-block.ts";
+import { toBlock } from "@/lib/schemas/local-block.ts";
 
 const POLL_INTERVAL_MS = 50;
 const POLL_MAX_ATTEMPTS = 100;
@@ -55,10 +62,89 @@ function blockDatabaseId(props: unknown): string | undefined {
   return typeof databaseId === "string" ? databaseId : undefined;
 }
 
+/** The hub page's linked `database` block used for `viewId` persistence only. */
+export function findHubDatabaseBlock(
+  pageId: string,
+  databaseId: string
+): LocalBlock | undefined {
+  return localBlocksCollection.toArray.find(
+    (block) =>
+      block.pageId === pageId &&
+      block.type === "database" &&
+      blockDatabaseId(block.props) === databaseId
+  );
+}
+
 /**
- * Ensures the hub page canvas includes a linked `database` block for this
- * database. Existing hubs created before hub-as-PageWorkspace may only have
- * the default empty text row.
+ * Persists the hub's active saved-view id onto the ghost linked `database`
+ * block (hubs no longer mount a canvas, but the block still stores `viewId`).
+ */
+export function setHubDatabaseBlockViewId(
+  pageId: string,
+  databaseId: string,
+  viewId: string
+): void {
+  const page = localPagesCollection.get(pageId);
+  const block = findHubDatabaseBlock(pageId, databaseId);
+  if (!(page && block)) {
+    return;
+  }
+
+  const props = block.props as DatabaseProps;
+  if (props.viewId === viewId) {
+    return;
+  }
+
+  const order = page.blockOrder ?? [block.id];
+  const tx = beginPageBlockTransaction(pageId, order);
+  const nextBlock: Block = {
+    ...toBlock(block),
+    type: "database",
+    props: { ...props, viewId },
+  };
+  updatePageBlockInTx(pageId, nextBlock, true, tx);
+  commitPageBlockTransaction(tx);
+}
+
+/**
+ * Mirrors `database.name` / `database.icon` onto the hub page when they have
+ * drifted (older hubs edited page metadata independently of the entity).
+ */
+export function syncHubPageMetadataFromDatabase(
+  pageId: string,
+  database: LocalDatabase
+): void {
+  const page = localPagesCollection.get(pageId);
+  if (!page) {
+    return;
+  }
+  if (page.title === database.name && page.icon === database.icon) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+  const tx = createTransaction({
+    autoCommit: false,
+    mutationFn: async ({ transaction }) => {
+      localPagesCollection.utils.acceptMutations(transaction);
+      await Promise.resolve();
+    },
+  });
+  tx.mutate(() => {
+    localPagesCollection.update(pageId, (draft) => {
+      draft.title = database.name;
+      draft.icon = database.icon;
+      draft.updatedAt = timestamp;
+    });
+  });
+  tx.commit().catch(reportPersistenceError);
+}
+
+/**
+ * Ensures the hub page includes a linked `database` block for this database
+ * (ghost storage for `viewId` — hubs render `DatabaseTableView` directly).
+ * Existing hubs created before hub-as-PageWorkspace may only have the default
+ * empty text row.
  */
 export function ensureDatabaseHubContent(
   pageId: string,

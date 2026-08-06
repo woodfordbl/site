@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   rowInsert: vi.fn(),
   rowState: [] as unknown[],
   rowUpdate: vi.fn(),
+  toastError: vi.fn(),
+  toastInfo: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-db", () => ({
@@ -36,6 +38,13 @@ vi.mock("@/db/persistence-errors.ts", () => ({
 
 vi.mock("@/lib/databases/row-template-store.ts", () => ({
   deleteRowTemplate: mocks.deleteRowTemplate,
+}));
+
+vi.mock("@/lib/toast/app-toast.ts", () => ({
+  appToast: {
+    error: mocks.toastError,
+    info: mocks.toastInfo,
+  },
 }));
 
 vi.mock("@/db/collections/local-collections.ts", () => ({
@@ -255,6 +264,183 @@ describe("database collection ops", () => {
 
     expect(mocks.rowUpdate).not.toHaveBeenCalled();
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  function makeLiveMarketsDatabase(
+    instruments: { symbol: string; assetClass: "crypto" | "equity" }[] = [
+      { symbol: "AAPL", assetClass: "equity" },
+    ]
+  ): LocalDatabase {
+    return {
+      id: databaseId,
+      name: "Stocks and Crypto",
+      primaryFieldId: "f-symbol",
+      source: {
+        kind: "connector",
+        connectorId: "live-markets",
+        config: { instruments, currency: "USD" },
+      },
+      fields: [
+        { id: "f-symbol", name: "Symbol", type: "text", sourceKey: "symbol" },
+        {
+          id: "f-class",
+          name: "Asset class",
+          type: "select",
+          sourceKey: "assetClass",
+          options: [
+            { id: "crypto", name: "Crypto" },
+            { id: "equity", name: "Equity" },
+          ],
+        },
+        { id: "f-price", name: "Price", type: "number", sourceKey: "price" },
+      ],
+      views: [
+        {
+          id: "view-1",
+          name: "Table",
+          type: "table",
+          visibleFieldIds: ["f-symbol", "f-class", "f-price"],
+          config: {},
+        },
+      ],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  it("insertLiveMarketRow seeds equity Asset class without externalId", async () => {
+    const database = makeLiveMarketsDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowState = [];
+
+    const inserted = ops.insertLiveMarketRow(databaseId);
+    await flushAsync();
+
+    expect(inserted).not.toBeNull();
+    expect(inserted?.externalId).toBeUndefined();
+    expect(inserted?.values).toEqual({ "f-class": "equity" });
+    expect(mocks.rowInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("insertLiveMarketRow refuses when the watchlist is at capacity", async () => {
+    const instruments = Array.from({ length: 30 }, (_, index) => ({
+      symbol: `S${index}`,
+      assetClass: "equity" as const,
+    }));
+    mocks.databaseGet.mockReturnValue(makeLiveMarketsDatabase(instruments));
+
+    const inserted = ops.insertLiveMarketRow(databaseId);
+    await flushAsync();
+
+    expect(inserted).toBeNull();
+    expect(mocks.toastInfo).toHaveBeenCalled();
+    expect(mocks.rowInsert).not.toHaveBeenCalled();
+  });
+
+  it("updateDatabaseCell on Symbol commits the instrument and sets externalId", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+    ]);
+    const pending = makeRow("row-pending", {
+      values: { "f-class": "equity" },
+    });
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockReturnValue(pending);
+    const rowDrafts = captureRowDrafts([pending]);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseCell("row-pending", "f-symbol", "msft");
+    await flushAsync();
+
+    const rowDraft = rowDrafts.get("row-pending");
+    expect(rowDraft?.externalId).toBe("MSFT");
+    expect(rowDraft?.values["f-symbol"]).toBe("MSFT");
+    expect(databaseDrafts[0]?.source).toEqual({
+      kind: "connector",
+      connectorId: "live-markets",
+      config: {
+        instruments: [
+          { symbol: "AAPL", assetClass: "equity" },
+          { symbol: "MSFT", assetClass: "equity" },
+        ],
+        currency: "USD",
+      },
+    });
+  });
+
+  it("updateDatabaseCell on Symbol renames externalId in place", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+    ]);
+    const row = {
+      ...makeRow("row-aapl", {
+        values: { "f-symbol": "AAPL", "f-class": "equity" },
+      }),
+      externalId: "AAPL",
+    };
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockReturnValue(row);
+    const rowDrafts = captureRowDrafts([row]);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseCell("row-aapl", "f-symbol", "MSFT");
+    await flushAsync();
+
+    expect(rowDrafts.get("row-aapl")?.externalId).toBe("MSFT");
+    expect(databaseDrafts[0]?.source?.kind === "connector").toBe(true);
+    if (databaseDrafts[0]?.source?.kind === "connector") {
+      expect(databaseDrafts[0].source.config.instruments).toEqual([
+        { symbol: "MSFT", assetClass: "equity" },
+      ]);
+    }
+  });
+
+  it("deleteLiveMarketRows removes the ticker from the watchlist", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+      { symbol: "BTC", assetClass: "crypto" },
+    ]);
+    const row = {
+      ...makeRow("row-aapl", {
+        values: { "f-symbol": "AAPL", "f-class": "equity" },
+      }),
+      externalId: "AAPL",
+    };
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockImplementation((id: string) =>
+      id === "row-aapl" ? row : undefined
+    );
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.deleteLiveMarketRows(["row-aapl"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).toHaveBeenCalledWith("row-aapl");
+    if (databaseDrafts[0]?.source?.kind === "connector") {
+      expect(databaseDrafts[0].source.config.instruments).toEqual([
+        { symbol: "BTC", assetClass: "crypto" },
+      ]);
+    }
+  });
+
+  it("deleteLiveMarketRows refuses to remove the last instrument", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+    ]);
+    const row = {
+      ...makeRow("row-aapl", {
+        values: { "f-symbol": "AAPL", "f-class": "equity" },
+      }),
+      externalId: "AAPL",
+    };
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockReturnValue(row);
+
+    ops.deleteLiveMarketRows(["row-aapl"]);
+    await flushAsync();
+
+    expect(mocks.toastInfo).toHaveBeenCalled();
+    expect(mocks.rowDelete).not.toHaveBeenCalled();
   });
 
   it("insertDatabaseRow appends with sparse order after the last row", async () => {

@@ -1,3 +1,5 @@
+import { IconDatabase } from "@tabler/icons-react";
+
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { iconSlotClassName } from "@/components/ui/button.tsx";
 import { pageListRowPadding } from "@/lib/pages/page-list-preview-depth.ts";
@@ -20,6 +22,8 @@ export function PageListDragPreview({
 }: {
   preview: PageListDragPreviewState;
 }) {
+  const isDatabase = preview.pageId.startsWith("database:");
+
   return (
     <div
       aria-hidden
@@ -35,7 +39,11 @@ export function PageListDragPreview({
       }}
     >
       <span className={iconSlotClassName("icon-xs")}>
-        <PageIconDisplay icon={preview.icon} />
+        {preview.icon ? <PageIconDisplay icon={preview.icon} /> : null}
+        {!preview.icon && isDatabase ? (
+          <IconDatabase className="size-4 stroke-[1.5px]" />
+        ) : null}
+        {preview.icon || isDatabase ? null : <PageIconDisplay />}
       </span>
       <span className="min-w-0 flex-1 truncate text-left">{preview.title}</span>
     </div>

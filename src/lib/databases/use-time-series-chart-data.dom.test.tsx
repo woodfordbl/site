@@ -14,7 +14,38 @@ import type {
 
 const HOUR_MS = 3_600_000;
 
-const readFieldHistory = vi.hoisted(() => vi.fn(async () => []));
+const historyMocks = vi.hoisted(() => {
+  const series = new Map<string, { t: number; v: number }[]>();
+  const keyOf = (databaseId: string, externalId: string, fieldId: string) =>
+    `${databaseId}:${externalId}:${fieldId}`;
+  return {
+    series,
+    readFieldHistory: vi.fn(
+      async (databaseId: string, externalId: string, fieldId: string) => [
+        ...(series.get(keyOf(databaseId, externalId, fieldId)) ?? []),
+      ]
+    ),
+    mergeFieldHistory: vi.fn(
+      async (
+        batches: {
+          databaseId: string;
+          externalId: string;
+          fieldId: string;
+          points: { t: number; v: number }[];
+        }[]
+      ) => {
+        for (const batch of batches) {
+          series.set(
+            keyOf(batch.databaseId, batch.externalId, batch.fieldId),
+            [...batch.points]
+          );
+        }
+      }
+    ),
+    peekFieldHistory: vi.fn(() => []),
+  };
+});
+
 const fetchHistory = vi.hoisted(() => {
   const hourMs = 3_600_000;
   return vi.fn(async () => [
@@ -23,9 +54,13 @@ const fetchHistory = vi.hoisted(() => {
   ]);
 });
 
-vi.mock("@/db/history/field-history-store.ts", () => ({ readFieldHistory }));
+vi.mock("@/db/history/field-history-store.ts", () => ({
+  readFieldHistory: historyMocks.readFieldHistory,
+  mergeFieldHistory: historyMocks.mergeFieldHistory,
+  peekFieldHistory: historyMocks.peekFieldHistory,
+}));
 vi.mock("@/lib/connectors/registry.ts", () => ({
-  getConnector: () => ({ fetchHistory }),
+  getConnector: () => ({ id: "live-markets", fetchHistory }),
 }));
 vi.mock("@/lib/connectors/token-store.ts", () => ({
   getConnectorToken: () => undefined,
@@ -82,7 +117,7 @@ const ROWS: LocalDatabaseRow[] = [
   },
 ];
 
-/** 7 days: buckets stitched points hourly, so both mocked candles survive. */
+/** 7 days: resolution is coarse enough that both mocked candles survive. */
 const WINDOW_MS = 7 * 24 * HOUR_MS;
 
 let renderCount = 0;
@@ -123,16 +158,18 @@ function tickedRows(price: number): LocalDatabaseRow[] {
 afterEach(() => {
   cleanup();
   renderCount = 0;
+  historyMocks.series.clear();
   vi.clearAllMocks();
 });
 
 describe("useTimeSeriesChartData", () => {
-  it("stitches backfill under local capture", async () => {
+  it("covers gaps via fetchHistory and surfaces the cached points", async () => {
     renderProbe();
     await waitFor(() => {
       expect(screen.getByTestId("points").textContent).toBe("2");
     });
     expect(fetchHistory).toHaveBeenCalled();
+    expect(historyMocks.mergeFieldHistory).toHaveBeenCalled();
   });
 
   it("settles instead of re-rendering forever", async () => {
@@ -147,7 +184,9 @@ describe("useTimeSeriesChartData", () => {
     // The live re-read interval is 2s, so a settled hook must not re-render
     // (and must not re-read history) during this idle window.
     expect(renderCount - settled).toBeLessThanOrEqual(1);
-    expect(readFieldHistory.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(historyMocks.readFieldHistory.mock.calls.length).toBeLessThanOrEqual(
+      6
+    );
   });
 
   it("does not reload history when only prices tick", async () => {
@@ -156,13 +195,16 @@ describe("useTimeSeriesChartData", () => {
       expect(screen.getByTestId("points").textContent).toBe("2");
     });
 
-    const readsAfterLoad = readFieldHistory.mock.calls.length;
+    const readsAfterLoad = historyMocks.readFieldHistory.mock.calls.length;
+    const fetchesAfterLoad = fetchHistory.mock.calls.length;
     for (const price of [11, 12, 13]) {
       rerender(ui(tickedRows(price)));
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(readFieldHistory.mock.calls.length).toBe(readsAfterLoad);
-    expect(fetchHistory).toHaveBeenCalledTimes(1);
+    expect(historyMocks.readFieldHistory.mock.calls.length).toBe(
+      readsAfterLoad
+    );
+    expect(fetchHistory.mock.calls.length).toBe(fetchesAfterLoad);
   });
 });

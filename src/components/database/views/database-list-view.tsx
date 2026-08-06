@@ -209,6 +209,10 @@ export function DatabaseListView({
     [database.primaryFieldId, fields, view]
   );
   const isSyncedDatabase = database.source?.kind === "connector";
+  const isLiveMarkets =
+    database.source?.kind === "connector" &&
+    database.source.connectorId === "live-markets";
+  const canAddRow = mode === "edit" && (!isSyncedDatabase || isLiveMarkets);
 
   return (
     <div className="w-full min-w-0 border-border border-t">
@@ -230,7 +234,7 @@ export function DatabaseListView({
           />
         ))
       )}
-      {mode === "edit" && !isSyncedDatabase ? (
+      {canAddRow ? (
         // No inline editors in v1: the new row is inserted but nothing
         // focuses — the user opens the row page (or the table view) to type.
         <DatabaseAddRow databaseId={database.id} />

@@ -148,9 +148,9 @@ Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** i
 
 | Effect | Applied by `usePageDispatch` |
 |--------|------------------------------|
-| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` or via `persistPageReposition` (`userPage` when `routeBy === "id"`) |
+| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` (`userPage` when `routeBy === "id"`) |
 | `page.delete` | `deleteLocalPage` (user hard delete or shipped tombstone) |
-| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts) |
+| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts); active-tab router navigate via [`resolveSlugPrefixRedirect`](../../src/lib/pages/resolve-slug-prefix-redirect.ts) when the open path sits under the previous slug |
 | `navigate` | `{ slug, userPage? }` → router [`pageNavTargetForUserPage`](../../src/lib/pages/slugify.ts) or [`pageNavTarget`](../../src/lib/pages/slugify.ts) (`replace: true`); `mode: "history"` → [`syncPageUrl`](../../src/lib/pages/sync-url.ts) with the same `userPage` flag |
 
 Boot routing ([`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts)) and passive-tab slug sync ([`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts)) are not `PageEffect` entries — see [pages — Route migration](../architecture/pages.md#route-migration).

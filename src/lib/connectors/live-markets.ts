@@ -29,10 +29,12 @@ import { yahooFetchHistory } from "@/lib/connectors/yahoo-chart.ts";
  * - **crypto** → CoinGecko seed + Binance live/history
  * - **equity** → Finnhub quote/profile/stream + Yahoo candle backfill
  *
- * Schema is a fixed superset. Name and Market cap come from CoinGecko for
- * crypto and Finnhub `profile2` for equities (market cap stored in absolute
- * currency units on both). When both asset classes appear, the sync engine
- * defaults the table view to group by Asset class (unless the user opted out).
+ * Schema is a fixed superset. Name and Float come from CoinGecko (circulating
+ * supply) / Finnhub `profile2` (shares outstanding). Market cap is float × price
+ * when float is known (else the provider market-cap seed). Change is seeded from
+ * the provider and refined from the price series once 24h coverage is ensured.
+ * When both asset classes appear, the sync engine defaults the table view to
+ * group by Asset class (unless the user opted out).
  */
 
 const MINUTE_MS = 60_000;
@@ -179,6 +181,13 @@ function liveFields(config: LiveConfig): ConnectorFieldDef[] {
       icon: "tabler:IconTrendingUp",
     },
     {
+      sourceKey: "float",
+      name: "Float",
+      type: "number",
+      numberFormat: "integer",
+      icon: "tabler:IconStack2",
+    },
+    {
       sourceKey: "marketCap",
       name: "Market cap",
       type: "number",
@@ -198,6 +207,16 @@ function withAssetClass(
   row: ConnectorRow,
   assetClass: LiveAssetClass
 ): ConnectorRow {
+  const float =
+    typeof row.values.float === "number" && Number.isFinite(row.values.float)
+      ? row.values.float
+      : null;
+  const price =
+    typeof row.values.price === "number" && Number.isFinite(row.values.price)
+      ? row.values.price
+      : null;
+  const derivedCap =
+    float !== null && price !== null ? float * price : (row.values.marketCap ?? null);
   return {
     ...row,
     values: {
@@ -205,7 +224,8 @@ function withAssetClass(
       assetClass,
       // Preserve provider enrichment (CoinGecko / Finnhub profile) when present.
       name: row.values.name ?? null,
-      marketCap: row.values.marketCap ?? null,
+      float,
+      marketCap: derivedCap,
     },
   };
 }

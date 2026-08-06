@@ -33,6 +33,7 @@ import {
   resolveGroupByField,
 } from "@/lib/databases/row-group.ts";
 import { sortRowsForView } from "@/lib/databases/row-sort.ts";
+import { useLiveMarketsDerivedRows } from "@/lib/databases/use-live-markets-derived.ts";
 import {
   resolveColumnOrder,
   resolvePinnedFields,
@@ -49,7 +50,7 @@ import { cn } from "@/lib/utils.ts";
 export interface DatabaseTableViewProps {
   databaseId: string;
   /**
-   * Full-page hosts (`/db/$databaseId`): the table view flexes to the host's
+   * Full-page hosts (database hub pages): the table view flexes to the host's
    * remaining height — rows scroll between the sticky header and the add-row
    * strip pinned at the bottom of the screen. Embedded blocks keep their
    * natural height (600px scroll cap).
@@ -287,6 +288,7 @@ interface DatabaseViewBodyProps {
   databaseId: string;
   fillHeight: boolean;
   groups: DatabaseRowGroup[] | null;
+  isLiveMarkets: boolean;
   isSyncedDatabase: boolean;
   mode: "view" | "edit";
   pinnedFields: DatabaseField[];
@@ -302,6 +304,7 @@ function DatabaseViewBody({
   databaseId,
   fillHeight,
   groups,
+  isLiveMarkets,
   isSyncedDatabase,
   mode,
   pinnedFields,
@@ -347,6 +350,7 @@ function DatabaseViewBody({
       databaseId={databaseId}
       fillHeight={fillHeight}
       groups={groups}
+      isLiveMarkets={isLiveMarkets}
       isSyncedDatabase={isSyncedDatabase}
       // Remount clears session row-selection when the database or active
       // view changes (selection is intentionally not persisted).
@@ -415,6 +419,9 @@ export function DatabaseTableView({
   // floor so the table changes in near-real-time on screen. Ref-counted with
   // cleanup on unmount; a no-op for local databases.
   const isSyncedDatabase = database?.source?.kind === "connector";
+  const isLiveMarkets =
+    database?.source?.kind === "connector" &&
+    database.source.connectorId === "live-markets";
   useEffect(() => {
     if (!isSyncedDatabase) {
       return;
@@ -426,12 +433,20 @@ export function DatabaseTableView({
   // the whole existing pipeline — filter, sort, group, Calculate row, and the
   // grid's cells all read merged values. No formula fields → rows pass
   // through untouched.
-  const mergedRows = useMemo<LocalDatabaseRow[]>(() => {
+  const formulaRows = useMemo<LocalDatabaseRow[]>(() => {
     const overlay = computeFormulaOverlay(fields, allRows, {
       now: () => clockNow,
     });
     return withFormulaValues(allRows, overlay);
   }, [allRows, fields, clockNow]);
+
+  // Stocks and Crypto: ensure 24h price coverage, then overlay series Change +
+  // Float × Price Market cap (after formulas so derived synced columns win).
+  const { rows: mergedRows } = useLiveMarketsDerivedRows(
+    database,
+    fields,
+    formulaRows
+  );
 
   const rows = useMemo<LocalDatabaseRow[]>(() => {
     if (!(database && view)) {
@@ -560,6 +575,7 @@ export function DatabaseTableView({
         databaseId={databaseId}
         fillHeight={fillHeight}
         groups={groups}
+        isLiveMarkets={isLiveMarkets}
         isSyncedDatabase={isSyncedDatabase}
         mode={mode}
         pinnedFields={pinnedFields}

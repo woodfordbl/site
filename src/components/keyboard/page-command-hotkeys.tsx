@@ -53,7 +53,7 @@ function PageCommandHotkeysLive({
   };
 
   // Only truly global page commands live here. The contextual actions
-  // (favorite/duplicate/delete/save-as-template/edit-template) are `scope: "menu"`
+  // (favorite/duplicate/delete/save-as-template) are `scope: "menu"`
   // — bare single keys dispatched by useMenuCommandKeys while their action menu
   // is open, so they act on that menu's target instead of the active page.
   useCommandHotkeys({

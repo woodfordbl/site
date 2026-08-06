@@ -92,7 +92,8 @@ function isoTimestampFromMs(ms: number): string {
 /**
  * Partial tick row keyed by the base ticker (`externalId`). Only price /
  * change / updatedAt are written; `applyStreamTick` merges, so the CoinGecko
- * seed's name and market cap are preserved.
+ * seed's name and float are preserved, and marketCap is recomputed as
+ * float × price when float is on the existing row.
  */
 function tickToRow(
   base: string,

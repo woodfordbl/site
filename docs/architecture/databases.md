@@ -298,7 +298,16 @@ election, per-database scheduling clamped to connector minimums, push-based
 [`src/lib/connectors/`](../../src/lib/connectors/) (registry `listConnectors`/
 `getConnector`; GitHub repos/pull requests/issues, Frankfurter FX, and the unified
 **Stocks and Crypto** connector — CoinGecko + Binance for crypto, Finnhub quote/
-`profile2` (company name + market cap) + Yahoo candles for equities).
+`profile2` (company name + float / shares outstanding) + Yahoo candles for equities).
+Price is a number column with `captureHistory` (latest in the row; `{ t, v }` series
+in IndexedDB). **Float** (circulating supply / shares outstanding) is poll-only.
+**Market cap** is derived as Float × Price (seeded on poll, refreshed on stream ticks
+when float is known). **Change** is seeded from the provider, then refined to a
+rolling 24h series pct once
+[`ensureSeriesCoverage`](../../src/lib/databases/ensure-series-coverage.ts)
+backfills missing history via `fetchHistory` (shared with time-axis charts —
+see [`use-time-series-chart-data.ts`](../../src/lib/databases/use-time-series-chart-data.ts)
+and [`use-live-markets-derived.ts`](../../src/lib/databases/use-live-markets-derived.ts)).
 Snapshot diffing lives
 in [`database-sync-ops.ts`](../../src/db/queries/database-sync-ops.ts): keyed by
 `externalId`, touching only `sourceKey` field values so local columns survive refreshes.
@@ -355,8 +364,15 @@ UI surfaces:
   `decimals`, `useGrouping` — presentation is local; stored cell values stay
   provider-owned and are never overwritten by sync). Formula expression and select
   option editors stay hidden on synced columns. Add-field stays enabled on synced tables
-  (local columns are first-class); the "New row" strip is hidden, and `deleteDatabaseRows`
-  skips rows with `externalId` (they would respawn on the next sync).
+  (local columns are first-class). For most connectors the "New row" strip is hidden and
+  `deleteDatabaseRows` skips rows with `externalId` (they would respawn on the next sync).
+  **Stocks and Crypto (`live-markets`) exception** — Symbol and Asset class stay
+  editable (`isLiveMarketIdentityField`); edits rewrite `source.config.instruments` via
+  `commitLiveMarketIdentity` and trigger a sync pass so derived fields refresh. **New
+  row** inserts a pending blank row (Asset class defaults to equity; Symbol focused);
+  committing a valid symbol appends the instrument. Grid delete uses
+  `deleteLiveMarketRows` (drops the ticker from the watchlist); duplicate stays disabled.
+  Other connectors are unchanged.
 
 ## Formula fields
 
@@ -486,20 +502,28 @@ renders [`DatabaseHubPage`](../../src/components/database/database-hub-page.tsx)
 for hub paths. A **hub** `LocalPage` (`databaseSource: { databaseId }`) is
 created on open under the host
 ([`ensureDatabaseHubPage`](../../src/lib/databases/ensure-database-hub-page.ts))
-with a linked `database` block as its body, then rendered through normal
-[`PageWorkspace`](../../src/components/pages/page-workspace.tsx) — same cover,
-title, header menu, and page settings as any other page. Optional persisted
+with a ghost linked `database` block (stores `viewId` only — never shown as a
+canvas row). The hub renders through
+[`PageWorkspace`](../../src/components/pages/page-workspace.tsx) with a
+`bodySlot` full-page
+[`DatabaseTableView`](../../src/components/database/database-table-view.tsx)
+(`fillHeight`, `hideTitle`) — no canvas editor and no other blocks. Page icon
+and title are the database’s
+([`HubPageTitleSlot`](../../src/components/database/hub-page-title-slot.tsx)
+writes through `renameDatabase` / `setDatabaseIcon`, which mirror onto hub
+page metadata). Cover and header menu match any other page. Optional persisted
 `database.slug` (else `slugifyPageSegment(name)`) forms the leaf segment.
-Legacy `/db/$databaseId` URLs client-redirect to the slug path.
+Legacy `/db/$databaseId` URLs client-redirect to the slug path. Linked/inline
+`database` blocks on normal pages stay canvas blocks.
 
 **Host page resolution**
 ([`findDatabaseHostPageId`](../../src/lib/databases/resolve-database-host-page.ts))
-skips pages marked `databaseSource` / `databaseRowSource`. The hub embeds its
-own linked `database` block, so treating it as a host candidate would let a
-UUID hub id win over a shipped host like `home` — and the row slug path
-(`{host}/{db}/{row}`) would stop resolving the moment the hub seeded mid-open.
-When only the hub remains (host block deleted), the hub's parent is used so
-slug paths stay stable. Splat routes also wait for
+skips pages marked `databaseSource` / `databaseRowSource`. The hub keeps a
+ghost linked `database` block for `viewId` persistence, so treating it as a
+host candidate would let a UUID hub id win over a shipped host like `home` —
+and the row slug path (`{host}/{db}/{row}`) would stop resolving the moment
+the hub seeded mid-open. When only the hub remains (host block deleted), the
+hub's parent is used so slug paths stay stable. Splat routes also wait for
 [`useShippedDatabasesSettled`](../../src/lib/databases/shipped-databases-settled.ts)
 before throwing not-found for unresolved slugs, so a cold load of a shipped
 database path never 404s while the seed pass is still in flight.
@@ -515,8 +539,16 @@ Both are client-only (SSR-safe snapshot hooks — never `useLiveQuery` on the
 sidebar). Each row is a shared
 [`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx):
 click opens the hub slug path; right-click / ⋯ offer Rename, Change icon, and
-Delete. Hub pages and materialized row pages stay out of the Pages tree
-(`databaseSource` / `databaseRowSource`).
+Delete. Hosted (per-page) rows can be drag-nested onto another page in the
+Pages tree — [`moveDatabaseHost`](../../src/lib/databases/move-database-host.ts)
+strips the database's blocks from non-owned hosts, appends one on the new host,
+and reparents the hub so `{host}/{db}` URLs follow. When the open tab is on that
+hub or a row under it, [`PageList`](../../src/components/pages/page-list.tsx)
+router-navigates via [`resolveSlugPrefixRedirect`](../../src/lib/pages/resolve-slug-prefix-redirect.ts).
+The workspace **Databases**
+section is outside the page-list DnD surface and is not draggable. Hub pages
+and materialized row pages stay out of the Pages tree (`databaseSource` /
+`databaseRowSource`).
 
 ## Row pages (slug paths + seed-on-open)
 

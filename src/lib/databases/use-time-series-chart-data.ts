@@ -5,17 +5,12 @@ import { readFieldHistory } from "@/db/history/field-history-store.ts";
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
-import type {
-  ConnectorFetchContext,
-  ConnectorHistoryPoint,
-} from "@/lib/connectors/types.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
+import { ensureSeriesCoverageMany } from "@/lib/databases/ensure-series-coverage.ts";
 import {
   clipToWindow,
   DEFAULT_TIME_WINDOW_MS,
   resolutionForWindow,
-  stitchBucketMs,
-  stitchSeries,
 } from "@/lib/databases/time-series-chart-data.ts";
 import type {
   DatabaseField,
@@ -24,14 +19,13 @@ import type {
 } from "@/lib/schemas/database.ts";
 
 /**
- * Async loader for time-axis chart data: for each synced row it reads the
- * forward-only local capture from the field-history store, backfills older
- * history via TanStack Query (Binance / Yahoo / connector `fetchHistory`),
- * stitches the two, and clips to the visible window. Re-reads local capture on
- * a short interval so live ticks extend the right edge.
+ * Async loader for time-axis chart data: demand-fetches missing history via
+ * {@link ensureSeriesCoverageMany} (shared with live-markets derived Change),
+ * then clips to the visible window. Re-reads on a short interval so live ticks
+ * extend the right edge without re-hitting the network when coverage is warm.
  */
 
-/** One symbol's line: stable key + display label + stitched points. */
+/** One symbol's line: stable key + display label + covered points. */
 export interface TimeSeriesLine {
   key: string;
   label: string;
@@ -49,13 +43,11 @@ export interface UseTimeSeriesResult {
   loading: boolean;
 }
 
-/** Live re-read cadence (ms) — cheap: backfill is RQ-cached, local is in-memory.
- * Fast enough that the `Live` window's right edge visibly scrolls with ticks. */
+/** Live re-read cadence (ms) — cheap once coverage is cached in the store. */
 const LIVE_REFRESH_MS = 2000;
 
 /** Provider candles are historical; keep them fresh enough for scrolling windows. */
 const BACKFILL_STALE_MS = 60_000;
-const EMPTY_BACKFILL_POINTS: ConnectorHistoryPoint[][] = [];
 
 interface RowMeta {
   externalId: string;
@@ -69,6 +61,69 @@ function rowMetaSignature(meta: readonly RowMeta[]): string {
     .join("\u0001");
 }
 
+async function loadSeriesLines(args: {
+  databaseId: string;
+  fieldId: string;
+  from: number;
+  to: number;
+  resolution: ReturnType<typeof resolutionForWindow>;
+  rowMeta: readonly RowMeta[];
+  connectorId: string | undefined;
+  connectorConfig: Record<string, unknown>;
+}): Promise<TimeSeriesLine[]> {
+  const {
+    databaseId,
+    fieldId,
+    from,
+    to,
+    resolution,
+    rowMeta,
+    connectorId,
+    connectorConfig,
+  } = args;
+
+  const connector = connectorId ? getConnector(connectorId) : undefined;
+  if (connector?.fetchHistory) {
+    const token =
+      (await Promise.resolve(getConnectorToken(connector.id)).catch(
+        () => undefined
+      )) ?? undefined;
+    const covered = await ensureSeriesCoverageMany(
+      rowMeta.map((meta) => ({
+        databaseId,
+        externalId: meta.externalId,
+        fieldId,
+        from,
+        to,
+        resolution,
+      })),
+      {
+        connector,
+        config: connectorConfig,
+        fetchFn: globalThis.fetch.bind(globalThis),
+        token,
+      }
+    );
+    return rowMeta.map((meta, index) => ({
+      key: meta.externalId,
+      label: meta.label,
+      points: covered[index] ?? [],
+    }));
+  }
+
+  return await Promise.all(
+    rowMeta.map(async (meta) => ({
+      key: meta.externalId,
+      label: meta.label,
+      points: clipToWindow(
+        await readFieldHistory(databaseId, meta.externalId, fieldId),
+        from,
+        to
+      ),
+    }))
+  );
+}
+
 export function useTimeSeriesChartData(
   database: LocalDatabase,
   fields: readonly DatabaseField[],
@@ -78,7 +133,6 @@ export function useTimeSeriesChartData(
 ): UseTimeSeriesResult {
   const effectiveWindow = windowMs ?? DEFAULT_TIME_WINDOW_MS;
   const resolution = resolutionForWindow(effectiveWindow);
-  const bucketMs = stitchBucketMs(effectiveWindow);
 
   const tickedRowMeta = useMemo<RowMeta[]>(() => {
     const primaryField =
@@ -113,115 +167,118 @@ export function useTimeSeriesChartData(
     source?.kind === "connector" ? source.connectorId : undefined;
   const connectorConfig = source?.kind === "connector" ? source.config : {};
   const databaseId = database.id;
-  const connector = connectorId ? getConnector(connectorId) : undefined;
-  const needsBackfill = Boolean(fieldId && connector?.fetchHistory);
 
   const {
-    data: backfillPoints,
-    isError: backfillError,
-    isFetching: backfillPending,
+    data: querySeries,
+    isError: queryError,
+    isFetching: queryPending,
   } = useQuery({
     queryKey: [
       "connectors",
-      "history-backfill",
+      "series-coverage",
       databaseId,
+      fieldId,
       rowMetaKey,
       resolution,
       connectorConfig,
       effectiveWindow,
     ] as const,
-    enabled: needsBackfill,
+    enabled: Boolean(fieldId),
     staleTime: BACKFILL_STALE_MS,
-    queryFn: async (): Promise<ConnectorHistoryPoint[][]> => {
-      const token = connectorId
-        ? ((await Promise.resolve(getConnectorToken(connectorId)).catch(
-            () => undefined
-          )) ?? undefined)
-        : undefined;
-      const ctx: ConnectorFetchContext = {
-        config: connectorConfig,
-        fetchFn: (input, init) => fetch(input, init),
-        token,
-      };
+    queryFn: async (): Promise<TimeSeriesLine[]> => {
+      if (!fieldId) {
+        return [];
+      }
       const to = Date.now();
       const from = to - effectiveWindow;
-      return await Promise.all(
-        rowMeta.map(
-          async (meta) =>
-            (await connector?.fetchHistory?.(ctx, {
-              externalId: meta.externalId,
-              from,
-              to,
-              resolution,
-            })) ?? []
-        )
-      );
+      return await loadSeriesLines({
+        databaseId,
+        fieldId,
+        from,
+        to,
+        resolution,
+        rowMeta,
+        connectorId,
+        connectorConfig,
+      });
     },
   });
-  const effectiveBackfillPoints =
-    backfillPoints ??
-    (backfillError || !needsBackfill ? EMPTY_BACKFILL_POINTS : undefined);
 
-  const [data, setData] = useState<TimeSeriesChartData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [liveSeries, setLiveSeries] = useState<TimeSeriesLine[] | null>(null);
 
+  // Promote RQ result into local state, then refresh on an interval so live
+  // ticks extend the right edge. Dependencies are primitives / stable rowMeta
+  // — never the connector object identity.
   useEffect(() => {
     if (!fieldId) {
-      setData(null);
-      setLoading(false);
+      setLiveSeries(null);
       return;
     }
-    if (!effectiveBackfillPoints) {
+    if (queryError && !querySeries) {
+      setLiveSeries([]);
       return;
     }
-    const activeBackfillPoints = effectiveBackfillPoints;
+    if (!querySeries) {
+      return;
+    }
+    setLiveSeries(querySeries);
+
     let cancelled = false;
-    const activeFieldId = fieldId;
-
-    async function load() {
-      const to = Date.now();
-      const from = to - effectiveWindow;
-      const series = await Promise.all(
-        rowMeta.map(async (meta, index): Promise<TimeSeriesLine> => {
-          const local = clipToWindow(
-            await readFieldHistory(databaseId, meta.externalId, activeFieldId),
-            from,
-            to
-          );
-          const points = clipToWindow(
-            stitchSeries(activeBackfillPoints[index] ?? [], local, bucketMs),
-            from,
-            to
-          );
-          return { key: meta.externalId, label: meta.label, points };
-        })
-      );
-      if (!cancelled) {
-        setData({ series, from, to });
-        setLoading(false);
-      }
-    }
-
-    setLoading(true);
-    load().catch(() => undefined);
     const interval = setInterval(() => {
-      load().catch(() => undefined);
+      if (cancelled || !fieldId) {
+        return;
+      }
+      const refreshTo = Date.now();
+      const refreshFrom = refreshTo - effectiveWindow;
+      loadSeriesLines({
+        databaseId,
+        fieldId,
+        from: refreshFrom,
+        to: refreshTo,
+        resolution,
+        rowMeta,
+        connectorId,
+        connectorConfig,
+      })
+        .then((series) => {
+          if (!cancelled) {
+            setLiveSeries(series);
+          }
+        })
+        .catch(() => undefined);
     }, LIVE_REFRESH_MS);
+
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
   }, [
-    databaseId,
     fieldId,
+    querySeries,
+    queryError,
     effectiveWindow,
+    databaseId,
+    resolution,
     rowMeta,
-    effectiveBackfillPoints,
-    bucketMs,
+    connectorId,
+    connectorConfig,
   ]);
+
+  const data = useMemo<TimeSeriesChartData | null>(() => {
+    if (!fieldId || liveSeries === null) {
+      return null;
+    }
+    const to = Date.now();
+    return {
+      series: liveSeries,
+      from: to - effectiveWindow,
+      to,
+    };
+  }, [fieldId, liveSeries, effectiveWindow]);
 
   return {
     data,
-    loading: loading || (Boolean(fieldId) && backfillPending && data === null),
+    loading:
+      data === null && Boolean(fieldId) && (queryPending || !queryError),
   };
 }

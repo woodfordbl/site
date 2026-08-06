@@ -48,6 +48,7 @@ describe("finnhubFetchRows enrichment", () => {
           values: {
             symbol: "MSFT",
             name: "Microsoft Corp",
+            float: null,
             marketCap: 3_100_000_000_000,
             price: 420.1,
             change: -0.005,
@@ -75,6 +76,7 @@ describe("finnhubFetchRows enrichment", () => {
           JSON.stringify({
             name: "Apple Inc",
             marketCapitalization: 3_000_000,
+            shareOutstanding: 15_000,
           }),
           { status: 200 }
         );
@@ -98,7 +100,8 @@ describe("finnhubFetchRows enrichment", () => {
           values: {
             symbol: "AAPL",
             name: "Apple Inc",
-            marketCap: 3_000_000_000_000,
+            float: 15_000_000_000,
+            marketCap: 15_000_000_000 * 190.5,
             price: 190.5,
             change: 0.015,
             updatedAt: "2026-07-03T18:20:10.000Z",
@@ -140,6 +143,7 @@ describe("finnhubFetchRows enrichment", () => {
           values: {
             symbol: "XYZ",
             name: null,
+            float: null,
             marketCap: null,
             price: 10,
             change: null,
