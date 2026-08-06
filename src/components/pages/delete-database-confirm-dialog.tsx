@@ -19,8 +19,7 @@ interface DeleteDatabaseConfirmDialogProps {
   open: boolean;
 }
 
-const CASCADE_COPY =
-  "Linked database blocks on every page will be removed, along with the database's own page.";
+const CASCADE_COPY = "Linked blocks and the database page will be removed too.";
 
 function describeDatabases(names: string[]): {
   description: string;
@@ -33,13 +32,13 @@ function describeDatabases(names: string[]): {
 
   if (names.length > 1) {
     return {
-      description: `${subject} and all of their rows will be permanently deleted. ${CASCADE_COPY}`,
+      description: `${subject} and their rows will be permanently deleted. ${CASCADE_COPY}`,
       title: `Delete ${names.length} databases?`,
     };
   }
 
   return {
-    description: `${subject} and all of its rows will be permanently deleted. ${CASCADE_COPY}`,
+    description: `${subject} and its rows will be permanently deleted. ${CASCADE_COPY}`,
     title: "Delete database?",
   };
 }

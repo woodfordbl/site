@@ -987,6 +987,29 @@ describe("database collection ops", () => {
     expect(created && "xFieldId" in (created.config.chart ?? {})).toBe(false);
   });
 
+  it("addDatabaseView seeds a chart over time when a captured number field exists", () => {
+    const database = makeDatabase();
+    database.fields = [
+      { id: "f-title", name: "Name", type: "text" },
+      { id: "f-status", name: "Status", type: "select", options: [] },
+      { id: "f-change", name: "Change", type: "number" },
+      { id: "f-price", name: "Price", type: "number", captureHistory: true },
+    ];
+    mocks.databaseGet.mockReturnValue(database);
+    captureDatabaseDrafts(database);
+
+    const created = ops.addDatabaseView(databaseId, { type: "chart" });
+
+    // A captured price wins over the select field's category rollup.
+    expect(created?.config).toEqual({
+      chart: {
+        mark: "line",
+        timeSeries: { fieldId: "f-price" },
+        xMode: "time",
+      },
+    });
+  });
+
   it("addDatabaseView no-ops for an unknown database", async () => {
     mocks.databaseGet.mockReturnValue(undefined);
 

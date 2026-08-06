@@ -16,9 +16,9 @@ vi.mock("@/hooks/use-local-databases.ts", () => ({
 
 import { DatabaseBlockDeleteDialog } from "@/components/canvas/database-block-delete-dialog.tsx";
 
-const SINGLE_DATABASE_COPY = /"Reading list" and all of its rows/;
-const CASCADE_COPY = /Linked database blocks on every page will be removed/;
-const MULTI_DATABASE_COPY = /"Books", "Films" and all of their rows/;
+const SINGLE_DATABASE_COPY = /"Reading list" and its rows/;
+const CASCADE_COPY = /Linked blocks and the database page will be removed too/;
+const MULTI_DATABASE_COPY = /"Books", "Films" and their rows/;
 const DELETE_BUTTON = /^Delete/;
 const CANCEL_BUTTON = /^Cancel/;
 

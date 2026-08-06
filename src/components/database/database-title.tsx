@@ -175,20 +175,17 @@ export function DatabaseTitle({
     nameDisplay = (
       <span
         className={cn(
-          "inline-grid min-w-0",
+          "relative inline-block min-w-0",
           TITLE_NAME_MAX_CLASS,
           TITLE_TYPOGRAPHY_CLASS
         )}
       >
-        <span
-          aria-hidden
-          className="invisible col-start-1 row-start-1 whitespace-pre px-1.5"
-        >
+        <span aria-hidden className="invisible block whitespace-pre px-1.5">
           {mirrorText}
         </span>
         {draft === null ? (
           <button
-            className="col-start-1 row-start-1 min-w-0 truncate rounded-sm px-1.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+            className="absolute inset-0 min-w-0 truncate rounded-sm px-1.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
             onClick={() => {
               finishedRef.current = false;
               setDraft(name);
@@ -200,7 +197,7 @@ export function DatabaseTitle({
         ) : (
           <input
             aria-label="Database name"
-            className="col-start-1 row-start-1 w-full min-w-0 rounded-sm border-none bg-transparent px-1.5 py-0 outline-none placeholder:text-muted-foreground"
+            className="absolute inset-0 w-full min-w-0 rounded-sm border-none bg-transparent px-1.5 py-0 outline-none placeholder:text-muted-foreground"
             onBlur={(event) => {
               if (finishedRef.current) {
                 return;

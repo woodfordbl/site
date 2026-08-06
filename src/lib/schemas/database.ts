@@ -292,6 +292,12 @@ export const databaseTableViewConfigSchema = z.object({
   collapsedGroupKeys: z.array(z.string()).optional(),
   /** Group buckets hidden from this grouped view (groupBy value keys). */
   hiddenGroupKeys: z.array(z.string()).optional(),
+  /**
+   * Stocks and Crypto auto-grouping: `auto` (or absent) lets sync set
+   * `groupBy` Asset class when both crypto and equity rows appear; `manual`
+   * means the user cleared or changed grouping — sync must not re-apply.
+   */
+  liveMarketsGrouping: z.enum(["auto", "manual"]).optional(),
   /** Board (kanban) settings — used when `view.type` is `board`. */
   board: z
     .object({

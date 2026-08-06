@@ -5,33 +5,10 @@ import { useMemo } from "react";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageListItems } from "@/hooks/use-page-list.ts";
+import { formatMenuTimestamp } from "@/lib/pages/format-menu-timestamp.ts";
 import { buildPageActivitySummary } from "@/lib/pages/page-activity-summary.ts";
 import { SITE_AUTHOR_NAME } from "@/lib/site/site-author.ts";
 import { cn } from "@/lib/utils.ts";
-
-function formatTimestamp(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  const isToday =
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate();
-
-  if (isToday) {
-    return `Today at ${date.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    })}`;
-  }
-
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 interface PageActivityPanelProps {
   className?: string;
@@ -90,14 +67,14 @@ export function PageActivityPanel({
       <StatRow
         label="Created at"
         value={
-          summary.createdAt ? formatTimestamp(summary.createdAt) : "Unknown"
+          summary.createdAt ? formatMenuTimestamp(summary.createdAt) : "Unknown"
         }
       />
       <StatRow
         label="Last edited at"
         value={
           summary.lastEditedAt
-            ? formatTimestamp(summary.lastEditedAt)
+            ? formatMenuTimestamp(summary.lastEditedAt)
             : "Unknown"
         }
       />

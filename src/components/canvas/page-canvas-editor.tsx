@@ -80,9 +80,15 @@ import {
 } from "@/lib/databases/database-view-edit-history.ts";
 import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
 import { resolveDeletedDatabaseIds } from "@/lib/databases/resolve-database-block-deletion.ts";
-import { resolveCanvasRowDragPreviewNode } from "@/lib/dnd/canvas-row-drag-image.ts";
+import {
+  type CanvasRowDragPreviewSource,
+  resolveCanvasRowDragPreviewSource,
+} from "@/lib/dnd/canvas-row-drag-image.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
-import { cloneNodeWithFieldValues } from "@/lib/dnd/drag-image.ts";
+import {
+  cloneNodeWithFieldValues,
+  resolveDragPreviewOffset,
+} from "@/lib/dnd/drag-image.ts";
 import {
   canDropPageIntoCanvas,
   PAGE_DRAG_MIME_TYPE,
@@ -125,19 +131,21 @@ function isTableRowDragSource(sourceId: string): boolean {
 }
 
 /**
- * Builds the touch-path follow-the-pointer preview for a canvas row. Detached
- * synthetics (database grid cards) are mounted briefly to measure, then
- * returned as-is for the overlay host.
+ * Builds the follow-the-pointer overlay preview for a canvas row. Detached
+ * synthetics (database cards) are mounted briefly to measure, then returned
+ * as-is for the overlay host.
  */
 function measureCanvasRowDragPreview(
   sourceId: string,
-  pointer: { x: number; y: number }
+  pointer: { x: number; y: number },
+  resolvedSource?: CanvasRowDragPreviewSource | null
 ): CanvasRowDragPreviewState | null {
-  const node = resolveCanvasRowDragPreviewNode(sourceId);
-  if (!node) {
+  const source = resolvedSource ?? resolveCanvasRowDragPreviewSource(sourceId);
+  if (!source) {
     return null;
   }
 
+  const { node } = source;
   const synthetic = !node.isConnected;
   if (synthetic) {
     Object.assign(node.style, {
@@ -159,16 +167,17 @@ function measureCanvasRowDragPreview(
     node.style.pointerEvents = "";
   }
 
-  const isDatabasePreview = node.hasAttribute("data-database-drag-preview");
+  // A detached preview's measured rect is its off-screen staging position, not
+  // where the block sits, so it anchors on the origin it reported instead.
+  const offset = resolveDragPreviewOffset(pointer, rect, {
+    clamp: true,
+    origin: source.origin,
+  });
 
   return {
     node: synthetic ? node : cloneNodeWithFieldValues(node),
-    offsetX: isDatabasePreview
-      ? Math.min(24, Math.max(rect.width / 2, 0))
-      : pointer.x - rect.left,
-    offsetY: isDatabasePreview
-      ? Math.min(rect.height / 2, Math.max(rect.height - 1, 0))
-      : pointer.y - rect.top,
+    offsetX: offset.x,
+    offsetY: offset.y,
     width: Math.max(rect.width, 1),
   };
 }
@@ -518,9 +527,13 @@ function PageCanvasEditorBody({
         if (isTableRowDragSource(sourceId)) {
           return { kind: "overlay" };
         }
+        const source = resolveCanvasRowDragPreviewSource(sourceId);
+        if (!source || source.origin) {
+          return { kind: "overlay" };
+        }
         return {
           kind: "native-clone",
-          getNode: resolveCanvasRowDragPreviewNode,
+          getNode: () => source.node,
         };
       },
       onDragStart: ({ sourceId, pointer, pointerDrag }) => {
@@ -529,12 +542,16 @@ function PageCanvasEditorBody({
           setTableRowPreviewMeta(measureTableRowDragPreview(sourceId, pointer));
           return;
         }
-        // Native (mouse) drags use the browser drag image; only the pointer
-        // (touch) path needs a React-rendered follow-the-pointer preview.
-        if (!pointerDrag) {
+        const source = resolveCanvasRowDragPreviewSource(sourceId);
+        // Native (mouse) drags use the browser drag image, except database
+        // rows, whose detached card the browser cannot place — they render the
+        // React overlay on every pointer type, same as the touch path.
+        if (!(pointerDrag || source?.origin)) {
           return;
         }
-        setCanvasRowPreview(measureCanvasRowDragPreview(sourceId, pointer));
+        setCanvasRowPreview(
+          measureCanvasRowDragPreview(sourceId, pointer, source)
+        );
       },
       onDragEnd: () => {
         pointerDragActiveRef.current = false;

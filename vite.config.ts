@@ -40,6 +40,10 @@ const finnhubStreamHandler = fileURLToPath(
   new URL("./routes/api/connectors/finnhub/stream.ts", import.meta.url)
 );
 
+const yahooChartHandler = fileURLToPath(
+  new URL("./routes/api/connectors/yahoo/chart.get.ts", import.meta.url)
+);
+
 /**
  * Nitro module that re-adds `continue: true` to header-only routes in the
  * generated Vercel Build Output config once the preset has written it. Without
@@ -141,6 +145,11 @@ const config = defineConfig({
         {
           route: "/api/connectors/finnhub/stream",
           handler: finnhubStreamHandler,
+        },
+        {
+          route: "/api/connectors/yahoo/chart",
+          method: "GET",
+          handler: yahooChartHandler,
         },
       ],
       // Workaround for a Nitro bug on the Vercel preset. Nitro's Vite plugin

@@ -1,6 +1,7 @@
 import { InlinePageLink } from "@/components/editor/inline-page-link.tsx";
 import { InlineLink } from "@/components/editor/link-preview.tsx";
 import { segmentRichText } from "@/lib/blocks/rich-text.ts";
+import { pageLinkTitleMarks } from "@/lib/editor/rich-text-dom.ts";
 import type { InlineMark, InlineMarkType } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -41,8 +42,12 @@ export function RichTextContent({ text, marks }: RichTextContentProps) {
     const className =
       segment.marks.length > 0 ? classNameForMarks(segment.marks) : undefined;
     if (segment.pageId) {
+      const styleMarks = pageLinkTitleMarks(segment.marks);
       return (
         <InlinePageLink
+          className={
+            styleMarks.length > 0 ? classNameForMarks(styleMarks) : undefined
+          }
           key={key}
           label={segment.text}
           pageId={segment.pageId}

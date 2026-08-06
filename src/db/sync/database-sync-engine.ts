@@ -1,5 +1,6 @@
 import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
+import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import {
   applyStreamTick,
   applySyncSnapshot,
@@ -25,6 +26,7 @@ import type {
   ConnectorDefinition,
   ConnectorRow,
 } from "@/lib/connectors/types.ts";
+import { liveMarketsAutoGroupPatch } from "@/lib/databases/live-markets-auto-group.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
@@ -73,8 +75,6 @@ interface ScheduleEntry {
   halted: boolean;
   intervalMs: number;
   lastAttemptAt?: number;
-  /** Fingerprint of the connector's `list` config values (the symbol set). */
-  listFingerprint: string;
   /** Connector floor (`pollPolicy.minMs`) — the watched cadence. */
   minIntervalMs: number;
   /** Epoch ms the pending timer aims at; drives overdue checks on refocus. */
@@ -82,12 +82,14 @@ interface ScheduleEntry {
   /** Timer fired while the document was hidden; run on next `visible`. */
   pendingWhileHidden: boolean;
   /**
-   * Set when the symbol set changed (a `list` config edit): the next snapshot
+   * Set when the configured instrument set changed: the next snapshot
    * deletes rows for dropped symbols immediately, skipping the tombstone grace.
    * Other source edits (currency, refreshMs) never set it, so a partial
    * provider response can't delete live rows. Cleared once a pass consumes it.
    */
   pruneOnNextSnapshot: boolean;
+  /** Fingerprint of config values that define the connector's row set. */
+  rowSetFingerprint: string;
   running: boolean;
   /** Fingerprint of non-symbol config (currency); a change resets history. */
   scalarFingerprint: string;
@@ -329,13 +331,11 @@ function streamConfigSignature(database: LocalDatabase): string {
 }
 
 /**
- * Fingerprint of just the connector's `list` config values (the symbol set) —
- * the only edits that change which rows a snapshot should contain. Used to gate
- * immediate pruning: editing symbols prunes dropped rows now, but editing a
- * non-row config (display currency) or `refreshMs` must keep the tombstone
- * grace so a partial provider response never deletes live rows.
+ * Fingerprint of connector config values that define the snapshot row set.
+ * Used to prune dropped instruments immediately without treating display-only
+ * config changes as authoritative row removals.
  */
-function configListFingerprint(
+function configRowSetFingerprint(
   database: LocalDatabase,
   connector: ConnectorDefinition
 ): string {
@@ -343,20 +343,18 @@ function configListFingerprint(
     return "";
   }
   const config = database.source.config ?? {};
-  const listValues: Record<string, unknown> = {};
+  const rowSetValues: Record<string, unknown> = {};
   for (const field of connector.configFields ?? []) {
-    if (field.kind === "list") {
-      listValues[field.key] = config[field.key];
+    if (field.kind === "instrumentList") {
+      rowSetValues[field.key] = config[field.key];
     }
   }
-  return JSON.stringify(listValues);
+  return JSON.stringify(rowSetValues);
 }
 
 /**
- * Fingerprint of the connector config EXCLUDING `list` (symbol) fields — the
- * config that changes the value *scale* of captured samples (e.g. display
- * currency, which re-quotes prices). A change here invalidates the captured
- * field history (old-currency samples must not stitch with new-currency ones).
+ * Fingerprint excluding row-set fields. Changes here can alter captured value
+ * scale (for example display currency), so they invalidate field history.
  */
 function configScalarFingerprint(
   database: LocalDatabase,
@@ -366,14 +364,14 @@ function configScalarFingerprint(
     return "";
   }
   const config = database.source.config ?? {};
-  const listKeys = new Set(
+  const rowSetKeys = new Set(
     (connector.configFields ?? [])
-      .filter((field) => field.kind === "list")
+      .filter((field) => field.kind === "instrumentList")
       .map((field) => field.key)
   );
   const scalar: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
-    if (!listKeys.has(key)) {
+    if (!rowSetKeys.has(key)) {
       scalar[key] = value;
     }
   }
@@ -727,6 +725,11 @@ async function runSync(databaseId: string): Promise<void> {
       // below: lastError is written, the OLD etag/missingCounts are kept,
       // and the retry refetches unconditionally against the stale validator.
       await applied.persisted;
+      const grouped = localDatabasesCollection.get(databaseId) ?? latest;
+      const autoGroup = liveMarketsAutoGroupPatch(grouped, result.rows);
+      if (autoGroup) {
+        updateDatabaseView(databaseId, autoGroup.viewId, autoGroup.patch);
+      }
       await setSyncMeta(databaseId, {
         etag: result.etag,
         lastSyncedAt,
@@ -816,7 +819,7 @@ function ensureSchedule(database: LocalDatabase): void {
     connector.pollPolicy
   );
   const sourceFingerprint = JSON.stringify(database.source);
-  const listFingerprint = configListFingerprint(database, connector);
+  const rowSetFingerprint = configRowSetFingerprint(database, connector);
   const scalarFingerprint = configScalarFingerprint(database, connector);
   const existing = entries.get(database.id);
   if (existing) {
@@ -825,10 +828,10 @@ function ensureSchedule(database: LocalDatabase): void {
     existing.intervalMs = intervalMs;
     existing.minIntervalMs = connector.pollPolicy.minMs;
     const sourceChanged = existing.sourceFingerprint !== sourceFingerprint;
-    const listChanged = existing.listFingerprint !== listFingerprint;
+    const rowSetChanged = existing.rowSetFingerprint !== rowSetFingerprint;
     const scalarChanged = existing.scalarFingerprint !== scalarFingerprint;
     existing.sourceFingerprint = sourceFingerprint;
-    existing.listFingerprint = listFingerprint;
+    existing.rowSetFingerprint = rowSetFingerprint;
     existing.scalarFingerprint = scalarFingerprint;
     // A scale-changing config edit (e.g. display currency) invalidates the
     // captured field history — old-currency samples must not stitch with new
@@ -844,10 +847,10 @@ function ensureSchedule(database: LocalDatabase): void {
     // database edits (rename, view tweaks) don't change the fingerprint, so
     // they don't restart polling — and a halted loop (non-transient config/auth
     // failure) resumes only on a genuine source change, never on an identical
-    // retry. Only a symbol-set edit (`listChanged`) prunes immediately; other
+    // retry. Only a row-set edit prunes immediately; other
     // edits keep the tombstone grace so a partial response can't delete rows.
     if (sourceChanged && !existing.running) {
-      existing.pruneOnNextSnapshot = listChanged;
+      existing.pruneOnNextSnapshot = rowSetChanged;
       if (existing.halted) {
         existing.halted = false;
         existing.consecutiveFailures = 0;
@@ -861,7 +864,7 @@ function ensureSchedule(database: LocalDatabase): void {
     consecutiveFailures: 0,
     halted: false,
     intervalMs,
-    listFingerprint,
+    rowSetFingerprint,
     minIntervalMs: connector.pollPolicy.minMs,
     pendingWhileHidden: false,
     pruneOnNextSnapshot: false,

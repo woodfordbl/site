@@ -38,6 +38,26 @@ export function cloneNodeWithFieldValues(node: HTMLElement): HTMLElement {
   return clone;
 }
 
+/** Resolve a pointer hotspot relative to a preview, optionally clamped. */
+export function resolveDragPreviewOffset(
+  pointer: { x: number; y: number },
+  previewRect: { height: number; left: number; top: number; width: number },
+  options: {
+    clamp?: boolean;
+    origin?: { left: number; top: number };
+  } = {}
+): { x: number; y: number } {
+  const anchor = options.origin ?? previewRect;
+  const x = pointer.x - anchor.left;
+  const y = pointer.y - anchor.top;
+  return options.clamp
+    ? {
+        x: Math.min(x, previewRect.width),
+        y: Math.min(y, previewRect.height),
+      }
+    : { x, y };
+}
+
 function syncFormValues(source: Element, clone: Element): void {
   const sourceFields = source.querySelectorAll(CANVAS_FIELD_SELECTOR);
   const cloneFields = clone.querySelectorAll(CANVAS_FIELD_SELECTOR);
@@ -65,53 +85,38 @@ const CLONE_MIN_HEIGHT_PX = 32;
 /** Shared opacity for canvas block drag previews (native clone + touch overlay). */
 export const CANVAS_ROW_DRAG_PREVIEW_OPACITY = 0.5;
 
-export interface ClonedDragImageOptions {
-  /** Cursor hotspot within the drag image; defaults to the pointer position on `node`. */
-  hotspotX?: number;
-  hotspotY?: number;
-}
-
 /**
  * Uses an off-screen clone of `node` as the native drag image, preserving the
  * dragged element's appearance and live form values. Opt-in alternative to the
  * empty-image + React overlay strategy (prefer overlay in embedded Chromium).
  *
- * Detached synthetic previews (e.g. sanitized database grid cards) are mounted
- * as-is — they are already the preview, not a live DOM source to clone.
+ * **`node` must be connected and must not have layered descendants that
+ * overflow its top-left.** Chromium rasterizes an element drag image over
+ * `AbsoluteBoundingBoxRectIncludingDescendants()` — the union of every
+ * positioned descendant's border box, which `overflow: hidden` does *not*
+ * shrink — and reads the hotspot from that union's origin, not the node's. A
+ * descendant bleeding left (the database grid's negative scrollport margins)
+ * therefore shifts the ghost by a constant no hotspot can cancel. Surfaces with
+ * such previews use the `overlay` strategy instead, which positions the preview
+ * itself. See docs/architecture/drag-and-drop.md#preview-anchoring.
  */
-export function setClonedDragImage(
-  event: DragEvent,
-  node: HTMLElement,
-  options: ClonedDragImageOptions = {}
-): void {
+export function setClonedDragImage(event: DragEvent, node: HTMLElement): void {
   if (!event.dataTransfer) {
     return;
   }
 
-  const synthetic = !node.isConnected;
-  const sourceRect = synthetic ? null : node.getBoundingClientRect();
-
-  let image: HTMLElement;
-  if (synthetic) {
-    image = node;
-  } else {
-    image = node.cloneNode(true) as HTMLElement;
-    syncFormValues(node, image);
-  }
+  const sourceRect = node.getBoundingClientRect();
+  const image = cloneNodeWithFieldValues(node);
 
   Object.assign(image.style, {
     position: "fixed",
     top: "-10000px",
     left: "-10000px",
-    ...(sourceRect
-      ? {
-          width: `${sourceRect.width}px`,
-          minHeight: `${Math.max(sourceRect.height, CLONE_MIN_HEIGHT_PX)}px`,
-          backgroundColor: "var(--background)",
-          borderRadius: "var(--radius-lg)",
-          overflow: "hidden",
-        }
-      : {}),
+    width: `${sourceRect.width}px`,
+    minHeight: `${Math.max(sourceRect.height, CLONE_MIN_HEIGHT_PX)}px`,
+    backgroundColor: "var(--background)",
+    borderRadius: "var(--radius-lg)",
+    overflow: "hidden",
     boxSizing: "border-box",
     opacity: String(CANVAS_ROW_DRAG_PREVIEW_OPACITY),
     pointerEvents: "none",
@@ -120,23 +125,13 @@ export function setClonedDragImage(
 
   document.body.appendChild(image);
 
-  const imageRect = image.getBoundingClientRect();
-  let hotspotX = options.hotspotX;
-  let hotspotY = options.hotspotY;
-  if (hotspotX === undefined || hotspotY === undefined) {
-    if (sourceRect) {
-      hotspotX ??= event.clientX - sourceRect.left;
-      hotspotY ??= event.clientY - sourceRect.top;
-    } else {
-      hotspotX ??= Math.min(24, Math.max(imageRect.width / 2, 0));
-      hotspotY ??= Math.min(
-        imageRect.height / 2,
-        Math.max(imageRect.height - 1, 0)
-      );
-    }
-  }
-
-  event.dataTransfer.setDragImage(image, hotspotX, hotspotY);
+  // Negative when the grab handle sits outside the row content (the canvas
+  // gutter), which draws the ghost over the row it came from.
+  const offset = resolveDragPreviewOffset(
+    { x: event.clientX, y: event.clientY },
+    sourceRect
+  );
+  event.dataTransfer.setDragImage(image, offset.x, offset.y);
 
   requestAnimationFrame(() => {
     image.remove();

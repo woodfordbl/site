@@ -2,13 +2,9 @@
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  flattenDatabaseGridClone,
-  resolveCanvasRowDragPreviewNode,
-  sanitizeDatabaseGridClone,
-} from "@/lib/dnd/canvas-row-drag-image.ts";
+import { resolveCanvasRowDragPreviewSource } from "@/lib/dnd/canvas-row-drag-image.ts";
 
-describe("resolveCanvasRowDragPreviewNode", () => {
+describe("resolveCanvasRowDragPreviewSource", () => {
   beforeAll(() => {
     Object.defineProperty(globalThis, "CSS", {
       configurable: true,
@@ -31,7 +27,10 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     shell.appendChild(content);
     document.body.appendChild(shell);
 
-    expect(resolveCanvasRowDragPreviewNode("row-1")).toBe(content);
+    const source = resolveCanvasRowDragPreviewSource("row-1");
+    expect(source?.node).toBe(content);
+    // Connected nodes anchor on their own live rect.
+    expect(source?.origin).toBeUndefined();
   });
 
   it("prefers the table grid for a table block so the preview keeps its size", () => {
@@ -48,7 +47,7 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     shell.appendChild(content);
     document.body.appendChild(shell);
 
-    expect(resolveCanvasRowDragPreviewNode("table-1")).toBe(table);
+    expect(resolveCanvasRowDragPreviewSource("table-1")?.node).toBe(table);
   });
 
   it("builds a full-block preview with title, chips, and flattened grid", () => {
@@ -68,7 +67,7 @@ describe("resolveCanvasRowDragPreviewNode", () => {
 
     const grid = document.createElement("div");
     grid.setAttribute("role", "grid");
-    grid.className = "-ml-8";
+    grid.style.marginLeft = "-32px";
     grid.style.width = "320px";
 
     const header = document.createElement("div");
@@ -103,8 +102,8 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     shell.appendChild(content);
     document.body.appendChild(shell);
 
-    const preview = resolveCanvasRowDragPreviewNode("db-1");
-    expect(preview).not.toBeNull();
+    const preview = resolveCanvasRowDragPreviewSource("db-1")?.node;
+    expect(preview).not.toBeUndefined();
     expect(preview?.hasAttribute("data-database-drag-preview")).toBe(true);
     expect(preview?.isConnected).toBe(false);
     expect(preview?.textContent).toContain("FX rates");
@@ -112,7 +111,9 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     expect(preview?.textContent).toContain("Currency");
     expect(preview?.textContent).toContain("CAD");
     expect(preview?.querySelector(".hover-reveal")).toBeNull();
-    expect(preview?.querySelector(".-ml-8")).toBeNull();
+    expect(
+      (preview?.querySelector('[role="grid"]') as HTMLElement).style.marginLeft
+    ).toBe("0px");
 
     const clonedBody = preview?.querySelector('[role="rowgroup"] [role="row"]');
     expect(clonedBody).not.toBeNull();
@@ -120,71 +121,27 @@ describe("resolveCanvasRowDragPreviewNode", () => {
     expect((clonedBody as HTMLElement).style.transform).toBe("none");
   });
 
+  it("anchors the database card on the live block, inset by the card padding", () => {
+    const shell = document.createElement("div");
+    shell.setAttribute("data-canvas-row-id", "db-2");
+    const block = document.createElement("div");
+    block.setAttribute("data-database-block", "");
+    block.getBoundingClientRect = () =>
+      ({ left: 200, top: 120, width: 640, height: 900 }) as DOMRect;
+    shell.appendChild(block);
+    document.body.appendChild(shell);
+
+    const source = resolveCanvasRowDragPreviewSource("db-2");
+    expect(source?.origin).toEqual({ left: 192, top: 112 });
+    // Card grows by its padding so the clone renders at the block's real width.
+    expect((source?.node as HTMLElement).style.width).toBe("656px");
+  });
+
   it("falls back to a table row element", () => {
     const row = document.createElement("tr");
     row.setAttribute("data-table-row-id", "row-2");
     document.body.appendChild(row);
 
-    expect(resolveCanvasRowDragPreviewNode("row-2")).toBe(row);
-  });
-});
-
-describe("sanitizeDatabaseGridClone", () => {
-  it("flattens sticky headers and absolute body rows", () => {
-    const grid = document.createElement("div");
-    grid.setAttribute("role", "grid");
-
-    const header = document.createElement("div");
-    header.setAttribute("role", "row");
-    header.className = "sticky top-0 z-20";
-    grid.appendChild(header);
-
-    const rowgroup = document.createElement("div");
-    rowgroup.setAttribute("role", "rowgroup");
-    rowgroup.style.height = "200px";
-
-    const body = document.createElement("div");
-    body.setAttribute("role", "row");
-    body.className = "absolute top-0 left-0";
-    body.style.transform = "translateY(0px)";
-    rowgroup.appendChild(body);
-    grid.appendChild(rowgroup);
-
-    const reveal = document.createElement("div");
-    reveal.className = "hover-reveal";
-    grid.appendChild(reveal);
-
-    document.body.appendChild(grid);
-
-    const card = sanitizeDatabaseGridClone(grid);
-    expect(card.hasAttribute("data-database-drag-preview")).toBe(true);
-    expect(card.querySelector(".hover-reveal")).toBeNull();
-
-    const headerClone = card.querySelector('[role="row"].sticky, [role="row"]');
-    expect(headerClone?.classList.contains("sticky")).toBe(false);
-
-    const bodyClone = card.querySelector('[role="rowgroup"] [role="row"]');
-    expect(bodyClone?.classList.contains("absolute")).toBe(false);
-    expect((bodyClone as HTMLElement).style.position).toBe("relative");
-    expect((bodyClone as HTMLElement).style.transform).toBe("none");
-
-    const group = card.querySelector('[role="rowgroup"]') as HTMLElement;
-    expect(group.style.height).toBe("auto");
-  });
-});
-
-describe("flattenDatabaseGridClone", () => {
-  it("mutates a grid clone in place", () => {
-    const grid = document.createElement("div");
-    grid.setAttribute("role", "grid");
-    const row = document.createElement("div");
-    row.setAttribute("role", "row");
-    row.className = "absolute top-0 left-0";
-    row.style.transform = "translateY(10px)";
-    grid.appendChild(row);
-
-    flattenDatabaseGridClone(grid);
-    expect(row.classList.contains("absolute")).toBe(false);
-    expect(row.style.transform).toBe("none");
+    expect(resolveCanvasRowDragPreviewSource("row-2")?.node).toBe(row);
   });
 });

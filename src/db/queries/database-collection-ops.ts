@@ -504,6 +504,31 @@ export function updateDatabaseView(
   commitDatabaseTransaction(tx);
 }
 
+/** Set/clear grouping and reset bucket state through one canonical policy. */
+export function setDatabaseViewGroupBy(
+  databaseId: string,
+  viewId: string,
+  fieldId: string | null
+): void {
+  const database = localDatabasesCollection.get(databaseId);
+  const view = database?.views.find((candidate) => candidate.id === viewId);
+  if (!(database && view)) {
+    return;
+  }
+  const isLiveMarkets =
+    database.source?.kind === "connector" &&
+    database.source.connectorId === "live-markets";
+  updateDatabaseView(databaseId, viewId, {
+    groupBy: fieldId === null ? undefined : { fieldId },
+    config: {
+      ...view.config,
+      collapsedGroupKeys: undefined,
+      hiddenGroupKeys: undefined,
+      ...(isLiveMarkets ? { liveMarketsGrouping: "manual" as const } : {}),
+    },
+  });
+}
+
 /**
  * Replace one saved view wholesale (undo/redo restore). Does not record edit
  * history — callers push the pre-restore snapshot themselves.
@@ -559,8 +584,10 @@ function dedupeViewName(
  * Per-type starting config for a fresh view: `table`/`list` start empty;
  * `board` picks the first select field as the column source when one exists
  * (multiSelect can't be a kanban lane — a card would sit in several columns);
- * `chart` starts as a bar chart counting rows over the first select or date
- * field. All picks are optional — the view editors handle the unset state.
+ * `chart` starts as a time-axis line over the first captured numeric field
+ * (e.g. a synced price) when the database has one, else as a bar chart
+ * counting rows over the first select or date field. All picks are optional —
+ * the view editors handle the unset state.
  */
 function defaultViewConfig(
   type: DatabaseViewType,
@@ -571,6 +598,18 @@ function defaultViewConfig(
     return groupField ? { board: { groupFieldId: groupField.id } } : {};
   }
   if (type === "chart") {
+    const timeField = fields.find(
+      (field) => field.type === "number" && field.captureHistory === true
+    );
+    if (timeField) {
+      return {
+        chart: {
+          mark: "line",
+          timeSeries: { fieldId: timeField.id },
+          xMode: "time",
+        },
+      };
+    }
     const xField = fields.find(
       (field) => field.type === "select" || field.type === "date"
     );
