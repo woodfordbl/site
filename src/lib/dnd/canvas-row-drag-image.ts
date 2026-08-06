@@ -1,8 +1,21 @@
 import { CANVAS_ROW_ATTRIBUTE } from "@/lib/canvas/resolve-drop-target.ts";
 import { TABLE_ROW_ATTRIBUTE } from "@/lib/canvas/resolve-table-drop-target.ts";
 
-/** Cap so huge databases stay usable as a native drag image. */
+/** Cap so huge databases stay usable as a drag preview. */
 const DATABASE_DRAG_PREVIEW_MAX_HEIGHT_PX = 320;
+
+/** Card padding (`p-2`) inset between the preview's box and the cloned surface. */
+const DATABASE_DRAG_PREVIEW_PADDING_PX = 8;
+
+export interface CanvasRowDragPreviewSource {
+  /** Live element to clone, or a detached card that is already the preview. */
+  node: HTMLElement;
+  /**
+   * Viewport point mapping to `node`'s top-left corner. Set only for detached
+   * previews, which cannot be measured against the live row.
+   */
+  origin?: { left: number; top: number };
+}
 
 function hasClassToken(el: Element, token: string): boolean {
   return el.classList.contains(token);
@@ -13,7 +26,7 @@ function hasClassToken(el: Element, token: string): boolean {
  * sticky headers / pinned cells → static, absolute body rows → relative flow,
  * and drops chrome that should not appear in the ghost.
  */
-export function flattenDatabaseGridClone(grid: HTMLElement): void {
+function flattenDatabaseGridClone(grid: HTMLElement): void {
   for (const el of grid.querySelectorAll(
     '[data-slot="scroll-area-scrollbar"], .hover-reveal'
   )) {
@@ -61,17 +74,10 @@ export function flattenDatabaseGridClone(grid: HTMLElement): void {
 }
 
 /**
- * Clones a live database `[role="grid"]`, flattens virtualization, and wraps
- * it in an opaque card. Prefer {@link buildDatabaseBlockDragPreview} when the
- * full block (title + chips) should be included.
+ * Wraps a flattened clone in the opaque preview card. `widthPx` is the mirrored
+ * surface's width; the card grows by its own padding so the clone renders at 1:1
+ * and its columns do not reflow inside the ghost.
  */
-export function sanitizeDatabaseGridClone(grid: HTMLElement): HTMLElement {
-  const sourceWidth = grid.getBoundingClientRect().width;
-  const clone = grid.cloneNode(true) as HTMLElement;
-  flattenDatabaseGridClone(clone);
-  return wrapDatabaseDragPreview(clone, sourceWidth);
-}
-
 function wrapDatabaseDragPreview(
   content: HTMLElement,
   widthPx: number
@@ -83,7 +89,9 @@ function wrapDatabaseDragPreview(
   Object.assign(wrapper.style, {
     maxHeight: `${DATABASE_DRAG_PREVIEW_MAX_HEIGHT_PX}px`,
     overflow: "hidden",
-    ...(widthPx > 0 ? { width: `${widthPx}px` } : {}),
+    ...(widthPx > 0
+      ? { width: `${widthPx + DATABASE_DRAG_PREVIEW_PADDING_PX * 2}px` }
+      : {}),
   });
   wrapper.appendChild(content);
   return wrapper;
@@ -94,34 +102,25 @@ function wrapDatabaseDragPreview(
  * and the visible grid — with only the virtualized grid flattened so sticky /
  * absolute layers do not stack into a broken ghost.
  */
-function buildDatabaseBlockDragPreview(shell: Element): HTMLElement | null {
+function buildDatabaseBlockDragPreview(
+  shell: Element
+): CanvasRowDragPreviewSource | null {
   const block = shell.querySelector("[data-database-block]");
   if (!(block instanceof HTMLElement)) {
     return null;
   }
 
+  const blockRect = block.getBoundingClientRect();
   const sourceWidth = Math.max(
-    block.getBoundingClientRect().width,
+    blockRect.width,
     shell.querySelector('[role="grid"]')?.getBoundingClientRect().width ?? 0
   );
 
   const clone = block.cloneNode(true) as HTMLElement;
 
-  // Select-lane bleed (`-ml-8`) is for the live canvas gutter — neutralize
-  // it in the ghost so the card edges stay square. Also strip legacy `-ml-12`
-  // in case a clone still carries the previous bleed class.
-  for (const el of clone.querySelectorAll("*")) {
-    if (!(el instanceof HTMLElement)) {
-      continue;
-    }
-    if (hasClassToken(el, "-ml-8") || hasClassToken(el, "-ml-12")) {
-      el.classList.remove("-ml-8", "-ml-12");
-      el.style.marginLeft = "0";
-    }
-  }
-
   const grid = clone.querySelector('[role="grid"]');
   if (grid instanceof HTMLElement) {
+    grid.style.marginLeft = "0";
     flattenDatabaseGridClone(grid);
   } else {
     // List/board/chart views: still strip hover chrome from the clone.
@@ -130,13 +129,27 @@ function buildDatabaseBlockDragPreview(shell: Element): HTMLElement | null {
     }
   }
 
-  return wrapDatabaseDragPreview(clone, sourceWidth);
+  return {
+    node: wrapDatabaseDragPreview(clone, sourceWidth),
+    // The card insets the clone by its padding, so the live block's top-left
+    // sits one padding step inside the preview's own top-left corner.
+    origin: {
+      left: blockRect.left - DATABASE_DRAG_PREVIEW_PADDING_PX,
+      top: blockRect.top - DATABASE_DRAG_PREVIEW_PADDING_PX,
+    },
+  };
 }
 
-/** Resolves the DOM node cloned as the native drag image for a canvas row drag. */
-export function resolveCanvasRowDragPreviewNode(
+/**
+ * Resolves the drag preview for a canvas row: a live element to clone, or a
+ * detached card plus the viewport `origin` that keeps the grab point under the
+ * pointer. Detached previews can only be rendered by the `overlay` strategy —
+ * `setClonedDragImage` in [drag-image.ts](./drag-image.ts) documents why the
+ * native drag image cannot place them.
+ */
+export function resolveCanvasRowDragPreviewSource(
   rowId: string
-): HTMLElement | null {
+): CanvasRowDragPreviewSource | null {
   const escapedId = CSS.escape(rowId);
 
   // Table blocks sit in a full-width content column but the grid itself is only
@@ -148,7 +161,7 @@ export function resolveCanvasRowDragPreviewNode(
     `[data-table-id="${escapedId}"] table`
   );
   if (tableGrid instanceof HTMLElement) {
-    return tableGrid;
+    return { node: tableGrid };
   }
 
   const shell = document.querySelector(
@@ -163,12 +176,12 @@ export function resolveCanvasRowDragPreviewNode(
 
     const canvasContent = shell.querySelector("[data-canvas-row-content]");
     if (canvasContent instanceof HTMLElement) {
-      return canvasContent;
+      return { node: canvasContent };
     }
   }
 
   const tableRow = document.querySelector(
     `[${TABLE_ROW_ATTRIBUTE}="${escapedId}"]`
   );
-  return tableRow instanceof HTMLElement ? tableRow : null;
+  return tableRow instanceof HTMLElement ? { node: tableRow } : null;
 }

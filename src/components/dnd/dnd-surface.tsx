@@ -15,7 +15,11 @@ import {
 } from "@/lib/dnd/drag-store.ts";
 import { collectRects } from "@/lib/dnd/rects.ts";
 
-/** Drag-image strategy: hide the native chip (overlay) or clone a DOM node. */
+/**
+ * Drag-image strategy: hide the native chip (overlay) or clone a DOM node.
+ * `getNode` must return a connected element whose descendants stay inside its
+ * box — see {@link setClonedDragImage}.
+ */
 export type DragImageStrategy =
   | { kind: "overlay" }
   | { kind: "native-clone"; getNode: (sourceId: string) => HTMLElement | null };

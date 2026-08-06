@@ -26,6 +26,51 @@ function linksMatch(a: InlineMark, b: InlineMark): boolean {
   return a.href === b.href && a.pageId === b.pageId;
 }
 
+interface MarkRange {
+  end: number;
+  start: number;
+}
+
+function subtractRange(piece: MarkRange, cut: MarkRange): MarkRange[] {
+  if (cut.end <= piece.start || cut.start >= piece.end) {
+    return [piece];
+  }
+  const rest: MarkRange[] = [];
+  if (piece.start < cut.start) {
+    rest.push({ start: piece.start, end: cut.start });
+  }
+  if (piece.end > cut.end) {
+    rest.push({ start: cut.end, end: piece.end });
+  }
+  return rest;
+}
+
+/**
+ * Inline page links are atomic runs: a styling mark either covers a whole page
+ * link or stops at its edges. Partial coverage is clipped away, so a page link
+ * never splits into two chrome-bearing anchors when the user bolds across it.
+ */
+function clipToPageLinkRuns(
+  mark: InlineMark,
+  runs: readonly MarkRange[]
+): InlineMark[] {
+  if (mark.type === "link") {
+    return [mark];
+  }
+  let pieces: MarkRange[] = [{ start: mark.start, end: mark.end }];
+  for (const run of runs) {
+    if (mark.start <= run.start && mark.end >= run.end) {
+      continue;
+    }
+    pieces = pieces.flatMap((piece) => subtractRange(piece, run));
+  }
+  return pieces.map((piece) => ({
+    type: mark.type,
+    start: piece.start,
+    end: piece.end,
+  }));
+}
+
 /** Sort, clamp to `textLength`, drop empties, merge same-type overlaps. */
 export function normalizeInlineMarks(
   marks: readonly InlineMark[],
@@ -41,8 +86,17 @@ export function normalizeInlineMarks(
     .filter((mark) => mark.start < mark.end)
     .sort((a, b) => a.start - b.start || a.end - b.end);
 
+  const pageLinkRuns = clamped
+    .filter((mark) => mark.type === "link" && mark.pageId !== undefined)
+    .map((mark) => ({ start: mark.start, end: mark.end }));
+  const clipped = (
+    pageLinkRuns.length === 0
+      ? clamped
+      : clamped.flatMap((mark) => clipToPageLinkRuns(mark, pageLinkRuns))
+  ).sort((a, b) => a.start - b.start || a.end - b.end);
+
   const merged: InlineMark[] = [];
-  for (const mark of clamped) {
+  for (const mark of clipped) {
     let previous: InlineMark | undefined;
     for (let i = merged.length - 1; i >= 0; i -= 1) {
       // Links only merge with an adjoining link of the *same* href/pageId —

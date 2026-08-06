@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { readFieldHistory } from "@/db/history/field-history-store.ts";
@@ -5,9 +6,8 @@ import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
 import type {
-  ConnectorDefinition,
   ConnectorFetchContext,
-  ConnectorHistoryRequest,
+  ConnectorHistoryPoint,
 } from "@/lib/connectors/types.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
@@ -26,9 +26,9 @@ import type {
 /**
  * Async loader for time-axis chart data: for each synced row it reads the
  * forward-only local capture from the field-history store, backfills older
- * history via the connector's `fetchHistory` (cached), stitches the two, and
- * clips to the visible window. Re-reads on a short interval so live ticks
- * (which append to the store) extend the right edge.
+ * history via TanStack Query (Binance / Yahoo / connector `fetchHistory`),
+ * stitches the two, and clips to the visible window. Re-reads local capture on
+ * a short interval so live ticks extend the right edge.
  */
 
 /** One symbol's line: stable key + display label + stitched points. */
@@ -49,49 +49,24 @@ export interface UseTimeSeriesResult {
   loading: boolean;
 }
 
-/** Live re-read cadence (ms) — cheap: backfill is cached, local is in-memory.
+/** Live re-read cadence (ms) — cheap: backfill is RQ-cached, local is in-memory.
  * Fast enough that the `Live` window's right edge visibly scrolls with ticks. */
 const LIVE_REFRESH_MS = 2000;
 
-/**
- * Backfill cache: provider candles are historical and immutable, so cache by
- * (database, symbol, resolution) and reuse whenever the cached range already
- * starts at or before the requested `from`.
- */
-const backfillCache = new Map<
-  string,
-  { points: FieldHistoryPoint[]; from: number }
->();
-
-async function loadBackfill(
-  connector: ConnectorDefinition,
-  ctx: ConnectorFetchContext,
-  databaseId: string,
-  request: ConnectorHistoryRequest
-): Promise<FieldHistoryPoint[]> {
-  if (!connector.fetchHistory) {
-    return [];
-  }
-  // Include the display currency: it changes the fetched pair (e.g. BTCUSDT vs
-  // BTCEUR), so cached candles from the old currency must not be reused.
-  const currency = String(ctx.config.currency ?? "");
-  const key = `${databaseId}:${request.externalId}:${request.resolution}:${currency}`;
-  const cached = backfillCache.get(key);
-  if (cached && cached.from <= request.from) {
-    return cached.points;
-  }
-  try {
-    const points = await connector.fetchHistory(ctx, request);
-    backfillCache.set(key, { points, from: request.from });
-    return points;
-  } catch {
-    return cached?.points ?? [];
-  }
-}
+/** Provider candles are historical; keep them fresh enough for scrolling windows. */
+const BACKFILL_STALE_MS = 60_000;
+const EMPTY_BACKFILL_POINTS: ConnectorHistoryPoint[][] = [];
 
 interface RowMeta {
   externalId: string;
   label: string;
+}
+
+/** Content key for a row set — the parts the loader actually reads. */
+function rowMetaSignature(meta: readonly RowMeta[]): string {
+  return meta
+    .map((entry) => `${entry.externalId}\u0000${entry.label}`)
+    .join("\u0001");
 }
 
 export function useTimeSeriesChartData(
@@ -102,10 +77,10 @@ export function useTimeSeriesChartData(
   windowMs: number | undefined
 ): UseTimeSeriesResult {
   const effectiveWindow = windowMs ?? DEFAULT_TIME_WINDOW_MS;
+  const resolution = resolutionForWindow(effectiveWindow);
+  const bucketMs = stitchBucketMs(effectiveWindow);
 
-  // Stable per-row identity + label; the memo lets the effect re-run only when
-  // the set of symbols (or their labels) actually changes.
-  const rowMeta = useMemo<RowMeta[]>(() => {
+  const tickedRowMeta = useMemo<RowMeta[]>(() => {
     const primaryField =
       fields.find((field) => field.id === database.primaryFieldId) ?? fields[0];
     const meta: RowMeta[] = [];
@@ -118,18 +93,77 @@ export function useTimeSeriesChartData(
         primaryField && raw !== undefined && raw !== null
           ? formatCellValue(primaryField, raw)
           : row.externalId;
-      meta.push({ externalId: row.externalId, label });
+      meta.push({
+        externalId: row.externalId,
+        label,
+      });
     }
     return meta;
   }, [rows, fields, database.primaryFieldId]);
 
-  const [data, setData] = useState<TimeSeriesChartData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // A live connector hands down a fresh `rows` array on every tick, so pin the
+  // loader's row set to its content: the symbols only change when the sync adds
+  // or drops one, and re-reading history per price tick would thrash IndexedDB.
+  const rowMetaKey = rowMetaSignature(tickedRowMeta);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: identity is keyed by the content signature
+  const rowMeta = useMemo(() => tickedRowMeta, [rowMetaKey]);
 
   const source = database.source;
   const connectorId =
     source?.kind === "connector" ? source.connectorId : undefined;
+  const connectorConfig = source?.kind === "connector" ? source.config : {};
   const databaseId = database.id;
+  const connector = connectorId ? getConnector(connectorId) : undefined;
+  const needsBackfill = Boolean(fieldId && connector?.fetchHistory);
+
+  const {
+    data: backfillPoints,
+    isError: backfillError,
+    isFetching: backfillPending,
+  } = useQuery({
+    queryKey: [
+      "connectors",
+      "history-backfill",
+      databaseId,
+      rowMetaKey,
+      resolution,
+      connectorConfig,
+      effectiveWindow,
+    ] as const,
+    enabled: needsBackfill,
+    staleTime: BACKFILL_STALE_MS,
+    queryFn: async (): Promise<ConnectorHistoryPoint[][]> => {
+      const token = connectorId
+        ? ((await Promise.resolve(getConnectorToken(connectorId)).catch(
+            () => undefined
+          )) ?? undefined)
+        : undefined;
+      const ctx: ConnectorFetchContext = {
+        config: connectorConfig,
+        fetchFn: (input, init) => fetch(input, init),
+        token,
+      };
+      const to = Date.now();
+      const from = to - effectiveWindow;
+      return await Promise.all(
+        rowMeta.map(
+          async (meta) =>
+            (await connector?.fetchHistory?.(ctx, {
+              externalId: meta.externalId,
+              from,
+              to,
+              resolution,
+            })) ?? []
+        )
+      );
+    },
+  });
+  const effectiveBackfillPoints =
+    backfillPoints ??
+    (backfillError || !needsBackfill ? EMPTY_BACKFILL_POINTS : undefined);
+
+  const [data, setData] = useState<TimeSeriesChartData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!fieldId) {
@@ -137,45 +171,25 @@ export function useTimeSeriesChartData(
       setLoading(false);
       return;
     }
+    if (!effectiveBackfillPoints) {
+      return;
+    }
+    const activeBackfillPoints = effectiveBackfillPoints;
     let cancelled = false;
     const activeFieldId = fieldId;
-    const connector = connectorId ? getConnector(connectorId) : undefined;
-    const connectorConfig = source?.kind === "connector" ? source.config : {};
-    const resolution = resolutionForWindow(effectiveWindow);
-    const bucketMs = stitchBucketMs(effectiveWindow);
 
     async function load() {
       const to = Date.now();
       const from = to - effectiveWindow;
-      let ctx: ConnectorFetchContext | null = null;
-      if (connector?.fetchHistory && connectorId) {
-        const token = await Promise.resolve(
-          getConnectorToken(connectorId)
-        ).catch(() => undefined);
-        ctx = {
-          config: connectorConfig,
-          fetchFn: (input, init) => fetch(input, init),
-          token: token ?? undefined,
-        };
-      }
       const series = await Promise.all(
-        rowMeta.map(async (meta): Promise<TimeSeriesLine> => {
+        rowMeta.map(async (meta, index): Promise<TimeSeriesLine> => {
           const local = clipToWindow(
             await readFieldHistory(databaseId, meta.externalId, activeFieldId),
             from,
             to
           );
-          const backfill =
-            connector && ctx
-              ? await loadBackfill(connector, ctx, databaseId, {
-                  externalId: meta.externalId,
-                  from,
-                  to,
-                  resolution,
-                })
-              : [];
           const points = clipToWindow(
-            stitchSeries(backfill, local, bucketMs),
+            stitchSeries(activeBackfillPoints[index] ?? [], local, bucketMs),
             from,
             to
           );
@@ -197,7 +211,17 @@ export function useTimeSeriesChartData(
       cancelled = true;
       clearInterval(interval);
     };
-  }, [databaseId, connectorId, source, fieldId, effectiveWindow, rowMeta]);
+  }, [
+    databaseId,
+    fieldId,
+    effectiveWindow,
+    rowMeta,
+    effectiveBackfillPoints,
+    bucketMs,
+  ]);
 
-  return { data, loading };
+  return {
+    data,
+    loading: loading || (Boolean(fieldId) && backfillPending && data === null),
+  };
 }

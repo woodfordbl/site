@@ -139,7 +139,10 @@ URLs already render a not-found shell once the definition is gone.
   per view (type icon + name, truncated), horizontally scrollable on overflow. Edit mode
   appends a "+" opening the Add-view menu (Table/List/Board/Chart), which creates via
   `addDatabaseView` (per-type defaults: board adopts the first select field as
-  `groupFieldId`; chart starts `bar`/`count` over the first select-or-date field; names
+  `groupFieldId`; chart starts as a time-axis `line` over the first captured numeric
+  field — `xMode: "time"` + `timeSeries.fieldId`, so a synced price database charts
+  price over time on the first try — falling back to `bar`/`count` over the first
+  select-or-date field when nothing is captured; names
   dedupe with a numeric suffix) and activates the new view. View mode is switch-only and
   hides the tabs entirely for single-view databases.
 - [`database-table-grid.tsx`](../../src/components/database/database-table-grid.tsx) —
@@ -293,7 +296,9 @@ Synced databases pull rows from an external service via the client-side engine i
 election, per-database scheduling clamped to connector minimums, push-based
 `subscribeSyncStatus`, and **watch mode** — see below) over the connector SDK in
 [`src/lib/connectors/`](../../src/lib/connectors/) (registry `listConnectors`/
-`getConnector`; GitHub repos/pull requests/issues, CoinGecko markets, Frankfurter FX).
+`getConnector`; GitHub repos/pull requests/issues, Frankfurter FX, and the unified
+**Stocks and Crypto** connector — CoinGecko + Binance for crypto, Finnhub quote/
+`profile2` (company name + market cap) + Yahoo candles for equities).
 Snapshot diffing lives
 in [`database-sync-ops.ts`](../../src/db/queries/database-sync-ops.ts): keyed by
 `externalId`, touching only `sourceKey` field values so local columns survive refreshes.
@@ -307,8 +312,9 @@ UI surfaces:
   — search-first single-select; links the block to an existing id without creating a
   database), and **Synced** tabs. The synced tab lists
   connector cards (icon/title/description from the registry); picking one renders a form
-  generated from `configFields` ("list" inputs parse comma/newline-separated values;
-  empty text inputs are omitted so schema defaults apply), validated by the connector's
+  generated from `configFields` (`"instrumentList"` inputs — Stocks and Crypto — are one
+  ticker per row with a Stock / Crypto toggle; empty text inputs are omitted so schema
+  defaults apply), validated by the connector's
   zod `configSchema` with inline `FieldError`s. Connectors with `auth` add a masked token
   input persisted via [`token-store.ts`](../../src/lib/connectors/token-store.ts)
   (client-only localStorage — never in the database config). Submit builds
@@ -333,7 +339,8 @@ UI surfaces:
   message tooltip on error, tiny muted refresh glyph when idle+healthy. Click =
   `requestImmediateSync` ("Refresh now" tooltip); a refused click (follower tab —
   leader-only by design) switches the chip to a no-op look.
-- **Settings → Source** — connector identity + config summary, last sync/error, Refresh
+- **Settings → Source** — connector identity + live config editors (instrument rows for
+  Stocks and Crypto, chips for plain lists, selects/text), last sync/error, Refresh
   now, refresh-interval override submenu (Default/1m/5m/15m/1h/6h → `updateDatabaseSource`
   writes `source.refreshMs`; connectors clamp to their minimum), and the token row for
   auth connectors.

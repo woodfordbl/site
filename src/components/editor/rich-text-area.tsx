@@ -8,10 +8,14 @@ import {
   useCallback,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 
 import {
-  EditableInlinePageLinkChrome,
+  collectInlinePageLinkChromeHosts,
+  InlinePageLinkChrome,
+  type InlinePageLinkChromeHost,
+  inlinePageLinkChromeHostsEqual,
   inlinePageLinkClassName,
 } from "@/components/editor/inline-page-link.tsx";
 import { classNameForMarks } from "@/components/editor/rich-text.tsx";
@@ -24,10 +28,13 @@ import {
 import { extractPrimaryPastedUrl } from "@/lib/canvas/paste-url.ts";
 import { getFieldSelection } from "@/lib/editor/caret-navigation.ts";
 import {
+  createInlinePageLinkAnchor,
   insertLinkedTextAtSelection,
   insertLinkOverSelection,
   insertPlainTextAtSelection,
+  pageLinkTitleMarks,
   type RichTextDomSnapshot,
+  repairInlinePageLinkDom,
   richTextToHtml,
   serializeRichTextDom,
   setRichTextSelection,
@@ -85,23 +92,19 @@ function buildContent(root: HTMLElement, value: string, marks: InlineMark[]) {
       continue;
     }
     if (segment.href && segment.pageId) {
-      const anchor = doc.createElement("a");
-      anchor.setAttribute("href", segment.href);
-      anchor.dataset.href = segment.href;
-      anchor.dataset.pageId = segment.pageId;
-      anchor.dataset.marks = segment.marks.join(" ");
-      anchor.className = inlinePageLinkClassName;
-      const icon = doc.createElement("span");
-      icon.dataset.inlinePageLinkChrome = "icon";
-      icon.contentEditable = "false";
-      const title = doc.createElement("span");
-      title.className = "underline underline-offset-4 decoration-border";
-      title.textContent = segment.text;
-      const arrow = doc.createElement("span");
-      arrow.dataset.inlinePageLinkChrome = "arrow";
-      arrow.contentEditable = "false";
-      anchor.append(icon, title, arrow);
-      fragment.append(anchor);
+      const styleMarks = pageLinkTitleMarks(segment.marks);
+      fragment.append(
+        createInlinePageLinkAnchor(doc, {
+          className: inlinePageLinkClassName,
+          href: segment.href,
+          markTokens: segment.marks.join(" "),
+          pageId: segment.pageId,
+          text: segment.text,
+          ...(styleMarks.length > 0
+            ? { titleClassName: classNameForMarks(styleMarks) }
+            : {}),
+        })
+      );
       continue;
     }
     const element = doc.createElement(segment.href ? "a" : "span");
@@ -168,12 +171,9 @@ export function RichTextArea({
   const navigate = useNavigate();
   const { pages } = useMergedPageListItems();
   const normalizedMarks = normalizeInlineMarks(marks, value.length);
-  const chromeRevision = `${value}:${normalizedMarks
-    .map(
-      (mark) =>
-        `${mark.type}:${mark.start}:${mark.end}:${mark.href ?? ""}:${mark.pageId ?? ""}`
-    )
-    .join("|")}`;
+  const [chromeHosts, setChromeHosts] = useState<InlinePageLinkChromeHost[]>(
+    []
+  );
 
   // Initial (and server-rendered) content. Computed once — the identity stays
   // stable so React never rewrites the DOM; after mount the layout effect owns
@@ -187,24 +187,30 @@ export function RichTextArea({
     };
   }
 
+  // Keeps the field DOM in sync with the model and re-reads the page-link
+  // chrome hosts afterwards — the rescan must follow the rebuild, so it lives
+  // here rather than in a child effect (children run first).
   useLayoutEffect(() => {
     const root = fieldRef.current;
     if (!root || composingRef.current) {
       return;
     }
-    if (snapshotEquals(serializeRichTextDom(root), value, normalizedMarks)) {
-      return;
+    if (!snapshotEquals(serializeRichTextDom(root), value, normalizedMarks)) {
+      const hadFocus = root.ownerDocument.activeElement === root;
+      const selection = hadFocus ? getFieldSelection(root) : null;
+      buildContent(root, value, normalizedMarks);
+      if (hadFocus && selection) {
+        setRichTextSelection(root, {
+          start: Math.min(selection.start, value.length),
+          end: Math.min(selection.end, value.length),
+        });
+      }
     }
 
-    const hadFocus = root.ownerDocument.activeElement === root;
-    const selection = hadFocus ? getFieldSelection(root) : null;
-    buildContent(root, value, normalizedMarks);
-    if (hadFocus && selection) {
-      setRichTextSelection(root, {
-        start: Math.min(selection.start, value.length),
-        end: Math.min(selection.end, value.length),
-      });
-    }
+    const nextHosts = collectInlinePageLinkChromeHosts(root);
+    setChromeHosts((previous) =>
+      inlinePageLinkChromeHostsEqual(previous, nextHosts) ? previous : nextHosts
+    );
   });
 
   const emitSnapshot = useCallback(() => {
@@ -212,6 +218,9 @@ export function RichTextArea({
     if (!root) {
       return;
     }
+    // Typing at a link edge can still land inside the anchor; lift it out
+    // before reading, so the run's marks never spread onto the new text.
+    repairInlinePageLinkDom(root);
     const snapshot = serializeRichTextDom(root);
     onInput(
       multiline
@@ -363,10 +372,7 @@ export function RichTextArea({
         role="textbox"
         tabIndex={0}
       />
-      <EditableInlinePageLinkChrome
-        fieldRef={fieldRef}
-        revision={chromeRevision}
-      />
+      <InlinePageLinkChrome hosts={chromeHosts} />
     </>
   );
 }

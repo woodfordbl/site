@@ -103,6 +103,7 @@ import {
   addDatabaseField,
   duplicateDatabaseField,
   removeDatabaseField,
+  setDatabaseViewGroupBy,
   updateDatabaseField,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
@@ -991,18 +992,11 @@ export function DatabaseColumnMenu({
 
   const isGroupedByField = view.groupBy?.fieldId === field.id;
   const toggleGroupBy = () => {
-    // Grouping by a new field (or clearing) always resets the collapse AND
-    // hidden state — both store bucket keys of the previous field, which can
-    // collide with the new field's buckets (`""` empty, checkbox
-    // `true`/`false`, plain text/number values).
-    updateDatabaseView(databaseId, viewId, {
-      groupBy: isGroupedByField ? undefined : { fieldId: field.id },
-      config: {
-        ...config,
-        collapsedGroupKeys: undefined,
-        hiddenGroupKeys: undefined,
-      },
-    });
+    setDatabaseViewGroupBy(
+      databaseId,
+      viewId,
+      isGroupedByField ? null : field.id
+    );
   };
 
   const writeIcon = (icon: string | undefined) => {

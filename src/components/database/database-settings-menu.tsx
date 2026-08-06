@@ -19,10 +19,8 @@ import {
   IconRefresh,
   IconRestore,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
-import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -39,6 +37,7 @@ import {
   AddDatabaseViewMenuItems,
   DATABASE_VIEW_TYPE_ICONS,
 } from "@/components/database/database-view-switcher.tsx";
+import { InstrumentListConfigEditor } from "@/components/database/instrument-list-config-editor.tsx";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
   type ListReorderHandleProps,
@@ -83,6 +82,7 @@ import {
   removeDatabaseView,
   reorderDatabaseFields,
   setDatabaseIcon,
+  setDatabaseViewGroupBy,
   updateDatabaseSource,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
@@ -108,6 +108,7 @@ import {
   deleteRowTemplate,
   readRowTemplateSnapshot,
 } from "@/lib/databases/row-template-store.ts";
+import { formatMenuTimestamp } from "@/lib/pages/format-menu-timestamp.ts";
 import type {
   DatabaseField,
   DatabaseSource,
@@ -125,11 +126,6 @@ import { cn } from "@/lib/utils.ts";
  * sections (Properties visibility, Group, Vertical separators) scope to the
  * ACTIVE view threaded from the title row — never `views[0]`.
  */
-
-/** Timestamps in menu copy: "Jan 5, 2026 3:24 PM". */
-function formatTimestamp(iso: string): string {
-  return format(new Date(iso), "MMM d, yyyy h:mm a");
-}
 
 /**
  * Keep typing inside menu-embedded inputs from triggering the menu's
@@ -395,17 +391,7 @@ function GroupSubmenu({ database, view }: GroupSubmenuProps) {
     if (fieldId === activeFieldId || (fieldId === null && !activeFieldId)) {
       return;
     }
-    // Collapse AND hidden state reset together — both store bucket keys of
-    // the previous field, which can collide with the new field's buckets
-    // (`""` empty, checkbox `true`/`false`, plain text/number values).
-    updateDatabaseView(database.id, view.id, {
-      groupBy: fieldId === null ? undefined : { fieldId },
-      config: {
-        ...view.config,
-        collapsedGroupKeys: undefined,
-        hiddenGroupKeys: undefined,
-      },
-    });
+    setDatabaseViewGroupBy(database.id, view.id, fieldId);
   };
 
   return (
@@ -752,140 +738,6 @@ function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
   );
 }
 
-/** Max instruments per synced source — matches the Finnhub proxy's peer cap. */
-const MAX_CONNECTOR_SYMBOLS = 30;
-/** Provider symbol shape once uppercased: A–Z 0–9 . : _ - up to 20 chars. */
-const CONNECTOR_SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
-/** Splits pasted/typed input into candidate symbols on commas or newlines. */
-const SYMBOL_INPUT_SEPARATOR = /[\n,]/;
-
-interface SymbolListEditorProps {
-  config: Record<string, JsonValue>;
-  configKey: string;
-  databaseId: string;
-  label: string;
-  placeholder?: string;
-  values: string[];
-}
-
-/**
- * Editor for a `list` config field (symbol/ticker set): removable chips plus an
- * add input. Every mutation writes the full config back through
- * `updateDatabaseSource`; the sync engine's collection watcher then refetches
- * and reopens the live socket against the new set (database-sync-engine.ts).
- * Enforces the provider caps (≤ {@link MAX_CONNECTOR_SYMBOLS}, symbol shape) so
- * the next poll can't fail config validation, and blocks removing the last one
- * (connectors require ≥ 1).
- */
-function SymbolListEditor({
-  config,
-  configKey,
-  databaseId,
-  label,
-  placeholder,
-  values,
-}: SymbolListEditorProps) {
-  const [error, setError] = useState("");
-
-  const write = (next: string[]) => {
-    updateDatabaseSource(databaseId, {
-      config: { ...config, [configKey]: next },
-    });
-  };
-
-  // Returns true when the input produced at least one new symbol (so the caller
-  // can clear the field); sets an inline note for anything skipped.
-  const addFromInput = (text: string): boolean => {
-    const parsed = text
-      .split(SYMBOL_INPUT_SEPARATOR)
-      .map((symbol) => symbol.trim().toUpperCase())
-      .filter(Boolean);
-    const next = [...values];
-    const skipped: string[] = [];
-    for (const symbol of parsed) {
-      if (next.includes(symbol)) {
-        continue;
-      }
-      if (
-        next.length >= MAX_CONNECTOR_SYMBOLS ||
-        !CONNECTOR_SYMBOL_PATTERN.test(symbol)
-      ) {
-        skipped.push(symbol);
-        continue;
-      }
-      next.push(symbol);
-    }
-    setError(skipped.length > 0 ? `Skipped ${skipped.join(", ")}` : "");
-    if (next.length !== values.length) {
-      write(next);
-      return true;
-    }
-    return false;
-  };
-
-  const remove = (symbol: string) => {
-    if (values.length <= 1) {
-      setError("Keep at least one");
-      return;
-    }
-    setError("");
-    write(values.filter((value) => value !== symbol));
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      {values.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
-          {values.map((symbol) => (
-            <span
-              className="inline-flex items-center gap-1 rounded bg-muted py-0.5 pr-1 pl-1.5 text-foreground text-xs tabular-nums"
-              key={symbol}
-            >
-              {symbol}
-              <button
-                aria-label={`Remove ${symbol}`}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40"
-                disabled={values.length <= 1}
-                onClick={() => remove(symbol)}
-                type="button"
-              >
-                <IconX className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <InputGroup className="h-8 pointer-coarse:h-10">
-        <InputGroupInput
-          aria-label={`Add to ${label}`}
-          autoComplete="off"
-          onBlur={(event) => {
-            if (addFromInput(event.currentTarget.value)) {
-              event.currentTarget.value = "";
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.currentTarget.value = "";
-              return;
-            }
-            stopMenuKeys(event);
-            if (event.key === "Enter" || event.key === ",") {
-              event.preventDefault();
-              if (addFromInput(event.currentTarget.value)) {
-                event.currentTarget.value = "";
-              }
-            }
-          }}
-          placeholder={placeholder ?? "Add…"}
-        />
-      </InputGroup>
-      {error ? <p className="text-destructive text-xs">{error}</p> : null}
-    </div>
-  );
-}
-
 interface ConnectorTextConfigRowProps {
   config: Record<string, JsonValue>;
   configKey: string;
@@ -1007,26 +859,23 @@ interface ConnectorConfigEditorProps {
 
 /**
  * Live editor for one connector config field, replacing the old read-only
- * summary so a synced source's instruments can change after creation. `list`
- * fields get chips; editable `select` fields a dropdown; `creationOnly`
- * fields (e.g. asset type — schema-locked at create) show read-only; `text`
- * fields a single input.
+ * summary so a synced source's instruments can change after creation.
+ * `instrumentList` fields get per-row Stock/Crypto toggles; editable `select`
+ * fields get a dropdown; `creationOnly` fields show read-only; `text` fields
+ * get a single input.
  */
 function ConnectorConfigEditor({
   config,
   databaseId,
   field,
 }: ConnectorConfigEditorProps) {
-  if (field.kind === "list") {
-    const raw = config[field.key];
+  if (field.kind === "instrumentList") {
     return (
-      <SymbolListEditor
+      <InstrumentListConfigEditor
         config={config}
-        configKey={field.key}
         databaseId={databaseId}
-        label={field.label}
-        placeholder={field.placeholder}
-        values={Array.isArray(raw) ? raw.map(String) : []}
+        field={field}
+        key={JSON.stringify(config[field.key])}
       />
     );
   }
@@ -1110,7 +959,9 @@ function ConnectorSourceSubmenu({
           <InfoRow
             label="Last synced"
             value={
-              status.lastSyncedAt ? formatTimestamp(status.lastSyncedAt) : "—"
+              status.lastSyncedAt
+                ? formatMenuTimestamp(status.lastSyncedAt)
+                : "—"
             }
           />
         </div>
@@ -1186,11 +1037,11 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
           <InfoRow label="Rows" value={String(rowCount)} />
           <InfoRow
             label="Created"
-            value={formatTimestamp(database.createdAt)}
+            value={formatMenuTimestamp(database.createdAt)}
           />
           <InfoRow
             label="Updated"
-            value={formatTimestamp(database.updatedAt)}
+            value={formatMenuTimestamp(database.updatedAt)}
           />
         </div>
         <DropdownMenuSeparator />
@@ -1592,11 +1443,11 @@ export function DatabaseSettingsMenu({
           ) : null}
           <StatRow
             label="Created at"
-            value={formatTimestamp(database.createdAt)}
+            value={formatMenuTimestamp(database.createdAt)}
           />
           <StatRow
             label="Last edited at"
-            value={formatTimestamp(database.updatedAt)}
+            value={formatMenuTimestamp(database.updatedAt)}
           />
         </div>
       </DropdownMenuContent>

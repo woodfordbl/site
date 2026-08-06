@@ -12,10 +12,11 @@ import {
 
 /**
  * CoinGecko markets transport: the price / market-cap / real-currency plumbing
- * behind the unified "Stocks and Crypto" connector's `crypto` type (see `live-markets.ts`).
+ * behind the unified "Stocks and Crypto" connector (see `live-markets.ts`).
  * One row per configured ticker, resolved by CoinGecko's `symbols` filter and
  * quoted in an arbitrary `vs_currency` (true conversion, unlike the Binance
- * live tick). Binance streaming overlays live price updates on top, keyed by
+ * live tick). Tickers CoinGecko does not recognize are classified as equities
+ * by `live-markets`. Binance streaming overlays live price updates on top, keyed by
  * the same base-ticker `externalId`. Keyless public `/coins/markets` endpoint
  * (open CORS, no auth). No ETag: the payload changes on effectively every poll.
  */
