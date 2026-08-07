@@ -32,7 +32,9 @@ export interface UseLiveMarketsDerivedResult {
   rows: LocalDatabaseRow[];
 }
 
-function isLiveMarketsDatabase(database: LocalDatabase | null | undefined): boolean {
+function isLiveMarketsDatabase(
+  database: LocalDatabase | null | undefined
+): boolean {
   return (
     database?.source?.kind === "connector" &&
     database.source.connectorId === "live-markets"
@@ -135,7 +137,6 @@ export function useLiveMarketsDerivedRows(
 
   return {
     rows: merged,
-    changePending:
-      enabled && isFetching && seriesByExternalId === undefined,
+    changePending: enabled && isFetching && seriesByExternalId === undefined,
   };
 }

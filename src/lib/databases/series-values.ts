@@ -35,7 +35,7 @@ export function valueAtSeries(
   let hi = points.length - 1;
   let best: FieldHistoryPoint | null = null;
   while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
+    const mid = Math.floor((lo + hi) / 2);
     const point = points[mid];
     if (point.t <= timestampMs) {
       best = point;

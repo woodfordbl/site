@@ -30,9 +30,9 @@ describe("computeSeriesCoverageGaps", () => {
       { t: 10 * hour, v: 10 },
       { t: 11 * hour, v: 11 },
     ];
-    expect(
-      computeSeriesCoverageGaps(points, hour, 12 * hour, "1h")
-    ).toEqual([{ from: hour, to: 10 * hour }]);
+    expect(computeSeriesCoverageGaps(points, hour, 12 * hour, "1h")).toEqual([
+      { from: hour, to: 10 * hour },
+    ]);
   });
 });
 

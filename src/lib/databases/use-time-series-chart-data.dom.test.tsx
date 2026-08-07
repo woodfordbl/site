@@ -21,12 +21,13 @@ const historyMocks = vi.hoisted(() => {
   return {
     series,
     readFieldHistory: vi.fn(
-      async (databaseId: string, externalId: string, fieldId: string) => [
-        ...(series.get(keyOf(databaseId, externalId, fieldId)) ?? []),
-      ]
+      (databaseId: string, externalId: string, fieldId: string) =>
+        Promise.resolve([
+          ...(series.get(keyOf(databaseId, externalId, fieldId)) ?? []),
+        ])
     ),
     mergeFieldHistory: vi.fn(
-      async (
+      (
         batches: {
           databaseId: string;
           externalId: string;
@@ -35,11 +36,11 @@ const historyMocks = vi.hoisted(() => {
         }[]
       ) => {
         for (const batch of batches) {
-          series.set(
-            keyOf(batch.databaseId, batch.externalId, batch.fieldId),
-            [...batch.points]
-          );
+          series.set(keyOf(batch.databaseId, batch.externalId, batch.fieldId), [
+            ...batch.points,
+          ]);
         }
+        return Promise.resolve();
       }
     ),
     peekFieldHistory: vi.fn(() => []),

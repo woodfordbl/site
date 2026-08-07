@@ -84,5 +84,7 @@ export function resolveSlugPrefixRedirect(options: {
   const nextSlug = replacePageSlugPrefix(previous, next, activeSlug);
   const userPage = pathname.startsWith("/p/");
 
-  return userPage ? pageNavTargetForUserPage(nextSlug) : pageNavTarget(nextSlug);
+  return userPage
+    ? pageNavTargetForUserPage(nextSlug)
+    : pageNavTarget(nextSlug);
 }

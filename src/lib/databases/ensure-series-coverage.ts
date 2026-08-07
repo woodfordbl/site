@@ -35,17 +35,17 @@ export interface SeriesCoverageRequest {
   fieldId: string;
   /** Inclusive range start, epoch ms. */
   from: number;
-  /** Inclusive range end, epoch ms. */
-  to: number;
   /** Candle resolution; defaults from window length via `resolutionForWindow`. */
   resolution?: HistoryResolution;
+  /** Inclusive range end, epoch ms. */
+  to: number;
 }
 
 export interface SeriesCoverageContext {
-  /** Connector that owns `fetchHistory` (typically live-markets). */
-  connector: ConnectorDefinition;
   /** Raw connector config from the database source. */
   config: Record<string, unknown>;
+  /** Connector that owns `fetchHistory` (typically live-markets). */
+  connector: ConnectorDefinition;
   fetchFn?: typeof fetch;
   token?: string;
 }
@@ -128,9 +128,8 @@ async function mapPool<T, R>(
       results[index] = await mapper(items[index]);
     }
   }
-  const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    () => worker()
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () =>
+    worker()
   );
   await Promise.all(workers);
   return results;
@@ -162,10 +161,10 @@ async function ensureOne(
     if (gaps.length > 0 && ctx.connector.fetchHistory) {
       const token =
         ctx.token ??
-        ((await Promise.resolve(getConnectorToken(ctx.connector.id)).catch(
+        (await Promise.resolve(getConnectorToken(ctx.connector.id)).catch(
           () => undefined
         )) ??
-          undefined);
+        undefined;
       const fetchCtx: ConnectorFetchContext = {
         config: ctx.config,
         fetchFn: ctx.fetchFn ?? globalThis.fetch.bind(globalThis),

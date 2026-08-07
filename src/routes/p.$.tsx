@@ -74,7 +74,7 @@ function UserPageBySlugClient({ slug }: { slug: string }) {
       ...pageNavTargetForUserPage(userPage.slug),
       replace: true,
     });
-  }, [isRenameSlugGap, navigate, slug, userPage]);
+  }, [isRenameSlugGap, navigate, userPage]);
 
   // Skip replaceState sync during the rename gap — that leaves the router on
   // the stale splat. Router navigate above (and navigateAfter*) rematch instead.

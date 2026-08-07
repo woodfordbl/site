@@ -216,7 +216,9 @@ function withAssetClass(
       ? row.values.price
       : null;
   const derivedCap =
-    float !== null && price !== null ? float * price : (row.values.marketCap ?? null);
+    float !== null && price !== null
+      ? float * price
+      : (row.values.marketCap ?? null);
   return {
     ...row,
     values: {

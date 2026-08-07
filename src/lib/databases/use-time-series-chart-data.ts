@@ -278,7 +278,6 @@ export function useTimeSeriesChartData(
 
   return {
     data,
-    loading:
-      data === null && Boolean(fieldId) && (queryPending || !queryError),
+    loading: data === null && Boolean(fieldId) && (queryPending || !queryError),
   };
 }

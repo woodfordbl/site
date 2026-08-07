@@ -45,21 +45,16 @@ function fieldIdForSourceKey(
   return fields.find((field) => field.sourceKey === sourceKey)?.id;
 }
 
-/**
- * Build the derived overlay. `seriesByExternalId` is the covered price window
- * (from {@link ensureSeriesCoverage}). Pass `coverageReady: false` while the
- * ensure query is still in flight so Change keeps the seeded provider % until
- * we know whether the series can refine it.
- */
-export function computeLiveMarketsDerivedOverlay(
-  fields: readonly DatabaseField[],
-  rows: readonly LocalDatabaseRow[],
-  seriesByExternalId: ReadonlyMap<string, FieldHistoryPoint[]>,
-  nowMs: number = Date.now(),
-  options?: { coverageReady?: boolean }
-): LiveMarketsDerivedOverlay {
-  const overlay: LiveMarketsDerivedOverlay = new Map();
-  const coverageReady = options?.coverageReady ?? true;
+interface DerivedFieldIds {
+  changeId: string | undefined;
+  floatId: string | undefined;
+  marketCapId: string | undefined;
+  priceId: string;
+}
+
+function resolveDerivedFieldIds(
+  fields: readonly DatabaseField[]
+): DerivedFieldIds | null {
   const priceId = fieldIdForSourceKey(
     fields,
     LIVE_MARKETS_DERIVED_SOURCE_KEYS.price
@@ -77,46 +72,105 @@ export function computeLiveMarketsDerivedOverlay(
     LIVE_MARKETS_DERIVED_SOURCE_KEYS.marketCap
   );
   if (!(priceId && (floatId || changeId || marketCapId))) {
-    return overlay;
+    return null;
+  }
+  return { changeId, floatId, marketCapId, priceId };
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" ? value : null;
+}
+
+function deriveChangeForRow(
+  series: readonly FieldHistoryPoint[],
+  nowMs: number,
+  price: number | null
+): { change?: number; changePending: boolean } {
+  const change = pctChangeFromSeries(
+    series,
+    LIVE_MARKETS_CHANGE_WINDOW_MS,
+    nowMs,
+    price
+  );
+  if (change !== null) {
+    return { change, changePending: false };
+  }
+  // Coverage finished but empty — mark pending so the merge can clear a
+  // misleading stale value rather than showing a wrong 0%. Series present but
+  // valueAt failed (thin history) leaves the seeded provider % in place.
+  return { changePending: series.length === 0 };
+}
+
+function computeDerivedCellForRow(
+  row: LocalDatabaseRow,
+  fieldIds: DerivedFieldIds,
+  seriesByExternalId: ReadonlyMap<string, FieldHistoryPoint[]>,
+  nowMs: number,
+  coverageReady: boolean
+): LiveMarketsDerivedCell | null {
+  const price = asFiniteNumber(row.values[fieldIds.priceId]);
+  const floatShares = fieldIds.floatId
+    ? asFiniteNumber(row.values[fieldIds.floatId])
+    : null;
+
+  const values: LiveMarketsDerivedCell["values"] = {};
+  let changePending = false;
+
+  if (fieldIds.marketCapId) {
+    const derived = marketCapFromFloatAndPrice(floatShares, price);
+    if (derived !== null) {
+      values.marketCap = derived;
+    }
   }
 
+  if (fieldIds.changeId && row.externalId && coverageReady) {
+    const derivedChange = deriveChangeForRow(
+      seriesByExternalId.get(row.externalId) ?? [],
+      nowMs,
+      price
+    );
+    if (derivedChange.change !== undefined) {
+      values.change = derivedChange.change;
+    }
+    changePending = derivedChange.changePending;
+  }
+
+  if (Object.keys(values).length === 0 && !changePending) {
+    return null;
+  }
+  return { changePending, values };
+}
+
+/**
+ * Build the derived overlay. `seriesByExternalId` is the covered price window
+ * (from {@link ensureSeriesCoverage}). Pass `coverageReady: false` while the
+ * ensure query is still in flight so Change keeps the seeded provider % until
+ * we know whether the series can refine it.
+ */
+export function computeLiveMarketsDerivedOverlay(
+  fields: readonly DatabaseField[],
+  rows: readonly LocalDatabaseRow[],
+  seriesByExternalId: ReadonlyMap<string, FieldHistoryPoint[]>,
+  nowMs: number = Date.now(),
+  options?: { coverageReady?: boolean }
+): LiveMarketsDerivedOverlay {
+  const overlay: LiveMarketsDerivedOverlay = new Map();
+  const fieldIds = resolveDerivedFieldIds(fields);
+  if (!fieldIds) {
+    return overlay;
+  }
+  const coverageReady = options?.coverageReady ?? true;
+
   for (const row of rows) {
-    const priceRaw = row.values[priceId];
-    const price = typeof priceRaw === "number" ? priceRaw : null;
-    const floatRaw = floatId ? row.values[floatId] : undefined;
-    const floatShares = typeof floatRaw === "number" ? floatRaw : null;
-
-    const values: LiveMarketsDerivedCell["values"] = {};
-    let changePending = false;
-
-    if (marketCapId) {
-      const derived = marketCapFromFloatAndPrice(floatShares, price);
-      if (derived !== null) {
-        values.marketCap = derived;
-      }
-    }
-
-    if (changeId && row.externalId && coverageReady) {
-      const series = seriesByExternalId.get(row.externalId) ?? [];
-      const change = pctChangeFromSeries(
-        series,
-        LIVE_MARKETS_CHANGE_WINDOW_MS,
-        nowMs,
-        price
-      );
-      if (change !== null) {
-        values.change = change;
-      } else if (series.length === 0) {
-        // Coverage finished but empty — mark pending so the merge can clear a
-        // misleading stale value rather than showing a wrong 0%.
-        changePending = true;
-      }
-      // else: series present but valueAt failed (thin history) — leave the
-      // seeded provider % in place.
-    }
-
-    if (Object.keys(values).length > 0 || changePending) {
-      overlay.set(row.id, { changePending, values });
+    const cell = computeDerivedCellForRow(
+      row,
+      fieldIds,
+      seriesByExternalId,
+      nowMs,
+      coverageReady
+    );
+    if (cell) {
+      overlay.set(row.id, cell);
     }
   }
   return overlay;
