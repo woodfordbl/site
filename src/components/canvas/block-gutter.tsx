@@ -98,7 +98,9 @@ export function BlockGutter({
   // hotkey layer treat every key as typing (`ignoreInputs`). Route the two keys
   // the menu advertises from the open menu itself so they act on this row.
   const onMenuKeyDown = useMenuCommandKeys({
-    "delete-block": () => onDelete?.(),
+    // Menu-scoped delete (D) — not `delete-block` (Backspace), which stays the
+    // canvas field binding for empty/selected blocks.
+    "delete-page": () => onDelete?.(),
     "duplicate-block": () => {
       setOpenRowId(null);
       onDuplicate?.();

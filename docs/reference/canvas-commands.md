@@ -91,11 +91,11 @@ Press and release the grab handle (without dragging) highlights the row and open
 |-----------|-------------------|
 | Turn into | `slash.convert` or `container.wrap`; eligible source types are gated by `canTurnIntoBlock` (text, heading, quote, callout, code) |
 | Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids). Shortcut affordance: Mod+D (`duplicate-block`) |
-| Delete | `row.delete` (or `selection.delete` when multiple rows are selected) via `useRowGutterHandlers`. Shortcut affordance: Delete key (same binding that removes selected blocks; Backspace is an alias) |
+| Delete | `row.delete` (or `selection.delete` when multiple rows are selected) via `useRowGutterHandlers`. Shortcut affordance: **D** (`delete-page`, shared menu-scoped delete binding) |
 
 Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canvas/block-actions-menu.tsx) (`openRowId`). Keyboard delete with a menu open closes it first via `useCloseBlockActionsMenuBeforeAction` before dispatching `row.delete` / `selection.delete`.
 
-The two shortcuts the menu advertises are routed by the menu itself: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) spreads [`useMenuCommandKeys`](../../src/components/keyboard/use-menu-command-keys.ts) (`delete-block`, `duplicate-block`) onto the menu content as an `onKeyDownCapture`. The global `useCommandHotkeys` registrations cannot fire here — opening the menu auto-focuses its "Search actions…" field, and TanStack's `ignoreInputs` suppresses every canvas binding while a text field holds focus. The menu-scoped router treats a field tagged `MENU_COMMAND_SEARCH_ATTRIBUTE` as "not typing" while it is empty, so Delete/Backspace and Mod+D act on the row; once a query is typed the field owns those keys again. `useMenuCommandKeys` matches each command's resolved binding *and* its registry aliases, so the Delete keycap shown on the menu item fires alongside the `Backspace` default.
+The two shortcuts the menu advertises are routed by the menu itself: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) spreads [`useMenuCommandKeys`](../../src/components/keyboard/use-menu-command-keys.ts) (`delete-page`, `duplicate-block`) onto the menu content as an `onKeyDownCapture`. The global `useCommandHotkeys` registrations cannot fire here — opening the menu auto-focuses its "Search actions…" field, and TanStack's `ignoreInputs` suppresses every canvas binding while a text field holds focus. The menu-scoped router treats a field tagged `MENU_COMMAND_SEARCH_ATTRIBUTE` as "not typing" while it is empty, so **D** and Mod+D act on the row; once a query is typed the field owns those keys again. Canvas empty-block / selection delete still uses Backspace/Delete via `delete-block` when the menu is closed.
 
 Table structure menus (row/column handles in [`TableView`](../../src/components/blocks/types/table/table-view.tsx)) dispatch table-scoped commands directly — not the gutter block menu:
 
@@ -148,9 +148,9 @@ Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** i
 
 | Effect | Applied by `usePageDispatch` |
 |--------|------------------------------|
-| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` or via `persistPageReposition` (`userPage` when `routeBy === "id"`) |
+| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` (`userPage` when `routeBy === "id"`) |
 | `page.delete` | `deleteLocalPage` (user hard delete or shipped tombstone) |
-| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts) |
+| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts); active-tab router navigate via [`resolveSlugPrefixRedirect`](../../src/lib/pages/resolve-slug-prefix-redirect.ts) when the open path sits under the previous slug |
 | `navigate` | `{ slug, userPage? }` → router [`pageNavTargetForUserPage`](../../src/lib/pages/slugify.ts) or [`pageNavTarget`](../../src/lib/pages/slugify.ts) (`replace: true`); `mode: "history"` → [`syncPageUrl`](../../src/lib/pages/sync-url.ts) with the same `userPage` flag |
 
 Boot routing ([`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts)) and passive-tab slug sync ([`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts)) are not `PageEffect` entries — see [pages — Route migration](../architecture/pages.md#route-migration).

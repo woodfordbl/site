@@ -172,6 +172,22 @@ export function databaseHubNavTarget(
   );
 }
 
+/**
+ * Hub metadata slug (`/{host?}/{db}`) used for sidebar active-state matching.
+ * Returns `null` when the database has no resolvable host page.
+ */
+export function resolveDatabaseHubSlug(
+  database: LocalDatabase,
+  pages: readonly PageSummary[],
+  blocks: readonly HostScanBlock[]
+): string | null {
+  const host = resolveDatabaseHost(database, pages, blocks);
+  if (!host) {
+    return null;
+  }
+  return buildDatabaseHubSlug(host.slug, resolveDatabaseSlug(database));
+}
+
 /** Builds the canonical navigable path for a virtual database row. */
 export function databaseRowNavTarget(
   database: LocalDatabase,

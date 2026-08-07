@@ -139,7 +139,7 @@ describe("BlockGutterMenu row actions", () => {
     assertNoOrphanMenuSeparators(screen.getByRole("menu"));
   });
 
-  it("shows a Delete key shortcut next to Delete", () => {
+  it("shows a D key shortcut next to Delete", () => {
     renderMenu(() => undefined);
 
     const deleteItem = screen
@@ -147,26 +147,17 @@ describe("BlockGutterMenu row actions", () => {
       .closest("[data-slot='dropdown-menu-item']");
     expect(deleteItem).not.toBeNull();
     expect(deleteItem?.querySelector("[data-slot='kbd']")?.textContent).toBe(
-      "⌦"
+      "D"
     );
   });
 });
 
 describe("BlockGutter menu keyboard routing", () => {
-  it("deletes the row when Delete is pressed with the menu open", () => {
+  it("deletes the row when D is pressed with the menu open", () => {
     const onDelete = vi.fn();
     renderOpenGutter({ onDelete, onDuplicate: () => undefined });
 
-    fireEvent.keyDown(searchField(), { key: "Delete" });
-
-    expect(onDelete).toHaveBeenCalledTimes(1);
-  });
-
-  it("deletes the row on the Backspace alias too", () => {
-    const onDelete = vi.fn();
-    renderOpenGutter({ onDelete, onDuplicate: () => undefined });
-
-    fireEvent.keyDown(searchField(), { key: "Backspace" });
+    fireEvent.keyDown(searchField(), { key: "d" });
 
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
@@ -187,8 +178,8 @@ describe("BlockGutter menu keyboard routing", () => {
 
     const field = searchField();
     fireEvent.change(field, { target: { value: "del" } });
+    fireEvent.keyDown(field, { key: "d" });
     fireEvent.keyDown(field, { key: "Backspace" });
-    fireEvent.keyDown(field, { key: "Delete" });
 
     expect(onDelete).not.toHaveBeenCalled();
     expect(onDuplicate).not.toHaveBeenCalled();

@@ -1,1 +1,0 @@
-export const PAGE_BREADCRUMB_CHILDREN_LIMIT = 5;

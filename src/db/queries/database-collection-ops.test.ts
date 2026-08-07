@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   rowInsert: vi.fn(),
   rowState: [] as unknown[],
   rowUpdate: vi.fn(),
+  toastError: vi.fn(),
+  toastInfo: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-db", () => ({
@@ -36,6 +38,13 @@ vi.mock("@/db/persistence-errors.ts", () => ({
 
 vi.mock("@/lib/databases/row-template-store.ts", () => ({
   deleteRowTemplate: mocks.deleteRowTemplate,
+}));
+
+vi.mock("@/lib/toast/app-toast.ts", () => ({
+  appToast: {
+    error: mocks.toastError,
+    info: mocks.toastInfo,
+  },
 }));
 
 vi.mock("@/db/collections/local-collections.ts", () => ({
@@ -255,6 +264,183 @@ describe("database collection ops", () => {
 
     expect(mocks.rowUpdate).not.toHaveBeenCalled();
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  function makeLiveMarketsDatabase(
+    instruments: { symbol: string; assetClass: "crypto" | "equity" }[] = [
+      { symbol: "AAPL", assetClass: "equity" },
+    ]
+  ): LocalDatabase {
+    return {
+      id: databaseId,
+      name: "Stocks and Crypto",
+      primaryFieldId: "f-symbol",
+      source: {
+        kind: "connector",
+        connectorId: "live-markets",
+        config: { instruments, currency: "USD" },
+      },
+      fields: [
+        { id: "f-symbol", name: "Symbol", type: "text", sourceKey: "symbol" },
+        {
+          id: "f-class",
+          name: "Asset class",
+          type: "select",
+          sourceKey: "assetClass",
+          options: [
+            { id: "crypto", name: "Crypto" },
+            { id: "equity", name: "Equity" },
+          ],
+        },
+        { id: "f-price", name: "Price", type: "number", sourceKey: "price" },
+      ],
+      views: [
+        {
+          id: "view-1",
+          name: "Table",
+          type: "table",
+          visibleFieldIds: ["f-symbol", "f-class", "f-price"],
+          config: {},
+        },
+      ],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  it("insertLiveMarketRow seeds equity Asset class without externalId", async () => {
+    const database = makeLiveMarketsDatabase();
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowState = [];
+
+    const inserted = ops.insertLiveMarketRow(databaseId);
+    await flushAsync();
+
+    expect(inserted).not.toBeNull();
+    expect(inserted?.externalId).toBeUndefined();
+    expect(inserted?.values).toEqual({ "f-class": "equity" });
+    expect(mocks.rowInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("insertLiveMarketRow refuses when the watchlist is at capacity", async () => {
+    const instruments = Array.from({ length: 30 }, (_, index) => ({
+      symbol: `S${index}`,
+      assetClass: "equity" as const,
+    }));
+    mocks.databaseGet.mockReturnValue(makeLiveMarketsDatabase(instruments));
+
+    const inserted = ops.insertLiveMarketRow(databaseId);
+    await flushAsync();
+
+    expect(inserted).toBeNull();
+    expect(mocks.toastInfo).toHaveBeenCalled();
+    expect(mocks.rowInsert).not.toHaveBeenCalled();
+  });
+
+  it("updateDatabaseCell on Symbol commits the instrument and sets externalId", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+    ]);
+    const pending = makeRow("row-pending", {
+      values: { "f-class": "equity" },
+    });
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockReturnValue(pending);
+    const rowDrafts = captureRowDrafts([pending]);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseCell("row-pending", "f-symbol", "msft");
+    await flushAsync();
+
+    const rowDraft = rowDrafts.get("row-pending");
+    expect(rowDraft?.externalId).toBe("MSFT");
+    expect(rowDraft?.values["f-symbol"]).toBe("MSFT");
+    expect(databaseDrafts[0]?.source).toEqual({
+      kind: "connector",
+      connectorId: "live-markets",
+      config: {
+        instruments: [
+          { symbol: "AAPL", assetClass: "equity" },
+          { symbol: "MSFT", assetClass: "equity" },
+        ],
+        currency: "USD",
+      },
+    });
+  });
+
+  it("updateDatabaseCell on Symbol renames externalId in place", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+    ]);
+    const row = {
+      ...makeRow("row-aapl", {
+        values: { "f-symbol": "AAPL", "f-class": "equity" },
+      }),
+      externalId: "AAPL",
+    };
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockReturnValue(row);
+    const rowDrafts = captureRowDrafts([row]);
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.updateDatabaseCell("row-aapl", "f-symbol", "MSFT");
+    await flushAsync();
+
+    expect(rowDrafts.get("row-aapl")?.externalId).toBe("MSFT");
+    expect(databaseDrafts[0]?.source?.kind === "connector").toBe(true);
+    if (databaseDrafts[0]?.source?.kind === "connector") {
+      expect(databaseDrafts[0].source.config.instruments).toEqual([
+        { symbol: "MSFT", assetClass: "equity" },
+      ]);
+    }
+  });
+
+  it("deleteLiveMarketRows removes the ticker from the watchlist", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+      { symbol: "BTC", assetClass: "crypto" },
+    ]);
+    const row = {
+      ...makeRow("row-aapl", {
+        values: { "f-symbol": "AAPL", "f-class": "equity" },
+      }),
+      externalId: "AAPL",
+    };
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockImplementation((id: string) =>
+      id === "row-aapl" ? row : undefined
+    );
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.deleteLiveMarketRows(["row-aapl"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).toHaveBeenCalledWith("row-aapl");
+    if (databaseDrafts[0]?.source?.kind === "connector") {
+      expect(databaseDrafts[0].source.config.instruments).toEqual([
+        { symbol: "BTC", assetClass: "crypto" },
+      ]);
+    }
+  });
+
+  it("deleteLiveMarketRows refuses to remove the last instrument", async () => {
+    const database = makeLiveMarketsDatabase([
+      { symbol: "AAPL", assetClass: "equity" },
+    ]);
+    const row = {
+      ...makeRow("row-aapl", {
+        values: { "f-symbol": "AAPL", "f-class": "equity" },
+      }),
+      externalId: "AAPL",
+    };
+    mocks.databaseGet.mockReturnValue(database);
+    mocks.rowGet.mockReturnValue(row);
+
+    ops.deleteLiveMarketRows(["row-aapl"]);
+    await flushAsync();
+
+    expect(mocks.toastInfo).toHaveBeenCalled();
+    expect(mocks.rowDelete).not.toHaveBeenCalled();
   });
 
   it("insertDatabaseRow appends with sparse order after the last row", async () => {
@@ -562,6 +748,114 @@ describe("database collection ops", () => {
     expect(databaseDrafts[0]?.fields.map((field) => field.id)).toEqual([
       "f-extra",
       "f-title",
+    ]);
+  });
+
+  it("reorderDatabaseViews rebuilds the views array in the given order", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "Table" },
+      { ...database.views[0], id: "view-2", name: "Board" },
+      { ...database.views[0], id: "view-3", name: "Chart" },
+    ];
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseViews(databaseId, ["view-3", "view-1", "view-2"]);
+    await flushAsync();
+
+    expect(databaseDrafts[0]?.views.map((view) => view.id)).toEqual([
+      "view-3",
+      "view-1",
+      "view-2",
+    ]);
+    expect(databaseDrafts[0]?.updatedAt).not.toBe(database.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("reorderDatabaseViews flattens draft proxies so record configs stay writable", async () => {
+    // Same proxy trap as updateDatabaseView: without toPlain, storing draft
+    // views leaves z.record maps (calculations/columnWidths) as proxies and
+    // schema validation rejects the persist — tabs appear to snap back.
+    const base = makeDatabase();
+    base.views = [
+      {
+        ...base.views[0],
+        id: "view-1",
+        name: "Table",
+        config: {
+          ...base.views[0].config,
+          calculations: { "f-extra": "sum" as const },
+          columnWidths: { "f-title": 180 },
+        },
+      },
+      { ...base.views[0], id: "view-2", name: "Board" },
+    ];
+    const proxiedViews = base.views.map(
+      (view) =>
+        new Proxy(
+          {
+            ...view,
+            config: new Proxy(
+              {
+                ...view.config,
+                calculations: view.config.calculations
+                  ? new Proxy({ ...view.config.calculations }, {})
+                  : undefined,
+                columnWidths: view.config.columnWidths
+                  ? new Proxy({ ...view.config.columnWidths }, {})
+                  : undefined,
+              },
+              {}
+            ),
+          },
+          {}
+        )
+    );
+    const draft: LocalDatabase = { ...base, views: proxiedViews };
+    const captured: LocalDatabase[] = [];
+    mocks.databaseUpdate.mockImplementation(
+      (_id: string, update: (value: LocalDatabase) => void) => {
+        update(draft);
+        captured.push(draft);
+        return draft;
+      }
+    );
+
+    ops.reorderDatabaseViews(databaseId, ["view-2", "view-1"]);
+    await flushAsync();
+
+    expect(captured[0]?.views.map((view) => view.id)).toEqual([
+      "view-2",
+      "view-1",
+    ]);
+    const moved = captured[0]?.views[1];
+    expect(moved).toBeDefined();
+    if (!moved) {
+      return;
+    }
+    expect(types.isProxy(moved)).toBe(false);
+    expect(types.isProxy(moved.config)).toBe(false);
+    expect(types.isProxy(moved.config.calculations)).toBe(false);
+    expect(types.isProxy(moved.config.columnWidths)).toBe(false);
+    expect(moved.config.calculations).toEqual({ "f-extra": "sum" });
+    expect(moved.config.columnWidths).toEqual({ "f-title": 180 });
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("reorderDatabaseViews ignores unknown ids and appends missing ids in prior order", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "Table" },
+      { ...database.views[0], id: "view-2", name: "Board" },
+    ];
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseViews(databaseId, ["view-ghost", "view-2"]);
+    await flushAsync();
+
+    expect(databaseDrafts[0]?.views.map((view) => view.id)).toEqual([
+      "view-2",
+      "view-1",
     ]);
   });
 

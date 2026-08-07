@@ -4,7 +4,6 @@ import {
   IconCheckbox,
   IconClock,
   IconColumns3,
-  IconCopy,
   IconDatabase,
   IconDots,
   IconEye,
@@ -34,9 +33,10 @@ import { visibleFieldIdsAfterHide } from "@/components/database/database-column-
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
 import {
-  AddDatabaseViewMenuItems,
-  DATABASE_VIEW_TYPE_ICONS,
-} from "@/components/database/database-view-switcher.tsx";
+  DatabaseViewEditActions,
+  DatabaseViewRenameField,
+} from "@/components/database/database-view-menu.tsx";
+import { AddDatabaseViewMenuItems } from "@/components/database/database-view-switcher.tsx";
 import { InstrumentListConfigEditor } from "@/components/database/instrument-list-config-editor.tsx";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
@@ -59,12 +59,7 @@ import {
   DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-  InputGroupText,
-} from "@/components/ui/input-group.tsx";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group.tsx";
 import {
   MenuIconRenameInput,
   shouldCancelMenuCloseForIconPicker,
@@ -77,9 +72,7 @@ import {
   SelectValue,
 } from "@/components/ui/select.tsx";
 import {
-  duplicateDatabaseView,
   removeDatabaseField,
-  removeDatabaseView,
   reorderDatabaseFields,
   setDatabaseIcon,
   setDatabaseViewGroupBy,
@@ -103,6 +96,7 @@ import type {
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
 import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
+import { navigateAfterDatabaseHubRename } from "@/lib/databases/navigate-after-database-rename.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import {
   deleteRowTemplate,
@@ -497,9 +491,9 @@ interface ViewRowProps {
 }
 
 /**
- * One view row: type icon, inline rename input, and Duplicate / Delete
- * actions. Delete is disabled on the last view (`removeDatabaseView` also
- * refuses at the op level); Duplicate switches the block to the copy.
+ * One view row: icon picker + inline rename, and Duplicate / Delete actions.
+ * Delete is disabled on the last view (`removeDatabaseView` also refuses at
+ * the op level); Duplicate switches the block to the copy.
  */
 function ViewRow({
   canDelete,
@@ -507,63 +501,15 @@ function ViewRow({
   onViewIdChange,
   view,
 }: ViewRowProps) {
-  const TypeIcon = DATABASE_VIEW_TYPE_ICONS[view.type];
-
-  const commit = (value: string) => {
-    const trimmed = value.trim();
-    if (trimmed !== "" && trimmed !== view.name) {
-      updateDatabaseView(databaseId, view.id, { name: trimmed });
-    }
-  };
-
   return (
     <div className="flex items-center gap-1">
-      <InputGroup className="h-8 min-w-0 flex-1">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <TypeIcon className="stroke-[1.5px]" />
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label={`Rename view ${view.name}`}
-          autoComplete="off"
-          defaultValue={view.name}
-          onBlur={(event) => {
-            commit(event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            stopMenuKeys(event);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commit(event.currentTarget.value);
-            }
-          }}
-        />
-      </InputGroup>
-      <Button
-        aria-label={`Duplicate view ${view.name}`}
-        onClick={() => {
-          const copy = duplicateDatabaseView(databaseId, view.id);
-          if (copy) {
-            onViewIdChange?.(copy.id);
-          }
-        }}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <IconCopy />
-      </Button>
-      <Button
-        aria-label={`Delete view ${view.name}`}
-        disabled={!canDelete}
-        onClick={() => {
-          removeDatabaseView(databaseId, view.id);
-        }}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <IconTrash />
-      </Button>
+      <DatabaseViewRenameField databaseId={databaseId} view={view} />
+      <DatabaseViewEditActions
+        canDelete={canDelete}
+        databaseId={databaseId}
+        onViewIdChange={onViewIdChange}
+        view={view}
+      />
     </div>
   );
 }
@@ -1228,6 +1174,7 @@ export function DatabaseSettingsMenu({
   onViewIdChange,
   rowCount,
 }: DatabaseSettingsMenuProps): ReactNode {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(database.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -1239,9 +1186,10 @@ export function DatabaseSettingsMenu({
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
     if (trimmed !== "" && trimmed !== database.name) {
-      renameDatabase(database.id, trimmed);
+      const change = renameDatabase(database.id, trimmed);
+      navigateAfterDatabaseHubRename(navigate, change);
     }
-  }, [database.id, database.name, draftName]);
+  }, [database.id, database.name, draftName, navigate]);
 
   const handleOpenChange = useCallback(
     (

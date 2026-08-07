@@ -1,8 +1,10 @@
 "use client";
 
 import { IconDatabase, IconDots, IconTrash } from "@tabler/icons-react";
+import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, type RefObject, useCallback, useState } from "react";
 
+import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,15 +12,18 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import {
   MenuIconRenameInput,
   shouldCancelMenuCloseForIconPicker,
 } from "@/components/ui/menu-icon-rename-input.tsx";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import { setDatabaseIcon } from "@/db/queries/database-collection-ops.ts";
 import { renameDatabase } from "@/db/queries/database-page-ops.ts";
+import { navigateAfterDatabaseHubRename } from "@/lib/databases/navigate-after-database-rename.ts";
 
 interface DatabaseSidebarRowMenuProps {
   databaseId: string;
@@ -36,18 +41,25 @@ export function DatabaseSidebarRowMenu({
   name,
   onDelete,
 }: DatabaseSidebarRowMenuProps): ReactNode {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(name);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
+  // D (delete-page) is live only while this menu is open.
+  const onMenuKeyDown = useMenuCommandKeys({
+    "delete-page": onDelete,
+  });
+
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
     if (trimmed !== "" && trimmed !== name) {
-      renameDatabase(databaseId, trimmed);
+      const change = renameDatabase(databaseId, trimmed);
+      navigateAfterDatabaseHubRename(navigate, change);
     } else {
       setDraftName(name);
     }
-  }, [databaseId, draftName, name]);
+  }, [databaseId, draftName, name, navigate]);
 
   const handleOpenChange = useCallback(
     (
@@ -112,6 +124,7 @@ export function DatabaseSidebarRowMenu({
       <DropdownMenuContent
         align="start"
         className="w-64 min-w-64"
+        onKeyDownCapture={onMenuKeyDown}
         side="bottom"
       >
         <MenuIconRenameInput
@@ -140,6 +153,9 @@ export function DatabaseSidebarRowMenu({
           <DropdownMenuItem onClick={onDelete} variant="destructive">
             <IconTrash />
             Delete
+            <DropdownMenuShortcut>
+              <Shortcut command="delete-page" />
+            </DropdownMenuShortcut>
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

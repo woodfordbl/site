@@ -1,5 +1,6 @@
 import { IconDatabase } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 
 import { DatabaseSettingsMenu } from "@/components/database/database-settings-menu.tsx";
@@ -12,6 +13,7 @@ import { setDatabaseIcon } from "@/db/queries/database-collection-ops.ts";
 import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
+import { navigateAfterDatabaseHubRename } from "@/lib/databases/navigate-after-database-rename.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import type { DatabaseView, LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -30,6 +32,8 @@ const TITLE_NAME_MAX_CLASS = "max-w-[min(100%,40ch)]";
 interface DatabaseTitleProps {
   /** The resolved active view — settings menu scope (Properties/Group/…). */
   activeView: DatabaseView;
+  /** Keeps title-row tools visible at rest for full-page database hubs. */
+  alwaysShowTools?: boolean;
   /** Chart dataset for a chart active view — the settings menu color rows. */
   chartData?: ChartData;
   /** Extra right-aligned controls before the ⋯ menu (filter/sort icon triggers). */
@@ -131,6 +135,7 @@ function DatabaseTitleIcon({
  */
 export function DatabaseTitle({
   activeView,
+  alwaysShowTools = false,
   chartData,
   controls,
   database,
@@ -141,6 +146,7 @@ export function DatabaseTitle({
   totalRowCount,
   viewSwitcher,
 }: DatabaseTitleProps): ReactNode {
+  const navigate = useNavigate();
   const { id: databaseId, name } = database;
   // `null` = display mode; a string is the in-flight draft.
   const [draft, setDraft] = useState<string | null>(null);
@@ -150,7 +156,8 @@ export function DatabaseTitle({
   const commit = (value: string) => {
     const trimmed = value.trim();
     if (trimmed !== "" && trimmed !== name) {
-      renameDatabase(databaseId, trimmed);
+      const change = renameDatabase(databaseId, trimmed);
+      navigateAfterDatabaseHubRename(navigate, change);
     }
     setDraft(null);
   };
@@ -230,7 +237,10 @@ export function DatabaseTitle({
 
   return (
     <div
-      className="flex min-w-0 items-center gap-1"
+      className={cn(
+        "flex min-w-0 items-center gap-1",
+        alwaysShowTools && "[&_.hover-reveal]:opacity-100"
+      )}
       data-database-title=""
       data-reveal-group
     >

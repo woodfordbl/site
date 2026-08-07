@@ -18,6 +18,7 @@ const coingeckoFixture = [
     symbol: "btc",
     name: "Bitcoin",
     current_price: 55_034,
+    circulating_supply: 19_800_000,
     market_cap: 1_103_037_933_465,
     price_change_percentage_24h: 2.5,
     last_updated: "2026-07-03T18:20:15.000Z",
@@ -32,6 +33,7 @@ const finnhubProxyFixture = [
     t: Date.parse("2026-07-03T18:20:10.000Z") / 1000,
     name: "Apple Inc",
     marketCap: 3_000_000_000_000,
+    float: 15_000_000_000,
   },
 ];
 
@@ -104,6 +106,7 @@ describe("liveMarketsConnector config + fields", () => {
       "assetClass",
       "price",
       "change",
+      "float",
       "marketCap",
       "updatedAt",
     ]);
@@ -163,8 +166,9 @@ describe("liveMarketsConnector.fetchRows explicit classification", () => {
             name: "Bitcoin",
             assetClass: ASSET_CLASS_CRYPTO,
             price: 55_034,
+            float: 19_800_000,
             change: 0.025,
-            marketCap: 1_103_037_933_465,
+            marketCap: 19_800_000 * 55_034,
             updatedAt: "2026-07-03T18:20:15.000Z",
           },
         },
@@ -175,8 +179,9 @@ describe("liveMarketsConnector.fetchRows explicit classification", () => {
             name: "Apple Inc",
             assetClass: ASSET_CLASS_EQUITY,
             price: 190.5,
+            float: 15_000_000_000,
             change: 0.015,
-            marketCap: 3_000_000_000_000,
+            marketCap: 15_000_000_000 * 190.5,
             updatedAt: "2026-07-03T18:20:10.000Z",
           },
         },
@@ -229,7 +234,8 @@ describe("liveMarketsConnector.fetchRows explicit classification", () => {
       expect(result.rows[0]?.values).toMatchObject({
         assetClass: ASSET_CLASS_EQUITY,
         name: "Apple Inc",
-        marketCap: 3_000_000_000_000,
+        float: 15_000_000_000,
+        marketCap: 15_000_000_000 * 190.5,
       });
     }
   });

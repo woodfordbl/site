@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   finnhubMarketCapFromMillions,
+  finnhubSharesFromMillions,
   normalizeFinnhubCompanyName,
 } from "@/lib/connectors/finnhub-profile.ts";
 import {
@@ -34,8 +35,9 @@ import {
  *   own token (their token, their choice), skipping the proxy entirely — still
  *   pairing `/quote` with `/stock/profile2` on seed.
  *
- * Stream ticks only carry price; name/marketCap/change keep their last seeded
- * values via `applyStreamTick` merge semantics.
+ * Stream ticks only carry price; name/float/marketCap/change keep their last seeded
+ * values via `applyStreamTick` merge semantics. Market cap is float × price when
+ * shares outstanding is known (else the profile market-cap millions value).
  */
 
 const finnhubConfigSchema = z.object({
@@ -52,10 +54,11 @@ const finnhubQuoteSchema = z.object({
   t: z.number(), // quote time (unix seconds)
 });
 
-/** Direct-mode `/stock/profile2` — company name + market cap (millions). */
+/** Direct-mode `/stock/profile2` — company name + market cap / shares (millions). */
 const finnhubProfileSchema = z.object({
   name: z.string().optional(),
   marketCapitalization: z.number().optional(),
+  shareOutstanding: z.number().optional(),
 });
 
 /** Proxy-mode seed payload — quote + profile enrichment per symbol. */
@@ -67,6 +70,7 @@ const proxyQuoteListSchema = z.array(
     t: z.number(),
     name: z.string().nullable().optional(),
     marketCap: z.number().nullable().optional(),
+    float: z.number().nullable().optional(),
   })
 );
 
@@ -127,18 +131,31 @@ function quoteToRow(
   price: number,
   percent: number | null,
   timeMs: number,
-  enrichment: { name: string | null; marketCap: number | null } = {
+  enrichment: {
+    name: string | null;
+    marketCap: number | null;
+    float: number | null;
+  } = {
     name: null,
     marketCap: null,
+    float: null,
   }
 ): ConnectorRow {
+  const safePrice = Number.isFinite(price) ? price : null;
+  const derivedCap =
+    enrichment.float !== null &&
+    safePrice !== null &&
+    Number.isFinite(enrichment.float)
+      ? enrichment.float * safePrice
+      : enrichment.marketCap;
   return {
     externalId: symbol,
     values: {
       symbol,
       name: enrichment.name,
-      marketCap: enrichment.marketCap,
-      price: Number.isFinite(price) ? price : null,
+      float: enrichment.float,
+      marketCap: derivedCap,
+      price: safePrice,
       change:
         percent !== null && Number.isFinite(percent)
           ? percent / PERCENT_TO_FRACTION
@@ -223,9 +240,14 @@ async function fetchDirect(
         });
       }
 
-      let enrichment: { name: string | null; marketCap: number | null } = {
+      let enrichment: {
+        name: string | null;
+        marketCap: number | null;
+        float: number | null;
+      } = {
         name: null,
         marketCap: null,
+        float: null,
       };
       if (profileResponse?.ok) {
         const profile = finnhubProfileSchema.safeParse(
@@ -237,6 +259,7 @@ async function fetchDirect(
             marketCap: finnhubMarketCapFromMillions(
               profile.data.marketCapitalization
             ),
+            float: finnhubSharesFromMillions(profile.data.shareOutstanding),
           };
         }
       }
@@ -282,6 +305,10 @@ async function fetchProxy(
       marketCap:
         typeof quote.marketCap === "number" && Number.isFinite(quote.marketCap)
           ? Math.round(quote.marketCap)
+          : null,
+      float:
+        typeof quote.float === "number" && Number.isFinite(quote.float)
+          ? quote.float
           : null,
     })
   );

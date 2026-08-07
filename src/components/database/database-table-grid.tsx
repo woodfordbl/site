@@ -38,6 +38,10 @@ import {
   DatabaseColumnDropIndicator,
   DatabaseColumnDropZone,
 } from "@/components/database/database-column-dnd.tsx";
+import {
+  DatabaseColumnHeaderLabel,
+  databaseColumnHeaderAlignClass,
+} from "@/components/database/database-column-header-label.tsx";
 import { DatabaseColumnMenu } from "@/components/database/database-column-menu.tsx";
 import { DatabaseColumnResizeZone } from "@/components/database/database-column-resize-zone.tsx";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
@@ -50,6 +54,7 @@ import {
   GRID_ROW_HEIGHT_PX,
   type GridColumn,
   type GridItem,
+  isCheckboxColumnHeaderCompact,
   isInlineEditableField,
   isPointerInSelectLaneZone,
   isSelectColumnCoveredByClip,
@@ -82,7 +87,7 @@ import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area.tsx";
 import {
   addDatabaseField,
-  insertDatabaseRow,
+  addDatabaseRow,
   updateDatabaseCell,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
@@ -342,9 +347,12 @@ interface DatabaseTableGridProps {
    * renders the flat ungrouped grid. Collapsed groups render header-only.
    */
   groups?: readonly DatabaseRowGroup[] | null;
+  /** Stocks and Crypto connector — enables New row on an otherwise synced table. */
+  isLiveMarkets?: boolean;
   /**
    * Connector-synced database: the "New row" strip is hidden (rows come from
-   * the source). Local columns stay first-class — add-field remains enabled.
+   * the source) — except Stocks/Crypto (`isLiveMarkets`), which adds pending
+   * watchlist rows. Local columns stay first-class — add-field remains enabled.
    */
   isSyncedDatabase?: boolean;
   mode: "view" | "edit";
@@ -369,6 +377,7 @@ export function DatabaseTableGrid({
   fillHeight = false,
   groups = null,
   isSyncedDatabase = false,
+  isLiveMarkets = false,
   mode,
   now,
   pinnedFields,
@@ -844,13 +853,17 @@ export function DatabaseTableGrid({
   }, []);
 
   const groupByFieldId = view.groupBy?.fieldId;
+  const canAddRow = mode === "edit" && (!isSyncedDatabase || isLiveMarkets);
   const handleAddRowToGroup = useCallback(
     (group: DatabaseRowGroup) => {
       // Insert after the group's last row so manual-order views keep the new
       // row inside the bucket; seed the group-by cell so sorted/grouped
       // views bucket it correctly (the empty group inserts a blank row).
       const lastRow = group.rows.at(-1);
-      const row = insertDatabaseRow(databaseId, { after: lastRow?.id });
+      const row = addDatabaseRow(databaseId, { after: lastRow?.id });
+      if (!row) {
+        return;
+      }
       let values = row.values;
       if (groupByFieldId !== undefined && group.value !== null) {
         updateDatabaseCell(row.id, groupByFieldId, group.value);
@@ -1020,11 +1033,13 @@ export function DatabaseTableGrid({
                   })
                 )}
                 {mode === "edit" ? (
-                  // A real, empty trailing column; its header is a normal
-                  // header-style button (mirrors `GridHeaderCell`'s trigger).
+                  // The trailing add-property column absorbs unused viewport
+                  // width, but never shrinks below the "+" button's minimum.
+                  // Once data columns overflow, it returns to that minimum and
+                  // scrolls with the rest of the grid.
                   <div
-                    className="relative isolate flex h-9 shrink-0 items-stretch overflow-hidden border-border border-b-[0.5px] bg-background text-muted-foreground"
-                    style={{ width: ADD_FIELD_CELL_WIDTH_PX }}
+                    className="relative isolate flex h-9 min-w-0 flex-1 items-stretch overflow-hidden border-border border-b-[0.5px] bg-background text-muted-foreground"
+                    style={{ minWidth: ADD_FIELD_CELL_WIDTH_PX }}
                   >
                     <button
                       aria-label="Add property"
@@ -1073,7 +1088,7 @@ export function DatabaseTableGrid({
                           onToggle={handleToggleGroup}
                           rowIndex={virtualRow.index}
                           selectColumnPinned={selectColumnPinned}
-                          showAddRow={mode === "edit" && !isSyncedDatabase}
+                          showAddRow={canAddRow}
                           showMenu={mode === "edit"}
                           top={virtualRow.start}
                         />
@@ -1131,7 +1146,7 @@ export function DatabaseTableGrid({
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
-        {mode === "edit" && !isSyncedDatabase ? (
+        {canAddRow ? (
           <DatabaseAddRow
             databaseId={databaseId}
             onRowInserted={handleRowInserted}
@@ -1231,17 +1246,19 @@ function GridHeaderCell({
     field.id
   );
   const Icon = resolveFieldIcon(field);
-  // Checkbox columns are only as wide as the checkbox, so their header shows
-  // just the field icon (centered over the checkbox); the name stays reachable
-  // through the column menu.
-  const isCheckbox = field.type === "checkbox";
+  // Checkbox columns collapse to icon + padding; only then hide the name and
+  // center the type icon. At ordinary widths they match other property headers.
+  const checkboxHeaderCompact =
+    field.type === "checkbox" && isCheckboxColumnHeaderCompact(width);
   const headerContent = (
-    <>
-      <Icon className="size-4 shrink-0 stroke-[1.5px]" />
-      {isCheckbox ? null : (
-        <span className="truncate text-sm">{field.name}</span>
-      )}
-    </>
+    <DatabaseColumnHeaderLabel
+      compact={checkboxHeaderCompact}
+      Icon={Icon}
+      name={field.name}
+    />
+  );
+  const headerAlignClassName = databaseColumnHeaderAlignClass(
+    checkboxHeaderCompact
   );
 
   const handleHeaderContextMenu = (
@@ -1297,8 +1314,8 @@ function GridHeaderCell({
             isPrimary={field.id === primaryFieldId}
             openMenuRef={openMenuRef}
             triggerClassName={cn(
-              "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50",
-              isCheckbox && "justify-center"
+              headerAlignClassName,
+              "text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 data-popup-open:bg-muted/50"
             )}
             view={view}
           >
@@ -1306,14 +1323,7 @@ function GridHeaderCell({
           </DatabaseColumnMenu>
         </div>
       ) : (
-        <div
-          className={cn(
-            "flex w-full min-w-0 items-center gap-1.5 overflow-hidden px-2",
-            isCheckbox && "justify-center"
-          )}
-        >
-          {headerContent}
-        </div>
+        <div className={headerAlignClassName}>{headerContent}</div>
       )}
       {mode === "edit" ? (
         <DatabaseColumnResizeZone
@@ -1666,6 +1676,13 @@ const GridRow = memo(function GridRowInner({
             showPageIcon={showPageIcon}
           />
         ))}
+        {mode === "edit" ? (
+          <div
+            aria-hidden
+            className="min-w-0 flex-1 border-border border-b-[0.5px]"
+            style={{ minWidth: ADD_FIELD_CELL_WIDTH_PX }}
+          />
+        ) : null}
       </div>
     </DatabaseRowMenu>
   );
@@ -1893,6 +1910,20 @@ function GridCell({
           field={field}
           onNavigate={onNavigate}
           onStopEdit={onStopEdit}
+          rowIconEdit={
+            isPrimary
+              ? {
+                  fallbackIcon: resolveDatabaseRowIcon({
+                    databaseId: row.databaseId,
+                    icon: undefined,
+                  }),
+                  rowIcon: row.icon,
+                  // Omit the picker when page icons are hidden for this view —
+                  // still use InputGroup for the title edit surface.
+                  showIcon: showPageIcon,
+                }
+              : undefined
+          }
           rowId={row.id}
           value={value}
           width={column.width}

@@ -1,7 +1,6 @@
 "use client";
 
 import { IconDots } from "@tabler/icons-react";
-import { useNavigate } from "@tanstack/react-router";
 import type { RefObject } from "react";
 
 import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
@@ -9,7 +8,6 @@ import {
   PageRowMenuContent,
   rowMenuCommandHandlers,
 } from "@/components/pages/page-row-menu-content.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +16,6 @@ import {
 import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 
 interface PageListRowDropdownProps {
   canDelete: boolean;
@@ -57,11 +54,7 @@ export function PageListRowDropdown({
   pages,
   title,
 }: PageListRowDropdownProps) {
-  const navigate = useNavigate();
-  const { setTemplatePageId } = useTemplatePage();
-  const onEditTemplate = () => openTemplateEditor(navigate, setTemplatePageId);
-
-  // Single-key shortcuts (F/D/Backspace/E/T) are live only while this dropdown
+  // Single-key shortcuts (F / Shift+D / D / T) are live only while this dropdown
   // is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
@@ -69,7 +62,6 @@ export function PageListRowDropdown({
       onCopyLink,
       onDelete,
       onDuplicate,
-      onEditTemplate,
       onSaveAsTemplate,
       onToggleFavorite,
     })
@@ -116,7 +108,6 @@ export function PageListRowDropdown({
           onCopyLink={onCopyLink}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
-          onEditTemplate={onEditTemplate}
           onMoveTo={onMoveTo}
           onRename={onRename}
           onResetToRemote={onResetToRemote}

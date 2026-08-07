@@ -1,7 +1,6 @@
 import { IconCheck, IconDots, IconPlus, IconSearch } from "@tabler/icons-react";
 import { type ReactNode, useMemo, useState } from "react";
 
-import { DatabaseOptionPill } from "@/components/database/database-cell.tsx";
 import {
   DatabaseOptionColorMenuItems,
   updateSelectOptionColor,
@@ -45,16 +44,14 @@ const OPTION_ROW_CLASS =
 /**
  * Search-first option list shared by the select/multi-select cell editors and
  * the filter bar's option checklists: type-ahead filtering, check marks on
- * selected options, selected pills atop the list in multi mode, and an
- * optional "Create" row appending a new option for unmatched queries. Each
- * option row carries a trailing ⋯ menu (hover/focus-revealed on fine
- * pointers, always visible on touch) holding the option color palette —
- * opening or picking inside it never toggles the option or dismisses the
- * hosting popover.
+ * selected options, and an optional "Create" row appending a new option for
+ * unmatched queries. Each option row carries a trailing ⋯ menu
+ * (hover/focus-revealed on fine pointers, always visible on touch) holding the
+ * option color palette — opening or picking inside it never toggles the option
+ * or dismisses the hosting popover.
  */
 export function DatabaseOptionCombobox({
   fieldId,
-  multiple,
   onCreateOption,
   onToggleOption,
   options,
@@ -84,12 +81,6 @@ export function DatabaseOptionCombobox({
       (option) => option.name.toLowerCase() === trimmed.toLowerCase()
     );
 
-  const selectedOptions = multiple
-    ? selectedIds
-        .map((id) => options.find((option) => option.id === id))
-        .filter((option): option is DatabaseSelectOption => Boolean(option))
-    : [];
-
   const create = () => {
     if (canCreate && onCreateOption) {
       onCreateOption(trimmed);
@@ -99,21 +90,6 @@ export function DatabaseOptionCombobox({
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      {selectedOptions.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1">
-          {selectedOptions.map((option) => (
-            <button
-              aria-label={`Remove ${option.name}`}
-              className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              key={option.id}
-              onClick={() => onToggleOption(option.id)}
-              type="button"
-            >
-              <DatabaseOptionPill option={option} />
-            </button>
-          ))}
-        </div>
-      ) : null}
       <InputGroup className="h-8">
         <InputGroupAddon align="inline-start">
           <InputGroupText>

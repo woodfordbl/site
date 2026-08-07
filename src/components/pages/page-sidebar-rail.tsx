@@ -23,8 +23,8 @@ interface PageSidebarRailProps {
 }
 
 /**
- * Content-panel left-edge rail: click collapses; press-and-drag resizes the sidebar (12–24rem).
- * Spans the bordered main panel only — aligned to its left border.
+ * Sidebar boundary rail. When pinned, click collapses and press-and-drag resizes
+ * the sidebar (12–24rem). In the collapsed hover panel, click pins it open.
  */
 export function PageSidebarRail({ className }: PageSidebarRailProps) {
   const {
@@ -163,7 +163,9 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
         <TooltipTrigger
           render={
             <button
-              aria-label="Resize or collapse sidebar"
+              aria-label={
+                isCollapsed ? "Pin sidebar open" : "Resize or collapse sidebar"
+              }
               className={cn(
                 "absolute inset-inline-start-0 inset-y-0 z-30 hidden w-3 -translate-x-1/2 cursor-col-resize border-0 bg-transparent p-0 outline-none after:absolute after:inset-y-2 after:left-1/2 after:w-0.5 after:transition-colors hover:after:bg-selection-primary focus-visible:outline-none focus-visible:ring-0 sm:flex",
                 className
@@ -184,13 +186,15 @@ export function PageSidebarRail({ className }: PageSidebarRailProps) {
           side="right"
           sideOffset={8}
         >
+          {isCollapsed ? null : (
+            <span className="inline-flex items-center gap-1">
+              <span className="font-medium">Drag</span>
+              to resize
+            </span>
+          )}
           <span className="inline-flex items-center gap-1">
-            <span className="font-semibold">Drag</span>
-            to resize
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="font-semibold">Click</span>
-            to collapse
+            <span className="font-medium">Click</span>
+            {isCollapsed ? "to pin open" : "to collapse"}
             <Shortcut command="toggle-sidebar" />
           </span>
         </TooltipContent>

@@ -83,6 +83,7 @@ describe("coingeckoCryptoFetchRows", () => {
             symbol: "BTC",
             name: "Bitcoin",
             price: 55_034,
+            float: null,
             change: 0.025,
             marketCap: 1_103_037_933_465,
             updatedAt: "2026-07-03T18:20:15.123Z",
@@ -94,6 +95,7 @@ describe("coingeckoCryptoFetchRows", () => {
             symbol: "ETH",
             name: "Ethereum",
             price: 2810.9,
+            float: null,
             change: -0.0125,
             marketCap: 338_000_000_000,
             updatedAt: "2026-07-03T18:20:10.456Z",
@@ -130,6 +132,7 @@ describe("coingeckoCryptoFetchRows", () => {
           symbol: "BTC",
           name: "Bitcoin",
           price: 55_034,
+          float: null,
           change: 0.025,
           marketCap: 1_103_037_933_465,
           updatedAt: "2026-07-03T18:20:15.123Z",
@@ -138,6 +141,32 @@ describe("coingeckoCryptoFetchRows", () => {
     ]);
   });
 
+  it("derives market cap from circulating supply × price when present", async () => {
+    const { fetchFn } = createFetchStub(
+      new Response(
+        JSON.stringify([
+          {
+            ...marketsFixture[0],
+            circulating_supply: 19_800_000,
+          },
+        ]),
+        { status: 200 }
+      )
+    );
+    const result = await coingeckoCryptoFetchRows({
+      config: { symbols: ["BTC"], currency: "USD" },
+      fetchFn,
+    });
+    expect(result.kind === "rows" && result.rows[0]?.values).toEqual({
+      symbol: "BTC",
+      name: "Bitcoin",
+      price: 55_034,
+      float: 19_800_000,
+      change: 0.025,
+      marketCap: 19_800_000 * 55_034,
+      updatedAt: "2026-07-03T18:20:15.123Z",
+    });
+  });
   it("stores fractions that render with percent format semantics", () => {
     expect(
       formatCellValue(

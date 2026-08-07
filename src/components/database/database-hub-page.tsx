@@ -1,8 +1,10 @@
 import { IconDatabaseOff, IconHome } from "@tabler/icons-react";
 import { eq, useLiveQuery } from "@tanstack/react-db";
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useCallback, useEffect, useRef } from "react";
 
+import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
+import { HubPageTitleSlot } from "@/components/database/hub-page-title-slot.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
@@ -18,7 +20,10 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
-import { localDatabasesCollection } from "@/db/collections/local-collections.ts";
+import {
+  localBlocksCollection,
+  localDatabasesCollection,
+} from "@/db/collections/local-collections.ts";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
@@ -26,17 +31,22 @@ import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import {
   ensureDatabaseHubContent,
   ensureDatabaseHubPage,
+  findHubDatabaseBlock,
+  setHubDatabaseBlockViewId,
+  syncHubPageMetadataFromDatabase,
 } from "@/lib/databases/ensure-database-hub-page.ts";
 import { useShippedDatabasesSettled } from "@/lib/databases/shipped-databases-settled.ts";
+import type { DatabaseProps } from "@/lib/schemas/block-props.ts";
 
 export interface DatabaseHubPageProps {
   databaseId: string;
 }
 
 /**
- * Database hub URL: seed a normal page (with a linked `database` block) then
- * render {@link PageWorkspace}. Cover, header menu, and settings match any
- * other page — the only database-specific chrome is on row pages (properties).
+ * Database hub URL: seed a hub page (ghost linked `database` block for
+ * `viewId`) then render {@link PageWorkspace} with a full-page
+ * {@link DatabaseTableView} — no canvas / other blocks. Cover and header menu
+ * match any other page.
  */
 export function DatabaseHubPage({
   databaseId,
@@ -99,7 +109,7 @@ export function DatabaseHubPage({
   return <SiteShell>{null}</SiteShell>;
 }
 
-/** Hub page already resolved — normal workspace, no special header shell. */
+/** Hub page already resolved — full-page database view, no canvas. */
 export function DatabaseHubPageWorkspace({
   pageId,
 }: {
@@ -107,18 +117,79 @@ export function DatabaseHubPageWorkspace({
 }): ReactNode {
   const page = useLocalPageById(pageId);
   const source = page?.databaseSource;
+  const databaseId = source?.databaseId ?? "";
+
+  const { data: databases = [] } = useLiveQuery(
+    (query) =>
+      query
+        .from({ database: localDatabasesCollection })
+        .where(({ database }) => eq(database.id, databaseId)),
+    [databaseId]
+  );
+  const database = databases[0];
+
+  // Re-read the ghost block when blocks for this page change (viewId writes).
+  const { data: pageBlocks = [] } = useLiveQuery(
+    (query) =>
+      query
+        .from({ block: localBlocksCollection })
+        .where(({ block }) => eq(block.pageId, pageId)),
+    [pageId]
+  );
 
   useEffect(() => {
-    if (page && source) {
-      ensureDatabaseHubContent(page.id, source.databaseId);
+    if (!(page && source && database)) {
+      return;
     }
-  }, [page, source]);
+    ensureDatabaseHubContent(page.id, source.databaseId);
+    syncHubPageMetadataFromDatabase(page.id, database);
+  }, [database, page, source]);
 
-  if (!(page && source)) {
+  const ghostBlock =
+    database &&
+    (findHubDatabaseBlock(pageId, database.id) ??
+      pageBlocks.find(
+        (block) =>
+          block.type === "database" &&
+          (block.props as DatabaseProps).databaseId === database.id
+      ));
+  const viewId =
+    ghostBlock && typeof ghostBlock.props === "object" && ghostBlock.props
+      ? (ghostBlock.props as DatabaseProps).viewId
+      : undefined;
+
+  const handleViewIdChange = useCallback(
+    (nextViewId: string) => {
+      if (!database) {
+        return;
+      }
+      setHubDatabaseBlockViewId(pageId, database.id, nextViewId);
+    },
+    [database, pageId]
+  );
+
+  if (!(page && source && database)) {
     return null;
   }
 
-  return <PageWorkspace kind="user" page={page} pageHasLocalDraft />;
+  return (
+    <PageWorkspace
+      bodySlot={
+        <DatabaseTableView
+          databaseId={database.id}
+          fillHeight
+          hideTitle
+          mode="edit"
+          onViewIdChange={handleViewIdChange}
+          viewId={viewId}
+        />
+      }
+      kind="user"
+      page={page}
+      pageHasLocalDraft
+      titleSlot={<HubPageTitleSlot database={database} pageId={page.id} />}
+    />
+  );
 }
 
 function DatabaseHubNotFoundBody(): ReactNode {

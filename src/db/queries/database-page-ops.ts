@@ -22,6 +22,23 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function createPagesAndDatabasesTransaction() {
+  return createTransaction({
+    autoCommit: false,
+    mutationFn: async ({ transaction }) => {
+      localDatabasesCollection.utils.acceptMutations(transaction);
+      localPagesCollection.utils.acceptMutations(transaction);
+      await Promise.resolve();
+    },
+  });
+}
+
+function findDatabaseHubPage(databaseId: string) {
+  return localPagesCollection.toArray.find(
+    (page) => page.databaseSource?.databaseId === databaseId
+  );
+}
+
 function dedupeDatabaseSlug(
   databaseId: string,
   segment: string,
@@ -54,35 +71,76 @@ function dedupeDatabaseSlug(
   return `${segment}-${index}`;
 }
 
+/** Hub slug rewrite produced by {@link renameDatabase} — feed to router navigate. */
+export interface DatabaseRenameSlugChange {
+  nextHubSlug: string;
+  previousHubSlug: string;
+}
+
 /**
- * Rename a database, update its route segment, and cascade its hub subtree in
- * one transaction so observers never see a renamed DB with stale hub/row URLs.
+ * Live-sync a database's display name (and hub page title) without touching
+ * route slugs. Use while typing; call {@link renameDatabase} on blur to commit
+ * the slug cascade.
  */
-export function renameDatabase(databaseId: string, name: string): void {
+export function setDatabaseName(databaseId: string, name: string): void {
   const database = localDatabasesCollection.get(databaseId);
-  if (!database) {
+  if (!database || database.name === name) {
     return;
   }
 
   const timestamp = nowIso();
-  const hub = localPagesCollection.toArray.find(
-    (page) => page.databaseSource?.databaseId === databaseId
-  );
+  const hub = findDatabaseHubPage(databaseId);
+  const tx = createPagesAndDatabasesTransaction();
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      draft.name = name;
+      draft.updatedAt = timestamp;
+    });
+    if (hub) {
+      localPagesCollection.update(hub.id, (draft) => {
+        draft.title = name;
+        draft.updatedAt = timestamp;
+      });
+    }
+  });
+  tx.commit().catch(reportPersistenceError);
+}
+
+/**
+ * Rename a database, update its route segment, and cascade its hub subtree in
+ * one transaction so observers never see a renamed DB with stale hub/row URLs.
+ * Also mirrors the new name onto the hub page title when a hub exists.
+ *
+ * Returns the hub slug rewrite when the route segment changed — callers on the
+ * open hub (or a row under it) must `navigate({ …, replace: true })` via
+ * {@link resolveSlugPrefixRedirect}; `history.replaceState` alone leaves the
+ * router on the stale splat and flashes not-found.
+ */
+export function renameDatabase(
+  databaseId: string,
+  name: string
+): DatabaseRenameSlugChange | null {
+  const database = localDatabasesCollection.get(databaseId);
+  if (!database) {
+    return null;
+  }
+
+  const timestamp = nowIso();
+  const hub = findDatabaseHubPage(databaseId);
+  const previousHubSlug = hub?.slug ?? null;
   const slug = dedupeDatabaseSlug(
     databaseId,
     slugifyPageSegment(name),
     hub?.parentId
   );
+  const parent = hub?.parentId
+    ? localPagesCollection.get(hub.parentId)
+    : undefined;
+  const nextHubSlug = hub
+    ? buildDatabaseHubSlug(parent?.slug ?? "/", slug)
+    : null;
 
-  const tx = createTransaction({
-    autoCommit: false,
-    mutationFn: async ({ transaction }) => {
-      localDatabasesCollection.utils.acceptMutations(transaction);
-      localPagesCollection.utils.acceptMutations(transaction);
-      await Promise.resolve();
-    },
-  });
-
+  const tx = createPagesAndDatabasesTransaction();
   tx.mutate(() => {
     localDatabasesCollection.update(databaseId, (draft) => {
       draft.name = name;
@@ -90,20 +148,91 @@ export function renameDatabase(databaseId: string, name: string): void {
       draft.updatedAt = timestamp;
     });
 
-    if (!hub) {
+    if (!(hub && nextHubSlug)) {
       return;
     }
 
-    const parent = hub.parentId
-      ? localPagesCollection.get(hub.parentId)
-      : undefined;
-    const nextHubSlug = buildDatabaseHubSlug(parent?.slug ?? "/", slug);
     const hubPrefix = hub.slug.endsWith("/") ? hub.slug : `${hub.slug}/`;
 
     for (const page of localPagesCollection.toArray) {
       if (page.id === hub.id || page.slug.startsWith(hubPrefix)) {
         localPagesCollection.update(page.id, (draft) => {
           draft.slug = replacePageSlugPrefix(hub.slug, nextHubSlug, draft.slug);
+          if (page.id === hub.id) {
+            draft.title = name;
+          }
+          draft.updatedAt = timestamp;
+        });
+      }
+    }
+  });
+
+  tx.commit().catch(reportPersistenceError);
+
+  if (!(previousHubSlug && nextHubSlug) || previousHubSlug === nextHubSlug) {
+    return null;
+  }
+
+  return { previousHubSlug, nextHubSlug };
+}
+
+/**
+ * Reparents a database hub under a new host page and cascades hub + row slug
+ * prefixes so routes stay host-relative. Call after the host canvas blocks have
+ * been rewritten (strip old hosts + append on the new host).
+ */
+export function reparentDatabaseHub(options: {
+  databaseId: string;
+  newHostPageId: string;
+}): void {
+  const { databaseId, newHostPageId } = options;
+  const database = localDatabasesCollection.get(databaseId);
+  const hub = findDatabaseHubPage(databaseId);
+  if (!(database && hub)) {
+    return;
+  }
+
+  const host = localPagesCollection.get(newHostPageId);
+  if (!host) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const slug = dedupeDatabaseSlug(
+    databaseId,
+    resolveDatabaseSlug(database),
+    newHostPageId
+  );
+  const nextHubSlug = buildDatabaseHubSlug(host.slug, slug);
+  const hubPrefix = hub.slug.endsWith("/") ? hub.slug : `${hub.slug}/`;
+  const previousHubSlug = hub.slug;
+
+  const tx = createPagesAndDatabasesTransaction();
+  tx.mutate(() => {
+    if (slug !== resolveDatabaseSlug(database)) {
+      localDatabasesCollection.update(databaseId, (draft) => {
+        draft.slug = slug;
+        draft.updatedAt = timestamp;
+      });
+    }
+
+    localPagesCollection.update(hub.id, (draft) => {
+      draft.parentId = newHostPageId;
+      draft.slug = nextHubSlug;
+      draft.updatedAt = timestamp;
+    });
+
+    for (const page of localPagesCollection.toArray) {
+      if (page.id === hub.id) {
+        continue;
+      }
+      if (page.slug.startsWith(hubPrefix) || page.slug === previousHubSlug) {
+        localPagesCollection.update(page.id, (draft) => {
+          draft.slug = replacePageSlugPrefix(
+            previousHubSlug,
+            nextHubSlug,
+            draft.slug
+          );
           draft.updatedAt = timestamp;
         });
       }

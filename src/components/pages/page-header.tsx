@@ -8,6 +8,11 @@ import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
@@ -40,21 +45,30 @@ function PageHeaderSidebarToggle() {
   return (
     <motion.div
       animate={{ opacity: 1, transform: "translateX(0px)" }}
-      className="shrink-0"
+      className="flex shrink-0 items-center"
       initial={
         isCollapsing ? { opacity: 0, transform: "translateX(-6px)" } : false
       }
       transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
     >
-      <Button
-        aria-label="Expand sidebar"
-        onClick={pinSidebar}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        <IconLayoutSidebar aria-hidden />
-      </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              aria-label="Pin sidebar open"
+              onClick={pinSidebar}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <IconLayoutSidebar aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent command="toggle-sidebar" side="bottom">
+          Pin sidebar open
+        </TooltipContent>
+      </Tooltip>
     </motion.div>
   );
 }

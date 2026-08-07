@@ -39,9 +39,13 @@ import {
 } from "@/lib/pages/page-sidebar-order.ts";
 import { persistPageMetadata } from "@/lib/pages/persist-page-metadata.ts";
 import { persistPageReposition } from "@/lib/pages/persist-page-reposition.ts";
-import { planPageReposition } from "@/lib/pages/reposition-page.ts";
+import {
+  type PageRepositionPlan,
+  planPageReposition,
+} from "@/lib/pages/reposition-page.ts";
 import { resetAllToRemote } from "@/lib/pages/reset-all-to-remote.ts";
 import { resetPageToRemote } from "@/lib/pages/reset-page-to-remote.ts";
+import { resolveSlugPrefixRedirect } from "@/lib/pages/resolve-slug-prefix-redirect.ts";
 import { purgeSlugTombstonesForUserPageCreate } from "@/lib/pages/resolve-user-page-by-slug.ts";
 import {
   normalizePageSlug,
@@ -374,6 +378,27 @@ function applyPageRepositionEffect(
   }
 }
 
+/** Router-navigate when the open page (or a descendant URL) moved with the reposition. */
+function navigateAfterReposition(
+  plan: PageRepositionPlan,
+  navigate: ReturnType<typeof useNavigate>
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const target = resolveSlugPrefixRedirect({
+    nextPrefix: plan.slug,
+    pathname: window.location.pathname,
+    previousPrefix: plan.previousSlug,
+  });
+  if (!target) {
+    return;
+  }
+
+  navigate({ ...target, replace: true });
+}
+
 /**
  * Applies `PageCommand` effects to collections and the router (`navigate` uses `userPage` for new user pages).
  * @see docs/reference/page-commands.md
@@ -428,6 +453,7 @@ export function usePageDispatch(pages: PageSummary[] = []) {
             break;
           case "page.reposition":
             applyPageRepositionEffect(effect, dispatchPages, now);
+            navigateAfterReposition(effect.plan, navigate);
             break;
           case "navigate":
             if (effect.mode === "history") {

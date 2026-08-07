@@ -1,4 +1,5 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { DatabaseHubPageWorkspace } from "@/components/database/database-hub-page.tsx";
 import {
   DatabaseSlugPathPage,
@@ -14,7 +15,11 @@ import { useSlugPageResolution } from "@/hooks/use-slug-page-resolution.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
 import { useShippedDatabasesSettled } from "@/lib/databases/shipped-databases-settled.ts";
-import { pagePathFromParam, pageSlugsEqual } from "@/lib/pages/slugify.ts";
+import {
+  pageNavTargetForUserPage,
+  pagePathFromParam,
+  pageSlugsEqual,
+} from "@/lib/pages/slugify.ts";
 import {
   isLocallyDeletedPage,
   isUserCreatedPage,
@@ -39,6 +44,7 @@ function UserPageBySlugRoute() {
 }
 
 function UserPageBySlugClient({ slug }: { slug: string }) {
+  const navigate = useNavigate();
   const userPageBySlug = useResolvedUserPage(slug);
   const userPage = useSlugPageResolution(slug, userPageBySlug);
   const isLocalPagesSettling = useLocalPagesSettling();
@@ -47,19 +53,38 @@ function UserPageBySlugClient({ slug }: { slug: string }) {
 
   const slugMatchesResolvedPage =
     userPage != null && pageSlugsEqual(userPage.slug, slug);
+  // Id-fallback after rename: collection already has the next slug while the
+  // router splat is still the previous one. Keep rendering; do not notFound.
+  const isRenameSlugGap =
+    userPage != null && userPageBySlug == null && !slugMatchesResolvedPage;
   const isValidUserPage =
     Boolean(userPage && isUserCreatedPage(userPage)) &&
     !(userPage && isLocallyDeletedPage(userPage)) &&
-    slugMatchesResolvedPage;
+    (slugMatchesResolvedPage || isRenameSlugGap);
 
   // Prefer an exact database slug path over a stale slug→id fallback from a
   // previous `/p/$` navigation (see useSlugPageResolution).
   const useDatabasePath = Boolean(databasePath) && !isValidUserPage;
 
-  useSyncPageUrl(isValidUserPage ? userPage?.id : undefined, {
-    urlSlug: slug,
-    userPage: true,
-  });
+  useEffect(() => {
+    if (!(isRenameSlugGap && userPage)) {
+      return;
+    }
+    navigate({
+      ...pageNavTargetForUserPage(userPage.slug),
+      replace: true,
+    });
+  }, [isRenameSlugGap, navigate, userPage]);
+
+  // Skip replaceState sync during the rename gap — that leaves the router on
+  // the stale splat. Router navigate above (and navigateAfter*) rematch instead.
+  useSyncPageUrl(
+    isValidUserPage && slugMatchesResolvedPage ? userPage?.id : undefined,
+    {
+      urlSlug: slug,
+      userPage: true,
+    }
+  );
 
   if (!isValidUserPage) {
     if (isLocalPagesSettling) {

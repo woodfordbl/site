@@ -11,14 +11,15 @@ import {
 } from "@/lib/connectors/types.ts";
 
 /**
- * CoinGecko markets transport: the price / market-cap / real-currency plumbing
- * behind the unified "Stocks and Crypto" connector (see `live-markets.ts`).
- * One row per configured ticker, resolved by CoinGecko's `symbols` filter and
- * quoted in an arbitrary `vs_currency` (true conversion, unlike the Binance
- * live tick). Tickers CoinGecko does not recognize are classified as equities
- * by `live-markets`. Binance streaming overlays live price updates on top, keyed by
- * the same base-ticker `externalId`. Keyless public `/coins/markets` endpoint
- * (open CORS, no auth). No ETag: the payload changes on effectively every poll.
+ * CoinGecko markets transport: the price / float / market-cap / real-currency
+ * plumbing behind the unified "Stocks and Crypto" connector (see
+ * `live-markets.ts`). One row per configured ticker, resolved by CoinGecko's
+ * `symbols` filter and quoted in an arbitrary `vs_currency` (true conversion,
+ * unlike the Binance live tick). Circulating supply seeds `float`; market cap
+ * prefers `float × price` when supply is present. Binance streaming overlays
+ * live price updates on top, keyed by the same base-ticker `externalId`.
+ * Keyless public `/coins/markets` endpoint (open CORS, no auth). No ETag: the
+ * payload changes on effectively every poll.
  */
 
 const coingeckoConfigSchema = z.object({
@@ -34,6 +35,7 @@ const coingeckoMarketSchema = z.object({
   symbol: z.string(),
   name: z.string(),
   current_price: z.number().nullable(),
+  circulating_supply: z.number().nullable().optional(),
   market_cap: z.number().nullable(),
   price_change_percentage_24h: z.number().nullable(),
   last_updated: z.string().nullable(),
@@ -66,18 +68,32 @@ function parseConfig(config: Record<string, unknown>): {
 function toConnectorRow(
   coin: z.infer<typeof coingeckoMarketSchema>
 ): ConnectorRow {
+  const float =
+    typeof coin.circulating_supply === "number" &&
+    Number.isFinite(coin.circulating_supply) &&
+    coin.circulating_supply > 0
+      ? coin.circulating_supply
+      : null;
+  const price = coin.current_price;
+  // Prefer float × price so Market cap tracks live ticks; fall back to the
+  // provider's market_cap when circulating supply is missing.
+  const marketCap =
+    float !== null && typeof price === "number" && Number.isFinite(price)
+      ? float * price
+      : coin.market_cap;
   return {
     // Base ticker (uppercase) so the Binance live stream can key the same row.
     externalId: coin.symbol.toUpperCase(),
     values: {
       symbol: coin.symbol.toUpperCase(),
       name: coin.name,
-      price: coin.current_price,
+      price,
+      float,
       change:
         coin.price_change_percentage_24h === null
           ? null
           : coin.price_change_percentage_24h / PERCENT_TO_FRACTION,
-      marketCap: coin.market_cap,
+      marketCap,
       // Full ISO timestamp (with time) so the Updated column reflects the poll.
       updatedAt: coin.last_updated,
     },

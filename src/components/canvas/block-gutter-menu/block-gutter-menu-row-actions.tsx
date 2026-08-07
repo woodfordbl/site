@@ -27,7 +27,7 @@ export function BlockGutterMenuRowActions() {
       <DropdownMenuItem onClick={handleDelete} variant="destructive">
         <IconTrash />
         Delete
-        <Shortcut className="ml-auto" keys="Delete" />
+        <Shortcut className="ml-auto" command="delete-page" />
       </DropdownMenuItem>
     </>
   );
