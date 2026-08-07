@@ -20,16 +20,19 @@ export const DEFAULT_COLUMN_WIDTH_PX = 192;
 export const MIN_COLUMN_WIDTH_PX = 96;
 
 /**
- * Checkbox columns hold no text — only the header's field icon and the
- * centered checkbox — so they size to just the checkbox plus padding, used as
- * both their default width and their minimum (they don't need to grow).
+ * Compact minimum for checkbox property columns: `size-4` field icon (16) plus
+ * modest horizontal padding — same footprint as
+ * {@link SELECTION_COLUMN_WIDTH_PX}. Headers switch to icon-only (centered,
+ * tighter `px-1` padding) at this width; the default remains the ordinary
+ * text-column width so the property name is visible until the user collapses
+ * the column.
  */
-export const CHECKBOX_COLUMN_WIDTH_PX = 48;
+export const CHECKBOX_COLUMN_WIDTH_PX = 32;
 
 /**
  * Leading row-selection checkbox / number lane (not a DatabaseField). Sized
- * to the `size-4` checkbox with modest centering — narrower than checkbox
- * field columns, which also need a header icon footprint.
+ * to the `size-4` checkbox with modest centering — same width as the compact
+ * checkbox property column minimum.
  */
 export const SELECTION_COLUMN_WIDTH_PX = 32;
 
@@ -204,11 +207,19 @@ export function minColumnWidthPx(field: Pick<DatabaseField, "type">): number {
 
 /** A field's fallback column width when the view stores none. */
 export function defaultColumnWidthPx(
-  field: Pick<DatabaseField, "type">
+  _field: Pick<DatabaseField, "type">
 ): number {
-  return field.type === "checkbox"
-    ? CHECKBOX_COLUMN_WIDTH_PX
-    : DEFAULT_COLUMN_WIDTH_PX;
+  // All field types share the ordinary default. Checkbox columns still resize
+  // down to {@link CHECKBOX_COLUMN_WIDTH_PX} and hide the header name there.
+  return DEFAULT_COLUMN_WIDTH_PX;
+}
+
+/**
+ * Checkbox column headers hide the property name (icon-only, centered) at or
+ * below the compact minimum; wider columns keep icon + name like other fields.
+ */
+export function isCheckboxColumnHeaderCompact(widthPx: number): boolean {
+  return widthPx <= CHECKBOX_COLUMN_WIDTH_PX;
 }
 
 /** Fixed grid row height (header, body, and footer rows). */

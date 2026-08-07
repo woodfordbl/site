@@ -42,6 +42,15 @@ import { cn } from "@/lib/utils.ts";
  * `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of views).
  */
 
+/**
+ * Shared vertical hit-area for property name triggers and value cells in the
+ * row-page Properties list. Both sides use fixed `h-8` + `items-center` so
+ * hover surfaces align within `min-h-8` grid rows; horizontal padding stays
+ * per-side (`px-0.5` on names, `px-2` on values).
+ */
+export const rowPropertyCellClassName =
+  "flex h-8 min-w-0 items-center rounded-sm transition-colors hover:bg-muted/50 focus-visible:bg-muted/50";
+
 /** Evaluate a formula field's expression against the row for display. */
 function formulaDisplay(
   field: Extract<DatabaseField, { type: "formula" }>,
@@ -117,7 +126,10 @@ function RowPropertyValue({
     <>
       {editing ? null : (
         <button
-          className="flex h-8 w-full min-w-0 cursor-default items-center overflow-hidden rounded-sm px-2 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+          className={cn(
+            rowPropertyCellClassName,
+            "w-full cursor-default overflow-hidden px-2 text-left outline-none"
+          )}
           onClick={() => {
             onStartEdit(field.id);
           }}
@@ -170,7 +182,12 @@ function RowPropertyLabel({
 
   if (!view) {
     return (
-      <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+      <div
+        className={cn(
+          rowPropertyCellClassName,
+          "max-w-full gap-1.5 px-0.5 text-muted-foreground"
+        )}
+      >
         {label}
       </div>
     );
@@ -183,7 +200,10 @@ function RowPropertyLabel({
       displayFieldIds={displayFieldIds}
       field={field}
       isPrimary={false}
-      triggerClassName="flex min-w-0 max-w-full items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left text-muted-foreground outline-hidden transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50 focus-visible:text-foreground"
+      triggerClassName={cn(
+        rowPropertyCellClassName,
+        "max-w-full gap-1.5 px-0.5 text-left text-muted-foreground outline-hidden hover:text-foreground focus-visible:text-foreground"
+      )}
       view={view}
     >
       {label}

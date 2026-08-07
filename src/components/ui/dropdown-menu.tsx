@@ -12,6 +12,7 @@ import {
   DrawerMenuSectionLabel,
   DrawerMenuSeparator,
   DrawerMenuTrigger,
+  ignoreKeysFromNestedSurfaces,
   MenuDrawerRoot,
   MenuDrawerSubDrawer,
   MenuDrawerSubProvider,
@@ -108,6 +109,7 @@ function DropdownMenuContent({
   sideOffset = 4,
   className,
   children,
+  onKeyDown,
   ...props
 }: MenuPrimitive.Popup.Props &
   Pick<
@@ -148,6 +150,10 @@ function DropdownMenuContent({
             className
           )}
           data-slot="dropdown-menu-content"
+          onKeyDown={(event) => {
+            ignoreKeysFromNestedSurfaces(event);
+            onKeyDown?.(event);
+          }}
           {...props}
         >
           {children}

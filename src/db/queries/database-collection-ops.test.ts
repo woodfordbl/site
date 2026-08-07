@@ -751,6 +751,114 @@ describe("database collection ops", () => {
     ]);
   });
 
+  it("reorderDatabaseViews rebuilds the views array in the given order", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "Table" },
+      { ...database.views[0], id: "view-2", name: "Board" },
+      { ...database.views[0], id: "view-3", name: "Chart" },
+    ];
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseViews(databaseId, ["view-3", "view-1", "view-2"]);
+    await flushAsync();
+
+    expect(databaseDrafts[0]?.views.map((view) => view.id)).toEqual([
+      "view-3",
+      "view-1",
+      "view-2",
+    ]);
+    expect(databaseDrafts[0]?.updatedAt).not.toBe(database.updatedAt);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("reorderDatabaseViews flattens draft proxies so record configs stay writable", async () => {
+    // Same proxy trap as updateDatabaseView: without toPlain, storing draft
+    // views leaves z.record maps (calculations/columnWidths) as proxies and
+    // schema validation rejects the persist — tabs appear to snap back.
+    const base = makeDatabase();
+    base.views = [
+      {
+        ...base.views[0],
+        id: "view-1",
+        name: "Table",
+        config: {
+          ...base.views[0].config,
+          calculations: { "f-extra": "sum" as const },
+          columnWidths: { "f-title": 180 },
+        },
+      },
+      { ...base.views[0], id: "view-2", name: "Board" },
+    ];
+    const proxiedViews = base.views.map(
+      (view) =>
+        new Proxy(
+          {
+            ...view,
+            config: new Proxy(
+              {
+                ...view.config,
+                calculations: view.config.calculations
+                  ? new Proxy({ ...view.config.calculations }, {})
+                  : undefined,
+                columnWidths: view.config.columnWidths
+                  ? new Proxy({ ...view.config.columnWidths }, {})
+                  : undefined,
+              },
+              {}
+            ),
+          },
+          {}
+        )
+    );
+    const draft: LocalDatabase = { ...base, views: proxiedViews };
+    const captured: LocalDatabase[] = [];
+    mocks.databaseUpdate.mockImplementation(
+      (_id: string, update: (value: LocalDatabase) => void) => {
+        update(draft);
+        captured.push(draft);
+        return draft;
+      }
+    );
+
+    ops.reorderDatabaseViews(databaseId, ["view-2", "view-1"]);
+    await flushAsync();
+
+    expect(captured[0]?.views.map((view) => view.id)).toEqual([
+      "view-2",
+      "view-1",
+    ]);
+    const moved = captured[0]?.views[1];
+    expect(moved).toBeDefined();
+    if (!moved) {
+      return;
+    }
+    expect(types.isProxy(moved)).toBe(false);
+    expect(types.isProxy(moved.config)).toBe(false);
+    expect(types.isProxy(moved.config.calculations)).toBe(false);
+    expect(types.isProxy(moved.config.columnWidths)).toBe(false);
+    expect(moved.config.calculations).toEqual({ "f-extra": "sum" });
+    expect(moved.config.columnWidths).toEqual({ "f-title": 180 });
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("reorderDatabaseViews ignores unknown ids and appends missing ids in prior order", async () => {
+    const database = makeDatabase();
+    database.views = [
+      { ...database.views[0], id: "view-1", name: "Table" },
+      { ...database.views[0], id: "view-2", name: "Board" },
+    ];
+    const databaseDrafts = captureDatabaseDrafts(database);
+
+    ops.reorderDatabaseViews(databaseId, ["view-ghost", "view-2"]);
+    await flushAsync();
+
+    expect(databaseDrafts[0]?.views.map((view) => view.id)).toEqual([
+      "view-2",
+      "view-1",
+    ]);
+  });
+
   it("duplicateDatabaseField strips sourceKey so the copy is a local field", async () => {
     const database = makeDatabase();
     database.fields = [

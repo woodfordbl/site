@@ -1,11 +1,13 @@
 "use client";
 
+import type { BaseUIEvent } from "@base-ui/react/types";
 import { IconCheck, IconChevronLeft } from "@tabler/icons-react";
 import {
   cloneElement,
   createContext,
   isValidElement,
   type Key,
+  type KeyboardEvent,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
@@ -64,6 +66,28 @@ export function truncateMenuItemLabel(children: ReactNode): ReactNode {
     }
     return child;
   });
+}
+
+/**
+ * Keeps a menu popup from claiming keystrokes that came from a floating surface
+ * opened out of one of its rows (glyph icon picker popover, select, dialog).
+ * Those surfaces portal outside the popup but stay React descendants, so their
+ * keydowns still bubble into the menu as synthetic events — and Base UI's menu
+ * typeahead calls `preventDefault()` on every printable key it sees, which
+ * swallows typing in their inputs. Base UI runs external handlers before its
+ * own, so opting out here disables typeahead/arrow navigation for exactly those
+ * events. Escape is left alone so the stack still closes.
+ */
+export function ignoreKeysFromNestedSurfaces(
+  event: BaseUIEvent<KeyboardEvent<HTMLElement>>
+): void {
+  if (event.key === "Escape") {
+    return;
+  }
+  const target = event.target;
+  if (target instanceof Node && !event.currentTarget.contains(target)) {
+    event.preventBaseUIHandler();
+  }
 }
 
 // --- Root open-state context (read by triggers + content) -------------------

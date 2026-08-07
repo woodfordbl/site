@@ -18,7 +18,7 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`; default `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`. All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, optional `icon` (light override; no seed), `externalId?` (connector row identity), timestamps |
-| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
+| `DatabaseView` | `type: "table" \| "list" \| "board" \| "chart"`, optional `icon?` (emoji/`tabler:` glyph; unset → type glyph in tabs/menus), `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
@@ -49,7 +49,7 @@ All writes are single explicit-commit transactions
 [`database-collection-ops.ts`](../../src/db/queries/database-collection-ops.ts)
 (database create/rename/delete, row insert/reorder/duplicate/delete with midpoint-then-renumber
 sparse ordering, cell merge, field add/update/remove/duplicate with full view-reference
-stripping, view patches). `duplicateDatabaseRows` clones local rows (skips synced
+stripping, view patches / `reorderDatabaseViews`). `duplicateDatabaseRows` clones local rows (skips synced
 `externalId` rows and never copies `pageId`/`externalId`). Live reads:
 [`use-database.ts`](../../src/db/queries/use-database.ts) (`useDatabase`,
 `useDatabaseRows` — declarative `eq` so the index serves the query).
@@ -136,15 +136,23 @@ URLs already render a not-found shell once the definition is gone.
   that category is still empty — adding expands the inline bar automatically.
 - [`database-view-switcher.tsx`](../../src/components/database/database-view-switcher.tsx) —
   saved-view tabs in the title row: `TabsList` **`indicator`** variant, one compact tab
-  per view (type icon + name, truncated), horizontally scrollable on overflow. Edit mode
-  appends a "+" opening the Add-view menu (Table/List/Board/Chart), which creates via
-  `addDatabaseView` (per-type defaults: board adopts the first select field as
-  `groupFieldId`; chart starts as a time-axis `line` over the first captured numeric
-  field — `xMode: "time"` + `timeSeries.fieldId`, so a synced price database charts
-  price over time on the first try — falling back to `bar`/`count` over the first
-  select-or-date field when nothing is captured; names
-  dedupe with a numeric suffix) and activates the new view. View mode is switch-only and
-  hides the tabs entirely for single-view databases.
+  per view (optional `view.icon` emoji/`tabler:` glyph, else type icon + name, truncated),
+  horizontally scrollable on overflow. Tab order is the database document's `views[]`
+  array index (no separate order field). Edit mode appends a "+" opening the Add-view menu
+  (Table/List/Board/Chart), which creates via `addDatabaseView` (per-type defaults: board
+  adopts the first select field as `groupFieldId`; chart starts as a time-axis `line` over
+  the first captured numeric field — `xMode: "time"` + `timeSeries.fieldId`, so a synced
+  price database charts price over time on the first try — falling back to `bar`/`count`
+  over the first select-or-date field when nothing is captured; names dedupe with a
+  numeric suffix) and activates the new view. Edit-mode tabs also open a right-click
+  context menu ([`database-view-menu.tsx`](../../src/components/database/database-view-menu.tsx))
+  matching the Views submenu: rename, change/clear icon, Duplicate, Delete (last view
+  guarded), and support drag-reorder via the shared DnD toolkit (`DndSurface` +
+  `useDragSource` with a 50ms hold-to-grab, x-axis touch lock so vertical scroll wins;
+  drop commits through `reorderDatabaseViews`; `bg-selection-primary` boundary line;
+  50% opacity source + overlay preview). Left-click still activates; a completed drag
+  suppresses the trailing tab click so the active `viewId` stays put. View mode is
+  switch-only (no reorder) and hides the tabs entirely for single-view databases.
 - [`database-table-grid.tsx`](../../src/components/database/database-table-grid.tsx) —
   TanStack Table in **fully manual mode** (core row model only; data computation stays in
   the lib layer) + TanStack Virtual rows (36px, overscan 12, `max-h-[600px]` scrollport via
@@ -197,7 +205,12 @@ URLs already render a not-found shell once the definition is gone.
   edge hit zones (wider on coarse pointers, `touch-none` scoped to the zone), hover-reveal
   `w-1 bg-selection-primary` dividers scoped to each zone's own `data-reveal-group` (300ms delay —
   not the whole grid, so hovering the table does not light every boundary), live rAF widths committed to `view.config.columnWidths`,
-  double-click/tap reset. **Header drag-reorder**
+  double-click/tap reset. Checkbox property columns default to the ordinary text-column
+  width (type icon + property name, left-aligned) and may resize down to
+  [`CHECKBOX_COLUMN_WIDTH_PX`](../../src/components/database/database-grid-helpers.ts)
+  (32px — same footprint as the select gutter; compact headers use `px-1` around
+  the centered type icon — below the text-column floor); at that compact width the
+  header centers the type icon only. **Header drag-reorder**
   ([`use-database-column-drag.ts`](../../src/components/database/use-database-column-drag.ts) +
   [`database-column-dnd.tsx`](../../src/components/database/database-column-dnd.tsx)):
   press-threshold drag on fine pointers (click still opens the menu, on release),
@@ -219,6 +232,12 @@ URLs already render a not-found shell once the definition is gone.
   with create-option) and date (react-day-picker), Tab/Enter navigation
   (`nextEditTarget` in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts)).
+  Primary (title) cells edit via shared
+  [`InputGroup`](../../src/components/ui/input-group.tsx) chrome with an optional
+  leading [`InputGroupIconPicker`](../../src/components/ui/input-group-icon-picker.tsx)
+  that writes `row.icon` through `setDatabaseRowIcon` — the picker is omitted when
+  the view hides page icons (`config.showPageIcons === false`); non-primary text
+  cells keep the borderless input.
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —
   Column property menu: rename, Edit property (per-type config incl. select-option
   rename/add/delete and color via the shared block-color palette,
@@ -249,10 +268,10 @@ URLs already render a not-found shell once the definition is gone.
   [`use-list-reorder.ts`](../../src/components/database/use-list-reorder.ts) — the field
   name with a Title badge beside the primary field, and hide/show + delete
   (`removeDatabaseField`) controls on non-primary rows), Views
-  (inline rename with type icon, per-view Duplicate — `duplicateDatabaseView`, "<name>
-  copy" activated on create — and Delete, disabled on the last view and refused at the op
-  level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's
-  "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
+  (inline rename with icon picker — optional `view.icon`, else type glyph; per-view
+  Duplicate — `duplicateDatabaseView`, "<name> copy" activated on create — and Delete,
+  disabled on the last view and refused at the op level by `removeDatabaseView`; plus the
+  Add-view entries shared with the switcher's "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
   and Page icons switches (table views only — `showVerticalLines` / `showPageIcons` on the
   active view, both absent = shown; **Row select** submenu sets `rowSelectDisplay`:
   Always show / Show on hover / Show number), Source section (local info, or the connector sync controls
@@ -510,8 +529,12 @@ canvas row). The hub renders through
 (`fillHeight`, `hideTitle`) — no canvas editor and no other blocks. Page icon
 and title are the database’s
 ([`HubPageTitleSlot`](../../src/components/database/hub-page-title-slot.tsx)
-writes through `renameDatabase` / `setDatabaseIcon`, which mirror onto hub
-page metadata). Cover and header menu match any other page. Optional persisted
+writes through `setDatabaseName` while typing / `renameDatabase` on blur and
+`setDatabaseIcon`, which mirror onto hub page metadata; slug commits on blur
+use router `navigate({ replace: true })` via
+[`navigateAfterDatabaseHubRename`](../../src/lib/databases/navigate-after-database-rename.ts),
+and `/p/$` keeps rendering the id-fallback page while the splat still lags
+(so the collection update cannot flash not-found before navigate rematches). Cover and header menu match any other page. Optional persisted
 `database.slug` (else `slugifyPageSegment(name)`) forms the leaf segment.
 Legacy `/db/$databaseId` URLs client-redirect to the slug path. Linked/inline
 `database` blocks on normal pages stay canvas blocks.

@@ -529,6 +529,7 @@ export function DatabaseTableView({
       {showTitleRow ? (
         <DatabaseTitle
           activeView={view}
+          alwaysShowTools={fillHeight}
           chartData={chartData}
           controls={
             mode === "edit" ? (

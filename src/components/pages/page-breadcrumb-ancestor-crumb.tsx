@@ -1,7 +1,10 @@
 "use client";
 
 import { Link } from "@tanstack/react-router";
-import { PAGE_BREADCRUMB_CHILDREN_LIMIT } from "@/components/pages/page-breadcrumb-shared.ts";
+import {
+  breadcrumbIconFallback,
+  PAGE_BREADCRUMB_CHILDREN_LIMIT,
+} from "@/components/pages/page-breadcrumb-shared.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { buttonVariants, iconSlotClassName } from "@/components/ui/button.tsx";
 import {
@@ -34,11 +37,17 @@ function PageBreadcrumbMenuPageLabel({ page }: { page: PageSummary }) {
   const localPage = useLocalPageById(page.id);
   const title = localPage?.title ?? page.title;
   const icon = localPage?.icon ?? page.icon;
+  const isDatabaseHub = Boolean(
+    localPage?.databaseSource ?? page.databaseSource
+  );
 
   return (
     <>
       <span className={iconSlotClassName("icon-sm")}>
-        <PageIconDisplay icon={icon} />
+        <PageIconDisplay
+          fallback={breadcrumbIconFallback(isDatabaseHub)}
+          icon={icon}
+        />
       </span>
       <span className="min-w-0 truncate">{title || DEFAULT_PAGE_TITLE}</span>
     </>
@@ -161,6 +170,9 @@ export function PageBreadcrumbAncestorCrumb({
   const localPage = useLocalPageById(ancestor.id);
   const title = localPage?.title ?? ancestor.title;
   const icon = localPage?.icon ?? ancestor.icon;
+  const isDatabaseHub = Boolean(
+    localPage?.databaseSource ?? ancestor.databaseSource
+  );
   const navTarget = resolvePageNavTarget(ancestor.id, pages);
 
   return (
@@ -174,7 +186,10 @@ export function PageBreadcrumbAncestorCrumb({
         render={<Link {...navTarget} />}
       >
         <span className={iconSlotClassName("icon-sm")}>
-          <PageIconDisplay icon={icon} />
+          <PageIconDisplay
+            fallback={breadcrumbIconFallback(isDatabaseHub)}
+            icon={icon}
+          />
         </span>
         <span className="min-w-0 truncate">{title || DEFAULT_PAGE_TITLE}</span>
       </DropdownMenuTrigger>

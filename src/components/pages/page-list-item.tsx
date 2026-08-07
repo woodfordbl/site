@@ -579,7 +579,7 @@ export function PageListItem({
     startRenaming();
   }, [setIconPickerOpen, startRenaming]);
 
-  // Single-key shortcuts (F/D/Backspace/T) are live only while this right-click
+  // Single-key shortcuts (F / Shift+D / D / T) are live only while this right-click
   // menu is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({

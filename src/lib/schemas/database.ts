@@ -408,6 +408,11 @@ export const databaseViewSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: databaseViewTypeSchema,
+  /**
+   * Optional emoji or `tabler:IconName` glyph. When unset, UI falls back to the
+   * view-type icon (Table / List / Board / Chart).
+   */
+  icon: z.string().optional(),
   filter: databaseFilterGroupSchema.optional(),
   sorts: z.array(databaseSortSchema).optional(),
   /**

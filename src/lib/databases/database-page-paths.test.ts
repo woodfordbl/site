@@ -3,6 +3,7 @@ import {
   buildDatabaseHubSlug,
   buildDatabaseRowSlug,
   buildDatabaseTemplateSlug,
+  resolveDatabaseHubSlug,
   resolveDatabasePathFromSplat,
   resolveDatabaseSlug,
   resolveRowSlug,
@@ -60,6 +61,13 @@ describe("database page paths", () => {
     expect(buildDatabaseTemplateSlug("/work/projects", "project-tracker")).toBe(
       "/work/projects/project-tracker/template"
     );
+  });
+
+  it("resolves the hub metadata slug for sidebar active matching", () => {
+    expect(resolveDatabaseHubSlug(database, pages, blocks)).toBe(
+      "/work/projects/project-tracker"
+    );
+    expect(resolveDatabaseHubSlug(database, pages, [])).toBeNull();
   });
 
   it("resolves the longest hosted page prefix", () => {

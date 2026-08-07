@@ -1442,6 +1442,52 @@ export function reorderDatabaseFields(
   commitDatabaseTransaction(tx);
 }
 
+/**
+ * Rebuild the database's `views` array in the given id order, in one
+ * transaction, bumping `updatedAt`. Tab order is the array index (no separate
+ * order field). Unknown ids and duplicates after the first are ignored; views
+ * missing from `orderedViewIds` are appended in their prior relative order so
+ * a reorder can never drop or invent views. Draft proxies are flattened via
+ * `toPlain` before write so nested `z.record` view config maps stay valid.
+ */
+export function reorderDatabaseViews(
+  databaseId: string,
+  orderedViewIds: string[]
+): void {
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabasesCollection.update(databaseId, (draft) => {
+      // Flatten draft proxies first — view `config` holds `z.record` maps
+      // (columnWidths / calculations). Storing proxied views fails schema
+      // validation on persist and the UI snaps back to the prior order.
+      const plainViews = toPlain(draft.views);
+      const byId = new Map(plainViews.map((view) => [view.id, view]));
+      const ordered: typeof draft.views = [];
+      const used = new Set<string>();
+
+      for (const viewId of orderedViewIds) {
+        const view = byId.get(viewId);
+        if (view && !used.has(viewId)) {
+          ordered.push(view);
+          used.add(viewId);
+        }
+      }
+      for (const view of plainViews) {
+        if (!used.has(view.id)) {
+          ordered.push(view);
+        }
+      }
+
+      draft.views = ordered;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
 /** The connector variant of `DatabaseSource` (the only editable one). */
 type ConnectorDatabaseSource = Extract<DatabaseSource, { kind: "connector" }>;
 

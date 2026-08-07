@@ -53,3 +53,21 @@ export function isActivePage(
 
   return false;
 }
+
+/**
+ * True when the active route is `candidateSlug` or a nested path under it
+ * (e.g. database hub → row / template). Used by database sidebar rows so the
+ * hub stays highlighted on its sub-pages.
+ */
+export function isActiveOrDescendantSlug(
+  candidateSlug: string,
+  active: ActivePageRef
+): boolean {
+  if (!active.slug) {
+    return false;
+  }
+
+  const candidate = normalizePageSlug(candidateSlug);
+  const current = normalizePageSlug(active.slug);
+  return current === candidate || current.startsWith(`${candidate}/`);
+}

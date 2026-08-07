@@ -54,7 +54,7 @@ export function PageListRowDropdown({
   pages,
   title,
 }: PageListRowDropdownProps) {
-  // Single-key shortcuts (F/D/Backspace/T) are live only while this dropdown
+  // Single-key shortcuts (F / Shift+D / D / T) are live only while this dropdown
   // is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
