@@ -169,6 +169,38 @@ diagnostic synthesizes `unknown` — one mistake yields one diagnostic, never a 
 Blankness is a runtime concern: properties type as their plain cell type and per-row
 blank failures surface as ⚠ cells, not check errors. Checking never throws.
 
+`context.traceTypes` additionally records **every** node's synthesized type into
+`result.types` (`FormulaTypeSpan[]`, keyed by source span). It is off by default —
+the per-keystroke diagnostics pass and the engine allocate nothing for it — and only
+the editor hover reads it. Children complete before their parent, so the first write
+for a span wins and shared spans (grouping parens belong to the enclosing node) keep
+the innermost type.
+
+## Hover (editor LSP)
+
+[`hover.ts`](../../src/lib/formula/hover.ts) answers "what is this subexpression?"
+for the CM6 editor's tooltip. `formulaHoverAt(source, offset, options)` resolves the
+**innermost** node whose span contains the offset, then reports:
+
+- **`label`** — humanized off the check context: a property/database node reads as its
+  display name, a call as its catalog signature, anything else as its source slice with
+  reference spans swapped for names (`Estimate * Rate`, never `prop("t-est") * …`).
+  Splicing is right-to-left, mirroring [`ref-rewrite.ts`](../../src/lib/formula/ref-rewrite.ts),
+  but done from `context.properties`/`context.databases` so the pure language package
+  stays free of the database schema types.
+- **`type`** — the node's badge, looked up from the `traceTypes` span map.
+- **`value`** — what the subexpression evaluates to against an optional scope (the
+  panel's picked preview row), so hovering shows real intermediate results. `null`
+  when no scope is supplied, or when the node sits **inside a lambda**: its parameters
+  bind only mid-call, so a standalone evaluation would report a spurious unknown-name
+  error. Better to show the type alone than a wrong value.
+
+Pure and never-throwing like the rest of the package: unparseable input, an offset past
+the end, and evaluation blowups degrade to `null` or an error string. The editor's
+document IS the canonical text (chips are decorations over it), so the CM offset needs
+no translation — and hovering a chip reports the property it stands for, since the chip
+covers exactly that span.
+
 ## Database integration
 
 [`formula-values.ts`](../../src/lib/databases/formula-values.ts) computes formula

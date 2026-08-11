@@ -120,6 +120,13 @@ export interface FormulaCheckContext {
   readonly databases?: ReadonlyMap<string, FormulaCheckDatabase>;
   readonly properties: readonly FormulaCheckProperty[];
   /**
+   * Record every node's synthesized type into
+   * {@link FormulaCheckResult.types} (editor hovers). Off by default: the
+   * per-keystroke diagnostics pass and the engine's checks want no extra
+   * allocation, and only the hover surface ever reads the trace.
+   */
+  readonly traceTypes?: boolean;
+  /**
    * Named user-defined functions callable from this formula (prepared
    * registry, lowercased-name keys — `prepareUserFunctions`). Calls resolve
    * catalog-first: write-time validation prevents catalog collisions, but a
@@ -137,6 +144,21 @@ export interface FormulaCheckDiagnostic {
   readonly start: number;
 }
 
+/**
+ * One node's synthesized type over its source span — the raw material for
+ * editor hovers ("what is this subexpression?"). Only produced when
+ * {@link FormulaCheckContext.traceTypes} is on.
+ */
+export interface FormulaTypeSpan {
+  /** Exclusive, matching AST `end`. */
+  readonly end: number;
+  readonly start: number;
+  readonly type: FormulaType;
+}
+
+/** Shared empty trace, so untraced checks allocate nothing. */
+const EMPTY_TYPE_SPANS: readonly FormulaTypeSpan[] = [];
+
 /** Everything {@link checkFormula} produces in one pass. */
 export interface FormulaCheckResult {
   readonly diagnostics: FormulaCheckDiagnostic[];
@@ -147,6 +169,11 @@ export interface FormulaCheckResult {
    */
   readonly references: string[];
   readonly resultType: FormulaType;
+  /**
+   * Per-node types, innermost-first per span. Empty unless the context asked
+   * for {@link FormulaCheckContext.traceTypes}.
+   */
+  readonly types: readonly FormulaTypeSpan[];
   /** Name references that resolved to no field (broken-reference UX). */
   readonly unresolvedNames: string[];
 }
@@ -661,12 +688,17 @@ class Checker {
   private readonly references: string[] = [];
   private readonly seenReferences = new Set<string>();
   private readonly seenUnresolved = new Set<string>();
+  /** Span key → synthesized type; only allocated when `traceTypes` is on. */
+  private readonly types?: Map<string, FormulaTypeSpan>;
   private readonly unresolvedNames: string[] = [];
   private readonly userFunctions?: FormulaPreparedUserFunctions;
 
   constructor(context: FormulaCheckContext) {
     this.databases = context.databases;
     this.userFunctions = context.userFunctions;
+    if (context.traceTypes === true) {
+      this.types = new Map();
+    }
     for (const property of context.properties) {
       this.fieldsById.set(property.id, property);
       const key = normalizeFormulaPropertyName(property.name);
@@ -683,11 +715,27 @@ class Checker {
       diagnostics: this.diagnostics,
       references: this.references,
       resultType,
+      types:
+        this.types === undefined ? EMPTY_TYPE_SPANS : [...this.types.values()],
       unresolvedNames: this.unresolvedNames,
     };
   }
 
   synth(node: FormulaNode, env: CheckBinding | null): FormulaType {
+    const type = this.synthNode(node, env);
+    if (this.types !== undefined) {
+      // Children complete before their parent, so the FIRST write for a span
+      // is the innermost node — keep it. (Grouping parens belong to the
+      // enclosing node's span, so a node and its parent can share one.)
+      const key = `${node.position}:${node.end}`;
+      if (!this.types.has(key)) {
+        this.types.set(key, { end: node.end, start: node.position, type });
+      }
+    }
+    return type;
+  }
+
+  private synthNode(node: FormulaNode, env: CheckBinding | null): FormulaType {
     switch (node.kind) {
       case "literal":
         return literalType(node.value);
@@ -1619,6 +1667,7 @@ export function checkFormula(
       ],
       references: [],
       resultType: UNKNOWN_TYPE,
+      types: EMPTY_TYPE_SPANS,
       unresolvedNames: [],
     };
   }

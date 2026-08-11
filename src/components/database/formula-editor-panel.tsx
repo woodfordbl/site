@@ -37,6 +37,13 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import {
@@ -172,14 +179,12 @@ export class FormulaCodeEditorBoundary extends Component<
 }
 
 /**
- * Keep typing inside menu-embedded inputs from triggering the menu's
+ * Keep typing inside menu-embedded controls from triggering the menu's
  * typeahead/arrow navigation; Escape still propagates so it closes the menu.
+ * Typed on `Element` because the preview-row picker's trigger is a button,
+ * not a form control — the handler only reads `key` either way.
  */
-function stopMenuKeys(
-  event: KeyboardEvent<
-    HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-  >
-): void {
+function stopMenuKeys(event: KeyboardEvent<Element>): void {
   if (event.key !== "Escape") {
     event.stopPropagation();
   }
@@ -525,10 +530,11 @@ export interface FormulaPreviewRow {
 
 /**
  * The live-preview line: the evaluated result plus, when more than one row
- * is on offer, a compact native select to pick which row it evaluates
- * against (one muted control, no popup chrome). Renders nothing without a
- * parseable draft (`preview` null) or a row to evaluate against — owning
- * that guard here keeps the panel under the complexity cap.
+ * is on offer, a compact picker for which row it evaluates against (the
+ * shared {@link Select}, sized down to sit inline with the muted preview
+ * text). Renders nothing without a parseable draft (`preview` null) or a row
+ * to evaluate against — owning that guard here keeps the panel under the
+ * complexity cap.
  */
 function FormulaPreviewLine({
   onPickRow,
@@ -550,21 +556,36 @@ function FormulaPreviewLine({
         Preview: {preview === "" ? "(empty)" : preview}
       </span>
       {rows.length > 1 ? (
-        <select
-          aria-label="Preview row"
-          className="h-5 max-w-32 shrink-0 rounded-md border border-border bg-transparent px-1 text-muted-foreground text-xs outline-none transition-colors hover:text-foreground focus-visible:border-ring"
-          onChange={(event) => {
-            onPickRow(event.target.value);
+        <Select
+          onValueChange={(rowId) => {
+            // base-ui types the value as nullable (clearable selects); this
+            // one always has a picked row, so ignore a null.
+            if (rowId !== null) {
+              onPickRow(rowId);
+            }
           }}
-          onKeyDown={stopMenuKeys}
           value={pickedRow.id}
         >
-          {rows.map((row) => (
-            <option key={row.id} value={row.id}>
-              {row.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            aria-label="Preview row"
+            className="h-5 max-w-32 shrink-0 gap-1 rounded-md border-border bg-transparent px-1 text-muted-foreground text-xs hover:text-foreground md:text-xs"
+            onKeyDown={stopMenuKeys}
+          >
+            {/* Values are row ids; render the row's label instead. */}
+            <SelectValue>
+              {(rowId) =>
+                rows.find((row) => row.id === rowId)?.label ?? pickedRow.label
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {rows.map((row) => (
+              <SelectItem key={row.id} value={row.id}>
+                {row.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : null}
     </div>
   );
@@ -1280,8 +1301,12 @@ export function FormulaEditorPanel({
   // the same scope the real overlay uses — other formula fields resolve to
   // their computed values; errors render honestly ("⚠ …").
   const previewValues = previewRow?.values ?? null;
-  const preview = useMemo(() => {
-    if (!parsed?.ok || previewValues === null) {
+
+  // The picked row's scope — shared by the preview line below and the
+  // editor's hover tooltips, so a hovered subexpression evaluates against
+  // exactly the row the preview reports.
+  const previewScope = useMemo(() => {
+    if (previewValues === null) {
       return null;
     }
     const now = () => new Date();
@@ -1290,15 +1315,21 @@ export function FormulaEditorPanel({
       relations,
       userFunctions,
     });
-    const scope = createFormulaRowScope(fields, previewValues, resolved, {
+    return createFormulaRowScope(fields, previewValues, resolved, {
       now,
       relations,
       userFunctions,
     });
-    return formulaValueToDisplay(evaluateFormula(parsed.ast, scope), {
+  }, [fields, previewValues, relations, userFunctions]);
+
+  const preview = useMemo(() => {
+    if (!parsed?.ok || previewScope === null) {
+      return null;
+    }
+    return formulaValueToDisplay(evaluateFormula(parsed.ast, previewScope), {
       rowLabel: formulaRowLabelOf(relations),
     });
-  }, [parsed, fields, previewValues, relations, userFunctions]);
+  }, [parsed, previewScope, relations]);
 
   // Canonical-offset → visible-offset mapping for status positions: each
   // `prop("<id>")` / `db("<id>")` span before an offset renders shorter than
@@ -1466,6 +1497,7 @@ export function FormulaEditorPanel({
               databases={relatedDatabases}
               editorRef={codeEditorRef}
               fields={fields}
+              hoverScope={previewScope}
               onChange={setDraft}
               onChipTap={setChipTap}
               onSubmit={save}

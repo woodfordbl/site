@@ -22,6 +22,7 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
+  hoverTooltip,
   keymap,
   placeholder as placeholderOf,
   showTooltip,
@@ -58,6 +59,7 @@ import {
   formulaPropIdSpans,
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
+import { type FormulaHoverInfo, formulaHoverAt } from "@/lib/formula/hover.ts";
 import { FORMULA_SCOPE_ROOTS, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalDatabaseReference,
@@ -72,7 +74,10 @@ import {
   UNKNOWN_TYPE,
 } from "@/lib/formula/types.ts";
 import { formulaUserFunctionSignature } from "@/lib/formula/user-functions.ts";
-import type { FormulaPreparedUserFunction } from "@/lib/formula/values.ts";
+import type {
+  FormulaPreparedUserFunction,
+  FormulaScope,
+} from "@/lib/formula/values.ts";
 import {
   TABLER_PAGE_ICON_PREFIX,
   type TablerIconNode,
@@ -248,6 +253,12 @@ export interface FormulaCodeEditorProps {
    * CURRENT fields on every render (a rename relabels open chips).
    */
   fields: readonly DatabaseField[];
+  /**
+   * Scope the hover tooltip evaluates the node under the cursor against —
+   * the panel's picked preview row. Omitted (or null), hovers still report
+   * types and signatures but show no values.
+   */
+  hoverScope?: FormulaScope | null;
   onChange: (value: string) => void;
   /**
    * A click/tap landed on a reference chip — property or database (see the
@@ -367,6 +378,93 @@ const checkContextState = StateField.define<FormulaCheckContext>({
     return value;
   },
 });
+
+/** Set by the React side whenever the `hoverScope` prop changes. */
+const setHoverScope = StateEffect.define<FormulaScope | null>();
+
+/**
+ * Scope the hover tooltip evaluates the node under the cursor against — the
+ * panel's picked preview row. Kept in editor state (like
+ * {@link checkContextState}) so the tooltip source, which only receives a
+ * view, can read the current row without a closure that goes stale.
+ */
+const hoverScopeState = StateField.define<FormulaScope | null>({
+  create: () => null,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setHoverScope)) {
+        return effect.value;
+      }
+    }
+    return value;
+  },
+});
+
+/**
+ * LSP-style hover: the innermost subexpression's type, and what it evaluates
+ * to for the preview row. Resolution lives in `lib/formula/hover.ts`; the doc
+ * is the canonical text, so the CM offset needs no translation. Hovering a
+ * reference chip reports the property it stands for, since the chip is a
+ * decoration over that very span.
+ */
+const formulaHoverTooltip = hoverTooltip((view, pos) => {
+  const info = formulaHoverAt(view.state.doc.toString(), pos, {
+    context: view.state.field(checkContextState),
+    rowLabel: undefined,
+    ...(view.state.field(hoverScopeState) === null
+      ? {}
+      : { scope: view.state.field(hoverScopeState) as FormulaScope }),
+  });
+  if (info === null) {
+    return null;
+  }
+  return {
+    above: true,
+    create: () => ({ dom: hoverTooltipDom(info) }),
+    end: info.end,
+    pos: info.start,
+  };
+});
+
+/**
+ * Tooltip DOM — plain elements, matching the widgets' no-React discipline.
+ * Laid out like an LSP hover: `(kind) label: type` on top, then the
+ * description (catalog text or the author's doc comment), then the value for
+ * the preview row.
+ */
+function hoverTooltipDom(info: FormulaHoverInfo): HTMLElement {
+  const dom = document.createElement("div");
+  dom.className = "cm-formula-hover";
+
+  const head = document.createElement("div");
+  head.className = "cm-formula-hover-head";
+  const kind = document.createElement("span");
+  kind.className = "cm-formula-hover-kind";
+  kind.textContent = `(${info.kind})`;
+  const label = document.createElement("span");
+  label.className = "cm-formula-hover-label";
+  label.textContent = info.label;
+  const type = document.createElement("span");
+  type.className = "cm-formula-hover-type";
+  type.textContent = `: ${info.type}`;
+  head.append(kind, label, type);
+  dom.append(head);
+
+  if (info.description !== undefined) {
+    const description = document.createElement("div");
+    description.className = "cm-formula-hover-description";
+    description.textContent = info.description;
+    dom.append(description);
+  }
+
+  if (info.value !== null) {
+    const value = document.createElement("div");
+    value.className = "cm-formula-hover-value";
+    value.textContent = info.value === "" ? "(empty)" : info.value;
+    dom.append(value);
+  }
+  return dom;
+}
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -1923,6 +2021,39 @@ const formulaEditorTheme = EditorView.theme({
   ".cm-formula-infocard-description": {
     color: "var(--color-muted-foreground)",
   },
+  // Hover tooltip, laid out like an LSP hover: `(kind) label: type` on top,
+  // then the description, then the preview row's value.
+  ".cm-formula-hover": {
+    display: "flex",
+    flexDirection: "column",
+    fontFamily: "var(--font-sans)",
+    fontSize: "0.75rem",
+    gap: "4px",
+    maxWidth: "32rem",
+    padding: "8px 10px",
+  },
+  ".cm-formula-hover-head": {
+    fontFamily: "var(--font-mono)",
+    // Long expressions wrap rather than clipping — the head IS the signature.
+    overflowWrap: "anywhere",
+  },
+  ".cm-formula-hover-kind": {
+    color: "var(--color-muted-foreground)",
+    marginRight: "0.5ch",
+  },
+  ".cm-formula-hover-label": { color: "var(--color-foreground)" },
+  ".cm-formula-hover-type": { color: "var(--block-text-purple)" },
+  ".cm-formula-hover-description": {
+    borderTop: "1px solid var(--color-border)",
+    color: "var(--color-muted-foreground)",
+    lineHeight: "1.5",
+    paddingTop: "4px",
+  },
+  ".cm-formula-hover-value": {
+    color: "var(--color-foreground)",
+    fontFamily: "var(--font-mono)",
+    overflowWrap: "anywhere",
+  },
   ".cm-formula-comment": {
     color: "var(--color-muted-foreground)",
     fontStyle: "italic",
@@ -1958,6 +2089,7 @@ export function FormulaCodeEditor({
   databases = NO_DATABASES,
   editorRef,
   fields,
+  hoverScope = null,
   onChange,
   onChipTap,
   onSubmit,
@@ -1983,6 +2115,8 @@ export function FormulaCodeEditor({
   const databasesRef = useRef(databases);
   /** Latest check context, read at (re)create time to seed its state field. */
   const checkContextRef = useRef(checkContext);
+  /** Latest hover scope, read at (re)create time to seed its state field. */
+  const hoverScopeRef = useRef(hoverScope);
 
   useEffect(() => {
     callbacksRef.current = { onChange, onChipTap, onSubmit };
@@ -2005,6 +2139,12 @@ export function FormulaCodeEditor({
     checkContextRef.current = checkContext;
     viewRef.current?.dispatch({ effects: setCheckContext.of(checkContext) });
   }, [checkContext]);
+
+  // Push the preview row in so hover values follow the picked row.
+  useEffect(() => {
+    hoverScopeRef.current = hoverScope;
+    viewRef.current?.dispatch({ effects: setHoverScope.of(hoverScope) });
+  }, [hoverScope]);
 
   // Create the view. ariaLabel/placeholder are mount-time settings (constant
   // in practice); changing one recreates the view rather than going stale.
@@ -2097,6 +2237,8 @@ export function FormulaCodeEditor({
           chipFields.init(() => fieldsRef.current),
           chipDatabases.init(() => databasesRef.current),
           checkContextState.init(() => checkContextRef.current),
+          hoverScopeState.init(() => hoverScopeRef.current),
+          formulaHoverTooltip,
           referenceChips,
           placeholderField,
           typedReferenceCanonicalizer,
