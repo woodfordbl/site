@@ -18,12 +18,12 @@ export const inlineMarkClassNames: Record<InlineMarkType, string> = {
   code: "code-no-ligatures rounded bg-muted px-1 py-px font-mono text-[0.85em] text-[color:var(--code-foreground,inherit)]",
   link: "cursor-pointer text-primary underline underline-offset-2 hover:text-primary/80",
   /**
-   * A formula token's run holds only the U+FFFC sentinel; the VALUE is chrome
-   * rendered over it (see `docs/proposals/inline-prose-tokens.md`), so this
-   * class styles the container and hides the sentinel glyph itself.
+   * A formula token's run holds only the U+FFFC sentinel; the VALUE renders in
+   * its place (see `docs/proposals/inline-prose-tokens.md`), so this styles the
+   * container rather than any text of its own.
    */
   formula:
-    "inline-formula-token code-no-ligatures relative cursor-pointer rounded bg-muted px-1 py-px font-mono text-[0.85em] text-[color:var(--code-foreground,inherit)]",
+    "inline-formula-token code-no-ligatures rounded bg-muted px-1 py-px font-mono text-[0.85em] text-[color:var(--code-foreground,inherit)]",
 };
 
 export function classNameForMarks(marks: readonly InlineMarkType[]): string {
@@ -31,9 +31,18 @@ export function classNameForMarks(marks: readonly InlineMarkType[]): string {
 }
 
 interface RichTextContentProps {
+  /**
+   * Rendered value per inline formula token, keyed by the token's offset (see
+   * `useInlineFormulaValues`). A token with no entry shows a placeholder rather
+   * than its sentinel — the value simply has not been computed yet.
+   */
+  formulaValues?: ReadonlyMap<number, string>;
   marks?: InlineMark[];
   text: string;
 }
+
+/** Shown for a token whose value has not resolved yet. */
+const PENDING_TOKEN_LABEL = "…";
 
 /**
  * Read-only rich text: plain runs as bare text, marked runs as styled spans.
@@ -41,13 +50,18 @@ interface RichTextContentProps {
  * (`pageId`) use {@link InlinePageLink}. Newlines stay literal — parents render
  * with `whitespace-pre-wrap`.
  */
-export function RichTextContent({ text, marks }: RichTextContentProps) {
+export function RichTextContent({
+  formulaValues,
+  marks,
+  text,
+}: RichTextContentProps) {
   if (!marks || marks.length === 0) {
     return text;
   }
 
   let offset = 0;
   return segmentRichText(text, marks).map((segment) => {
+    const segmentStart = offset;
     const key = `${offset}:${segment.marks.join("-")}:${segment.pageId ?? ""}`;
     offset += segment.text.length;
     const className =
@@ -70,6 +84,20 @@ export function RichTextContent({ text, marks }: RichTextContentProps) {
         <InlineLink className={className} href={segment.href} key={key}>
           {segment.text}
         </InlineLink>
+      );
+    }
+    if (segment.expression !== undefined) {
+      // The segment's own text is the sentinel; render the value in its place
+      // so `props.text` never has to carry it.
+      return (
+        <span
+          className={className}
+          data-inline-formula
+          key={key}
+          title={segment.expression}
+        >
+          {formulaValues?.get(segmentStart) ?? PENDING_TOKEN_LABEL}
+        </span>
       );
     }
     return (

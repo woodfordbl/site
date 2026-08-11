@@ -326,6 +326,11 @@ export function isLikelyUrl(text: string): boolean {
 }
 
 export interface RichTextSegment {
+  /**
+   * Formula source when a `formula` mark covers the segment — an inline token,
+   * whose `text` is the sentinel rather than anything a reader should see.
+   */
+  expression?: string;
   /** Destination when a `link` mark covers the segment. */
   href?: string;
   marks: InlineMarkType[];
@@ -366,11 +371,18 @@ export function segmentRichText(
     const linkMark = normalized.find(
       (mark) => mark.type === "link" && mark.start <= start && mark.end >= end
     );
+    const formulaMark = normalized.find(
+      (mark) =>
+        mark.type === "formula" && mark.start <= start && mark.end >= end
+    );
     segments.push({
       text: text.slice(start, end),
       marks: segmentMarks,
       ...(linkMark?.href === undefined ? {} : { href: linkMark.href }),
       ...(linkMark?.pageId === undefined ? {} : { pageId: linkMark.pageId }),
+      ...(formulaMark?.expression === undefined
+        ? {}
+        : { expression: formulaMark.expression }),
     });
   }
   return segments;
