@@ -1,4 +1,8 @@
 import {
+  normalizeInlineMarks,
+  sliceInlineMarks,
+} from "@/lib/blocks/rich-text.ts";
+import {
   FORMULA_TOKEN_SENTINEL,
   type InlineMark,
 } from "@/lib/schemas/rich-text.ts";
@@ -88,4 +92,84 @@ export function formulaTokenMark(
     end: offset + FORMULA_TOKEN_SENTINEL.length,
     expression,
   };
+}
+
+interface TextRange {
+  end: number;
+  start: number;
+}
+
+export interface FormulaTokenEdit {
+  marks: InlineMark[];
+  /** Caret placement after the edit — collapsed just past the token. */
+  selection: TextRange;
+  text: string;
+}
+
+/**
+ * `(text, marks)` with a token replacing `range`.
+ *
+ * Composed from `sliceInlineMarks`/`normalizeInlineMarks` rather than doing
+ * offset arithmetic in place, so the surrounding marks are rebased by the same
+ * code paste and row-splitting already use — including the clipping that keeps
+ * a styling mark from covering half of an atomic run.
+ */
+export function insertFormulaToken(
+  text: string,
+  marks: readonly InlineMark[],
+  range: TextRange,
+  expression: string
+): FormulaTokenEdit {
+  const start = Math.max(0, Math.min(range.start, text.length));
+  const end = Math.max(start, Math.min(range.end, text.length));
+  const nextText =
+    text.slice(0, start) + FORMULA_TOKEN_SENTINEL + text.slice(end);
+  const after = start + FORMULA_TOKEN_SENTINEL.length;
+  const tail = sliceInlineMarks(marks, end, text.length).map((mark) => ({
+    ...mark,
+    start: mark.start + after,
+    end: mark.end + after,
+  }));
+  return {
+    text: nextText,
+    marks: normalizeInlineMarks(
+      [
+        ...sliceInlineMarks(marks, 0, start),
+        formulaTokenMark(start, expression),
+        ...tail,
+      ],
+      nextText.length
+    ),
+    selection: { start: after, end: after },
+  };
+}
+
+/** The token covering `offset`, or null — the lookup behind click-to-edit. */
+export function formulaTokenAt(
+  marks: readonly InlineMark[],
+  offset: number
+): InlineMark | null {
+  return (
+    marks.find(
+      (mark) =>
+        isFormulaTokenMark(mark) && mark.start <= offset && offset < mark.end
+    ) ?? null
+  );
+}
+
+/**
+ * A token's expression rewritten in place. Text is untouched: the sentinel is
+ * one character whatever the expression says, which is the whole point of the
+ * design — editing a formula can never shift a single offset in the document.
+ */
+export function setFormulaTokenExpression(
+  marks: readonly InlineMark[],
+  offset: number,
+  expression: string
+): InlineMark[] {
+  return marks.map((mark) =>
+    isFormulaTokenMark(mark) && mark.start === offset
+      ? { ...mark, expression }
+      : mark
+  );
 }

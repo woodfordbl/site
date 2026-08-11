@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formulaTokenAt,
   formulaTokenMark,
   hasUnprojectedToken,
+  insertFormulaToken,
   projectPlainText,
+  setFormulaTokenExpression,
 } from "@/lib/blocks/inline-formula.ts";
 import { normalizeInlineMarks } from "@/lib/blocks/rich-text.ts";
 import {
@@ -132,5 +135,126 @@ describe("formula tokens are atomic runs", () => {
 
   it("drops a token clamped out of range rather than keeping an empty run", () => {
     expect(normalizeInlineMarks([formulaTokenMark(5, "x")], 2)).toEqual([]);
+  });
+});
+
+describe("insertFormulaToken", () => {
+  it("inserts a sentinel and its mark at a collapsed caret", () => {
+    const result = insertFormulaToken(
+      "We have  open tasks.",
+      [],
+      { start: 8, end: 8 },
+      "count(x)"
+    );
+    expect(result.text).toBe(`We have ${S} open tasks.`);
+    expect(result.marks).toEqual([formulaTokenMark(8, "count(x)")]);
+  });
+
+  it("replaces a selected range with the token", () => {
+    const result = insertFormulaToken(
+      "Total: TBD",
+      [],
+      { start: 7, end: 10 },
+      "sum(x)"
+    );
+    expect(result.text).toBe(`Total: ${S}`);
+  });
+
+  it("leaves the caret after the token, ready to keep typing", () => {
+    const result = insertFormulaToken("ab", [], { start: 1, end: 1 }, "x");
+    expect(result.selection).toEqual({ start: 2, end: 2 });
+  });
+
+  it("rebases marks that followed the insertion point", () => {
+    const bold: InlineMark = { type: "bold", start: 4, end: 8 };
+    const result = insertFormulaToken(
+      "one two three",
+      [bold],
+      { start: 0, end: 0 },
+      "x"
+    );
+    expect(result.marks).toContainEqual({ type: "bold", start: 5, end: 9 });
+  });
+
+  it("leaves marks before the insertion point alone", () => {
+    const bold: InlineMark = { type: "bold", start: 0, end: 3 };
+    const result = insertFormulaToken(
+      "one two",
+      [bold],
+      { start: 7, end: 7 },
+      "x"
+    );
+    expect(result.marks).toContainEqual({ type: "bold", start: 0, end: 3 });
+  });
+
+  it("does not extend a surrounding mark across the token", () => {
+    // Bolding must stop at the token's edges: a mark covering half an atomic
+    // run is what `normalizeInlineMarks` exists to prevent.
+    const result = insertFormulaToken(
+      "bold text",
+      [{ type: "bold", start: 0, end: 9 }],
+      { start: 4, end: 4 },
+      "x"
+    );
+    const token = result.marks.find((mark) => mark.type === "formula");
+    expect(token).toBeDefined();
+    for (const mark of result.marks) {
+      if (mark.type === "bold") {
+        expect(mark.start >= 5 || mark.end <= 4).toBe(true);
+      }
+    }
+  });
+
+  it("clamps a range past the end of the text", () => {
+    const result = insertFormulaToken("hi", [], { start: 99, end: 99 }, "x");
+    expect(result.text).toBe(`hi${S}`);
+  });
+
+  it("keeps two tokens inserted in a row distinct", () => {
+    const first = insertFormulaToken("", [], { start: 0, end: 0 }, "same");
+    const second = insertFormulaToken(
+      first.text,
+      first.marks,
+      first.selection,
+      "same"
+    );
+    expect(second.text).toBe(`${S}${S}`);
+    expect(second.marks).toHaveLength(2);
+  });
+});
+
+describe("formulaTokenAt", () => {
+  const marks = [formulaTokenMark(3, "a")];
+
+  it("finds the token covering an offset", () => {
+    expect(formulaTokenAt(marks, 3)?.expression).toBe("a");
+  });
+
+  it("returns null just past it — the range is half-open", () => {
+    expect(formulaTokenAt(marks, 4)).toBeNull();
+  });
+
+  it("ignores marks that are not tokens", () => {
+    expect(formulaTokenAt([{ type: "bold", start: 0, end: 5 }], 2)).toBeNull();
+  });
+});
+
+describe("setFormulaTokenExpression", () => {
+  it("rewrites the expression without touching offsets", () => {
+    const marks = setFormulaTokenExpression(
+      [formulaTokenMark(2, "old")],
+      2,
+      "new"
+    );
+    expect(marks).toEqual([formulaTokenMark(2, "new")]);
+  });
+
+  it("leaves other tokens alone", () => {
+    const marks = setFormulaTokenExpression(
+      [formulaTokenMark(0, "a"), formulaTokenMark(1, "b")],
+      0,
+      "z"
+    );
+    expect(marks.map((mark) => mark.expression)).toEqual(["z", "b"]);
   });
 });
