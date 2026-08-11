@@ -15,6 +15,7 @@ export const inlineMarkTypeSchema = z.enum([
   "strikethrough",
   "code",
   "link",
+  "formula",
 ]);
 
 export type InlineMarkType = z.infer<typeof inlineMarkTypeSchema>;
@@ -30,9 +31,30 @@ export const inlineMarkSchema = z.object({
    * arrow) targeting this workspace page id rather than a plain URL.
    */
   pageId: z.string().optional(),
+  /**
+   * `formula` marks only: the v2 formula source this token evaluates. The run
+   * it covers is always the single {@link FORMULA_TOKEN_SENTINEL} character —
+   * the rendered value is chrome, never document text, so re-evaluation cannot
+   * move any offset (see `docs/proposals/inline-prose-tokens.md`).
+   *
+   * Interim home: once markdown becomes canonical the definition moves to page
+   * frontmatter and this becomes an id reference.
+   */
+  expression: z.string().optional(),
 });
 
 export type InlineMark = z.infer<typeof inlineMarkSchema>;
+
+/**
+ * The single character a `formula` token occupies in `props.text` — U+FFFC
+ * OBJECT REPLACEMENT CHARACTER, the standard stand-in for embedded content.
+ *
+ * Fixed width is the whole point: the rendered value lives in chrome, so a
+ * re-evaluation never changes the string's length and never shifts a mark.
+ * Nothing outside the editor should render this raw — read sites go through
+ * `projectPlainText` (`lib/blocks/inline-formula.ts`).
+ */
+export const FORMULA_TOKEN_SENTINEL = "￼";
 
 export const inlineMarksSchema = z.array(inlineMarkSchema);
 

@@ -17,6 +17,13 @@ export const inlineMarkClassNames: Record<InlineMarkType, string> = {
   // reason formula source turns them off: `!=` must not read as `≠`.
   code: "code-no-ligatures rounded bg-muted px-1 py-px font-mono text-[0.85em] text-[color:var(--code-foreground,inherit)]",
   link: "cursor-pointer text-primary underline underline-offset-2 hover:text-primary/80",
+  /**
+   * A formula token's run holds only the U+FFFC sentinel; the VALUE is chrome
+   * rendered over it (see `docs/proposals/inline-prose-tokens.md`), so this
+   * class styles the container and hides the sentinel glyph itself.
+   */
+  formula:
+    "inline-formula-token code-no-ligatures relative cursor-pointer rounded bg-muted px-1 py-px font-mono text-[0.85em] text-[color:var(--code-foreground,inherit)]",
 };
 
 export function classNameForMarks(marks: readonly InlineMarkType[]): string {
