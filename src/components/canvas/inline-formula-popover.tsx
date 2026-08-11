@@ -1,0 +1,279 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
+import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
+import { useInlineFormulaPage } from "@/components/editor/inline-formula-page.tsx";
+import { useAllDatabases } from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
+import { findRowById } from "@/lib/blocks/block-tree.ts";
+import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
+import {
+  formulaTokenAt,
+  setFormulaTokenExpression,
+} from "@/lib/blocks/inline-formula.ts";
+import { getBlockMarks, withBlockRichText } from "@/lib/blocks/rich-text.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
+import {
+  pageFormulaFields,
+  pageFormulaPreviewRow,
+} from "@/lib/databases/page-formula-fields.ts";
+import {
+  collectInlineFormulaTokens,
+  FORMULA_TOKEN_SELECTOR,
+} from "@/lib/editor/rich-text-dom.ts";
+import { cn } from "@/lib/utils.ts";
+
+/**
+ * Click an inline formula token, edit its expression in place.
+ *
+ * Positioned like {@link SelectionFormatToolbar} — one instance per canvas,
+ * anchored to the clicked token's rect — because it is the same kind of
+ * surface: a light editor that appears over the prose you are already reading,
+ * not a modal that takes you away from it.
+ *
+ * Saving rewrites only the mark's expression. The document text is untouched:
+ * a token is one sentinel character whatever the formula says, so re-editing a
+ * formula shifts no offsets, rebases no marks, and moves no caret.
+ */
+
+/** Space between the token and the panel. */
+const POPOVER_GAP_PX = 8;
+/**
+ * Sized for the panel's two-column `wide` form — editor and detail strip on
+ * the left, reference browser on the right. Height is the panel's own `30rem`
+ * plus this container's padding, used only to decide which side of the token
+ * to open on.
+ */
+const POPOVER_WIDTH_PX = 720;
+const POPOVER_HEIGHT_PX = 504;
+const VIEWPORT_MARGIN_PX = 12;
+
+/**
+ * Asks the popover to open on a token that was just inserted. A DOM event
+ * rather than context: the only caller is the slash handler, and threading a
+ * callback from there to a sibling of the canvas would be more plumbing than
+ * the one message is worth.
+ */
+const EDIT_REQUEST_EVENT = "inline-formula:edit";
+
+export function requestInlineFormulaEdit(rowId: string, offset: number): void {
+  document.dispatchEvent(
+    new CustomEvent(EDIT_REQUEST_EVENT, { detail: { offset, rowId } })
+  );
+}
+
+interface PopoverTarget {
+  expression: string;
+  /** Model offset of the token being edited — its identity in the marks. */
+  offset: number;
+  rect: { bottom: number; left: number; top: number };
+  rowId: string;
+}
+
+/**
+ * The token under `node`, with the model offset it sits at. Null when the
+ * click was not on a token, or landed in a field with no canvas row (a
+ * database cell, a title) — neither of which this popover edits.
+ */
+function resolveTarget(node: Node | null): PopoverTarget | null {
+  const element = node instanceof Element ? node : node?.parentElement;
+  const token = element?.closest(FORMULA_TOKEN_SELECTOR);
+  if (!(token instanceof HTMLElement)) {
+    return null;
+  }
+  const field = token.closest("[data-rich-text-field]");
+  const rowId = token
+    .closest("[data-canvas-row-id]")
+    ?.getAttribute("data-canvas-row-id");
+  if (!(field instanceof HTMLElement && rowId)) {
+    return null;
+  }
+  const position = collectInlineFormulaTokens(field).find(
+    (candidate) => candidate.element === token
+  );
+  if (!position) {
+    return null;
+  }
+  const rect = token.getBoundingClientRect();
+  return {
+    expression: token.dataset.expression ?? "",
+    offset: position.offset,
+    rect: { bottom: rect.bottom, left: rect.left, top: rect.top },
+    rowId,
+  };
+}
+
+/** The token at `offset` in `rowId`'s field, once the canvas has rendered it. */
+function targetForToken(rowId: string, offset: number): PopoverTarget | null {
+  const field = document
+    .querySelector(`[data-canvas-row-id="${CSS.escape(rowId)}"]`)
+    ?.querySelector("[data-rich-text-field]");
+  if (!(field instanceof HTMLElement)) {
+    return null;
+  }
+  const position = collectInlineFormulaTokens(field).find(
+    (candidate) => candidate.offset === offset
+  );
+  return position ? resolveTarget(position.element) : null;
+}
+
+export function InlineFormulaPopover() {
+  const canvas = useCanvasEditorContext();
+  const page = useInlineFormulaPage();
+  const relatedDatabases = useAllDatabases();
+  const userFunctions = useFormulaUserFunctions();
+  const [target, setTarget] = useState<PopoverTarget | null>(null);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const next = resolveTarget(event.target as Node | null);
+      if (next) {
+        // The token is `contenteditable=false`; claiming the click keeps the
+        // browser from dropping a caret beside it as the panel opens.
+        event.preventDefault();
+      }
+      setTarget(next);
+    };
+    const handleEditRequest = (event: Event) => {
+      const { offset, rowId } = (
+        event as CustomEvent<{ offset: number; rowId: string }>
+      ).detail;
+      // A timeout, not rAF: the canvas rebuilds the field in a layout effect
+      // during this dispatch's commit, and rAF is throttled to nothing in a
+      // background tab — where a freshly inserted token would then never open.
+      setTimeout(() => {
+        setTarget(targetForToken(rowId, offset));
+      }, 0);
+    };
+    document.addEventListener("click", handleClick);
+    document.addEventListener(EDIT_REQUEST_EVENT, handleEditRequest);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener(EDIT_REQUEST_EVENT, handleEditRequest);
+    };
+  }, []);
+
+  // A token's screen position is only valid until the page moves under it.
+  useEffect(() => {
+    if (target === null) {
+      return;
+    }
+    const close = () => {
+      setTarget(null);
+    };
+    // Escape is handled at the document, in capture: the editor's CM6 instance
+    // consumes its own keydowns, so a handler on the panel would never see it.
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [target]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
+  const relations = useMemo(
+    () => localFormulaRelationResolver(),
+    [relatedDatabases]
+  );
+  const fields = useMemo(() => pageFormulaFields(), []);
+  const previewRows = useMemo(
+    () => (page === null ? [] : [pageFormulaPreviewRow(page)]),
+    [page]
+  );
+
+  const handleSave = useCallback(
+    (expression: string) => {
+      if (target === null) {
+        return;
+      }
+      setTarget(null);
+      const row = findRowById(canvas.getRows(), target.rowId);
+      const block = row?.effectiveBlock;
+      if (!block) {
+        return;
+      }
+      const marks = getBlockMarks(block);
+      // Guard against a stale offset: the document may have changed under an
+      // open panel, and rewriting the wrong token is worse than doing nothing.
+      if (formulaTokenAt(marks, target.offset) === null) {
+        return;
+      }
+      canvas.dispatch({
+        type: "row.update",
+        rowId: target.rowId,
+        // Text unchanged — only the mark's expression moves.
+        block: withBlockRichText(
+          block,
+          getTextFromBlock(block),
+          setFormulaTokenExpression(marks, target.offset, expression)
+        ),
+      });
+    },
+    [canvas, target]
+  );
+
+  if (target === null) {
+    return null;
+  }
+
+  const placeAbove =
+    target.rect.bottom + POPOVER_GAP_PX + POPOVER_HEIGHT_PX >
+      window.innerHeight && target.rect.top > POPOVER_HEIGHT_PX;
+  const top = placeAbove
+    ? target.rect.top - POPOVER_GAP_PX
+    : target.rect.bottom + POPOVER_GAP_PX;
+  const left = Math.min(
+    Math.max(target.rect.left, VIEWPORT_MARGIN_PX),
+    Math.max(
+      VIEWPORT_MARGIN_PX,
+      window.innerWidth - POPOVER_WIDTH_PX - VIEWPORT_MARGIN_PX
+    )
+  );
+
+  return (
+    <div
+      aria-label="Edit formula"
+      className={cn(
+        "fixed z-50 rounded-lg border border-border bg-popover p-3 shadow-md",
+        placeAbove && "-translate-y-full"
+      )}
+      data-inline-formula-popover
+      role="dialog"
+      style={{
+        left,
+        top,
+        width: Math.min(
+          POPOVER_WIDTH_PX,
+          window.innerWidth - 2 * VIEWPORT_MARGIN_PX
+        ),
+      }}
+    >
+      {/* The `wide` form drops the panel's own label — the host owns it. */}
+      <div className="px-0.5 pb-2 font-medium text-muted-foreground text-xs">
+        Formula
+      </div>
+      <FormulaEditorPanel
+        expression={target.expression}
+        fields={fields}
+        layout="wide"
+        onCancel={() => {
+          setTarget(null);
+        }}
+        onSave={handleSave}
+        previewRows={previewRows}
+        relatedDatabases={relatedDatabases}
+        relations={relations}
+        userFunctions={userFunctions}
+      />
+    </div>
+  );
+}

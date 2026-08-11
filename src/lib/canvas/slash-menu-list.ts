@@ -1,3 +1,5 @@
+import { IconMathFunction } from "@tabler/icons-react";
+
 import {
   filterSlashMenuItems,
   type SlashMenuItem,
@@ -21,6 +23,12 @@ export type RootSlashMenuItem =
   | {
       icon: PageSlashMenuItem["icon"];
       key: string;
+      kind: "formula";
+      label: string;
+    }
+  | {
+      icon: PageSlashMenuItem["icon"];
+      key: string;
       kind: "page.create";
       label: string;
       pageItem: PageSlashMenuItem;
@@ -32,6 +40,16 @@ export type RootSlashMenuItem =
       label: string;
       pageItem: PageSlashMenuItem;
     };
+
+/** Inline formula token — a value in the prose, not a block of its own. */
+const FORMULA_ITEM_KEYWORDS = [
+  "formula",
+  "calc",
+  "calculation",
+  "equation",
+  "inline formula",
+  "math",
+];
 
 function matchesSlashQuery(keywords: string[], query: string): boolean {
   const normalized = query.trim().toLowerCase();
@@ -56,6 +74,15 @@ export function buildRootSlashMenuItems(
       label: blockItem.label,
       icon: blockItem.icon,
       blockItem,
+    });
+  }
+
+  if (matchesSlashQuery(FORMULA_ITEM_KEYWORDS, query)) {
+    items.push({
+      kind: "formula",
+      key: "inline.formula",
+      label: "Formula",
+      icon: IconMathFunction,
     });
   }
 

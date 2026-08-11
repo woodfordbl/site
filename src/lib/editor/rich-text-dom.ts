@@ -278,11 +278,21 @@ export function createInlineFormulaToken(
  * the live DOM rather than trusted from the caller, so a value that arrives
  * mid-edit lands on the right token or on none at all.
  */
-export function applyInlineFormulaValues(
-  root: HTMLElement,
-  values: ReadonlyMap<number, string>
-): void {
-  const tokens: Array<{ element: Element; offset: number }> = [];
+export interface InlineFormulaTokenPosition {
+  element: Element;
+  /** The token's offset in the model text — the key its value is stored under. */
+  offset: number;
+}
+
+/**
+ * Every token in the field with its live model offset. Derived from a walk
+ * rather than stamped on the element, because an offset stamped at build time
+ * goes stale the moment the user types before it.
+ */
+export function collectInlineFormulaTokens(
+  root: HTMLElement
+): InlineFormulaTokenPosition[] {
+  const tokens: InlineFormulaTokenPosition[] = [];
   let offset = 0;
   walkTextAndBreaks(root, (node, length) => {
     if (isFormulaTokenElement(node)) {
@@ -291,13 +301,27 @@ export function applyInlineFormulaValues(
     offset += length;
     return false;
   });
-  // Applied after the walk: writing into the tree mid-traversal would move the
+  return tokens;
+}
+
+export function applyInlineFormulaValues(
+  root: HTMLElement,
+  values: ReadonlyMap<number, string>
+): void {
+  // Collected first: writing into the tree mid-traversal would move the
   // walker's feet under it.
-  for (const { element, offset: at } of tokens) {
+  for (const { element, offset: at } of collectInlineFormulaTokens(root)) {
     const host = element.querySelector(FORMULA_VALUE_SELECTOR);
     const next = values.get(at) ?? PENDING_FORMULA_VALUE;
     if (host && host.textContent !== next) {
       host.textContent = next;
+    }
+    // The value may be truncated on screen, so the tooltip carries it in full
+    // alongside the expression that produced it.
+    const expression = (element as HTMLElement).dataset.expression ?? "";
+    const title = values.has(at) ? `${next}\n${expression}` : expression;
+    if (element.getAttribute("title") !== title) {
+      element.setAttribute("title", title);
     }
   }
 }

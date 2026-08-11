@@ -14,6 +14,7 @@ import {
   type PageFormulaSource,
   pageFormulaCheckProperties,
 } from "@/lib/formula/page-scope.ts";
+import { formulaRowLabelOf } from "@/lib/formula/row-scope.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 
 /**
@@ -134,12 +135,16 @@ export function useInlineFormulaValues(
     if (!hasTokens || page === null) {
       return null;
     }
+    const relations = localFormulaRelationResolver({ now: () => new Date() });
     const scope = createPageFormulaScope(page, {
       now: () => new Date(),
-      relations: localFormulaRelationResolver({ now: () => new Date() }),
+      relations,
       userFunctions,
     });
-    return evaluateInlineTokens(tokens, scope, pageContext);
+    return evaluateInlineTokens(tokens, scope, pageContext, {
+      // Relations render as their row's title, the way the grid shows them.
+      rowLabel: formulaRowLabelOf(relations),
+    });
     // `revision` and the clock tick are inputs: both mean "re-read the world".
   }, [hasTokens, page, tokens, pageContext, userFunctions, revision]);
 

@@ -145,7 +145,11 @@ export function CanvasMenuSlashContent() {
   const blockItemCount = rootItems.filter(
     (item) => item.kind === "block"
   ).length;
-  const pageItemCount = rootItems.length - blockItemCount;
+  // Only page kinds sit under the Pages heading — a formula token is neither a
+  // block nor a page, so counting by subtraction would file it under "Pages".
+  const pageItemCount = rootItems.filter((item) =>
+    item.kind.startsWith("page.")
+  ).length;
   const showBlocksHeading = blockItemCount > 0;
   const showPagesHeading = pageItemCount > 0 && blockItemCount === 0;
 
@@ -189,6 +193,10 @@ export function CanvasMenuSlashContent() {
             onClick={() => {
               if (item.kind === "block") {
                 session.onSelectBlock(item.blockItem);
+                return;
+              }
+              if (item.kind === "formula") {
+                session.onSelectFormula();
                 return;
               }
               if (item.kind === "page.create") {

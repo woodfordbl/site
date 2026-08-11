@@ -1,4 +1,5 @@
 import type { FormulaCheckContext } from "@/lib/formula/check.ts";
+import type { FormulaValueDisplayOptions } from "@/lib/formula/display.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
@@ -55,11 +56,17 @@ function tokenMarks(marks: readonly InlineMark[]): InlineMark[] {
  * databases for `db("…")`); `scope` supplies the values. They must describe the
  * same world — the checker's reference extraction is what makes the returned
  * `databaseIds` trustworthy.
+ *
+ * `display` carries the value→string conventions the grid already uses, so a
+ * token reads the way the same formula reads in a table cell: numbers grouped,
+ * dates formatted, relations shown by their row's title rather than a
+ * placeholder.
  */
 export function evaluateInlineTokens(
   marks: readonly InlineMark[],
   scope: FormulaScope,
-  context: FormulaCheckContext
+  context: FormulaCheckContext,
+  display?: FormulaValueDisplayOptions
 ): InlineTokenEvaluation {
   const tokens = tokenMarks(marks);
   if (tokens.length === 0) {
@@ -93,7 +100,7 @@ export function evaluateInlineTokens(
     volatile = volatile || references.volatile;
     values.set(
       token.start,
-      formulaValueToDisplay(evaluateFormula(parsed.ast, scope))
+      formulaValueToDisplay(evaluateFormula(parsed.ast, scope), display)
     );
   }
 

@@ -52,7 +52,9 @@ describe("RichTextContent formula tokens", () => {
     );
   });
 
-  it("exposes the expression for a hover affordance", () => {
+  it("exposes the full value and its expression on hover", () => {
+    // The rendered value can be truncated, so the tooltip carries it whole
+    // above the expression that produced it.
     render(
       <RichTextContent
         formulaValues={new Map([[8, "12"]])}
@@ -60,6 +62,13 @@ describe("RichTextContent formula tokens", () => {
         text={TEXT}
       />
     );
+    expect(
+      document.querySelector("[data-inline-formula]")?.getAttribute("title")
+    ).toBe('12\ncount(db("t"))');
+  });
+
+  it("falls back to the expression alone before a value resolves", () => {
+    render(<RichTextContent marks={MARKS} text={TEXT} />);
     expect(
       document.querySelector("[data-inline-formula]")?.getAttribute("title")
     ).toBe('count(db("t"))');
