@@ -19,6 +19,7 @@ import {
 } from "@/lib/code/code-languages.ts";
 import {
   highlightToHtml,
+  useCodeThemeRevision,
   useHighlighterReady,
 } from "@/lib/code/highlighter.ts";
 import {
@@ -51,6 +52,8 @@ export function CodeEdit({
 }: CodeEditProps) {
   // Repaint once the async Shiki highlighter resolves.
   useHighlighterReady();
+  // Repaint when the selected syntax theme changes (settings → appearance).
+  useCodeThemeRevision();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const language = props.language ?? DEFAULT_CODE_LANGUAGE;
   const isEmpty = props.text.trim().length === 0;

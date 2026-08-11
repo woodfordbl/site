@@ -202,7 +202,7 @@ function AdvancedFilterEditor({
     <Textarea
       aria-label="Advanced filter formula"
       autoComplete="off"
-      className="formula-code max-h-32 min-h-16 font-mono text-xs md:text-xs"
+      className="code-no-ligatures max-h-32 min-h-16 font-mono text-xs md:text-xs"
       onChange={(event) => {
         setDraft(
           canonicalizeExpression(event.target.value, fields, relatedDatabases)
@@ -382,7 +382,7 @@ export function DatabaseAdvancedFilterChip({
               ) : (
                 <span
                   className={cn(
-                    "formula-code max-w-48 truncate font-mono",
+                    "code-no-ligatures max-w-48 truncate font-mono",
                     issue === null ? "text-foreground" : "text-destructive"
                   )}
                 >

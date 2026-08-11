@@ -161,7 +161,7 @@ function PickerDrawer({
       <Drawer modal={false} onOpenChange={onOpenChange} open={open}>
         <DrawerContent
           // Signatures listed here are formula source: ligatures off.
-          className="formula-code"
+          className="code-no-ligatures"
           hasTitle
           // Let the formula editor reclaim focus (and the keyboard) after an
           // insert instead of vaul restoring focus to the trigger button.
@@ -394,7 +394,7 @@ export function FormulaEditorAccessoryRow({
             "backface-hidden fixed inset-x-0 top-0 z-50 flex items-center gap-2 px-3 transition-opacity duration-150 will-change-transform",
             // Each operator key's label IS the text it inserts, so ligatures
             // would put `≤` on a button that types `<=`.
-            "formula-code",
+            "code-no-ligatures",
             visible ? "opacity-100" : "pointer-events-none opacity-0"
           )}
           ref={anchorRef}

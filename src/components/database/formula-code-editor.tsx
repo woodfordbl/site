@@ -2066,17 +2066,35 @@ const formulaEditorTheme = EditorView.theme({
     fontFamily: "var(--font-mono)",
     overflowWrap: "anywhere",
   },
+  // Token colors come from the selected syntax theme (`--code-token-*`,
+  // published by `lib/code/highlighter.ts` from the same Shiki theme the code
+  // blocks use), falling back to the app's own palette before the highlighter
+  // has loaded and for kinds a sparse theme leaves uncolored.
   ".cm-formula-comment": {
-    color: "var(--color-muted-foreground)",
+    color: "var(--code-token-comment, var(--color-muted-foreground))",
     fontStyle: "italic",
   },
-  ".cm-formula-function": { color: "var(--color-foreground)" },
-  ".cm-formula-literal": { color: "var(--block-text-orange)" },
-  ".cm-formula-name": { color: "var(--block-text-purple)" },
-  ".cm-formula-number": { color: "var(--block-text-orange)" },
-  ".cm-formula-operator": { color: "var(--color-foreground)" },
-  ".cm-formula-property": { color: "var(--block-text-blue)" },
-  ".cm-formula-string": { color: "var(--block-text-green)" },
+  ".cm-formula-function": {
+    color: "var(--code-token-function, var(--color-foreground))",
+  },
+  ".cm-formula-literal": {
+    color: "var(--code-token-literal, var(--block-text-orange))",
+  },
+  ".cm-formula-name": {
+    color: "var(--code-token-name, var(--block-text-purple))",
+  },
+  ".cm-formula-number": {
+    color: "var(--code-token-number, var(--block-text-orange))",
+  },
+  ".cm-formula-operator": {
+    color: "var(--code-token-operator, var(--color-foreground))",
+  },
+  ".cm-formula-property": {
+    color: "var(--code-token-property, var(--block-text-blue))",
+  },
+  ".cm-formula-string": {
+    color: "var(--code-token-string, var(--block-text-green))",
+  },
 });
 
 /** Latest-callback cell so the mount-once extensions never go stale. */

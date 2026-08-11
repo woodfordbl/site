@@ -11,7 +11,11 @@ export const inlineMarkClassNames: Record<InlineMarkType, string> = {
   italic: "italic",
   underline: "underline underline-offset-2",
   strikethrough: "line-through",
-  code: "rounded bg-muted px-1 py-px font-mono text-[0.85em]",
+  // Inline code takes the selected syntax theme's foreground (there is no
+  // syntax to tokenize) over the app's own muted surface — the theme's
+  // `editor.background` would fight the page. Ligatures off for the same
+  // reason formula source turns them off: `!=` must not read as `≠`.
+  code: "code-no-ligatures rounded bg-muted px-1 py-px font-mono text-[0.85em] text-[color:var(--code-foreground,inherit)]",
   link: "cursor-pointer text-primary underline underline-offset-2 hover:text-primary/80",
 };
 

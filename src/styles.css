@@ -991,14 +991,14 @@
 }
 
 /*
- * Formula source is TYPED, not just read. Geist Mono ligates the comparison
- * operators — `==` renders as `=`, `!=` as `≠`, `<=` as `≤`, `>=` as `≥` — so
- * the reference list and the editor would show glyphs no keyboard produces.
- * Every surface that displays formula source opts out, on the element and its
- * descendants, so operators always read exactly as they must be entered.
+ * Code is TYPED, not just read. Geist Mono ligates the comparison operators —
+ * `==` renders as `=`, `!=` as `≠`, `<=` as `≤`, `>=` as `≥` — so a formula
+ * reference list, editor, or inline code span would show glyphs no keyboard
+ * produces. Every such surface opts out, on the element and its descendants,
+ * so operators always read exactly as they must be entered.
  */
-.formula-code,
-.formula-code * {
+.code-no-ligatures,
+.code-no-ligatures * {
   font-feature-settings:
     "liga" 0,
     "calt" 0;
