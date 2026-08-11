@@ -860,7 +860,7 @@ function PanelLayout({
 }: PanelLayoutProps): ReactNode {
   if (!wide) {
     return (
-      <div className="flex w-full flex-col gap-1.5 p-1">
+      <div className="formula-code flex w-full flex-col gap-1.5 p-1">
         <span className="px-0.5 font-medium text-muted-foreground text-xs">
           Formula
         </span>
@@ -874,7 +874,7 @@ function PanelLayout({
     );
   }
   return (
-    <div className="grid h-[30rem] max-h-[65svh] w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+    <div className="formula-code grid h-[30rem] max-h-[65svh] w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
       <div className="flex min-w-0 flex-col gap-1.5">
         {editor}
         {status}

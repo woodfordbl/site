@@ -991,6 +991,21 @@
 }
 
 /*
+ * Formula source is TYPED, not just read. Geist Mono ligates the comparison
+ * operators — `==` renders as `=`, `!=` as `≠`, `<=` as `≤`, `>=` as `≥` — so
+ * the reference list and the editor would show glyphs no keyboard produces.
+ * Every surface that displays formula source opts out, on the element and its
+ * descendants, so operators always read exactly as they must be entered.
+ */
+.formula-code,
+.formula-code * {
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  font-variant-ligatures: none;
+}
+
+/*
  * Grouped drawer menu (touch presentation of dropdown/context menus). Runs of
  * adjacent item rows read as one iOS/Linear "grouped list" card: shared --card
  * background over the drawer's recessed --sidebar surface, rounded only at the

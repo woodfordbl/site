@@ -513,7 +513,7 @@ export function FormulaFunctionManagerDialog({
 }: FormulaFunctionManagerDialogProps): ReactNode {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="formula-code sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Custom functions</DialogTitle>
         </DialogHeader>

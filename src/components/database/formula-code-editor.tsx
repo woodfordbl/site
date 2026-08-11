@@ -1898,7 +1898,16 @@ function menuKeydownGuard(event: KeyboardEvent, view: EditorView): boolean {
  * text size inherit from the container's `font-mono text-xs`.
  */
 const formulaEditorTheme = EditorView.theme({
-  "&": { backgroundColor: "transparent", fontSize: "inherit" },
+  // Ligatures off everywhere formula source appears: Geist Mono would fuse
+  // `==` `!=` `<=` `>=` into `=` `≠` `≤` `≥`, glyphs no keyboard produces.
+  // The panel's `.formula-code` covers its own subtree; CM portals tooltips
+  // and completion popups out of it, so they need the rule here too.
+  "&": {
+    backgroundColor: "transparent",
+    fontFeatureSettings: '"liga" 0, "calt" 0',
+    fontSize: "inherit",
+    fontVariantLigatures: "none",
+  },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
     fontFamily: "inherit",
@@ -1928,6 +1937,9 @@ const formulaEditorTheme = EditorView.theme({
     border: "1px solid var(--color-border)",
     borderRadius: "0.5rem",
     color: "var(--color-popover-foreground)",
+    // Tooltips portal out of the panel's `.formula-code`, so opt out here too.
+    fontFeatureSettings: '"liga" 0, "calt" 0',
+    fontVariantLigatures: "none",
     zIndex: "60",
   },
   ".cm-tooltip.cm-tooltip-autocomplete > ul": {
