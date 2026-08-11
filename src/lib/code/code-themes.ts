@@ -25,8 +25,6 @@ export type CodeThemeId = (typeof CODE_THEME_IDS)[number];
 export interface CodeThemeDefinition {
   /** Shiki theme id used in dark mode. */
   readonly dark: string;
-  /** Shown under the label in the settings picker. */
-  readonly description: string;
   readonly label: string;
   /** Shiki theme id used in light mode. */
   readonly light: string;
@@ -35,7 +33,6 @@ export interface CodeThemeDefinition {
 export const CODE_THEMES: Record<CodeThemeId, CodeThemeDefinition> = {
   github: {
     label: "GitHub",
-    description: "The default — familiar, high contrast.",
     light: "github-light",
     dark: "github-dark",
   },
@@ -43,43 +40,36 @@ export const CODE_THEMES: Record<CodeThemeId, CodeThemeDefinition> = {
     // Cursor is a VS Code fork and ships these as its defaults, so this is
     // the "Cursor light/dark" people mean.
     label: "VS Code / Cursor",
-    description: "The editor defaults (Light+ and Dark+).",
     light: "light-plus",
     dark: "dark-plus",
   },
   vitesse: {
     label: "Vitesse",
-    description: "Muted and low contrast, easy on long sessions.",
     light: "vitesse-light",
     dark: "vitesse-dark",
   },
   one: {
     label: "One",
-    description: "Atom's One Light and One Dark Pro.",
     light: "one-light",
     dark: "one-dark-pro",
   },
   catppuccin: {
     label: "Catppuccin",
-    description: "Soft pastels — Latte and Mocha.",
     light: "catppuccin-latte",
     dark: "catppuccin-mocha",
   },
   min: {
     label: "Min",
-    description: "Minimal: few colors, mostly weight and grey.",
     light: "min-light",
     dark: "min-dark",
   },
   "rose-pine": {
     label: "Rosé Pine",
-    description: "Warm and muted — Dawn and the dark original.",
     light: "rose-pine-dawn",
     dark: "rose-pine",
   },
   everforest: {
     label: "Everforest",
-    description: "Green-leaning and desaturated.",
     light: "everforest-light",
     dark: "everforest-dark",
   },

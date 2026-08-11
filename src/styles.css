@@ -980,6 +980,11 @@
  * light `color` plus a `--shiki-dark` variable (see lib/code/highlighter.ts);
  * under `.dark` we swap to the dark variable. Plaintext spans have no variable
  * and fall back to the inherited foreground.
+ *
+ * `!important` is load-bearing, not laziness: Shiki bakes the light color into
+ * each span's INLINE style, which outranks any selector, so without it dark
+ * mode renders the light theme's palette — near-black identifiers on a dark
+ * surface. Shiki's own dual-theme docs prescribe the same.
  */
 .code-shiki {
   font-family: var(--font-mono);
@@ -987,7 +992,7 @@
 }
 
 .dark .code-shiki span {
-  color: var(--shiki-dark, inherit);
+  color: var(--shiki-dark, inherit) !important;
 }
 
 /*

@@ -189,7 +189,7 @@ export function AppearancePanel() {
                 value={codeTheme}
               />
             }
-            description={`Syntax colors for code blocks, inline code, and formulas. ${CODE_THEMES[codeTheme].description} Each theme is a light/dark pair and follows your interface theme.`}
+            description="Syntax colors for code blocks, inline code, and formulas."
             title="Syntax theme"
           >
             <CodeThemePreview />

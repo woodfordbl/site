@@ -94,7 +94,9 @@ export function SettingsItemField({
   return (
     <div className="flex flex-col">
       {row}
-      <div className="px-4 pb-4">{children}</div>
+      {/* Horizontal padding MUST match `settingsItemRowClassName`'s, or the
+          body sits a few px off the title and description above it. */}
+      <div className="px-3 pb-3">{children}</div>
     </div>
   );
 }
