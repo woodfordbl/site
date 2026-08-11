@@ -1,4 +1,3 @@
-import { IconTrash } from "@tabler/icons-react";
 import {
   type ReactNode,
   useCallback,
@@ -37,6 +36,7 @@ import {
   resolveGroupByField,
 } from "@/lib/databases/row-group.ts";
 import { sortRowsForView } from "@/lib/databases/row-sort.ts";
+import { useLiveMarketsDerivedRows } from "@/lib/databases/use-live-markets-derived.ts";
 import {
   resolveColumnOrder,
   resolvePinnedFields,
@@ -53,7 +53,7 @@ import { cn } from "@/lib/utils.ts";
 export interface DatabaseTableViewProps {
   databaseId: string;
   /**
-   * Full-page hosts (`/db/$databaseId`): the table view flexes to the host's
+   * Full-page hosts (database hub pages): the table view flexes to the host's
    * remaining height — rows scroll between the sticky header and the add-row
    * strip pinned at the bottom of the screen. Embedded blocks keep their
    * natural height (600px scroll cap).
@@ -66,20 +66,8 @@ export interface DatabaseTableViewProps {
    */
   hideTitle?: boolean;
   mode: "view" | "edit";
-  /**
-   * Invoked by the settings menu AFTER deleting the database, so the hosting
-   * block can remove itself (the block is only a reference — a deleted
-   * database has nothing to render). Absent outside a block (row page).
-   */
-  onDeleteDatabase?: () => void;
   /** Persists the settings menu's "Hide title" toggle onto the block. */
   onHideTitleChange?: (hideTitle: boolean) => void;
-  /**
-   * Removes the hosting block when its database can no longer be resolved
-   * (deleted from another block / tab). Powers the "Remove" action in the
-   * dangling-reference state. Absent outside a block (row page).
-   */
-  onRemoveBlock?: () => void;
   /**
    * Persists a view switch onto the hosting block (`props.viewId`) — the
    * active view is per BLOCK, like Notion linked views. Absent in view mode
@@ -91,17 +79,10 @@ export interface DatabaseTableViewProps {
   viewId?: string;
 }
 
-function EmptyState({
-  action,
-  message,
-}: {
-  action?: ReactNode;
-  message: string;
-}) {
+function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-border border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
       <span>{message}</span>
-      {action}
     </div>
   );
 }
@@ -111,6 +92,9 @@ function EmptyState({
  * columns and relative filter windows.
  */
 const DISPLAY_CLOCK_REFRESH_MS = 60_000;
+
+/** Stable empty fields identity for databases that haven't loaded yet. */
+const NO_FIELDS: DatabaseField[] = [];
 
 /** Whether any of the given (visible) date fields displays relatively. */
 function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
@@ -317,6 +301,7 @@ interface DatabaseViewBodyProps {
   databaseId: string;
   fillHeight: boolean;
   groups: DatabaseRowGroup[] | null;
+  isLiveMarkets: boolean;
   isSyncedDatabase: boolean;
   mode: "view" | "edit";
   pinnedFields: DatabaseField[];
@@ -332,6 +317,7 @@ function DatabaseViewBody({
   databaseId,
   fillHeight,
   groups,
+  isLiveMarkets,
   isSyncedDatabase,
   mode,
   pinnedFields,
@@ -377,6 +363,7 @@ function DatabaseViewBody({
       databaseId={databaseId}
       fillHeight={fillHeight}
       groups={groups}
+      isLiveMarkets={isLiveMarkets}
       isSyncedDatabase={isSyncedDatabase}
       // Remount clears session row-selection when the database or active
       // view changes (selection is intentionally not persisted).
@@ -403,9 +390,7 @@ export function DatabaseTableView({
   fillHeight = false,
   hideTitle = false,
   mode,
-  onDeleteDatabase,
   onHideTitleChange,
-  onRemoveBlock,
   onViewIdChange,
   viewId,
 }: DatabaseTableViewProps): ReactNode {
@@ -433,6 +418,8 @@ export function DatabaseTableView({
     [onViewIdChange]
   );
 
+  const fields = database?.fields ?? NO_FIELDS;
+
   const columns = useMemo(
     () => (database && view ? resolveColumnOrder(database.fields, view) : []),
     [database, view]
@@ -450,6 +437,9 @@ export function DatabaseTableView({
   // floor so the table changes in near-real-time on screen. Ref-counted with
   // cleanup on unmount; a no-op for local databases.
   const isSyncedDatabase = database?.source?.kind === "connector";
+  const isLiveMarkets =
+    database?.source?.kind === "connector" &&
+    database.source.connectorId === "live-markets";
   useEffect(() => {
     if (!isSyncedDatabase) {
       return;
@@ -465,9 +455,17 @@ export function DatabaseTableView({
   // traverse into (rollups react; the old per-view recompute couldn't see
   // those) and the engine's own volatile 60s tick.
   const formulaOverlay = useFormulaOverlay(databaseId);
-  const mergedRows = useMemo<LocalDatabaseRow[]>(
+  const formulaRows = useMemo<LocalDatabaseRow[]>(
     () => withFormulaValues(allRows, formulaOverlay),
     [allRows, formulaOverlay]
+  );
+
+  // Stocks and Crypto: ensure 24h price coverage, then overlay series Change +
+  // Float × Price Market cap (after formulas so derived synced columns win).
+  const { rows: mergedRows } = useLiveMarketsDerivedRows(
+    database,
+    fields,
+    formulaRows
   );
 
   const rows = useMemo<LocalDatabaseRow[]>(() => {
@@ -541,23 +539,9 @@ export function DatabaseTableView({
   );
 
   if (!database) {
-    // A block whose database was deleted (here or in another tab) has nothing
-    // to render — offer to remove the now-empty reference instead of leaving a
-    // permanent "not found" shell. Read-only/row-page contexts (no
-    // `onRemoveBlock`) keep the neutral message.
-    return (
-      <EmptyState
-        action={
-          onRemoveBlock ? (
-            <Button onClick={onRemoveBlock} size="sm" variant="outline">
-              <IconTrash />
-              Remove
-            </Button>
-          ) : undefined
-        }
-        message="This database was deleted."
-      />
-    );
+    // Cascade delete removes referencing blocks; a dangling id (legacy orphan
+    // or mid-cascade race) renders nothing rather than a dead-end empty state.
+    return null;
   }
   if (!view) {
     return <EmptyState message="No views" />;
@@ -580,6 +564,7 @@ export function DatabaseTableView({
       {showTitleRow ? (
         <DatabaseTitle
           activeView={view}
+          alwaysShowTools={fillHeight}
           chartData={chartData}
           controls={
             mode === "edit" ? (
@@ -595,7 +580,6 @@ export function DatabaseTableView({
           database={database}
           hideTitle={hideTitle}
           mode={mode}
-          onDeleteDatabase={onDeleteDatabase}
           onHideTitleChange={onHideTitleChange}
           onViewIdChange={handleViewIdChange}
           totalRowCount={allRows.length}
@@ -627,6 +611,7 @@ export function DatabaseTableView({
         databaseId={databaseId}
         fillHeight={fillHeight}
         groups={groups}
+        isLiveMarkets={isLiveMarkets}
         isSyncedDatabase={isSyncedDatabase}
         mode={mode}
         pinnedFields={pinnedFields}

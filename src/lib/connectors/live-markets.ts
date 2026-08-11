@@ -16,39 +16,58 @@ import {
   type ConnectorFieldDef,
   type ConnectorHistoryPoint,
   type ConnectorHistoryRequest,
+  type ConnectorRow,
   type ConnectorStreamHandlers,
 } from "@/lib/connectors/types.ts";
+import { yahooFetchHistory } from "@/lib/connectors/yahoo-chart.ts";
 
 /**
- * Unified "Live" connector: one synced source for either crypto or stocks,
- * chosen via a `type` selector and driven by simple base tickers (BTC, ETH /
- * AAPL, MSFT). The provider is picked under the hood:
+ * Unified "Stocks and Crypto" connector: one instrument list mixing crypto and
+ * equity tickers. Each entry carries an explicit `assetClass` (set in the
+ * create/settings UI via Stock / Crypto toggles):
  *
- * - **crypto** — CoinGecko seeds price + market cap in the chosen `currency`
- *   (true conversion), and Binance overlays live price ticks on top, keyed by
- *   the same base ticker. So the currency selector is *functional* here.
- * - **stocks** — Finnhub (shared proxy or BYO token) streams live quotes;
- *   currency is display-only (US tickers are quoted in USD natively).
+ * - **crypto** → CoinGecko seed + Binance live/history
+ * - **equity** → Finnhub quote/profile/stream + Yahoo candle backfill
  *
- * The asset type is fixed at creation (schema-locked): the two types carry
- * different columns (crypto adds Name / Market cap), so switching would drift
- * the schema. Transport lives in `coingecko-markets.ts` / `binance-stream.ts` /
- * `finnhub-quotes.ts`.
+ * Schema is a fixed superset. Name and Float come from CoinGecko (circulating
+ * supply) / Finnhub `profile2` (shares outstanding). Market cap is float × price
+ * when float is known (else the provider market-cap seed). Change is seeded from
+ * the provider and refined from the price series once 24h coverage is ensured.
+ * When both asset classes appear, the sync engine defaults the table view to
+ * group by Asset class (unless the user opted out).
  */
 
 const MINUTE_MS = 60_000;
 const TWO_MINUTES_MS = 2 * MINUTE_MS;
 
-const liveConfigSchema = z.object({
-  /** Which provider/asset class backs this source. Fixed at creation. */
-  type: z.enum(["crypto", "stocks"]),
-  /** Base tickers — crypto ("BTC", "ETH") or stocks ("AAPL", "MSFT"). */
-  symbols: z.array(z.string().min(1)).min(1),
-  /** ISO 4217 quote/display currency. Functional for crypto, display for stocks. */
-  currency: z.string().default("USD"),
+/** Stable select option ids written into `assetClass` cells. */
+export const ASSET_CLASS_CRYPTO = "crypto";
+export const ASSET_CLASS_EQUITY = "equity";
+export const MAX_LIVE_MARKET_INSTRUMENTS = 30;
+export const LIVE_MARKET_SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
+
+export type LiveAssetClass =
+  | typeof ASSET_CLASS_CRYPTO
+  | typeof ASSET_CLASS_EQUITY;
+
+const liveInstrumentSchema = z.object({
+  symbol: z.string().trim().toUpperCase().regex(LIVE_MARKET_SYMBOL_PATTERN),
+  assetClass: z.enum([ASSET_CLASS_CRYPTO, ASSET_CLASS_EQUITY]),
 });
 
-type LiveConfig = z.infer<typeof liveConfigSchema>;
+/** One configured ticker with its Stock / Crypto classification. */
+export type LiveInstrument = z.infer<typeof liveInstrumentSchema>;
+
+/** Parse the valid instruments from an untrusted connector config value. */
+export function parseLiveInstruments(value: unknown): LiveInstrument[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const parsed = liveInstrumentSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
 
 /** Display-currency choices offered by the config selector. */
 const CURRENCY_OPTIONS = [
@@ -61,10 +80,15 @@ const CURRENCY_OPTIONS = [
   { value: "CHF", label: "CHF (Swiss Franc)" },
 ];
 
+const ASSET_CLASS_OPTIONS = [
+  { id: ASSET_CLASS_CRYPTO, name: "Crypto", color: "orange" as const },
+  { id: ASSET_CLASS_EQUITY, name: "Equity", color: "blue" as const },
+];
+
 function parseConfig(config: Record<string, unknown>): LiveConfig {
   const parsed = liveConfigSchema.safeParse(config);
   if (!parsed.success) {
-    throw new ConnectorError("Invalid Live connector config", {
+    throw new ConnectorError("Invalid Stocks and Crypto connector config", {
       kind: "config",
       cause: parsed.error,
     });
@@ -72,56 +96,73 @@ function parseConfig(config: Record<string, unknown>): LiveConfig {
   return parsed.data;
 }
 
-/** Crypto columns: CoinGecko-backed, with Name + Market cap. */
-function cryptoFields(config: LiveConfig): ConnectorFieldDef[] {
+/**
+ * Trim/uppercase symbols, drop empties, and dedupe by symbol (first wins) so a
+ * mistyped duplicate can't open two provider subscriptions.
+ */
+export function normalizeInstruments(
+  instruments: readonly LiveInstrument[]
+): LiveInstrument[] {
+  const seen = new Set<string>();
+  const next: LiveInstrument[] = [];
+  for (const instrument of instruments) {
+    const symbol = instrument.symbol.trim().toUpperCase();
+    if (
+      !LIVE_MARKET_SYMBOL_PATTERN.test(symbol) ||
+      seen.has(symbol) ||
+      next.length >= MAX_LIVE_MARKET_INSTRUMENTS
+    ) {
+      continue;
+    }
+    seen.add(symbol);
+    next.push({ symbol, assetClass: instrument.assetClass });
+  }
+  return next;
+}
+
+const liveConfigSchema = z.object({
+  /** Tickers with explicit asset class — normalized once at the config boundary. */
+  instruments: z
+    .array(liveInstrumentSchema)
+    .min(1)
+    .max(MAX_LIVE_MARKET_INSTRUMENTS)
+    .transform(normalizeInstruments),
+  /** ISO 4217 quote/display currency. Functional for crypto, display for equities. */
+  currency: z.string().default("USD"),
+});
+
+type LiveConfig = z.infer<typeof liveConfigSchema>;
+
+/** Partition configured instruments into crypto vs equity symbol lists. */
+function partitionLiveMarketInstruments(
+  instruments: readonly LiveInstrument[]
+): { crypto: string[]; equity: string[] } {
+  const crypto: string[] = [];
+  const equity: string[] = [];
+  for (const instrument of instruments) {
+    (instrument.assetClass === ASSET_CLASS_CRYPTO ? crypto : equity).push(
+      instrument.symbol
+    );
+  }
+  return { crypto, equity };
+}
+
+/** Shared column schema for mixed crypto + equity rows. */
+function liveFields(config: LiveConfig): ConnectorFieldDef[] {
   return [
     {
       sourceKey: "symbol",
       name: "Symbol",
       type: "text",
-      icon: "tabler:IconCurrencyBitcoin",
+      icon: "tabler:IconActivityHeartbeat",
     },
     { sourceKey: "name", name: "Name", type: "text", icon: "tabler:IconTag" },
     {
-      sourceKey: "price",
-      name: "Price",
-      type: "number",
-      numberFormat: "currency",
-      currencyCode: config.currency,
-      captureHistory: true,
-      icon: "tabler:IconCash",
-    },
-    {
-      sourceKey: "change",
-      name: "24h change",
-      type: "number",
-      numberFormat: "percent",
-      icon: "tabler:IconTrendingUp",
-    },
-    {
-      sourceKey: "marketCap",
-      name: "Market cap",
-      type: "number",
-      numberFormat: "integer",
-      icon: "tabler:IconChartPie",
-    },
-    {
-      sourceKey: "updatedAt",
-      name: "Updated",
-      type: "date",
-      icon: "tabler:IconClock",
-    },
-  ];
-}
-
-/** Stock columns: Finnhub-backed price + daily change. */
-function stockFields(config: LiveConfig): ConnectorFieldDef[] {
-  return [
-    {
-      sourceKey: "symbol",
-      name: "Symbol",
-      type: "text",
-      icon: "tabler:IconChartCandle",
+      sourceKey: "assetClass",
+      name: "Asset class",
+      type: "select",
+      options: ASSET_CLASS_OPTIONS,
+      icon: "tabler:IconCategory",
     },
     {
       sourceKey: "price",
@@ -140,6 +181,20 @@ function stockFields(config: LiveConfig): ConnectorFieldDef[] {
       icon: "tabler:IconTrendingUp",
     },
     {
+      sourceKey: "float",
+      name: "Float",
+      type: "number",
+      numberFormat: "integer",
+      icon: "tabler:IconStack2",
+    },
+    {
+      sourceKey: "marketCap",
+      name: "Market cap",
+      type: "number",
+      numberFormat: "integer",
+      icon: "tabler:IconChartPie",
+    },
+    {
       sourceKey: "updatedAt",
       name: "Updated",
       type: "date",
@@ -148,66 +203,162 @@ function stockFields(config: LiveConfig): ConnectorFieldDef[] {
   ];
 }
 
-// Async so a `parseConfig` config error surfaces as a rejection (matching the
-// other connectors) rather than a synchronous throw.
-// biome-ignore lint/suspicious/useAwait: delegates to a provider promise
+function withAssetClass(
+  row: ConnectorRow,
+  assetClass: LiveAssetClass
+): ConnectorRow {
+  const float =
+    typeof row.values.float === "number" && Number.isFinite(row.values.float)
+      ? row.values.float
+      : null;
+  const price =
+    typeof row.values.price === "number" && Number.isFinite(row.values.price)
+      ? row.values.price
+      : null;
+  const derivedCap =
+    float !== null && price !== null
+      ? float * price
+      : (row.values.marketCap ?? null);
+  return {
+    ...row,
+    values: {
+      ...row.values,
+      assetClass,
+      // Preserve provider enrichment (CoinGecko / Finnhub profile) when present.
+      name: row.values.name ?? null,
+      float,
+      marketCap: derivedCap,
+    },
+  };
+}
+
+function orderRows(
+  instruments: readonly LiveInstrument[],
+  byId: Map<string, ConnectorRow>
+): ConnectorRow[] {
+  const rows: ConnectorRow[] = [];
+  for (const instrument of instruments) {
+    const row = byId.get(instrument.symbol);
+    if (row) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
 async function fetchRows(
   ctx: ConnectorFetchContext
 ): Promise<ConnectorFetchResult> {
-  return parseConfig(ctx.config).type === "crypto"
-    ? coingeckoCryptoFetchRows(ctx)
-    : finnhubFetchRows(ctx);
+  const { instruments, currency } = parseConfig(ctx.config);
+  const { crypto, equity } = partitionLiveMarketInstruments(instruments);
+  const byId = new Map<string, ConnectorRow>();
+
+  if (crypto.length > 0) {
+    const cryptoResult = await coingeckoCryptoFetchRows({
+      ...ctx,
+      config: { symbols: crypto, currency },
+    });
+    if (cryptoResult.kind !== "rows") {
+      return cryptoResult;
+    }
+    for (const row of cryptoResult.rows) {
+      byId.set(
+        row.externalId.toUpperCase(),
+        withAssetClass(row, ASSET_CLASS_CRYPTO)
+      );
+    }
+  }
+
+  if (equity.length > 0) {
+    const equityResult = await finnhubFetchRows({
+      ...ctx,
+      config: { symbols: equity },
+    });
+    if (equityResult.kind === "rows") {
+      for (const row of equityResult.rows) {
+        byId.set(
+          row.externalId.toUpperCase(),
+          withAssetClass(row, ASSET_CLASS_EQUITY)
+        );
+      }
+    } else if (crypto.length === 0) {
+      return equityResult;
+    }
+  }
+
+  return { kind: "rows", rows: orderRows(instruments, byId) };
 }
 
 function subscribe(
   ctx: ConnectorFetchContext,
   handlers: ConnectorStreamHandlers
 ): () => void {
-  return parseConfig(ctx.config).type === "crypto"
-    ? binanceSubscribe(ctx, handlers)
-    : finnhubSubscribe(ctx, handlers);
+  const { instruments, currency } = parseConfig(ctx.config);
+  const { crypto, equity } = partitionLiveMarketInstruments(instruments);
+  const teardowns: Array<() => void> = [];
+
+  if (crypto.length > 0) {
+    teardowns.push(
+      binanceSubscribe(
+        { ...ctx, config: { symbols: crypto, currency } },
+        handlers
+      )
+    );
+  }
+  if (equity.length > 0) {
+    teardowns.push(
+      finnhubSubscribe({ ...ctx, config: { symbols: equity } }, handlers)
+    );
+  }
+
+  return () => {
+    for (const teardown of teardowns.splice(0)) {
+      teardown();
+    }
+  };
 }
 
 /**
- * Historical backfill: Binance klines for `crypto` (composed from the currency's
- * quote asset); none for `stocks` (Finnhub has no free candle backfill — stock
- * charts draw from live local capture only).
+ * Historical backfill: Binance klines for crypto instruments; Yahoo Finance
+ * chart proxy for equities. Classification comes from the configured
+ * instrument list (not CoinGecko probing).
  */
-// biome-ignore lint/suspicious/useAwait: delegates to a provider promise
 async function fetchHistory(
   ctx: ConnectorFetchContext,
   request: ConnectorHistoryRequest
 ): Promise<ConnectorHistoryPoint[]> {
-  return parseConfig(ctx.config).type === "crypto"
-    ? binanceFetchHistory(ctx, request)
-    : [];
+  const symbol = request.externalId.trim().toUpperCase();
+  const { instruments, currency } = parseConfig(ctx.config);
+  const match = instruments.find((entry) => entry.symbol === symbol);
+  if (match?.assetClass === ASSET_CLASS_CRYPTO) {
+    return await binanceFetchHistory(
+      {
+        ...ctx,
+        config: {
+          symbols: [symbol],
+          currency,
+        },
+      },
+      request
+    );
+  }
+  return await yahooFetchHistory(ctx, request);
 }
 
 /** Unified live crypto/stocks connector definition. */
 export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
   id: "live-markets",
-  title: "Live",
+  title: "Stocks and Crypto",
   description:
-    "Real-time price, change, and market cap for crypto or stock tickers.",
+    "Real-time prices for mixed crypto and equity tickers in one table.",
   icon: "tabler:IconActivityHeartbeat",
   configSchema: liveConfigSchema,
   configFields: [
     {
-      key: "type",
-      label: "Asset type",
-      kind: "select",
-      defaultValue: "crypto",
-      creationOnly: true,
-      options: [
-        { value: "crypto", label: "Crypto" },
-        { value: "stocks", label: "Stocks" },
-      ],
-    },
-    {
-      key: "symbols",
+      key: "instruments",
       label: "Symbols",
-      placeholder: "BTC, ETH",
-      kind: "list",
+      placeholder: "BTC",
+      kind: "instrumentList",
     },
     {
       key: "currency",
@@ -218,9 +369,7 @@ export const liveMarketsConnector: ConnectorDefinition<LiveConfig> = {
     },
   ],
   fields(config) {
-    return config.type === "crypto"
-      ? cryptoFields(config)
-      : stockFields(config);
+    return liveFields(config);
   },
   primarySourceKey: "symbol",
   fetchRows,

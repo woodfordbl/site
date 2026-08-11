@@ -3,9 +3,9 @@ import type { HistoryResolution } from "@/lib/connectors/types.ts";
 
 /**
  * Pure helpers for time-axis charts: window presets, resolution selection, and
- * the three-layer stitch (provider backfill under finer local capture). No IO —
- * the async loading (field-history store + connector `fetchHistory`) lives in
- * `use-time-series-chart-data.ts`.
+ * display clip helpers. Historical backfill + local capture are merged into the
+ * field-history store by {@link ensureSeriesCoverage} (shared with live-markets
+ * derived Change); this module stays IO-free.
  */
 
 const MINUTE_MS = 60_000;

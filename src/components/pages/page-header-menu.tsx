@@ -35,12 +35,15 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
+import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
@@ -98,6 +101,14 @@ export function PageHeaderMenu({
   const footerActions = usePageCanvasFooterActions({ onAfterReset, pageId });
   const importMarkdownPage = useImportMarkdownPage();
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Start the clipboard write inside the click itself. Deferring it past the
+  // menu close (the way runAfterClose does) drops the user activation Safari
+  // requires for navigator.clipboard.writeText.
+  const runCopyLink = useCallback(() => {
+    setOpen(false);
+    copyLink().catch(() => undefined);
+  }, [copyLink]);
 
   const runExportPage = useCallback(() => {
     exportPageArchive(pageId)
@@ -179,9 +190,8 @@ export function PageHeaderMenu({
         label: "Copy link",
         icon: <IconLink />,
         keywords: ["copy", "link", "url", "share"],
-        onSelect: () => {
-          copyLink().catch(() => undefined);
-        },
+        command: "copy-page-link",
+        onSelect: runCopyLink,
       },
       {
         id: "favorite",
@@ -292,7 +302,6 @@ export function PageHeaderMenu({
 
     return entries;
   }, [
-    copyLink,
     cover,
     duplicate,
     footerActions,
@@ -300,6 +309,7 @@ export function PageHeaderMenu({
     isFavorite,
     isNarrowViewport,
     pageId,
+    runCopyLink,
     runExportMarkdown,
     runExportPage,
     runImportMarkdown,
@@ -341,7 +351,10 @@ export function PageHeaderMenu({
         >
           <IconDots aria-hidden />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          className={standardActionMenuWidthClassName}
+        >
           <ActionMenuSearchSection
             activeKey={open ? pageId : null}
             items={searchableEntries}
@@ -377,15 +390,12 @@ export function PageHeaderMenu({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => {
-                  runAfterClose(() => {
-                    copyLink().catch(() => undefined);
-                  });
-                }}
-              >
+              <DropdownMenuItem onClick={runCopyLink}>
                 <IconLink />
                 Copy link
+                <DropdownMenuShortcut>
+                  <Shortcut command="copy-page-link" />
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {

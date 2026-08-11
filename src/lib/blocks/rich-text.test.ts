@@ -139,14 +139,36 @@ describe("segmentRichText", () => {
       { text: " home", marks: [] },
     ]);
   });
+
+  it("carries pageId onto inline page-link segments", () => {
+    expect(
+      segmentRichText("Notes", [
+        {
+          type: "link",
+          start: 0,
+          end: 5,
+          href: "https://site.test/notes",
+          pageId: "page-1",
+        },
+      ])
+    ).toEqual([
+      {
+        text: "Notes",
+        marks: ["link"],
+        href: "https://site.test/notes",
+        pageId: "page-1",
+      },
+    ]);
+  });
 });
 
 describe("link marks", () => {
-  const link = (start: number, end: number, href: string) => ({
+  const link = (start: number, end: number, href: string, pageId?: string) => ({
     type: "link" as const,
     start,
     end,
     href,
+    ...(pageId === undefined ? {} : { pageId }),
   });
 
   it("keeps adjacent links with different hrefs separate", () => {
@@ -155,16 +177,68 @@ describe("link marks", () => {
     );
   });
 
+  it("keeps adjacent page links with different pageIds separate", () => {
+    expect(
+      normalizeInlineMarks([link(0, 3, "a", "p1"), link(3, 6, "a", "p2")], 6)
+    ).toEqual([link(0, 3, "a", "p1"), link(3, 6, "a", "p2")]);
+  });
+
   it("merges adjacent links sharing an href", () => {
     expect(normalizeInlineMarks([link(0, 3, "a"), link(3, 6, "a")], 6)).toEqual(
       [link(0, 6, "a")]
     );
   });
 
+  it("clips a styling mark that only partly covers a page-link run", () => {
+    // "hi  Notes" bolded through "hi  No" — the link stays one atomic run.
+    expect(
+      normalizeInlineMarks([bold(0, 6), link(4, 9, "a", "p1")], 9)
+    ).toEqual([bold(0, 4), link(4, 9, "a", "p1")]);
+  });
+
+  it("keeps a styling mark that covers the whole page-link run", () => {
+    expect(
+      normalizeInlineMarks([bold(0, 9), link(4, 9, "a", "p1")], 9)
+    ).toEqual([bold(0, 9), link(4, 9, "a", "p1")]);
+  });
+
+  it("clips a styling mark that starts inside a page-link run", () => {
+    expect(
+      normalizeInlineMarks([bold(4, 8), link(3, 6, "a", "p1")], 9)
+    ).toEqual([link(3, 6, "a", "p1"), bold(6, 8)]);
+  });
+
+  it("keeps a styling mark that spans past both link edges", () => {
+    expect(
+      normalizeInlineMarks([bold(2, 7), link(3, 6, "a", "p1")], 9)
+    ).toEqual([bold(2, 7), link(3, 6, "a", "p1")]);
+  });
+
+  it("leaves styling marks over plain links alone", () => {
+    expect(normalizeInlineMarks([bold(0, 6), link(4, 9, "a")], 9)).toEqual([
+      bold(0, 6),
+      link(4, 9, "a"),
+    ]);
+  });
+
+  it("segments a partly bolded page link as a single run", () => {
+    const segments = segmentRichText("hi  Notes", [
+      bold(0, 6),
+      link(4, 9, "a", "p1"),
+    ]);
+    expect(segments.filter((segment) => segment.pageId)).toHaveLength(1);
+  });
+
   it("setLinkInRange replaces any link already covering the range", () => {
     expect(setLinkInRange([link(0, 6, "old")], 0, 6, "new", 6)).toEqual([
       link(0, 6, "new"),
     ]);
+  });
+
+  it("setLinkInRange stores pageId for inline page links", () => {
+    expect(
+      setLinkInRange([], 0, 5, "https://x.dev/p", 5, { pageId: "page-1" })
+    ).toEqual([link(0, 5, "https://x.dev/p", "page-1")]);
   });
 
   it("removeLinkInRange drops the link and keeps its href off the rest", () => {

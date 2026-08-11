@@ -172,10 +172,10 @@ export interface ConnectorConfigField {
   /** Config object key this input writes. */
   key: string;
   /**
-   * `"text"` = single string; `"list"` = comma/newline-separated string[];
-   * `"select"` = one value from a fixed `options` set.
+   * `"text"` = single string; `"instrumentList"` = one
+   * `{ symbol, assetClass }` row per line; `"select"` = one fixed option.
    */
-  kind: "text" | "list" | "select";
+  kind: "text" | "instrumentList" | "select";
   /** Input label. */
   label: string;
   /** Choices for `kind: "select"`; ignored for other kinds. */

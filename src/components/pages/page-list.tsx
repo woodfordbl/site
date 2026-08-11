@@ -1,4 +1,4 @@
-import { useRouteContext } from "@tanstack/react-router";
+import { useNavigate, useRouteContext } from "@tanstack/react-router";
 import {
   cloneElement,
   isValidElement,
@@ -21,13 +21,19 @@ import {
   type PageListDragPreviewState,
 } from "@/components/pages/page-list-drag-preview.tsx";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.tsx";
-import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import {
+  localBlocksCollection,
+  localDatabasesCollection,
+  localPagesCollection,
+} from "@/db/collections/local-collections.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { loadPage } from "@/lib/content/load-page.ts";
+import { parseDatabaseListDragSourceId } from "@/lib/databases/database-list-drag.ts";
+import { moveDatabaseHost } from "@/lib/databases/move-database-host.ts";
 import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import {
   buildPageTree,
@@ -49,13 +55,14 @@ import {
   type PageListDropTarget,
   resolvePageListDropTargetFromPointer,
 } from "@/lib/pages/resolve-page-list-drop-target.ts";
+import { resolveSlugPrefixRedirect } from "@/lib/pages/resolve-slug-prefix-redirect.ts";
 import { cn } from "@/lib/utils.ts";
 
 import { NewPageButton } from "./new-page-button.tsx";
 import { HostedDatabasesProvider } from "./page-list-database-rows.tsx";
 import { PageListItem } from "./page-list-item.tsx";
 
-/** HTML5 drag channel for sidebar page rows. */
+/** HTML5 drag channel for sidebar page rows (also carries prefixed database ids). */
 const pageDragChannel = createDragChannel(PAGE_DRAG_MIME_TYPE);
 
 function findPageById(
@@ -69,6 +76,55 @@ function hasLocalPageDocument(pageId: string): boolean {
   return localPagesCollection.toArray.some(
     (localPage) => localPage.id === pageId && localPage.deletedAt == null
   );
+}
+
+function resolvePageListDragPreviewMeta(options: {
+  nav: HTMLElement | null;
+  pages: PageSummary[];
+  pointer: { x: number; y: number };
+  sourceId: string;
+  visibleRows: { depth: number; pageId: string }[];
+}): Omit<PageListDragPreviewState, "clientX" | "clientY"> {
+  const { nav, pages, pointer, sourceId, visibleRows } = options;
+  const databaseId = parseDatabaseListDragSourceId(sourceId);
+  // Scope to this nav so a favorited page's mirror row (rendered in the
+  // sidebar Favorites section with the same id) can't be matched instead.
+  const rowEl = nav?.querySelector(
+    databaseId
+      ? `[data-database-sidebar-row-id="${databaseId}"]`
+      : `[${PAGE_LIST_ROW_ATTRIBUTE}="${sourceId}"]`
+  );
+  const rowRect =
+    rowEl instanceof HTMLElement ? rowEl.getBoundingClientRect() : null;
+  const offsetX = rowRect ? pointer.x - rowRect.left : 0;
+  const offsetY = rowRect ? pointer.y - rowRect.top : 0;
+  const width = rowRect?.width ?? 200;
+
+  if (databaseId) {
+    const database = localDatabasesCollection.get(databaseId);
+    return {
+      depth: Number(rowEl?.getAttribute("data-database-sidebar-depth")) || 1,
+      icon: database?.icon,
+      offsetX,
+      offsetY,
+      pageId: sourceId,
+      title: database?.name ?? "Database",
+      width,
+    };
+  }
+
+  const page = findPageById(pages, sourceId);
+  return {
+    depth:
+      visibleRows.find((visibleRow) => visibleRow.pageId === sourceId)?.depth ??
+      0,
+    icon: page?.icon,
+    offsetX,
+    offsetY,
+    pageId: sourceId,
+    title: page?.title ?? "Page",
+    width,
+  };
 }
 
 function PageListTree({
@@ -129,6 +185,7 @@ function PageListContent({
   pages: PageSummary[];
 }) {
   const activePage = useActivePageRef();
+  const navigate = useNavigate();
   const dispatch = usePageDispatch(pages);
   // The template snapshot is excluded from `pages` upstream (mergePageList).
   // Materialized row pages and database hubs are filtered HERE — the
@@ -286,49 +343,86 @@ function PageListContent({
     [dispatch, ensurePageSeed, pages]
   );
 
+  const rehostDatabaseFromDropTarget = useCallback(
+    (databaseId: string, target: PageListDropTarget) => {
+      if (target.kind !== "nest") {
+        return;
+      }
+
+      setExpandedIds((previous) => {
+        if (previous.has(target.parentPageId)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(target.parentPageId);
+        return next;
+      });
+
+      moveDatabaseHost({
+        databaseId,
+        newHostPageId: target.parentPageId,
+        pages,
+      })
+        .then((result) => {
+          if (!result || typeof window === "undefined") {
+            return;
+          }
+
+          const redirect = resolveSlugPrefixRedirect({
+            nextPrefix: result.nextHubSlug,
+            pathname: window.location.pathname,
+            previousPrefix: result.previousHubSlug,
+          });
+          if (redirect) {
+            navigate({ ...redirect, replace: true });
+          }
+        })
+        .catch(() => undefined);
+    },
+    [navigate, pages]
+  );
+
   const dndConfig = useMemo<DndSurfaceConfig<PageListDropTarget>>(
     () => ({
       channel: pageDragChannel,
       dragImage: { kind: "overlay" },
       rowAttribute: PAGE_LIST_ROW_ATTRIBUTE,
-      resolveDropTarget: ({ sourceId, pointer, rects }) =>
-        resolvePageListDropTargetFromPointer({
+      resolveDropTarget: ({ sourceId, pointer, rects }) => {
+        const draggingDatabaseId = parseDatabaseListDragSourceId(sourceId);
+        return resolvePageListDropTargetFromPointer({
+          blocks: localBlocksCollection.toArray,
           clientX: pointer.x,
           clientY: pointer.y,
-          draggingPageId: sourceId,
+          draggingDatabaseId,
+          draggingPageId: draggingDatabaseId ? null : sourceId,
           navRect: navRef.current?.getBoundingClientRect() ?? null,
           pages,
           rowRects: rects,
           visibleRows,
-        }),
-      onDrop: ({ sourceId, target }) =>
-        repositionFromDropTarget(sourceId, target),
-      onDragStart: ({ sourceId, pointer }) => {
-        const page = findPageById(pages, sourceId);
-        // Scope to this nav so a favorited page's mirror row (rendered in the
-        // sidebar Favorites section with the same id) can't be matched instead.
-        const rowEl = navRef.current?.querySelector(
-          `[${PAGE_LIST_ROW_ATTRIBUTE}="${sourceId}"]`
-        );
-        const rowRect =
-          rowEl instanceof HTMLElement ? rowEl.getBoundingClientRect() : null;
-        const depth =
-          visibleRows.find((visibleRow) => visibleRow.pageId === sourceId)
-            ?.depth ?? 0;
-
-        setPreviewMeta({
-          depth,
-          icon: page?.icon,
-          offsetX: rowRect ? pointer.x - rowRect.left : 0,
-          offsetY: rowRect ? pointer.y - rowRect.top : 0,
-          pageId: sourceId,
-          title: page?.title ?? "Page",
-          width: rowRect?.width ?? 200,
         });
+      },
+      onDrop: ({ sourceId, target }) => {
+        const databaseId = parseDatabaseListDragSourceId(sourceId);
+        if (databaseId) {
+          rehostDatabaseFromDropTarget(databaseId, target);
+          return;
+        }
+        repositionFromDropTarget(sourceId, target);
+      },
+      onDragStart: ({ sourceId, pointer }) => {
+        setPreviewMeta(
+          resolvePageListDragPreviewMeta({
+            nav: navRef.current,
+            pages,
+            pointer,
+            sourceId,
+            visibleRows,
+          })
+        );
       },
       onDragEnd: () => setPreviewMeta(null),
     }),
-    [pages, repositionFromDropTarget, visibleRows]
+    [pages, rehostDatabaseFromDropTarget, repositionFromDropTarget, visibleRows]
   );
 
   if (tree.length === 0) {

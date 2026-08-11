@@ -1,10 +1,19 @@
 export interface UrlPreview {
   description?: string;
+  faviconUrl?: string;
   imageUrl?: string;
+  siteName?: string;
   title?: string;
 }
 
 const TITLE_REGEX = /<title[^>]*>([^<]*)<\/title>/i;
+
+const FAVICON_LINK_PATTERNS = [
+  /<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/i,
+  /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'](?:shortcut )?icon["']/i,
+  /<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']([^"']+)["']/i,
+  /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']apple-touch-icon["']/i,
+] as const;
 
 function decodeHtmlEntities(value: string): string {
   return value
@@ -45,6 +54,31 @@ function pickMeta(html: string, keys: string[]): string | undefined {
     const value = extractMetaContent(html, key);
     if (value) {
       return value;
+    }
+  }
+  return;
+}
+
+function resolveAbsoluteUrl(
+  raw: string | undefined,
+  pageUrl: string
+): string | undefined {
+  if (!raw) {
+    return;
+  }
+  try {
+    return new URL(raw, pageUrl).href;
+  } catch {
+    return;
+  }
+}
+
+function extractFaviconUrl(html: string, pageUrl: string): string | undefined {
+  for (const pattern of FAVICON_LINK_PATTERNS) {
+    const match = pattern.exec(html);
+    const resolved = resolveAbsoluteUrl(match?.[1]?.trim(), pageUrl);
+    if (resolved) {
+      return resolved;
     }
   }
   return;
@@ -108,34 +142,36 @@ export function assertSafeUnfurlUrl(rawUrl: string): URL {
   return parsed;
 }
 
+/**
+ * Parse Open Graph / Twitter / favicon metadata from an HTML document.
+ * Used by embed bookmarks and inline link hover previews.
+ */
 export function parseUrlPreviewFromHtml(
   html: string,
   pageUrl: string
 ): UrlPreview {
   const titleMatch = TITLE_REGEX.exec(html);
+  const titleFromDoc = titleMatch?.[1]?.trim();
   const title =
     pickMeta(html, ["og:title", "twitter:title"]) ??
-    titleMatch?.[1]?.trim() ??
-    undefined;
+    (titleFromDoc ? decodeHtmlEntities(titleFromDoc) : undefined);
   const description = pickMeta(html, [
     "og:description",
     "twitter:description",
     "description",
   ]);
-  const imageRaw = pickMeta(html, ["og:image", "twitter:image"]);
-
-  let imageUrl: string | undefined;
-  if (imageRaw) {
-    try {
-      imageUrl = new URL(imageRaw, pageUrl).href;
-    } catch {
-      imageUrl = undefined;
-    }
-  }
+  const imageUrl = resolveAbsoluteUrl(
+    pickMeta(html, ["og:image", "twitter:image"]),
+    pageUrl
+  );
+  const siteName = pickMeta(html, ["og:site_name"]);
+  const faviconUrl = extractFaviconUrl(html, pageUrl);
 
   return {
     ...(title ? { title } : {}),
     ...(description ? { description } : {}),
     ...(imageUrl ? { imageUrl } : {}),
+    ...(siteName ? { siteName } : {}),
+    ...(faviconUrl ? { faviconUrl } : {}),
   };
 }

@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import {
   type ClipboardEvent,
   type KeyboardEvent,
@@ -7,23 +8,39 @@ import {
   useCallback,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 
+import {
+  collectInlinePageLinkChromeHosts,
+  InlinePageLinkChrome,
+  type InlinePageLinkChromeHost,
+  inlinePageLinkChromeHostsEqual,
+  inlinePageLinkClassName,
+} from "@/components/editor/inline-page-link.tsx";
 import { classNameForMarks } from "@/components/editor/rich-text.tsx";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import {
   isLikelyUrl,
   normalizeInlineMarks,
   segmentRichText,
 } from "@/lib/blocks/rich-text.ts";
+import { extractPrimaryPastedUrl } from "@/lib/canvas/paste-url.ts";
 import { getFieldSelection } from "@/lib/editor/caret-navigation.ts";
 import {
+  createInlinePageLinkAnchor,
+  insertLinkedTextAtSelection,
   insertLinkOverSelection,
   insertPlainTextAtSelection,
+  pageLinkTitleMarks,
   type RichTextDomSnapshot,
+  repairInlinePageLinkDom,
   richTextToHtml,
   serializeRichTextDom,
   setRichTextSelection,
 } from "@/lib/editor/rich-text-dom.ts";
+import { resolvePageIdFromUrl } from "@/lib/pages/resolve-page-from-url.ts";
+import { resolvePageNavTarget } from "@/lib/pages/resolve-page-nav-target.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -60,7 +77,8 @@ function snapshotEquals(
       mark.type === other.type &&
       mark.start === other.start &&
       mark.end === other.end &&
-      mark.href === other.href
+      mark.href === other.href &&
+      mark.pageId === other.pageId
     );
   });
 }
@@ -71,6 +89,22 @@ function buildContent(root: HTMLElement, value: string, marks: InlineMark[]) {
   for (const segment of segmentRichText(value, marks)) {
     if (segment.marks.length === 0) {
       fragment.append(doc.createTextNode(segment.text));
+      continue;
+    }
+    if (segment.href && segment.pageId) {
+      const styleMarks = pageLinkTitleMarks(segment.marks);
+      fragment.append(
+        createInlinePageLinkAnchor(doc, {
+          className: inlinePageLinkClassName,
+          href: segment.href,
+          markTokens: segment.marks.join(" "),
+          pageId: segment.pageId,
+          text: segment.text,
+          ...(styleMarks.length > 0
+            ? { titleClassName: classNameForMarks(styleMarks) }
+            : {}),
+        })
+      );
       continue;
     }
     const element = doc.createElement(segment.href ? "a" : "span");
@@ -84,6 +118,32 @@ function buildContent(root: HTMLElement, value: string, marks: InlineMark[]) {
     fragment.append(element);
   }
   root.replaceChildren(fragment);
+}
+
+function fieldHasNonCollapsedSelection(root: HTMLElement): boolean {
+  const domSelection = root.ownerDocument.getSelection();
+  return Boolean(
+    domSelection &&
+      domSelection.rangeCount > 0 &&
+      !domSelection.isCollapsed &&
+      root.contains(domSelection.getRangeAt(0).startContainer)
+  );
+}
+
+function insertUrlAtSelection(
+  root: HTMLElement,
+  url: string,
+  hasSelection: boolean,
+  options?: { label?: string; pageId?: string }
+): void {
+  const className = options?.pageId
+    ? inlinePageLinkClassName
+    : classNameForMarks(["link"]);
+  if (hasSelection) {
+    insertLinkOverSelection(root, url, className, options);
+    return;
+  }
+  insertLinkedTextAtSelection(root, url, className, options);
 }
 
 /**
@@ -108,7 +168,12 @@ export function RichTextArea({
   value,
 }: RichTextAreaProps) {
   const composingRef = useRef(false);
+  const navigate = useNavigate();
+  const { pages } = useMergedPageListItems();
   const normalizedMarks = normalizeInlineMarks(marks, value.length);
+  const [chromeHosts, setChromeHosts] = useState<InlinePageLinkChromeHost[]>(
+    []
+  );
 
   // Initial (and server-rendered) content. Computed once — the identity stays
   // stable so React never rewrites the DOM; after mount the layout effect owns
@@ -116,28 +181,36 @@ export function RichTextArea({
   const initialHtmlRef = useRef<{ __html: string } | null>(null);
   if (initialHtmlRef.current === null) {
     initialHtmlRef.current = {
-      __html: richTextToHtml(value, normalizedMarks, classNameForMarks),
+      __html: richTextToHtml(value, normalizedMarks, classNameForMarks, {
+        classForPageLink: () => inlinePageLinkClassName,
+      }),
     };
   }
 
+  // Keeps the field DOM in sync with the model and re-reads the page-link
+  // chrome hosts afterwards — the rescan must follow the rebuild, so it lives
+  // here rather than in a child effect (children run first).
   useLayoutEffect(() => {
     const root = fieldRef.current;
     if (!root || composingRef.current) {
       return;
     }
-    if (snapshotEquals(serializeRichTextDom(root), value, normalizedMarks)) {
-      return;
+    if (!snapshotEquals(serializeRichTextDom(root), value, normalizedMarks)) {
+      const hadFocus = root.ownerDocument.activeElement === root;
+      const selection = hadFocus ? getFieldSelection(root) : null;
+      buildContent(root, value, normalizedMarks);
+      if (hadFocus && selection) {
+        setRichTextSelection(root, {
+          start: Math.min(selection.start, value.length),
+          end: Math.min(selection.end, value.length),
+        });
+      }
     }
 
-    const hadFocus = root.ownerDocument.activeElement === root;
-    const selection = hadFocus ? getFieldSelection(root) : null;
-    buildContent(root, value, normalizedMarks);
-    if (hadFocus && selection) {
-      setRichTextSelection(root, {
-        start: Math.min(selection.start, value.length),
-        end: Math.min(selection.end, value.length),
-      });
-    }
+    const nextHosts = collectInlinePageLinkChromeHosts(root);
+    setChromeHosts((previous) =>
+      inlinePageLinkChromeHostsEqual(previous, nextHosts) ? previous : nextHosts
+    );
   });
 
   const emitSnapshot = useCallback(() => {
@@ -145,6 +218,9 @@ export function RichTextArea({
     if (!root) {
       return;
     }
+    // Typing at a link edge can still land inside the anchor; lift it out
+    // before reading, so the run's marks never spread onto the new text.
+    repairInlinePageLinkDom(root);
     const snapshot = serializeRichTextDom(root);
     onInput(
       multiline
@@ -186,22 +262,31 @@ export function RichTextArea({
       if (!root) {
         return;
       }
-      const raw = event.clipboardData.getData("text/plain");
-      // Pasting a URL over a selection turns the selected text into a link
-      // instead of replacing it.
-      const domSelection = root.ownerDocument.getSelection();
-      const hasSelection = Boolean(
-        domSelection &&
-          domSelection.rangeCount > 0 &&
-          !domSelection.isCollapsed &&
-          root.contains(domSelection.getRangeAt(0).startContainer)
-      );
-      if (hasSelection && isLikelyUrl(raw)) {
-        insertLinkOverSelection(root, raw.trim(), classNameForMarks(["link"]));
+      const primaryUrl =
+        extractPrimaryPastedUrl(event.clipboardData) ??
+        event.clipboardData.getData("text/plain").trim();
+      const hasSelection = fieldHasNonCollapsedSelection(root);
+      if (primaryUrl && isLikelyUrl(primaryUrl)) {
+        const url = primaryUrl.trim();
+        const pageId = resolvePageIdFromUrl(
+          url,
+          pages,
+          root.ownerDocument.defaultView?.location.origin ??
+            window.location.origin
+        );
+        if (pageId) {
+          const page = pages.find((entry) => entry.id === pageId);
+          insertUrlAtSelection(root, url, hasSelection, {
+            pageId,
+            label: page?.title.trim() || "Untitled",
+          });
+        } else {
+          insertUrlAtSelection(root, url, hasSelection);
+        }
         emitSnapshot();
         return;
       }
-      let pasted = raw;
+      let pasted = event.clipboardData.getData("text/plain");
       if (!multiline) {
         pasted = pasted.replace(/\n/g, " ");
       }
@@ -211,7 +296,7 @@ export function RichTextArea({
       insertPlainTextAtSelection(root, pasted);
       emitSnapshot();
     },
-    [emitSnapshot, fieldRef, multiline]
+    [emitSnapshot, fieldRef, multiline, pages]
   );
 
   const handleCompositionEnd = useCallback(() => {
@@ -219,62 +304,75 @@ export function RichTextArea({
     emitSnapshot();
   }, [emitSnapshot]);
 
-  // Links are just links: a plain click (no selection) opens the destination;
-  // highlighting the text instead leaves it editable and raises the toolbar.
-  const handleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || event.defaultPrevented) {
-      return;
-    }
-    const target = event.target as Element | null;
-    const anchor = target?.closest?.("a[data-href],a[href]");
-    if (!(anchor instanceof HTMLAnchorElement)) {
-      return;
-    }
-    const selection = anchor.ownerDocument.getSelection();
-    if (selection && !selection.isCollapsed) {
-      return;
-    }
-    const href = anchor.dataset.href ?? anchor.getAttribute("href");
-    if (!href) {
-      return;
-    }
-    event.preventDefault();
-    anchor.ownerDocument.defaultView?.open(
-      href,
-      "_blank",
-      "noopener,noreferrer"
-    );
-  }, []);
+  // Plain links open in a new tab; page links navigate in-app. A text selection
+  // over the anchor leaves it editable and raises the format toolbar.
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || event.defaultPrevented) {
+        return;
+      }
+      const target = event.target as Element | null;
+      const anchor = target?.closest?.("a[data-href],a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+      const selection = anchor.ownerDocument.getSelection();
+      if (selection && !selection.isCollapsed) {
+        return;
+      }
+      const pageId = anchor.dataset.pageId?.trim();
+      if (pageId) {
+        event.preventDefault();
+        const navTarget = resolvePageNavTarget(pageId, pages);
+        navigate(navTarget);
+        return;
+      }
+      const href = anchor.dataset.href ?? anchor.getAttribute("href");
+      if (!href) {
+        return;
+      }
+      event.preventDefault();
+      anchor.ownerDocument.defaultView?.open(
+        href,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    },
+    [navigate, pages]
+  );
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: contenteditable field — native inputs cannot render styled inline spans.
-    <div
-      aria-label={ariaLabel}
-      aria-multiline={multiline || undefined}
-      className={cn(
-        "min-h-[1lh] cursor-text whitespace-pre-wrap break-words",
-        className
-      )}
-      contentEditable
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: HTML is built from our own escaped model so SSR ships the field content.
-      dangerouslySetInnerHTML={initialHtmlRef.current}
-      data-canvas-field
-      data-placeholder={placeholder}
-      data-rich-text-field
-      onBeforeInput={handleBeforeInput}
-      onBlur={onBlur}
-      onClick={handleClick}
-      onCompositionEnd={handleCompositionEnd}
-      onCompositionStart={() => {
-        composingRef.current = true;
-      }}
-      onFocus={onFocus}
-      onInput={handleInput}
-      onKeyDown={onKeyDown}
-      onPaste={handlePaste}
-      ref={fieldRef}
-      role="textbox"
-      tabIndex={0}
-    />
+    <>
+      {/* biome-ignore lint/a11y/useSemanticElements: contenteditable field — native inputs cannot render styled inline spans. */}
+      <div
+        aria-label={ariaLabel}
+        aria-multiline={multiline || undefined}
+        className={cn(
+          "min-h-[1lh] cursor-text whitespace-pre-wrap break-words",
+          className
+        )}
+        contentEditable
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: HTML is built from our own escaped model so SSR ships the field content.
+        dangerouslySetInnerHTML={initialHtmlRef.current}
+        data-canvas-field
+        data-placeholder={placeholder}
+        data-rich-text-field
+        onBeforeInput={handleBeforeInput}
+        onBlur={onBlur}
+        onClick={handleClick}
+        onCompositionEnd={handleCompositionEnd}
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onFocus={onFocus}
+        onInput={handleInput}
+        onKeyDown={onKeyDown}
+        onPaste={handlePaste}
+        ref={fieldRef}
+        role="textbox"
+        tabIndex={0}
+      />
+      <InlinePageLinkChrome hosts={chromeHosts} />
+    </>
   );
 }

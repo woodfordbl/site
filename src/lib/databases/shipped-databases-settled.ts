@@ -3,7 +3,7 @@ import { useCallback, useSyncExternalStore } from "react";
 /**
  * Tiny module store: has the shipped-database seeding pass finished (or
  * failed) this session? Database blocks on shipped pages gate their table
- * view on it so a first visit never flashes "This database was deleted."
+ * view on it so a first visit never mounts against a missing definition
  * while the seed fetch is in flight. SSR snapshot is `false`, so server
  * renders (and the hydration frame) show the placeholder.
  */

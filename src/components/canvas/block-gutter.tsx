@@ -10,6 +10,7 @@ import {
 import { BlockGutterMenu } from "@/components/canvas/block-gutter-menu/block-gutter-menu.tsx";
 import { useCanvasMenu } from "@/components/canvas/canvas-menu-context.tsx";
 import { useDragSource } from "@/components/dnd/use-dnd.ts";
+import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Kbd } from "@/components/ui/kbd.tsx";
 import {
@@ -92,6 +93,19 @@ export function BlockGutter({
     pressOriginRef.current = null;
     setIsPointerMoving(false);
   };
+
+  // The menu auto-focuses its "Search actions…" field, which makes the global
+  // hotkey layer treat every key as typing (`ignoreInputs`). Route the two keys
+  // the menu advertises from the open menu itself so they act on this row.
+  const onMenuKeyDown = useMenuCommandKeys({
+    // Menu-scoped delete (D) — not `delete-block` (Backspace), which stays the
+    // canvas field binding for empty/selected blocks.
+    "delete-page": () => onDelete?.(),
+    "duplicate-block": () => {
+      setOpenRowId(null);
+      onDuplicate?.();
+    },
+  });
 
   const isMoveCursor = isPointerMoving || showGrabbing || isDragging;
 
@@ -225,7 +239,7 @@ export function BlockGutter({
           </Tooltip>
         </TooltipProvider>
 
-        <BlockActionsMenuContent>
+        <BlockActionsMenuContent onKeyDownCapture={onMenuKeyDown}>
           <BlockGutterMenu
             onConvert={onConvert}
             onDelete={onDelete}

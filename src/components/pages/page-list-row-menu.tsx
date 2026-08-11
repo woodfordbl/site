@@ -1,7 +1,6 @@
 "use client";
 
 import { IconDots } from "@tabler/icons-react";
-import { useNavigate } from "@tanstack/react-router";
 import type { RefObject } from "react";
 
 import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
@@ -9,15 +8,14 @@ import {
   PageRowMenuContent,
   rowMenuCommandHandlers,
 } from "@/components/pages/page-row-menu-content.tsx";
-import { useTemplatePage } from "@/components/pages/template-page-provider.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
 import { SidebarMenuAction } from "@/components/ui/sidebar.tsx";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import { openTemplateEditor } from "@/lib/pages/open-template-editor.ts";
 
 interface PageListRowDropdownProps {
   canDelete: boolean;
@@ -25,6 +23,7 @@ interface PageListRowDropdownProps {
   isFavorite: boolean;
   menuActionRef: RefObject<HTMLButtonElement | null>;
   onChangeIcon: () => void;
+  onCopyLink: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
   onMoveTo: (parentId: string | null) => void;
@@ -43,6 +42,7 @@ export function PageListRowDropdown({
   isFavorite,
   menuActionRef,
   onChangeIcon,
+  onCopyLink,
   onDelete,
   onDuplicate,
   onMoveTo,
@@ -54,18 +54,14 @@ export function PageListRowDropdown({
   pages,
   title,
 }: PageListRowDropdownProps) {
-  const navigate = useNavigate();
-  const { setTemplatePageId } = useTemplatePage();
-  const onEditTemplate = () => openTemplateEditor(navigate, setTemplatePageId);
-
-  // Single-key shortcuts (F/D/Backspace/E/T) are live only while this dropdown
+  // Single-key shortcuts (F / Shift+D / D / T) are live only while this dropdown
   // is open and act on this row.
   const onMenuKeyDown = useMenuCommandKeys(
     rowMenuCommandHandlers({
       canDelete,
+      onCopyLink,
       onDelete,
       onDuplicate,
-      onEditTemplate,
       onSaveAsTemplate,
       onToggleFavorite,
     })
@@ -100,6 +96,7 @@ export function PageListRowDropdown({
       />
       <DropdownMenuContent
         align="start"
+        className={standardActionMenuWidthClassName}
         onKeyDownCapture={onMenuKeyDown}
         side="bottom"
       >
@@ -108,9 +105,9 @@ export function PageListRowDropdown({
           canResetToRemote={canResetToRemote}
           isFavorite={isFavorite}
           onChangeIcon={onChangeIcon}
+          onCopyLink={onCopyLink}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
-          onEditTemplate={onEditTemplate}
           onMoveTo={onMoveTo}
           onRename={onRename}
           onResetToRemote={onResetToRemote}

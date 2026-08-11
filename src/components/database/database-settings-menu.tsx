@@ -4,7 +4,6 @@ import {
   IconCheckbox,
   IconClock,
   IconColumns3,
-  IconCopy,
   IconDatabase,
   IconDots,
   IconEye,
@@ -19,10 +18,8 @@ import {
   IconRefresh,
   IconRestore,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
-import { format } from "date-fns/format";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -36,9 +33,11 @@ import { visibleFieldIdsAfterHide } from "@/components/database/database-column-
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
 import {
-  AddDatabaseViewMenuItems,
-  DATABASE_VIEW_TYPE_ICONS,
-} from "@/components/database/database-view-switcher.tsx";
+  DatabaseViewEditActions,
+  DatabaseViewRenameField,
+} from "@/components/database/database-view-menu.tsx";
+import { AddDatabaseViewMenuItems } from "@/components/database/database-view-switcher.tsx";
+import { InstrumentListConfigEditor } from "@/components/database/instrument-list-config-editor.tsx";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
   type ListReorderHandleProps,
@@ -60,12 +59,7 @@ import {
   DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-  InputGroupText,
-} from "@/components/ui/input-group.tsx";
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group.tsx";
 import {
   MenuIconRenameInput,
   shouldCancelMenuCloseForIconPicker,
@@ -78,17 +72,17 @@ import {
   SelectValue,
 } from "@/components/ui/select.tsx";
 import {
-  deleteDatabase,
-  duplicateDatabaseView,
   removeDatabaseField,
-  removeDatabaseView,
   reorderDatabaseFields,
   setDatabaseIcon,
+  setDatabaseViewGroupBy,
   updateDatabaseSource,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
 import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { requestImmediateSync } from "@/db/sync/database-sync-engine.ts";
+import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { useSyncStatus } from "@/hooks/use-sync-status.ts";
 import { getConnector } from "@/lib/connectors/registry.ts";
 import {
@@ -101,11 +95,14 @@ import type {
   ConnectorConfigOption,
 } from "@/lib/connectors/types.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
+import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
+import { navigateAfterDatabaseHubRename } from "@/lib/databases/navigate-after-database-rename.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
 import {
   deleteRowTemplate,
   readRowTemplateSnapshot,
 } from "@/lib/databases/row-template-store.ts";
+import { formatMenuTimestamp } from "@/lib/pages/format-menu-timestamp.ts";
 import type {
   DatabaseField,
   DatabaseSource,
@@ -123,11 +120,6 @@ import { cn } from "@/lib/utils.ts";
  * sections (Properties visibility, Group, Vertical separators) scope to the
  * ACTIVE view threaded from the title row — never `views[0]`.
  */
-
-/** Timestamps in menu copy: "Jan 5, 2026 3:24 PM". */
-function formatTimestamp(iso: string): string {
-  return format(new Date(iso), "MMM d, yyyy h:mm a");
-}
 
 /**
  * Keep typing inside menu-embedded inputs from triggering the menu's
@@ -393,17 +385,7 @@ function GroupSubmenu({ database, view }: GroupSubmenuProps) {
     if (fieldId === activeFieldId || (fieldId === null && !activeFieldId)) {
       return;
     }
-    // Collapse AND hidden state reset together — both store bucket keys of
-    // the previous field, which can collide with the new field's buckets
-    // (`""` empty, checkbox `true`/`false`, plain text/number values).
-    updateDatabaseView(database.id, view.id, {
-      groupBy: fieldId === null ? undefined : { fieldId },
-      config: {
-        ...view.config,
-        collapsedGroupKeys: undefined,
-        hiddenGroupKeys: undefined,
-      },
-    });
+    setDatabaseViewGroupBy(database.id, view.id, fieldId);
   };
 
   return (
@@ -509,9 +491,9 @@ interface ViewRowProps {
 }
 
 /**
- * One view row: type icon, inline rename input, and Duplicate / Delete
- * actions. Delete is disabled on the last view (`removeDatabaseView` also
- * refuses at the op level); Duplicate switches the block to the copy.
+ * One view row: icon picker + inline rename, and Duplicate / Delete actions.
+ * Delete is disabled on the last view (`removeDatabaseView` also refuses at
+ * the op level); Duplicate switches the block to the copy.
  */
 function ViewRow({
   canDelete,
@@ -519,64 +501,15 @@ function ViewRow({
   onViewIdChange,
   view,
 }: ViewRowProps) {
-  const TypeIcon = DATABASE_VIEW_TYPE_ICONS[view.type];
-
-  const commit = (value: string) => {
-    const trimmed = value.trim();
-    if (trimmed !== "" && trimmed !== view.name) {
-      updateDatabaseView(databaseId, view.id, { name: trimmed });
-    }
-  };
-
   return (
     <div className="flex items-center gap-1">
-      <InputGroup className="h-8 min-w-0 flex-1">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <TypeIcon className="stroke-[1.5px]" />
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label={`Rename view ${view.name}`}
-          autoComplete="off"
-          defaultValue={view.name}
-          onBlur={(event) => {
-            commit(event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            stopMenuKeys(event);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commit(event.currentTarget.value);
-            }
-          }}
-        />
-      </InputGroup>
-      {/* Same height as the h-8 rename input; explicit size keeps 16px glyphs. */}
-      <Button
-        aria-label={`Duplicate view ${view.name}`}
-        onClick={() => {
-          const copy = duplicateDatabaseView(databaseId, view.id);
-          if (copy) {
-            onViewIdChange?.(copy.id);
-          }
-        }}
-        size="icon"
-        variant="ghost"
-      >
-        <IconCopy className="size-4" />
-      </Button>
-      <Button
-        aria-label={`Delete view ${view.name}`}
-        disabled={!canDelete}
-        onClick={() => {
-          removeDatabaseView(databaseId, view.id);
-        }}
-        size="icon"
-        variant="ghost"
-      >
-        <IconTrash className="size-4" />
-      </Button>
+      <DatabaseViewRenameField databaseId={databaseId} view={view} />
+      <DatabaseViewEditActions
+        canDelete={canDelete}
+        databaseId={databaseId}
+        onViewIdChange={onViewIdChange}
+        view={view}
+      />
     </div>
   );
 }
@@ -751,140 +684,6 @@ function ConnectorTokenRow({ auth, connectorId }: ConnectorTokenRowProps) {
   );
 }
 
-/** Max instruments per synced source — matches the Finnhub proxy's peer cap. */
-const MAX_CONNECTOR_SYMBOLS = 30;
-/** Provider symbol shape once uppercased: A–Z 0–9 . : _ - up to 20 chars. */
-const CONNECTOR_SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
-/** Splits pasted/typed input into candidate symbols on commas or newlines. */
-const SYMBOL_INPUT_SEPARATOR = /[\n,]/;
-
-interface SymbolListEditorProps {
-  config: Record<string, JsonValue>;
-  configKey: string;
-  databaseId: string;
-  label: string;
-  placeholder?: string;
-  values: string[];
-}
-
-/**
- * Editor for a `list` config field (symbol/ticker set): removable chips plus an
- * add input. Every mutation writes the full config back through
- * `updateDatabaseSource`; the sync engine's collection watcher then refetches
- * and reopens the live socket against the new set (database-sync-engine.ts).
- * Enforces the provider caps (≤ {@link MAX_CONNECTOR_SYMBOLS}, symbol shape) so
- * the next poll can't fail config validation, and blocks removing the last one
- * (connectors require ≥ 1).
- */
-function SymbolListEditor({
-  config,
-  configKey,
-  databaseId,
-  label,
-  placeholder,
-  values,
-}: SymbolListEditorProps) {
-  const [error, setError] = useState("");
-
-  const write = (next: string[]) => {
-    updateDatabaseSource(databaseId, {
-      config: { ...config, [configKey]: next },
-    });
-  };
-
-  // Returns true when the input produced at least one new symbol (so the caller
-  // can clear the field); sets an inline note for anything skipped.
-  const addFromInput = (text: string): boolean => {
-    const parsed = text
-      .split(SYMBOL_INPUT_SEPARATOR)
-      .map((symbol) => symbol.trim().toUpperCase())
-      .filter(Boolean);
-    const next = [...values];
-    const skipped: string[] = [];
-    for (const symbol of parsed) {
-      if (next.includes(symbol)) {
-        continue;
-      }
-      if (
-        next.length >= MAX_CONNECTOR_SYMBOLS ||
-        !CONNECTOR_SYMBOL_PATTERN.test(symbol)
-      ) {
-        skipped.push(symbol);
-        continue;
-      }
-      next.push(symbol);
-    }
-    setError(skipped.length > 0 ? `Skipped ${skipped.join(", ")}` : "");
-    if (next.length !== values.length) {
-      write(next);
-      return true;
-    }
-    return false;
-  };
-
-  const remove = (symbol: string) => {
-    if (values.length <= 1) {
-      setError("Keep at least one");
-      return;
-    }
-    setError("");
-    write(values.filter((value) => value !== symbol));
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      {values.length > 0 ? (
-        <div className="flex flex-wrap gap-1">
-          {values.map((symbol) => (
-            <span
-              className="inline-flex items-center gap-1 rounded bg-muted py-0.5 pr-1 pl-1.5 text-foreground text-xs tabular-nums"
-              key={symbol}
-            >
-              {symbol}
-              <button
-                aria-label={`Remove ${symbol}`}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-40"
-                disabled={values.length <= 1}
-                onClick={() => remove(symbol)}
-                type="button"
-              >
-                <IconX className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <InputGroup className="h-8 pointer-coarse:h-10">
-        <InputGroupInput
-          aria-label={`Add to ${label}`}
-          autoComplete="off"
-          onBlur={(event) => {
-            if (addFromInput(event.currentTarget.value)) {
-              event.currentTarget.value = "";
-            }
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.currentTarget.value = "";
-              return;
-            }
-            stopMenuKeys(event);
-            if (event.key === "Enter" || event.key === ",") {
-              event.preventDefault();
-              if (addFromInput(event.currentTarget.value)) {
-                event.currentTarget.value = "";
-              }
-            }
-          }}
-          placeholder={placeholder ?? "Add…"}
-        />
-      </InputGroup>
-      {error ? <p className="text-destructive text-xs">{error}</p> : null}
-    </div>
-  );
-}
-
 interface ConnectorTextConfigRowProps {
   config: Record<string, JsonValue>;
   configKey: string;
@@ -1006,26 +805,23 @@ interface ConnectorConfigEditorProps {
 
 /**
  * Live editor for one connector config field, replacing the old read-only
- * summary so a synced source's instruments can change after creation. `list`
- * fields get chips; editable `select` fields a dropdown; `creationOnly`
- * fields (e.g. asset type — schema-locked at create) show read-only; `text`
- * fields a single input.
+ * summary so a synced source's instruments can change after creation.
+ * `instrumentList` fields get per-row Stock/Crypto toggles; editable `select`
+ * fields get a dropdown; `creationOnly` fields show read-only; `text` fields
+ * get a single input.
  */
 function ConnectorConfigEditor({
   config,
   databaseId,
   field,
 }: ConnectorConfigEditorProps) {
-  if (field.kind === "list") {
-    const raw = config[field.key];
+  if (field.kind === "instrumentList") {
     return (
-      <SymbolListEditor
+      <InstrumentListConfigEditor
         config={config}
-        configKey={field.key}
         databaseId={databaseId}
-        label={field.label}
-        placeholder={field.placeholder}
-        values={Array.isArray(raw) ? raw.map(String) : []}
+        field={field}
+        key={JSON.stringify(config[field.key])}
       />
     );
   }
@@ -1109,7 +905,9 @@ function ConnectorSourceSubmenu({
           <InfoRow
             label="Last synced"
             value={
-              status.lastSyncedAt ? formatTimestamp(status.lastSyncedAt) : "—"
+              status.lastSyncedAt
+                ? formatMenuTimestamp(status.lastSyncedAt)
+                : "—"
             }
           />
         </div>
@@ -1185,11 +983,11 @@ function SourceSubmenu({ database, rowCount }: SourceSubmenuProps) {
           <InfoRow label="Rows" value={String(rowCount)} />
           <InfoRow
             label="Created"
-            value={formatTimestamp(database.createdAt)}
+            value={formatMenuTimestamp(database.createdAt)}
           />
           <InfoRow
             label="Updated"
-            value={formatTimestamp(database.updatedAt)}
+            value={formatMenuTimestamp(database.updatedAt)}
           />
         </div>
         <DropdownMenuSeparator />
@@ -1343,11 +1141,6 @@ export interface DatabaseSettingsMenuProps {
   /** Whether the hosting block currently hides the title row text. */
   hideTitle?: boolean;
   /**
-   * Runs AFTER `deleteDatabase` on confirm — lets the hosting block remove
-   * itself so a deleted database leaves no empty shell. Absent outside a block.
-   */
-  onDeleted?: () => void;
-  /**
    * Toggles the block's `hideTitle` prop. When absent (no block context to
    * write to) the "Hide title" switch row is not rendered.
    */
@@ -1362,8 +1155,8 @@ export interface DatabaseSettingsMenuProps {
  * The ⋯ trigger + dropdown for one database, mounted in the title row in edit
  * mode. The trigger reveals on title-row hover/focus on fine pointers and
  * stays visible on coarse pointers (`.hover-reveal` under the title's
- * `data-reveal-group`). Deleting only removes the database entity — blocks
- * are references and fall back to their "not found" empty state.
+ * `data-reveal-group`). Deleting removes the database entity and every linked
+ * `database` block that referenced it.
  */
 /** Fallback when a chart view's dataset hasn't been threaded in. */
 const EMPTY_CHART_DATA: ChartData = {
@@ -1377,23 +1170,26 @@ export function DatabaseSettingsMenu({
   chartData,
   database,
   hideTitle = false,
-  onDeleted,
   onHideTitleChange,
   onViewIdChange,
   rowCount,
 }: DatabaseSettingsMenuProps): ReactNode {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(database.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loadStats, setLoadStats] = useState<DatabaseLoadStats | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const { pages } = useMergedPageListItems();
+  const dispatchPage = usePageDispatch(pages);
 
   const commitRename = useCallback(() => {
     const trimmed = draftName.trim();
     if (trimmed !== "" && trimmed !== database.name) {
-      renameDatabase(database.id, trimmed);
+      const change = renameDatabase(database.id, trimmed);
+      navigateAfterDatabaseHubRename(navigate, change);
     }
-  }, [database.id, database.name, draftName]);
+  }, [database.id, database.name, draftName, navigate]);
 
   const handleOpenChange = useCallback(
     (
@@ -1438,11 +1234,12 @@ export function DatabaseSettingsMenu({
       setConfirmingDelete(true);
       return;
     }
-    deleteDatabase(database.id);
+    deleteDatabasesEverywhere({
+      databaseIds: [database.id],
+      dispatchPage,
+      pages,
+    });
     setOpen(false);
-    // Remove the now-empty hosting block (if any) so the deletion leaves no
-    // "not found" shell behind.
-    onDeleted?.();
   };
 
   const writeIcon = (nextIcon: string | undefined) => {
@@ -1594,11 +1391,11 @@ export function DatabaseSettingsMenu({
           ) : null}
           <StatRow
             label="Created at"
-            value={formatTimestamp(database.createdAt)}
+            value={formatMenuTimestamp(database.createdAt)}
           />
           <StatRow
             label="Last edited at"
-            value={formatTimestamp(database.updatedAt)}
+            value={formatMenuTimestamp(database.updatedAt)}
           />
         </div>
       </DropdownMenuContent>

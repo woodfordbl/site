@@ -2,6 +2,7 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { IconCheck, IconSearch } from "@tabler/icons-react";
 import { format } from "date-fns/format";
 import {
+  type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
   useCallback,
@@ -18,6 +19,7 @@ import {
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionCombobox } from "@/components/database/database-option-combobox.tsx";
 import { useFocusOnMount } from "@/components/database/use-focus-on-mount.ts";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
@@ -27,10 +29,12 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { InputGroupIconPicker } from "@/components/ui/input-group-icon-picker.tsx";
 import { useResolvedMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { localDatabaseRowsCollection } from "@/db/collections/local-collections.ts";
 import {
+  setDatabaseRowIcon,
   updateDatabaseCell,
   updateDatabaseField,
 } from "@/db/queries/database-collection-ops.ts";
@@ -52,9 +56,28 @@ import { cn } from "@/lib/utils.ts";
  * Inline cell editors, keyed by field type: a borderless input overlay for
  * text/url/number, popover editors for select/multi-select (searchable option
  * combobox with option creation) and date (calendar), and an in-place
- * checkbox toggle. All writes go through `updateDatabaseCell`; new select
- * options append to the field schema via `updateDatabaseField`.
+ * checkbox toggle. Primary (title) cells edit via {@link InputGroup} with an
+ * optional leading row-icon picker when the view shows page icons. All writes
+ * go through `updateDatabaseCell` / `setDatabaseRowIcon`; new select options
+ * append to the field schema via `updateDatabaseField`.
  */
+
+/**
+ * Primary-column title edit chrome: InputGroup, with a leading row-icon picker
+ * only when the view's `showPageIcons` toggle is on (`showIcon`).
+ */
+export interface PrimaryRowIconEdit {
+  /**
+   * Fallback glyph when the row has no override — typically the template icon
+   * or {@link DEFAULT_PAGE_ICON} via `resolveDatabaseRowIcon` with `icon`
+   * cleared.
+   */
+  fallbackIcon?: string;
+  /** Stored per-row icon override (`row.icon`); unset when inheriting. */
+  rowIcon?: string;
+  /** When false, omit the icon picker (icons hidden for this view). */
+  showIcon: boolean;
+}
 
 function initialDraft(
   field: DatabaseField,
@@ -81,6 +104,11 @@ interface DatabaseCellInlineEditorProps {
   onNavigate: (move: CellEditMove, from: CellEditTarget) => void;
   /** Leave edit mode without moving (blur commit, Escape revert). */
   onStopEdit: () => void;
+  /**
+   * Primary (title) column only — switches text editors to InputGroup chrome
+   * with an optional leading row-icon picker gated by `showIcon`.
+   */
+  rowIconEdit?: PrimaryRowIconEdit;
   rowId: string;
   value: DatabaseCellValue | undefined;
   /**
@@ -111,6 +139,7 @@ export function DatabaseCellInlineEditor({
   field,
   onNavigate,
   onStopEdit,
+  rowIconEdit,
   rowId,
   value,
   // Default to inline: surfaces that don't clip (row property panel) omit it.
@@ -151,6 +180,7 @@ export function DatabaseCellInlineEditor({
     default:
       // Number always edits inline; text/url edit inline unless the cell is
       // too narrow, in which case the aligned overflow popover gives room.
+      // Primary title cells only: InputGroup chrome (icon picker optional).
       if (field.type === "number" || width >= POPOVER_OVERFLOW_THRESHOLD_PX) {
         return (
           <TextCellInlineEditor
@@ -158,6 +188,7 @@ export function DatabaseCellInlineEditor({
             field={field}
             onNavigate={onNavigate}
             onStopEdit={onStopEdit}
+            rowIconEdit={rowIconEdit}
             rowId={rowId}
             value={value}
             width={width}
@@ -170,6 +201,7 @@ export function DatabaseCellInlineEditor({
           field={field}
           onNavigate={onNavigate}
           onStopEdit={onStopEdit}
+          rowIconEdit={rowIconEdit}
           rowId={rowId}
           value={value}
           width={width}
@@ -179,23 +211,106 @@ export function DatabaseCellInlineEditor({
 }
 
 /**
+ * True when focus is moving into the leading icon picker (or its portaled
+ * GlyphIconPicker popover) — blur must not commit/close the cell editor.
+ */
+function isFocusMovingToIconPicker(relatedTarget: EventTarget | null): boolean {
+  if (!(relatedTarget instanceof Element)) {
+    return false;
+  }
+  return Boolean(
+    relatedTarget.closest(
+      '[data-slot="input-group-icon-picker"], [data-slot="popover-content"]'
+    )
+  );
+}
+
+/**
+ * Primary-title InputGroup: name field plus optional leading row-icon picker
+ * (omitted entirely when `showIcon` is false — no blank icon slot).
+ */
+function PrimaryTitleInputGroup({
+  ariaLabel,
+  draft,
+  iconPickerOpen,
+  onBlur,
+  onDraftChange,
+  onIconPickerOpenChange,
+  onKeyDown,
+  rowIconEdit,
+  rowId,
+  inputRef,
+}: {
+  ariaLabel: string;
+  draft: string;
+  iconPickerOpen: boolean;
+  inputRef: (node: HTMLInputElement | null) => void;
+  onBlur: (event: FocusEvent<HTMLInputElement>) => void;
+  onDraftChange: (next: string) => void;
+  onIconPickerOpenChange: (open: boolean) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  rowIconEdit: PrimaryRowIconEdit;
+  rowId: string;
+}): ReactNode {
+  const fallbackIcon = (
+    <PageIconDisplay
+      className="[&_svg]:size-4"
+      icon={rowIconEdit.fallbackIcon}
+    />
+  );
+
+  return (
+    <InputGroup className="h-8 pointer-coarse:h-10 min-w-0">
+      {rowIconEdit.showIcon ? (
+        <InputGroupIconPicker
+          ariaLabel="Change page icon"
+          fallbackIcon={fallbackIcon}
+          icon={rowIconEdit.rowIcon}
+          onOpenChange={onIconPickerOpenChange}
+          onRemove={() => {
+            setDatabaseRowIcon(rowId, undefined);
+          }}
+          onSelect={(icon) => {
+            setDatabaseRowIcon(rowId, icon);
+          }}
+          open={iconPickerOpen}
+        />
+      ) : null}
+      <InputGroupInput
+        aria-label={ariaLabel}
+        autoComplete="off"
+        onBlur={onBlur}
+        onChange={(event) => onDraftChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        ref={inputRef}
+        type="text"
+        value={draft}
+      />
+    </InputGroup>
+  );
+}
+
+/**
  * Borderless input overlay filling the cell — number cells (right-aligned,
- * tabular) and text/url cells wide enough to type in place. Commits through
- * `updateDatabaseCell` on blur/Enter/Tab; Escape reverts without writing.
- * EditableSurface philosophy: native input, transparent chrome, no selection
- * ring on the cell. Narrow text/url cells route through
- * `TextCellPopoverEditor` instead so the editor escapes the cell's clip.
+ * tabular) and text/url cells wide enough to type in place. Primary title
+ * cells use InputGroup chrome instead. Commits through `updateDatabaseCell`
+ * on blur/Enter/Tab; Escape reverts without writing. Narrow text/url cells
+ * route through `TextCellPopoverEditor` instead so the editor escapes the
+ * cell's clip.
  */
 function TextCellInlineEditor({
   commitValueOverride,
   field,
   onNavigate,
   onStopEdit,
+  rowIconEdit,
   rowId,
   value,
 }: DatabaseCellInlineEditorProps): ReactNode {
   const initial = initialDraft(field, value);
   const [draft, setDraft] = useState(initial);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const iconPickerOpenRef = useRef(false);
   const focusOnMount = useFocusOnMount({ select: true });
   // Set once Enter/Tab/Escape handled the exit so the trailing blur is a no-op.
   const finishedRef = useRef(false);
@@ -244,6 +359,50 @@ function TextCellInlineEditor({
     }
   };
 
+  const handleBlur = (event: FocusEvent<HTMLInputElement>) => {
+    if (finishedRef.current) {
+      return;
+    }
+    if (
+      iconPickerOpenRef.current ||
+      isFocusMovingToIconPicker(event.relatedTarget)
+    ) {
+      return;
+    }
+    // Icon-picker open flips after mousedown→blur; defer so the open state
+    // can land before we commit/unmount.
+    window.setTimeout(() => {
+      if (finishedRef.current || iconPickerOpenRef.current) {
+        return;
+      }
+      finishedRef.current = true;
+      commit();
+      onStopEdit();
+    }, 0);
+  };
+
+  if (rowIconEdit) {
+    return (
+      <div className="absolute inset-0 z-10 flex items-center bg-background px-1">
+        <PrimaryTitleInputGroup
+          ariaLabel={field.name}
+          draft={draft}
+          iconPickerOpen={iconPickerOpen}
+          inputRef={focusOnMount}
+          onBlur={handleBlur}
+          onDraftChange={setDraft}
+          onIconPickerOpenChange={(open) => {
+            iconPickerOpenRef.current = open;
+            setIconPickerOpen(open);
+          }}
+          onKeyDown={handleKeyDown}
+          rowIconEdit={rowIconEdit}
+          rowId={rowId}
+        />
+      </div>
+    );
+  }
+
   return (
     <input
       aria-label={field.name}
@@ -287,21 +446,26 @@ function autosizeTextarea(el: HTMLTextAreaElement): void {
  * as the value overflows. Uses the Base UI primitive directly rather than the
  * shared `Popover` wrapper so it stays an aligned popover on touch devices too
  * (the wrapper swaps to a bottom drawer, which would break the alignment).
- * Commits on blur/Enter/Tab; Escape reverts. Enter commits and moves down —
- * these are single-line database strings, so newlines are never inserted.
+ * Primary title cells render InputGroup (+ optional icon picker) inside the
+ * popup. Commits on blur/Enter/Tab; Escape reverts. Enter commits and moves
+ * down — these are single-line database strings, so newlines are never inserted.
  */
 function TextCellPopoverEditor({
   commitValueOverride,
   field,
   onNavigate,
   onStopEdit,
+  rowIconEdit,
   rowId,
   value,
 }: DatabaseCellInlineEditorProps): ReactNode {
   const initial = initialDraft(field, value);
   const [draft, setDraft] = useState(initial);
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const iconPickerOpenRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   // Set once an exit path has run so the trailing blur/close is a no-op.
   const finishedRef = useRef(false);
 
@@ -316,6 +480,14 @@ function TextCellPopoverEditor({
       node.focus();
       node.select();
       autosizeTextarea(node);
+    }
+  }, []);
+
+  const initInput = useCallback((node: HTMLInputElement | null) => {
+    inputRef.current = node;
+    if (node) {
+      node.focus();
+      node.select();
     }
   }, []);
 
@@ -352,7 +524,9 @@ function TextCellPopoverEditor({
     onStopEdit();
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (
+    event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     if (event.key === "Enter") {
       event.preventDefault();
       finish("down");
@@ -369,6 +543,55 @@ function TextCellPopoverEditor({
     }
   };
 
+  const handleBlur = (event: FocusEvent<HTMLInputElement>) => {
+    if (
+      iconPickerOpenRef.current ||
+      isFocusMovingToIconPicker(event.relatedTarget)
+    ) {
+      return;
+    }
+    window.setTimeout(() => {
+      if (finishedRef.current || iconPickerOpenRef.current) {
+        return;
+      }
+      finish();
+    }, 0);
+  };
+
+  const editor = rowIconEdit ? (
+    <div className="p-1">
+      <PrimaryTitleInputGroup
+        ariaLabel={field.name}
+        draft={draft}
+        iconPickerOpen={iconPickerOpen}
+        inputRef={initInput}
+        onBlur={handleBlur}
+        onDraftChange={setDraft}
+        onIconPickerOpenChange={(open) => {
+          iconPickerOpenRef.current = open;
+          setIconPickerOpen(open);
+        }}
+        onKeyDown={handleKeyDown}
+        rowIconEdit={rowIconEdit}
+        rowId={rowId}
+      />
+    </div>
+  ) : (
+    <textarea
+      aria-label={field.name}
+      className="min-h-9 w-full resize-none bg-transparent px-2 py-2 text-foreground text-sm outline-none placeholder:text-muted-foreground"
+      onBlur={() => finish()}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        autosizeTextarea(event.currentTarget);
+      }}
+      onKeyDown={handleKeyDown}
+      ref={initTextarea}
+      rows={1}
+      value={draft}
+    />
+  );
+
   return (
     <>
       {/* Zero-height anchor at the cell's top edge → popover opens flush with it. */}
@@ -379,9 +602,10 @@ function TextCellPopoverEditor({
       />
       <PopoverPrimitive.Root
         onOpenChange={(open: boolean) => {
-          // Escape is handled on the textarea (reverting); any other dismissal
-          // (outside press) commits. `finishedRef` dedupes the trailing blur.
-          if (!open) {
+          // Escape is handled on the field (reverting); any other dismissal
+          // (outside press) commits. Keep open while the icon picker is up —
+          // its portal is outside the cell popover. `finishedRef` dedupes blur.
+          if (!(open || iconPickerOpenRef.current)) {
             finish();
           }
         }}
@@ -399,21 +623,9 @@ function TextCellPopoverEditor({
             <PopoverPrimitive.Popup
               className="overlay-popover-surface flex w-[max(var(--anchor-width),16rem)] max-w-[min(var(--available-width),32rem)] flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10"
               finalFocus={false}
-              initialFocus={textareaRef}
+              initialFocus={rowIconEdit ? inputRef : textareaRef}
             >
-              <textarea
-                aria-label={field.name}
-                className="min-h-9 w-full resize-none bg-transparent px-2 py-2 text-foreground text-sm outline-none placeholder:text-muted-foreground"
-                onBlur={() => finish()}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  autosizeTextarea(event.currentTarget);
-                }}
-                onKeyDown={handleKeyDown}
-                ref={initTextarea}
-                rows={1}
-                value={draft}
-              />
+              {editor}
             </PopoverPrimitive.Popup>
           </PopoverPrimitive.Positioner>
         </PopoverPrimitive.Portal>

@@ -30,7 +30,12 @@ function isNestedRowShellTarget(
   );
 }
 
-function isOverclickZone(target: Element): boolean {
+function isOverclickZone(root: HTMLElement, target: Element): boolean {
+  // Scroll-root padding (`pb-[50vh]` / `md:pb-12`) is outside the drop zone —
+  // the event target is the root itself when that empty band is clicked.
+  if (target === root) {
+    return true;
+  }
   return (
     target.closest("[data-canvas-drop-zone]") !== null ||
     target.closest("[data-column-content]") !== null ||
@@ -80,7 +85,7 @@ export function useCanvasOverclick(
         return;
       }
 
-      if (!isOverclickZone(target)) {
+      if (!isOverclickZone(root, target)) {
         return;
       }
 

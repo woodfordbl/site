@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu.tsx";
 import {
   addDatabaseField,
-  insertDatabaseRow,
+  addDatabaseRow,
   reorderDatabaseRow,
   updateDatabaseCell,
   updateDatabaseView,
@@ -597,13 +597,20 @@ export function DatabaseBoardView({
   }, [columnSort, groupField, hiddenColumnIds, hideEmptyColumns, rows]);
 
   const isSyncedDatabase = database.source?.kind === "connector";
+  const isLiveMarkets =
+    database.source?.kind === "connector" &&
+    database.source.connectorId === "live-markets";
   // Synced-field boards are read-only: the sync engine owns the group
-  // field's values, so a drop would be reverted on the next sync pass.
+  // field's values, so a drop would be reverted on the next sync pass —
+  // except live-markets Asset class, which rewrites the watchlist.
   const canDrag =
-    mode === "edit" && groupField !== null && !isSyncedField(groupField);
+    mode === "edit" &&
+    groupField !== null &&
+    (!isSyncedField(groupField) ||
+      (isLiveMarkets && groupField.sourceKey === "assetClass"));
   // Manual reorder only without sorts — sorted views own intra-column order.
   const allowReorder = !view.sorts || view.sorts.length === 0;
-  const canAddRow = mode === "edit" && !isSyncedDatabase;
+  const canAddRow = mode === "edit" && (!isSyncedDatabase || isLiveMarkets);
 
   // Latest render state in refs so drop resolution never closes over stale
   // columns/rows mid-drag.
@@ -682,7 +689,10 @@ export function DatabaseBoardView({
       // (the empty column inserts a blank row) — mirrors the grid's
       // per-group add.
       const lastRow = column.rows.at(-1);
-      const row = insertDatabaseRow(database.id, { after: lastRow?.id });
+      const row = addDatabaseRow(database.id, { after: lastRow?.id });
+      if (!row) {
+        return;
+      }
       const field = groupFieldRef.current;
       if (field && column.value !== null) {
         updateDatabaseCell(row.id, field.id, column.value);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useLoaderData } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { TablerGlyph } from "@/components/pages/tabler-glyph.tsx";
 import { DEFAULT_PAGE_ICON, decodePageIcon } from "@/lib/pages/page-icon.ts";
 import {
@@ -11,6 +12,11 @@ import { cn } from "@/lib/utils.ts";
 
 export interface PageIconDisplayProps {
   className?: string;
+  /**
+   * Replaces the default file icon when `icon` is empty. Database hubs pass
+   * `IconDatabase` so breadcrumbs match the sidebar and title chrome.
+   */
+  fallback?: ReactNode;
   icon?: string;
 }
 
@@ -40,7 +46,11 @@ function TablerPageIcon({
   );
 }
 
-export function PageIconDisplay({ className, icon }: PageIconDisplayProps) {
+export function PageIconDisplay({
+  className,
+  fallback,
+  icon,
+}: PageIconDisplayProps) {
   const { sidebarTablerGlyphs } = useLoaderData({ from: "__root__" });
   const decoded = decodePageIcon(icon);
 
@@ -72,7 +82,7 @@ export function PageIconDisplay({ className, icon }: PageIconDisplayProps) {
           preloadedGlyph={sidebarTablerGlyphs[decoded.name]}
         />
       ) : (
-        <DEFAULT_PAGE_ICON aria-hidden />
+        (fallback ?? <DEFAULT_PAGE_ICON aria-hidden />)
       )}
     </span>
   );

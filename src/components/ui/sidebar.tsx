@@ -255,24 +255,36 @@ function SidebarTrigger({
   onClick,
   ...props
 }: ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar();
+  const { isNarrowViewport, openMobile, state, toggleSidebar } = useSidebar();
+  const actionLabel = (isNarrowViewport ? openMobile : state === "expanded")
+    ? "Close sidebar"
+    : "Open sidebar";
 
   return (
-    <Button
-      className={cn(className)}
-      data-sidebar="trigger"
-      data-slot="sidebar-trigger"
-      onClick={(event) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
-      size="icon-sm"
-      variant="ghost"
-      {...props}
-    >
-      <IconLayoutSidebar aria-hidden />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            aria-label={actionLabel}
+            className={cn(className)}
+            data-sidebar="trigger"
+            data-slot="sidebar-trigger"
+            onClick={(event) => {
+              onClick?.(event);
+              toggleSidebar();
+            }}
+            size="icon-sm"
+            variant="ghost"
+            {...props}
+          >
+            <IconLayoutSidebar aria-hidden />
+          </Button>
+        }
+      />
+      <TooltipContent command="toggle-sidebar" side="bottom">
+        {actionLabel}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -18,7 +18,7 @@ Schemas in [`database.ts`](../../src/lib/schemas/database.ts):
 | `LocalDatabase` | `id`, `name`, `slug?` (URL leaf under host; else slugified name), `icon?`, `primaryFieldId`, `source?` (`local` \| `connector` `{connectorId, config, refreshMs?}`), `fields[]`, `views[]`, `rowDefaults?`, `rowPropertiesPlacement?` (`panel` \| `top`; default `top`), `rowPropertiesVisibleFieldIds?` (which non-primary fields appear on row pages — independent of per-view `visibleFieldIds`), timestamps |
 | `DatabaseField` | Discriminated union on `type`: `text`, `number` (display config: `format` plain/integer/percent/currency, `decimals?` 0-6 fixed fraction digits, `useGrouping?` thousands separators — absent = on), `checkbox`, `select`/`multiSelect` (options `{id,name,color?}`), `date` (`format?` default/long/relative/iso; `relative` cells re-render on the table view's minute clock tick, and fall back to the default display in Calculate-row aggregates), `url`, `formula` (`expression`), `relation` (`targetDatabaseId` — cells store target-row id arrays). All display-only — stored values unchanged. Stable `id` — renames never rewrite rows. `sourceKey?` marks a connector-synced column |
 | `LocalDatabaseRow` | `id`, `databaseId`, sparse `values: Record<fieldId, CellValue>`, sparse manual `order`, lazy `pageId`, optional `icon` (light override; no seed), `externalId?` (connector row identity), timestamps |
-| `DatabaseView` | `type: "table"`, `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `advancedFilter?` (ONE boolean formula filtering rows — see the filter bar bullet under [Table view](#table-view)), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
+| `DatabaseView` | `type: "table" \| "list" \| "board" \| "chart"`, optional `icon?` (emoji/`tabler:` glyph; unset → type glyph in tabs/menus), `filter?` (two-level and/or grammar; date conditions add `between` — value `[startIso, endIso]`, inclusive, swapped bounds normalized — plus valueless relative windows `pastDay/pastWeek/pastMonth/pastYear/thisWeek/thisMonth/nextWeek/nextMonth` computed from local "today" (`relativeDateWindow` in `row-filter.ts` documents the exact bounds; weeks start Sunday per date-fns defaults) — the table view's minute clock tick re-runs `applyFilter` while a relative operator is active), `advancedFilter?` (ONE boolean formula filtering rows — see the filter bar bullet under [Table view](#table-view)), `sorts?`, `visibleFieldIds?`, `config` (column order/widths, `pinnedFieldIds`, `calculations`, `wrapFieldIds`, `rowSelectDisplay` `always`/`hover`/`number`) |
 
 Invariants: every database has exactly one primary (title-like) field —
 `removeDatabaseField` refuses it; cell values are field-typed with `null`/missing = empty;
@@ -65,7 +65,7 @@ All writes are single explicit-commit transactions
 [`database-collection-ops.ts`](../../src/db/queries/database-collection-ops.ts)
 (database create/rename/delete, row insert/reorder/duplicate/delete with midpoint-then-renumber
 sparse ordering, cell merge, field add/update/remove/duplicate with full view-reference
-stripping, view patches). `duplicateDatabaseRows` clones local rows (skips synced
+stripping, view patches / `reorderDatabaseViews`). `duplicateDatabaseRows` clones local rows (skips synced
 `externalId` rows and never copies `pageId`/`externalId`). Live reads:
 [`use-database.ts`](../../src/db/queries/use-database.ts) (`useDatabase`,
 `useDatabaseRows` — declarative `eq` so the index serves the query).
@@ -79,6 +79,57 @@ windows read an injectable clock, `RowFilterOptions.now`), type-aware sorting wi
 resolution (`view-config.ts`), row-page materialization (`materialize-row-page.ts` —
 `ensureDatabaseRowPage`, shared by the row page and grid row menu), and the default seed
 (`database-defaults.ts`).
+
+## Deleting a database
+
+Every destructive surface routes through one helper,
+[`deleteDatabasesEverywhere`](../../src/lib/databases/delete-database-everywhere.ts),
+so a database never survives in one sidebar surface after being deleted from
+another. Per database it:
+
+1. Deletes the pages that exist only to host it — the hub page
+   (`databaseSource`) and every materialized row page (`databaseRowSource`).
+   [`resolveDatabaseOwnedPageDeleteRoots`](../../src/lib/databases/database-owned-pages.ts)
+   reduces that set to its roots because `page.delete` already cascades
+   descendants (and deleting a hard-deleted page twice would re-insert it as a
+   tombstone). The `page.delete` dispatch also strips `pageLink` blocks
+   pointing at those pages via `deletePageLinkReferences`.
+2. Deletes the definition, its rows, captured field history, and the row
+   template ([`deleteDatabase`](../../src/db/queries/database-collection-ops.ts));
+   a seeded shipped database is tombstoned so the seeder never resurrects it.
+3. Strips every linked `database` block that referenced that `databaseId` from
+   every page
+   ([`deleteDatabaseBlockReferences`](../../src/lib/databases/delete-database-block-references.ts)):
+   local shards are rewritten via
+   [`applyPageBlockDiff`](../../src/db/queries/block-collection-ops.ts) and
+   never-edited shipped hosts are seeded locally with the cleaned content —
+   the same shape as the
+   [`deletePageLinkReferences`](../../src/lib/pages/delete-page-link-references.ts)
+   cascade on `page.delete`. Pages left without a trailing empty text row are
+   normalized via `normalizeEditablePageBlocks`.
+
+Steps 2 and 3 clear both sidebar surfaces: the workspace **Databases** section
+reads the definitions collection, and the hosted-database child rows read
+`database` blocks per host page. The delete is **not** undoable, so every entry
+point confirms first:
+
+| Entry point | Confirmation |
+|-------------|--------------|
+| Sidebar row ⋯ / right-click (workspace **Databases** section and hosted rows) | [`DeleteDatabaseConfirmDialog`](../../src/components/pages/delete-database-confirm-dialog.tsx); navigates home when the deleted hub was active |
+| Database ⋯ settings menu → **Delete database** | Two-step menu item |
+| Canvas `database` block — gutter menu Delete, mobile actions drawer, Delete/Backspace on a selected block | [`DatabaseBlockDeleteDialog`](../../src/components/canvas/database-block-delete-dialog.tsx) |
+
+Canvas deletes are intercepted in
+[`page-canvas-editor.tsx`](../../src/components/canvas/page-canvas-editor.tsx),
+which wraps both `deleteRow` and `deleteSelection` — the same seam the nested
+`pageLink` "Delete page?" confirmation uses.
+[`resolveDeletedDatabaseIds`](../../src/lib/databases/resolve-database-block-deletion.ts)
+walks the rows about to be removed **and everything nested under them** (a
+selected `columns` container can hold a linked view) and returns the distinct
+linked `databaseId`s; unlinked placeholder blocks resolve to nothing and delete
+silently. On confirm the canvas rows are removed first, then the cascade runs —
+so linked views of the same database on other pages disappear too. Hub and row
+URLs already render a not-found shell once the definition is gone.
 
 ## Table view
 
@@ -101,12 +152,23 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   that category is still empty — adding expands the inline bar automatically.
 - [`database-view-switcher.tsx`](../../src/components/database/database-view-switcher.tsx) —
   saved-view tabs in the title row: `TabsList` **`indicator`** variant, one compact tab
-  per view (type icon + name, truncated), horizontally scrollable on overflow. Edit mode
-  appends a "+" opening the Add-view menu (Table/List/Board/Chart), which creates via
-  `addDatabaseView` (per-type defaults: board adopts the first select field as
-  `groupFieldId`; chart starts `bar`/`count` over the first select-or-date field; names
-  dedupe with a numeric suffix) and activates the new view. View mode is switch-only and
-  hides the tabs entirely for single-view databases.
+  per view (optional `view.icon` emoji/`tabler:` glyph, else type icon + name, truncated),
+  horizontally scrollable on overflow. Tab order is the database document's `views[]`
+  array index (no separate order field). Edit mode appends a "+" opening the Add-view menu
+  (Table/List/Board/Chart), which creates via `addDatabaseView` (per-type defaults: board
+  adopts the first select field as `groupFieldId`; chart starts as a time-axis `line` over
+  the first captured numeric field — `xMode: "time"` + `timeSeries.fieldId`, so a synced
+  price database charts price over time on the first try — falling back to `bar`/`count`
+  over the first select-or-date field when nothing is captured; names dedupe with a
+  numeric suffix) and activates the new view. Edit-mode tabs also open a right-click
+  context menu ([`database-view-menu.tsx`](../../src/components/database/database-view-menu.tsx))
+  matching the Views submenu: rename, change/clear icon, Duplicate, Delete (last view
+  guarded), and support drag-reorder via the shared DnD toolkit (`DndSurface` +
+  `useDragSource` with a 50ms hold-to-grab, x-axis touch lock so vertical scroll wins;
+  drop commits through `reorderDatabaseViews`; `bg-selection-primary` boundary line;
+  50% opacity source + overlay preview). Left-click still activates; a completed drag
+  suppresses the trailing tab click so the active `viewId` stays put. View mode is
+  switch-only (no reorder) and hides the tabs entirely for single-view databases.
 - [`database-table-grid.tsx`](../../src/components/database/database-table-grid.tsx) —
   TanStack Table in **fully manual mode** (core row model only; data computation stays in
   the lib layer) + TanStack Virtual rows (36px, overscan 12, `max-h-[600px]` scrollport via
@@ -170,9 +232,14 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   **Column resizing** ([`use-database-column-resize.ts`](../../src/components/database/use-database-column-resize.ts) +
   [`database-column-resize-zone.tsx`](../../src/components/database/database-column-resize-zone.tsx)):
   edge hit zones (wider on coarse pointers, `touch-none` scoped to the zone), hover-reveal
-  `bg-primary` dividers scoped to each zone's own `data-reveal-group` (300ms delay —
+  `w-1 bg-selection-primary` dividers scoped to each zone's own `data-reveal-group` (300ms delay —
   not the whole grid, so hovering the table does not light every boundary), live rAF widths committed to `view.config.columnWidths`,
-  double-click/tap reset. **Header drag-reorder**
+  double-click/tap reset. Checkbox property columns default to the ordinary text-column
+  width (type icon + property name, left-aligned) and may resize down to
+  [`CHECKBOX_COLUMN_WIDTH_PX`](../../src/components/database/database-grid-helpers.ts)
+  (32px — same footprint as the select gutter; compact headers use `px-1` around
+  the centered type icon — below the text-column floor); at that compact width the
+  header centers the type icon only. **Header drag-reorder**
   ([`use-database-column-drag.ts`](../../src/components/database/use-database-column-drag.ts) +
   [`database-column-dnd.tsx`](../../src/components/database/database-column-dnd.tsx)):
   press-threshold drag on fine pointers (click still opens the menu, on release),
@@ -195,6 +262,12 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   multi-toggle — no create-row affordance in v1), Tab/Enter navigation
   (`nextEditTarget` in
   [`database-grid-helpers.ts`](../../src/components/database/database-grid-helpers.ts)).
+  Primary (title) cells edit via shared
+  [`InputGroup`](../../src/components/ui/input-group.tsx) chrome with an optional
+  leading [`InputGroupIconPicker`](../../src/components/ui/input-group-icon-picker.tsx)
+  that writes `row.icon` through `setDatabaseRowIcon` — the picker is omitted when
+  the view hides page icons (`config.showPageIcons === false`); non-primary text
+  cells keep the borderless input.
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —
   Column property menu: rename, Edit property (per-type config incl. select-option
   rename/add/delete and color via the shared block-color palette,
@@ -249,10 +322,10 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   [`use-list-reorder.ts`](../../src/components/database/use-list-reorder.ts) — the field
   name with a Title badge beside the primary field, and hide/show + delete
   (`removeDatabaseField`) controls on non-primary rows), Views
-  (inline rename with type icon, per-view Duplicate — `duplicateDatabaseView`, "<name>
-  copy" activated on create — and Delete, disabled on the last view and refused at the op
-  level by `removeDatabaseView`; plus the Add-view entries shared with the switcher's
-  "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
+  (inline rename with icon picker — optional `view.icon`, else type glyph; per-view
+  Duplicate — `duplicateDatabaseView`, "<name> copy" activated on create — and Delete,
+  disabled on the last view and refused at the op level by `removeDatabaseView`; plus the
+  Add-view entries shared with the switcher's "+"), Hide title switch (block prop `hideTitle`, per placement), Vertical separators
   and Page icons switches (table views only — `showVerticalLines` / `showPageIcons` on the
   active view, both absent = shown; **Row select** submenu sets `rowSelectDisplay`:
   Always show / Show on hover / Show number), Source section (local info, or the connector sync controls
@@ -261,12 +334,8 @@ resolution (`view-config.ts`), row-page materialization (`materialize-row-page.t
   rows, plus Size — the row shard's UTF-8 byte size — and "Loads in" — the shard's
   JSON parse time measured fresh on each menu open). The per-view sections (Properties
   visibility, Group, Vertical separators) all write to the ACTIVE view threaded from the
-  title row — never `views[0]`. **Delete database** (`deleteDatabase`) removes the
-  definition + rows, then invokes the block's `onDeleted` hook so the hosting `database`
-  block removes ITSELF through the canvas command bus (an undoable `row.delete`) rather
-  than leaving a "not found" shell — a deleted database has nothing to render. Blocks
-  referencing a database deleted elsewhere (another block/tab) show a "This database was
-  deleted." state with a **Remove** action (edit mode) instead of a bare message.
+  title row — never `views[0]`. **Delete database** runs the shared
+  [`deleteDatabasesEverywhere`](#deleting-a-database) cascade.
 
 ### Per-view options (in the ⋯ menu)
 
@@ -300,7 +369,18 @@ Synced databases pull rows from an external service via the client-side engine i
 election, per-database scheduling clamped to connector minimums, push-based
 `subscribeSyncStatus`, and **watch mode** — see below) over the connector SDK in
 [`src/lib/connectors/`](../../src/lib/connectors/) (registry `listConnectors`/
-`getConnector`; GitHub repos/pull requests/issues, CoinGecko markets, Frankfurter FX).
+`getConnector`; GitHub repos/pull requests/issues, Frankfurter FX, and the unified
+**Stocks and Crypto** connector — CoinGecko + Binance for crypto, Finnhub quote/
+`profile2` (company name + float / shares outstanding) + Yahoo candles for equities).
+Price is a number column with `captureHistory` (latest in the row; `{ t, v }` series
+in IndexedDB). **Float** (circulating supply / shares outstanding) is poll-only.
+**Market cap** is derived as Float × Price (seeded on poll, refreshed on stream ticks
+when float is known). **Change** is seeded from the provider, then refined to a
+rolling 24h series pct once
+[`ensureSeriesCoverage`](../../src/lib/databases/ensure-series-coverage.ts)
+backfills missing history via `fetchHistory` (shared with time-axis charts —
+see [`use-time-series-chart-data.ts`](../../src/lib/databases/use-time-series-chart-data.ts)
+and [`use-live-markets-derived.ts`](../../src/lib/databases/use-live-markets-derived.ts)).
 Snapshot diffing lives
 in [`database-sync-ops.ts`](../../src/db/queries/database-sync-ops.ts): keyed by
 `externalId`, touching only `sourceKey` field values so local columns survive refreshes.
@@ -314,8 +394,9 @@ UI surfaces:
   — search-first single-select; links the block to an existing id without creating a
   database), and **Synced** tabs. The synced tab lists
   connector cards (icon/title/description from the registry); picking one renders a form
-  generated from `configFields` ("list" inputs parse comma/newline-separated values;
-  empty text inputs are omitted so schema defaults apply), validated by the connector's
+  generated from `configFields` (`"instrumentList"` inputs — Stocks and Crypto — are one
+  ticker per row with a Stock / Crypto toggle; empty text inputs are omitted so schema
+  defaults apply), validated by the connector's
   zod `configSchema` with inline `FieldError`s. Connectors with `auth` add a masked token
   input persisted via [`token-store.ts`](../../src/lib/connectors/token-store.ts)
   (client-only localStorage — never in the database config). Submit builds
@@ -340,7 +421,8 @@ UI surfaces:
   message tooltip on error, tiny muted refresh glyph when idle+healthy. Click =
   `requestImmediateSync` ("Refresh now" tooltip); a refused click (follower tab —
   leader-only by design) switches the chip to a no-op look.
-- **Settings → Source** — connector identity + config summary, last sync/error, Refresh
+- **Settings → Source** — connector identity + live config editors (instrument rows for
+  Stocks and Crypto, chips for plain lists, selects/text), last sync/error, Refresh
   now, refresh-interval override submenu (Default/1m/5m/15m/1h/6h → `updateDatabaseSource`
   writes `source.refreshMs`; connectors clamp to their minimum), and the token row for
   auth connectors.
@@ -355,8 +437,15 @@ UI surfaces:
   `decimals`, `useGrouping` — presentation is local; stored cell values stay
   provider-owned and are never overwritten by sync). Formula expression and select
   option editors stay hidden on synced columns. Add-field stays enabled on synced tables
-  (local columns are first-class); the "New row" strip is hidden, and `deleteDatabaseRows`
-  skips rows with `externalId` (they would respawn on the next sync).
+  (local columns are first-class). For most connectors the "New row" strip is hidden and
+  `deleteDatabaseRows` skips rows with `externalId` (they would respawn on the next sync).
+  **Stocks and Crypto (`live-markets`) exception** — Symbol and Asset class stay
+  editable (`isLiveMarketIdentityField`); edits rewrite `source.config.instruments` via
+  `commitLiveMarketIdentity` and trigger a sync pass so derived fields refresh. **New
+  row** inserts a pending blank row (Asset class defaults to equity; Symbol focused);
+  committing a valid symbol appends the instrument. Grid delete uses
+  `deleteLiveMarketRows` (drops the ticker from the watchlist); duplicate stays disabled.
+  Other connectors are unchanged.
 
 ## Formula fields
 
@@ -495,8 +584,8 @@ keystrokes inside grid cells must never delete the block. A linked block mounts
 whole page render — and shipped pages DO server-render database blocks now. An unlinked block shows the
 shared placeholder trigger opening the creation popover (New / Linked / Synced —
 see [Connector sync](#connector-sync)); it auto-opens on block autofocus, mirroring the
-media/embed pickers. Deleting a database block does **not**
-delete the database entity (blocks are references; entity lifecycle UI is future work).
+media/embed pickers. Deleting a linked database block **deletes the database
+entity** after a confirmation — see [Deleting a database](#deleting-a-database).
 `props.viewId` holds the block's saved-view pick (absent/stale → first view): the edit
 component persists switcher changes through `onChange`, the view component passes
 `viewId` read-only — several blocks can show DIFFERENT views of the SAME database.
@@ -534,11 +623,35 @@ renders [`DatabaseHubPage`](../../src/components/database/database-hub-page.tsx)
 for hub paths. A **hub** `LocalPage` (`databaseSource: { databaseId }`) is
 created on open under the host
 ([`ensureDatabaseHubPage`](../../src/lib/databases/ensure-database-hub-page.ts))
-with a linked `database` block as its body, then rendered through normal
-[`PageWorkspace`](../../src/components/pages/page-workspace.tsx) — same cover,
-title, header menu, and page settings as any other page. Optional persisted
+with a ghost linked `database` block (stores `viewId` only — never shown as a
+canvas row). The hub renders through
+[`PageWorkspace`](../../src/components/pages/page-workspace.tsx) with a
+`bodySlot` full-page
+[`DatabaseTableView`](../../src/components/database/database-table-view.tsx)
+(`fillHeight`, `hideTitle`) — no canvas editor and no other blocks. Page icon
+and title are the database’s
+([`HubPageTitleSlot`](../../src/components/database/hub-page-title-slot.tsx)
+writes through `setDatabaseName` while typing / `renameDatabase` on blur and
+`setDatabaseIcon`, which mirror onto hub page metadata; slug commits on blur
+use router `navigate({ replace: true })` via
+[`navigateAfterDatabaseHubRename`](../../src/lib/databases/navigate-after-database-rename.ts),
+and `/p/$` keeps rendering the id-fallback page while the splat still lags
+(so the collection update cannot flash not-found before navigate rematches). Cover and header menu match any other page. Optional persisted
 `database.slug` (else `slugifyPageSegment(name)`) forms the leaf segment.
-Legacy `/db/$databaseId` URLs client-redirect to the slug path.
+Legacy `/db/$databaseId` URLs client-redirect to the slug path. Linked/inline
+`database` blocks on normal pages stay canvas blocks.
+
+**Host page resolution**
+([`findDatabaseHostPageId`](../../src/lib/databases/resolve-database-host-page.ts))
+skips pages marked `databaseSource` / `databaseRowSource`. The hub keeps a
+ghost linked `database` block for `viewId` persistence, so treating it as a
+host candidate would let a UUID hub id win over a shipped host like `home` —
+and the row slug path (`{host}/{db}/{row}`) would stop resolving the moment
+the hub seeded mid-open. When only the hub remains (host block deleted), the
+hub's parent is used so slug paths stay stable. Splat routes also wait for
+[`useShippedDatabasesSettled`](../../src/lib/databases/shipped-databases-settled.ts)
+before throwing not-found for unresolved slugs, so a cold load of a shipped
+database path never 404s while the seed pass is still in flight.
 
 **Sidebar navigation:** two entry points open the same hub path:
 
@@ -551,8 +664,16 @@ Both are client-only (SSR-safe snapshot hooks — never `useLiveQuery` on the
 sidebar). Each row is a shared
 [`DatabaseSidebarRow`](../../src/components/pages/database-sidebar-row.tsx):
 click opens the hub slug path; right-click / ⋯ offer Rename, Change icon, and
-Delete. Hub pages and materialized row pages stay out of the Pages tree
-(`databaseSource` / `databaseRowSource`).
+Delete. Hosted (per-page) rows can be drag-nested onto another page in the
+Pages tree — [`moveDatabaseHost`](../../src/lib/databases/move-database-host.ts)
+strips the database's blocks from non-owned hosts, appends one on the new host,
+and reparents the hub so `{host}/{db}` URLs follow. When the open tab is on that
+hub or a row under it, [`PageList`](../../src/components/pages/page-list.tsx)
+router-navigates via [`resolveSlugPrefixRedirect`](../../src/lib/pages/resolve-slug-prefix-redirect.ts).
+The workspace **Databases**
+section is outside the page-list DnD surface and is not draggable. Hub pages
+and materialized row pages stay out of the Pages tree (`databaseSource` /
+`databaseRowSource`).
 
 ## Row pages (slug paths + seed-on-open)
 
@@ -602,7 +723,17 @@ explicitly set. The editor header edits **row defaults**
 `useRowPageWorkspaceChrome` /
 [`row-properties-rail.tsx`](../../src/components/database/row-page/row-properties-rail.tsx);
 placement is `database.rowPropertiesPlacement` (`top` under the title
-by default, or `panel` side rail). Row-page show/hide writes
+by default, or `panel` side rail). While the band renders under the title, the
+same hook returns `topLevelBlockAlign: "content-edge"`, which every row-page
+surface passes into `PageWorkspace` / `CanvasBlocksReadOnly` so the page's
+top-level canvas blocks anchor to the content column's left edge — body text
+lines up with the property rows instead of the page title text, and the block
+gutter moves fully into the scroll padding
+([`resolveTopLevelRowAlign`](../../src/lib/canvas/top-level-row-align.ts), see
+[canvas-editor](./canvas-editor.md#page-footer)). Side-panel placement and a
+template whose database has only the primary field (no band) keep the ordinary
+title-text alignment; narrow viewports are flush either way (the title indent is
+`md:` only). Row-page show/hide writes
 `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of per-view
 `visibleFieldIds`). Database rename + hub subtree slug cascade live in
 [`database-page-ops.ts`](../../src/db/queries/database-page-ops.ts) (re-exported

@@ -12,6 +12,65 @@ import { inlineMarkTypeSchema } from "@/lib/schemas/rich-text.ts";
 
 export const INLINE_MARK_TYPES = inlineMarkTypeSchema.options;
 
+/** Optional link destination fields carried on `link` marks. */
+export function linkMarkExtras(
+  mark: Pick<InlineMark, "href" | "pageId">
+): Pick<InlineMark, "href" | "pageId"> {
+  return {
+    ...(mark.href === undefined ? {} : { href: mark.href }),
+    ...(mark.pageId === undefined ? {} : { pageId: mark.pageId }),
+  };
+}
+
+function linksMatch(a: InlineMark, b: InlineMark): boolean {
+  return a.href === b.href && a.pageId === b.pageId;
+}
+
+interface MarkRange {
+  end: number;
+  start: number;
+}
+
+function subtractRange(piece: MarkRange, cut: MarkRange): MarkRange[] {
+  if (cut.end <= piece.start || cut.start >= piece.end) {
+    return [piece];
+  }
+  const rest: MarkRange[] = [];
+  if (piece.start < cut.start) {
+    rest.push({ start: piece.start, end: cut.start });
+  }
+  if (piece.end > cut.end) {
+    rest.push({ start: cut.end, end: piece.end });
+  }
+  return rest;
+}
+
+/**
+ * Inline page links are atomic runs: a styling mark either covers a whole page
+ * link or stops at its edges. Partial coverage is clipped away, so a page link
+ * never splits into two chrome-bearing anchors when the user bolds across it.
+ */
+function clipToPageLinkRuns(
+  mark: InlineMark,
+  runs: readonly MarkRange[]
+): InlineMark[] {
+  if (mark.type === "link") {
+    return [mark];
+  }
+  let pieces: MarkRange[] = [{ start: mark.start, end: mark.end }];
+  for (const run of runs) {
+    if (mark.start <= run.start && mark.end >= run.end) {
+      continue;
+    }
+    pieces = pieces.flatMap((piece) => subtractRange(piece, run));
+  }
+  return pieces.map((piece) => ({
+    type: mark.type,
+    start: piece.start,
+    end: piece.end,
+  }));
+}
+
 /** Sort, clamp to `textLength`, drop empties, merge same-type overlaps. */
 export function normalizeInlineMarks(
   marks: readonly InlineMark[],
@@ -22,18 +81,27 @@ export function normalizeInlineMarks(
       type: mark.type,
       start: Math.max(0, Math.min(mark.start, textLength)),
       end: Math.max(0, Math.min(mark.end, textLength)),
-      ...(mark.href === undefined ? {} : { href: mark.href }),
+      ...linkMarkExtras(mark),
     }))
     .filter((mark) => mark.start < mark.end)
     .sort((a, b) => a.start - b.start || a.end - b.end);
 
+  const pageLinkRuns = clamped
+    .filter((mark) => mark.type === "link" && mark.pageId !== undefined)
+    .map((mark) => ({ start: mark.start, end: mark.end }));
+  const clipped = (
+    pageLinkRuns.length === 0
+      ? clamped
+      : clamped.flatMap((mark) => clipToPageLinkRuns(mark, pageLinkRuns))
+  ).sort((a, b) => a.start - b.start || a.end - b.end);
+
   const merged: InlineMark[] = [];
-  for (const mark of clamped) {
+  for (const mark of clipped) {
     let previous: InlineMark | undefined;
     for (let i = merged.length - 1; i >= 0; i -= 1) {
-      // Links only merge with an adjoining link of the *same* href — two
-      // different destinations must stay distinct runs.
-      if (merged[i]?.type === mark.type && merged[i]?.href === mark.href) {
+      // Links only merge with an adjoining link of the *same* href/pageId —
+      // two different destinations must stay distinct runs.
+      if (merged[i]?.type === mark.type && linksMatch(merged[i], mark)) {
         previous = merged[i];
         break;
       }
@@ -60,7 +128,7 @@ export function sliceInlineMarks(
         type: mark.type,
         start: Math.max(mark.start, start) - start,
         end: Math.min(mark.end, end) - start,
-        ...(mark.href === undefined ? {} : { href: mark.href }),
+        ...linkMarkExtras(mark),
       })),
     end - start
   );
@@ -80,7 +148,7 @@ export function concatInlineMarks(
         type: mark.type,
         start: mark.start + aLength,
         end: mark.end + aLength,
-        ...(mark.href === undefined ? {} : { href: mark.href }),
+        ...linkMarkExtras(mark),
       })),
     ],
     totalLength
@@ -127,18 +195,21 @@ export function removeMarkFromRange(
   textLength: number
 ): InlineMark[] {
   const next: InlineMark[] = [];
-  const carryHref = (mark: InlineMark) =>
-    mark.href === undefined ? {} : { href: mark.href };
   for (const mark of marks) {
     if (mark.type !== type || mark.end <= start || mark.start >= end) {
       next.push(mark);
       continue;
     }
     if (mark.start < start) {
-      next.push({ type, start: mark.start, end: start, ...carryHref(mark) });
+      next.push({
+        type,
+        start: mark.start,
+        end: start,
+        ...linkMarkExtras(mark),
+      });
     }
     if (mark.end > end) {
-      next.push({ type, start: end, end: mark.end, ...carryHref(mark) });
+      next.push({ type, start: end, end: mark.end, ...linkMarkExtras(mark) });
     }
   }
   return normalizeInlineMarks(next, textLength);
@@ -164,23 +235,39 @@ export function toggleMarkInRange(
   return normalizeInlineMarks([...marks, { type, start, end }], textLength);
 }
 
+export interface SetLinkInRangeOptions {
+  /** Workspace page id — renders as an inline page link (icon + title + arrow). */
+  pageId?: string;
+}
+
 /**
  * Apply a link over `[start, end)`, replacing any link already covering the
- * range (a range carries at most one destination).
+ * range (a range carries at most one destination). Pass `pageId` for an inline
+ * page link rather than a plain URL mark.
  */
 export function setLinkInRange(
   marks: readonly InlineMark[],
   start: number,
   end: number,
   href: string,
-  textLength: number
+  textLength: number,
+  options?: SetLinkInRangeOptions
 ): InlineMark[] {
   if (start >= end) {
     return normalizeInlineMarks(marks, textLength);
   }
   const cleared = removeMarkFromRange(marks, "link", start, end, textLength);
   return normalizeInlineMarks(
-    [...cleared, { type: "link", start, end, href }],
+    [
+      ...cleared,
+      {
+        type: "link",
+        start,
+        end,
+        href,
+        ...(options?.pageId === undefined ? {} : { pageId: options.pageId }),
+      },
+    ],
     textLength
   );
 }
@@ -208,7 +295,10 @@ export function getLinkHrefInRange(
 
 const URL_PATTERN = /^https?:\/\/\S+$/i;
 
-/** True for a bare http(s) URL — the paste-to-link trigger. */
+/**
+ * True for a bare http(s) URL — the paste-to-link trigger (lone URL → linked
+ * text; URL over a selection → wrap selection as a link).
+ */
 export function isLikelyUrl(text: string): boolean {
   return URL_PATTERN.test(text.trim());
 }
@@ -217,6 +307,8 @@ export interface RichTextSegment {
   /** Destination when a `link` mark covers the segment. */
   href?: string;
   marks: InlineMarkType[];
+  /** Workspace page id when the link mark is an inline page link. */
+  pageId?: string;
   text: string;
 }
 
@@ -256,29 +348,51 @@ export function segmentRichText(
       text: text.slice(start, end),
       marks: segmentMarks,
       ...(linkMark?.href === undefined ? {} : { href: linkMark.href }),
+      ...(linkMark?.pageId === undefined ? {} : { pageId: linkMark.pageId }),
     });
   }
   return segments;
 }
 
 /**
- * True when the block's type supports inline marks on its primary text.
- * Headings carry no formatting (no marks, no color) — they stay structural.
+ * True when the block's primary text can carry `link` marks — including page
+ * links pasted into a heading. Code blocks keep their text literal.
+ */
+export function blockSupportsLinkMarks(block: Block): boolean {
+  return (
+    Boolean(getBlockDef(block.type).hasPrimaryText) && block.type !== "code"
+  );
+}
+
+/**
+ * True when the block's type supports the styling marks (bold, italic, …).
+ * Headings carry no formatting (no styling marks, no color) — they stay
+ * structural, but they may still hold link marks.
  */
 export function blockSupportsInlineMarks(block: Block): boolean {
   return (
-    Boolean(getBlockDef(block.type).hasPrimaryText) &&
-    block.type !== "code" &&
+    blockSupportsLinkMarks(block) &&
     block.type !== "heading" &&
     block.type !== "toggleHeading"
   );
 }
 
+function allowedMarksForBlock(
+  block: Block,
+  marks: readonly InlineMark[]
+): readonly InlineMark[] {
+  if (blockSupportsInlineMarks(block)) {
+    return marks;
+  }
+  return marks.filter((mark) => mark.type === "link");
+}
+
 export function getBlockMarks(block: Block): InlineMark[] {
-  if (!blockSupportsInlineMarks(block)) {
+  if (!blockSupportsLinkMarks(block)) {
     return [];
   }
-  return (block.props as { marks?: InlineMark[] }).marks ?? [];
+  const marks = (block.props as { marks?: InlineMark[] }).marks ?? [];
+  return [...allowedMarksForBlock(block, marks)];
 }
 
 /** Replace text and marks together (marks dropped for unsupported types). */
@@ -290,10 +404,13 @@ export function withBlockRichText<T extends Block>(
   if (!getBlockDef(block.type).hasPrimaryText) {
     return block;
   }
-  if (!blockSupportsInlineMarks(block)) {
+  if (!blockSupportsLinkMarks(block)) {
     return { ...block, props: { ...block.props, text } };
   }
-  const normalized = normalizeInlineMarks(marks, text.length);
+  const normalized = normalizeInlineMarks(
+    allowedMarksForBlock(block, marks),
+    text.length
+  );
   return {
     ...block,
     props: {

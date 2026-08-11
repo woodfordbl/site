@@ -90,10 +90,14 @@ Press and release the grab handle (without dragging) highlights the row and open
 | Menu item | Dispatches / hook |
 |-----------|-------------------|
 | Turn into | `slash.convert` or `container.wrap`; eligible source types are gated by `canTurnIntoBlock` (text, heading, quote, callout, code) |
-| Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids) |
-| Delete | `row.delete` |
+| Duplicate | `rows.paste` via `duplicateRow` (dispatches the row's flattened subtree; paste clones it with fresh ids). Shortcut affordance: Mod+D (`duplicate-block`) |
+| Delete | `row.delete` (or `selection.delete` when multiple rows are selected) via `useRowGutterHandlers`. Shortcut affordance: **D** (`delete-page`, shared menu-scoped delete binding) |
 
-Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canvas/block-actions-menu.tsx) (`openRowId`). Keyboard delete with a menu open closes it first via `useCloseBlockActionsMenuBeforeAction` before dispatching `row.delete` / `selection.delete`. (row/column handles in [`TableView`](../../src/components/blocks/types/table/table-view.tsx)) dispatch table-scoped commands directly — not the gutter block menu:
+Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canvas/block-actions-menu.tsx) (`openRowId`). Keyboard delete with a menu open closes it first via `useCloseBlockActionsMenuBeforeAction` before dispatching `row.delete` / `selection.delete`.
+
+The two shortcuts the menu advertises are routed by the menu itself: [`BlockGutter`](../../src/components/canvas/block-gutter.tsx) spreads [`useMenuCommandKeys`](../../src/components/keyboard/use-menu-command-keys.ts) (`delete-page`, `duplicate-block`) onto the menu content as an `onKeyDownCapture`. The global `useCommandHotkeys` registrations cannot fire here — opening the menu auto-focuses its "Search actions…" field, and TanStack's `ignoreInputs` suppresses every canvas binding while a text field holds focus. The menu-scoped router treats a field tagged `MENU_COMMAND_SEARCH_ATTRIBUTE` as "not typing" while it is empty, so **D** and Mod+D act on the row; once a query is typed the field owns those keys again. Canvas empty-block / selection delete still uses Backspace/Delete via `delete-block` when the menu is closed.
+
+Table structure menus (row/column handles in [`TableView`](../../src/components/blocks/types/table/table-view.tsx)) dispatch table-scoped commands directly — not the gutter block menu:
 
 | Menu item | Dispatches |
 |-----------|------------|
@@ -104,9 +108,9 @@ Open state is tracked by [`BlockActionsMenuProvider`](../../src/components/canva
 
 Copy is keyboard-only: Cmd/Ctrl+C copies selected rows to the canvas clipboard (`copySelection` / `copyRow`), not a gutter menu item. Both capture full subtrees — `subtreeBlocksFromSelectedRows` ([`block-selection.ts`](../../src/lib/canvas/block-selection.ts)) for selections, `flattenRows` for a single row.
 
-Pasting image/video files (e.g. a screenshot) is intercepted in [`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) before the field-focus guard: `extractMediaFiles` ([`paste-media.ts`](../../src/lib/media/paste-media.ts)) pulls the files, `insertMediaFiles` stores each as an IndexedDB asset and inserts `media` blocks via `rows.paste` after the target row — so it works even while a text field is focused. Non-media paste falls through to the block-clipboard path above.
+Pasting image/video files (e.g. a screenshot) is intercepted in [`handleCanvasPasteEvent`](../../src/lib/canvas/canvas-keyboard-shortcuts.ts) before the field-focus guard: `extractMediaFiles` ([`paste-media.ts`](../../src/lib/media/paste-media.ts)) pulls the files, `insertMediaFiles` stores each as an IndexedDB asset and inserts `media` blocks via `rows.paste` after the target row — so it works even while a text field is focused. A lone URL (plain text or a single HTML `<a href>`) is checked next: when it is same-origin and resolves to a page ([`resolvePageIdFromUrl`](../../src/lib/pages/resolve-page-from-url.ts)), `tryPastePageLink` converts an empty text-capable row in place (`slash.convert` → `pageLink`, `pageLinkVariant: linked`). Rows that already have text always take an **inline** page link (`link` mark + `pageId`, rendered by [`InlinePageLink`](../../src/components/editor/inline-page-link.tsx)): with the field focused it returns false so [`RichTextArea`](../../src/components/editor/rich-text-area.tsx) inserts at the caret, and with no live caret it applies [`planInlinePageLinkInsertion`](../../src/lib/canvas/paste-page-link.ts) through `row.update` (append at end + `focus.set` offset). Only blocks with no link-capable text (media, embed, divider, database) insert a `pageLink` after the row; code and table cells skip so inline/plain paste can run. Non-media, non-pageLink paste falls through to the block-clipboard path above. Rich-text fields still auto-link external (and unresolved same-origin) URLs as inline `link` marks.
 
-The gutter/mobile block menu also renders a non-command **Added / Last edited** footer ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx)) from the row's `LocalBlock` timestamps. Block commits also schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](../architecture/local-first-persistence.md#page-snapshots-version-history).
+The gutter/mobile block menu also renders a non-command **Added / Last edited** footer ([`BlockGutterMenuTimestamps`](../../src/components/canvas/block-gutter-menu/block-gutter-menu-timestamps.tsx)) from the row's `LocalBlock` timestamps — including its leading separator only when timestamps exist, so Duplicate/Delete never leave a trailing orphan divider. Values use the shared absolute menu format ([`formatMenuTimestamp`](../../src/lib/pages/format-menu-timestamp.ts) — "Today at 3:24 PM" / "Mar 3, 2026, 3:24 PM"), the same one as the page header stats footer, not the relative wording used by version history. Block commits also schedule a debounced page version-history snapshot — see [local-first-persistence — Page snapshots](../architecture/local-first-persistence.md#page-snapshots-version-history).
 
 Conversion helper: `src/lib/canvas/apply-block-conversion.ts`. Paste cloning: `cloneBlocksForPaste` in `src/lib/canvas/clipboard.ts`.
 
@@ -144,9 +148,9 @@ Page lifecycle and sidebar tree edits use **`PageCommand`** / **`PageEffect`** i
 
 | Effect | Applied by `usePageDispatch` |
 |--------|------------------------------|
-| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` or via `persistPageReposition` (`userPage` when `routeBy === "id"`) |
+| `page.persist` | `localPagesCollection` insert/update; optional `initialBlocks` seed; descendant slug cascade; `syncPageUrl` only when `persistPageMetadata` gets `syncUrl: true` (`userPage` when `routeBy === "id"`) |
 | `page.delete` | `deleteLocalPage` (user hard delete or shipped tombstone) |
-| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts) |
+| `page.reposition` | Optional `parentSeed` insert, [`persistPageReposition`](../../src/lib/pages/persist-page-reposition.ts), optional [`appendChildPageLinkFromShard`](../../src/lib/pages/append-page-link-on-parent.ts); active-tab router navigate via [`resolveSlugPrefixRedirect`](../../src/lib/pages/resolve-slug-prefix-redirect.ts) when the open path sits under the previous slug |
 | `navigate` | `{ slug, userPage? }` → router [`pageNavTargetForUserPage`](../../src/lib/pages/slugify.ts) or [`pageNavTarget`](../../src/lib/pages/slugify.ts) (`replace: true`); `mode: "history"` → [`syncPageUrl`](../../src/lib/pages/sync-url.ts) with the same `userPage` flag |
 
 Boot routing ([`useMigrateUserPageRoutes`](../../src/hooks/use-migrate-user-page-routes.ts)) and passive-tab slug sync ([`useSyncPageUrl`](../../src/hooks/use-sync-page-url.ts)) are not `PageEffect` entries — see [pages — Route migration](../architecture/pages.md#route-migration).

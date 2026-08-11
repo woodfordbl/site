@@ -1,0 +1,18 @@
+{
+  "id": "ca52e732-751f-4998-88b3-19f2ccd169de",
+  "slug": "/stocks-and-crypto",
+  "title": "Stocks and Crypto",
+  "icon": "tabler:IconActivityHeartbeat",
+  "parentId": "home",
+  "createdAt": "2026-07-31T03:28:08.506Z",
+  "updatedAt": "2026-07-31T03:28:08.507Z",
+  "blocks": [
+    {
+      "id": "4ded7491-3323-4a18-b010-d51048713d53",
+      "type": "database",
+      "props": {
+        "databaseId": "282bddac-7bb0-4ee7-9313-ee99a933eeb1"
+      }
+    }
+  ]
+}

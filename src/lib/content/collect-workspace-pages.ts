@@ -1,7 +1,9 @@
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { readBootstrapPageBlocks } from "@/db/queries/read-bootstrap-page-blocks.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { loadAllPages } from "@/lib/content/load-all-pages.ts";
+import { resolvePageLastEditedAt } from "@/lib/pages/page-activity-summary.ts";
 import {
   prefersLocalBlockSource,
   type ResolvedPageState,
@@ -55,6 +57,32 @@ function collectBlockAssetIds(blocks: Block[], into: Set<string>): void {
   }
 }
 
+/**
+ * Authored history for the archive document. The shipped `createdAt` wins over
+ * the local row's, which is stamped at lazy-seed time; last-edited maxes page
+ * and block timestamps the same way the author-save path does.
+ */
+function resolveEffectiveTimestamps(resolved: ResolvedPageState): {
+  createdAt?: string;
+  updatedAt?: string;
+} {
+  const { summary, localPage, serverPage, origin } = resolved;
+
+  const createdAt = serverPage?.createdAt ?? localPage?.createdAt;
+  const updatedAt = resolvePageLastEditedAt({
+    localBlocks: prefersLocalBlockSource(origin)
+      ? readBlockShardForPage(summary.id)
+      : [],
+    localPage,
+    serverPage,
+  });
+
+  return {
+    ...(createdAt === undefined ? {} : { createdAt }),
+    ...(updatedAt === null ? {} : { updatedAt }),
+  };
+}
+
 /** Builds the effective page for one catalog entry, or null when it shouldn't ship. */
 function buildEffectivePage(
   resolved: ResolvedPageState
@@ -90,6 +118,7 @@ function buildEffectivePage(
       ...(summary.sidebarOrder === undefined
         ? {}
         : { sidebarOrder: summary.sidebarOrder }),
+      ...resolveEffectiveTimestamps(resolved),
       ...settings,
       blocks,
     },

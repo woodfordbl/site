@@ -21,21 +21,52 @@ import { saveMediaAssets } from "@/lib/content/save-media-assets.ts";
 import { savePage } from "@/lib/content/save-page.ts";
 import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { markPageClean } from "@/lib/local-draft/dirty-pages-cookie.ts";
+import { resolvePageLastEditedAt } from "@/lib/pages/page-activity-summary.ts";
 import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 import {
   isLocallyDeletedPage,
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
+import type { Page } from "@/lib/schemas/page.ts";
 
 export interface SaveAllPagesResult {
   failed: Array<{ pageId: string; title: string; error: string }>;
   failedDatabases: Array<{ databaseId: string; name: string; error: string }>;
   saved: number;
   savedDatabases: number;
+  /** Persisted documents for pages that wrote successfully (before local clear). */
+  savedPages: Page[];
 }
 
-async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
+export interface SaveAllLocalPagesOptions {
+  /**
+   * Called after every successful disk write and before local overlays are
+   * cleared. Use this to seed client shipped-content React Query caches
+   * (`publishSavedPageToClient`) so the canvas never falls back to pre-save
+   * blocks. Do not await `router.invalidate()` here — open routes pick up
+   * `setQueryData` via `useQuery` subscriptions.
+   */
+  beforeClearLocal?: (savedPages: Page[]) => void | Promise<void>;
+}
+
+function clearLocalPageAfterSave(pageId: string): void {
+  const shard = readBlockShardForPage(pageId);
+  localPagesCollection.delete(pageId);
+  deleteAllBlocksForPage(shard);
+  clearPageSnapshots(pageId).catch(() => undefined);
+  clearPageBaseline(pageId).catch(() => undefined);
+  markPageClean(pageId);
+}
+
+/**
+ * Writes one local page to `content/pages/**.json` and returns the document as
+ * persisted. Does not clear local state — the batch caller does that after
+ * client caches are primed so the open canvas never paints stale shipped
+ * blocks.
+ */
+async function writeLocalPageToSource(localPage: LocalPage): Promise<Page> {
+  const shard = readBlockShardForPage(localPage.id);
   const rows = buildBlockTree(readBootstrapPageBlocks(localPage.id).blocks);
   const exported = exportPageDocument(rows, {
     id: localPage.id,
@@ -46,19 +77,18 @@ async function saveLocalPageToSource(localPage: LocalPage): Promise<void> {
     font: localPage.font,
     fullWidth: localPage.fullWidth,
     textScale: localPage.textScale,
+    createdAt: localPage.createdAt,
+    updatedAt:
+      resolvePageLastEditedAt({ localBlocks: shard, localPage }) ??
+      localPage.updatedAt,
   });
 
   const { doc, assets } = await preparePageDocumentForAuthorSave(exported);
   if (assets.length > 0) {
     await saveMediaAssets({ data: { assets } });
   }
-  await savePage({ data: doc });
-
-  localPagesCollection.delete(localPage.id);
-  deleteAllBlocksForPage(readBlockShardForPage(localPage.id));
-  clearPageSnapshots(localPage.id).catch(() => undefined);
-  clearPageBaseline(localPage.id).catch(() => undefined);
-  markPageClean(localPage.id);
+  const result = await savePage({ data: doc });
+  return result.page;
 }
 
 /**
@@ -96,9 +126,15 @@ async function saveLocalDatabaseToSource(database: LocalDatabase): Promise<{
  * Tombstoned (locally-deleted) pages are skipped. Database exports skip
  * connector-synced rows — the shipped `source` config repopulates them
  * client-side — and databases whose content already matches their baseline.
+ *
+ * Local page overlays are cleared only after `beforeClearLocal` resolves, so
+ * callers can publish the returned documents into React Query / router caches
+ * first and avoid a flash of pre-save shipped blocks.
  * @see docs/architecture/author-dev-mode.md
  */
-export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
+export async function saveAllLocalPages(
+  options: SaveAllLocalPagesOptions = {}
+): Promise<SaveAllPagesResult> {
   const pages = localPagesCollection.toArray.filter(
     (page) =>
       !(
@@ -109,12 +145,11 @@ export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
   );
 
   const failed: SaveAllPagesResult["failed"] = [];
-  let saved = 0;
+  const savedPages: Page[] = [];
 
   for (const page of pages) {
     try {
-      await saveLocalPageToSource(page);
-      saved += 1;
+      savedPages.push(await writeLocalPageToSource(page));
     } catch (error) {
       failed.push({
         pageId: page.id,
@@ -122,6 +157,12 @@ export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
         error: error instanceof Error ? error.message : "Save failed",
       });
     }
+  }
+
+  await options.beforeClearLocal?.(savedPages);
+
+  for (const page of savedPages) {
+    clearLocalPageAfterSave(page.id);
   }
 
   const failedDatabases: SaveAllPagesResult["failedDatabases"] = [];
@@ -143,5 +184,11 @@ export async function saveAllLocalPages(): Promise<SaveAllPagesResult> {
   }
 
   await sweepOrphanAssets();
-  return { failed, failedDatabases, saved, savedDatabases };
+  return {
+    failed,
+    failedDatabases,
+    saved: savedPages.length,
+    savedDatabases,
+    savedPages,
+  };
 }

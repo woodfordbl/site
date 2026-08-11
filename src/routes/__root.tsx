@@ -14,12 +14,12 @@ import {
 import { HapticsProvider } from "@/components/layout/haptics-provider.tsx";
 import {
   SyncSiteAppearanceCookieEffect,
-  THEME_COLOR_BY_APPEARANCE,
   ThemeProvider,
 } from "@/components/layout/theme-provider.tsx";
 import { TemplatePageProvider } from "@/components/pages/template-page-provider.tsx";
 import { NotFoundPage } from "@/components/ui/not-found-page.tsx";
 import { AppProviders } from "@/db/provider.tsx";
+import { THEME_COLOR_BY_APPEARANCE } from "@/lib/appearance/browser-chrome-tint.ts";
 import { loadSiteAppearance } from "@/lib/appearance/load-site-appearance.ts";
 import { FAVICON_SUFFIX } from "@/lib/content/deploy-env.ts";
 import {
@@ -149,17 +149,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       className={isDark ? "dark" : undefined}
       data-chart-palette={siteAppearance.appearance.chartPalette}
       data-page-text-scale={siteAppearance.appearance.textScale}
+      data-tooltip-style={siteAppearance.appearance.tooltipStyle}
       lang="en"
     >
       <head>
         <HeadContent />
-        {/* iOS Safari tints its top bar from `theme-color`. For the "system"
-            preference, ship BOTH variants with a `prefers-color-scheme` media
-            query so the browser picks the right one natively at load — SSR can't
-            know the device's system appearance, and iOS does not reliably re-read
-            a JS-updated `theme-color`, so a single SSR meta would pin the bar to
-            the wrong (light) tint in system-dark. For an explicit light/dark
-            preference, a single meta matching the resolved theme is correct. */}
+        {/* iOS Safari tints the chrome bands above/below the page from
+            `theme-color`. For the "system" preference, ship BOTH variants with a
+            `prefers-color-scheme` media query so the browser picks the right one
+            natively at load — SSR can't know the device's system appearance, so
+            a single SSR meta would pin the bands to the wrong (light) tint in
+            system-dark. For an explicit light/dark preference, a single meta
+            matching the resolved theme is correct. On iOS Safari these cover
+            first paint only — ThemeProvider then drops them so the chrome bands
+            track the live canvas instead (see browser-chrome-tint.ts). */}
         {siteAppearance.appearance.theme === "system" ? (
           <>
             <meta

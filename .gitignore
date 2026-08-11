@@ -29,6 +29,7 @@ public/emojibase
 public/tabler
 public/sitemap.xml
 src/generated
+/.tmp-chrome-debug*/
 
 # Local chart dev harness (browser visual iteration) — not product code
 /chart-harness.html

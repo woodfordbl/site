@@ -10,9 +10,8 @@ import { useShippedDatabasesSettled } from "@/lib/databases/shipped-databases-se
  *    the entire page render ("Missing getServerSnapshot") and silently
  *    reverts the site to a client-rendered empty shell.
  * 2. First visit: shipped databases seed into the local collections from a
- *    boot fetch; until that settles, the table would flash "This database
- *    was deleted." (with a Remove offer) for a database that is about to
- *    appear.
+ *    boot fetch; until that settles, the table would mount against a missing
+ *    definition for a database that is about to appear.
  *
  * Both signals are `useSyncExternalStore`-backed with `false` server
  * snapshots, so SSR and the hydration frame render the same placeholder.

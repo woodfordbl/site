@@ -27,8 +27,8 @@ function GlobalCommandHotkeysLive() {
       to: "/settings/$section",
     });
 
-  // `edit-template` moved to `scope: "menu"` (dispatched by the row/header action
-  // menus via useMenuCommandKeys), so it is no longer a global shortcut.
+  // Menu-scoped page actions (favorite/duplicate/delete/save-as-template) are
+  // dispatched by useMenuCommandKeys while their action menu is open.
   useCommandHotkeys({
     "new-page": () => createPage(),
     "open-settings": openSettings,

@@ -3,6 +3,7 @@ import {
   buildDatabaseHubSlug,
   buildDatabaseRowSlug,
   buildDatabaseTemplateSlug,
+  resolveDatabaseHubSlug,
   resolveDatabasePathFromSplat,
   resolveDatabaseSlug,
   resolveRowSlug,
@@ -62,6 +63,13 @@ describe("database page paths", () => {
     );
   });
 
+  it("resolves the hub metadata slug for sidebar active matching", () => {
+    expect(resolveDatabaseHubSlug(database, pages, blocks)).toBe(
+      "/work/projects/project-tracker"
+    );
+    expect(resolveDatabaseHubSlug(database, pages, [])).toBeNull();
+  });
+
   it("resolves the longest hosted page prefix", () => {
     expect(
       resolveDatabasePathFromSplat("work/projects/project-tracker", {
@@ -71,6 +79,58 @@ describe("database page paths", () => {
         rows: [row],
       })
     ).toMatchObject({ kind: "hub", database, host: pages[0] });
+  });
+
+  it("returns null for an unknown row slug", () => {
+    expect(
+      resolveDatabasePathFromSplat("work/projects/project-tracker/missing", {
+        blocks,
+        databases: [database],
+        pages,
+        rows: [row],
+      })
+    ).toBeNull();
+  });
+
+  it("keeps resolving the row path once the hub page is seeded", () => {
+    // The hub page carries its own linked `database` block, and its id sorts
+    // ahead of a shipped host id like `home`. Seeding it mid-open must not
+    // hijack host resolution and drop the in-flight row URL to not-found.
+    const hostPage = {
+      id: "home",
+      slug: "/",
+      title: "Home",
+      parentId: null,
+      routeBy: "slug" as const,
+    };
+    const hubPage = {
+      id: "0a3f-hub",
+      slug: "/project-tracker",
+      title: "Project tracker",
+      parentId: "home",
+      databaseSource: { databaseId: database.id },
+      routeBy: "id" as const,
+    };
+
+    expect(
+      resolveDatabasePathFromSplat("project-tracker/launch-site", {
+        blocks: [
+          {
+            pageId: "home",
+            type: "database",
+            props: { databaseId: database.id },
+          },
+          {
+            pageId: hubPage.id,
+            type: "database",
+            props: { databaseId: database.id },
+          },
+        ],
+        databases: [database],
+        pages: [hostPage, hubPage],
+        rows: [row],
+      })
+    ).toMatchObject({ kind: "row", host: hostPage, row });
   });
 
   it("resolves template and row paths", () => {

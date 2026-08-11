@@ -78,6 +78,19 @@ function makeRow(
   };
 }
 
+/**
+ * Local `yyyy-mm-dd` for a date (default: now) — the shape date cells are
+ * actually written in. Deliberately not `toISOString()`, whose date part is
+ * the UTC day and drifts from the local day for part of every day.
+ */
+function localDatePart(date: Date = new Date()): string {
+  return [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function cond(
   fieldId: string,
   operator: DatabaseFilterOperator,
@@ -370,12 +383,19 @@ describe("rowMatchesCondition", () => {
     });
 
     it("defaults to the real clock when no now is injected", () => {
-      const todayRow = makeRow("rt", {
-        [dueField.id]: new Date().toISOString(),
-      });
+      // Date cells hold a LOCAL `yyyy-mm-dd` (what the editor and row
+      // defaults write), and windows derive from local date parts — building
+      // the cell from `toISOString()` would use the UTC day instead and fail
+      // in the evening west of UTC. `pastDay` spans [today − 1, today], so
+      // the assertion also survives a midnight tick mid-test.
+      const todayRow = makeRow("rt", { [dueField.id]: localDatePart() });
+      const oldRow = makeRow("rt2", { [dueField.id]: "2020-01-01" });
       expect(
         rowMatchesCondition(todayRow, dueField, cond(dueField.id, "pastDay"))
       ).toBe(true);
+      expect(
+        rowMatchesCondition(oldRow, dueField, cond(dueField.id, "pastDay"))
+      ).toBe(false);
     });
   });
 

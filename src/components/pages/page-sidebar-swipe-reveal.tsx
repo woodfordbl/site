@@ -464,17 +464,30 @@ export function PageSidebarSwipeReveal({
   }
 
   const overlayProgress = Math.min(translateX / sidebarWidth, 1);
-  // Front-load the sidebar-color fade (ease-out quadratic) so the bars/safe
-  // areas read as sidebar-gray early in the swipe rather than only near the end.
-  const revealProgress = overlayProgress * (2 - overlayProgress);
 
-  // Drive the page background (the surface iOS Safari samples for the areas
-  // *behind* its top/bottom bars, via the `<html>` color-mix in styles.css)
-  // toward the sidebar color as the sidebar is revealed, so the insets fade to
-  // sidebar-gray with the swipe instead of staying bg-background. The dragging
-  // flag drops the CSS transition so the tint tracks the finger 1:1. (The top-bar
-  // `theme-color` tint itself is owned by the `prefers-color-scheme` metas in
-  // __root — iOS doesn't reliably honor a JS-updated `theme-color`.)
+  // Drive the document canvas (the `<html>` color-mix in styles.css) toward the
+  // sidebar color as the sidebar is revealed. That canvas paints the safe-area
+  // insets and the overscroll, AND — once `theme-color` is out of the way (see
+  // browser-chrome-tint.ts) — is what iOS Safari samples for the chrome bands
+  // above and below the page, so the whole screen fades together with the swipe
+  // instead of the bands sitting a shade off and drawing a seam at the edges.
+  //
+  // Fed the LINEAR drag progress, not an eased curve: Safari re-samples the
+  // canvas while the drag is under the finger, so the fade only reads as a fade
+  // over the shades it can catch there. The old ease-out spent most of the drag
+  // distance within a shade or two of full sidebar; linear spreads the same
+  // change evenly and measured 8 distinct steps across an open instead of 4. The
+  // dragging flag drops the CSS transition for the same reason (styles.css).
+  //
+  // Only an OPENING drag tracks the finger. Safari does not re-sample at all
+  // once the sidebar is open — a closing drag leaves the bands on their last
+  // sampled color until the lift — so ramping down under the finger would just
+  // pull the drawer off the bands it is supposed to match. Holding at 1 keeps
+  // them together through the close; the ramp to 0 happens on commit, animated
+  // by the CSS transition, by which point the drawer has slid away.
+  const draggingOpenProgress = isDragging ? overlayProgress : 0;
+  const revealProgress = openMobile ? 1 : draggingOpenProgress;
+
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--sidebar-reveal", String(revealProgress));
@@ -539,6 +552,10 @@ export function PageSidebarSwipeReveal({
         aria-label="Sidebar"
         aria-modal={openMobile}
         className="z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
+        // Re-derives `--sidebar` for this subtree from `--sidebar-reveal`, so the
+        // drawer surface rides the same ramp as the canvas and Safari's chrome
+        // bands instead of being revealed already-solid (see styles.css).
+        data-sidebar-reveal-surface=""
         inert={!openMobile}
         ref={sidebarRef}
         role="dialog"

@@ -19,7 +19,6 @@ export type CommandId =
   | "new-subpage"
   | "duplicate-page"
   | "delete-page"
-  | "edit-template"
   | "save-as-template"
   | "toggle-favorite"
   | "copy-page-link"
@@ -192,7 +191,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "duplicate-page",
     label: "Duplicate page",
     group: "Pages",
-    defaultHotkey: "D",
+    defaultHotkey: "Shift+D",
     customizable: true,
     scope: "menu",
   },
@@ -200,15 +199,7 @@ export const KEYBOARD_COMMANDS: KeyboardCommand[] = [
     id: "delete-page",
     label: "Delete page",
     group: "Pages",
-    defaultHotkey: "Backspace",
-    customizable: true,
-    scope: "menu",
-  },
-  {
-    id: "edit-template",
-    label: "Edit page template",
-    group: "Pages",
-    defaultHotkey: "E",
+    defaultHotkey: "D",
     customizable: true,
     scope: "menu",
   },

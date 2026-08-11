@@ -9,6 +9,7 @@ import {
   configWithoutColumnWidth,
   DEFAULT_COLUMN_WIDTH_PX,
   defaultColumnWidthPx,
+  isCheckboxColumnHeaderCompact,
   isInlineEditableField,
   isoDateToLocalDate,
   isPointerInSelectLaneZone,
@@ -71,6 +72,8 @@ describe("minColumnWidthPx", () => {
     expect(minColumnWidthPx({ type: "checkbox" })).toBe(
       CHECKBOX_COLUMN_WIDTH_PX
     );
+    expect(CHECKBOX_COLUMN_WIDTH_PX).toBe(32);
+    expect(CHECKBOX_COLUMN_WIDTH_PX).toBe(SELECTION_COLUMN_WIDTH_PX);
     expect(CHECKBOX_COLUMN_WIDTH_PX).toBeLessThan(MIN_COLUMN_WIDTH_PX);
   });
 
@@ -80,9 +83,9 @@ describe("minColumnWidthPx", () => {
 });
 
 describe("defaultColumnWidthPx", () => {
-  it("defaults checkbox columns to the narrow checkbox width", () => {
+  it("defaults checkbox columns to the ordinary text-column width", () => {
     expect(defaultColumnWidthPx({ type: "checkbox" })).toBe(
-      CHECKBOX_COLUMN_WIDTH_PX
+      DEFAULT_COLUMN_WIDTH_PX
     );
   });
 
@@ -100,7 +103,23 @@ describe("defaultColumnWidthPx", () => {
         minColumnWidthPx({ type: "checkbox" }),
         defaultColumnWidthPx({ type: "checkbox" })
       )
-    ).toBe(CHECKBOX_COLUMN_WIDTH_PX);
+    ).toBe(DEFAULT_COLUMN_WIDTH_PX);
+  });
+});
+
+describe("isCheckboxColumnHeaderCompact", () => {
+  it("is compact at or below the checkbox minimum width", () => {
+    expect(isCheckboxColumnHeaderCompact(CHECKBOX_COLUMN_WIDTH_PX)).toBe(true);
+    expect(isCheckboxColumnHeaderCompact(CHECKBOX_COLUMN_WIDTH_PX - 1)).toBe(
+      true
+    );
+  });
+
+  it("shows the property name above the compact minimum", () => {
+    expect(isCheckboxColumnHeaderCompact(CHECKBOX_COLUMN_WIDTH_PX + 1)).toBe(
+      false
+    );
+    expect(isCheckboxColumnHeaderCompact(DEFAULT_COLUMN_WIDTH_PX)).toBe(false);
   });
 });
 
@@ -385,6 +404,18 @@ describe("isInlineEditableField", () => {
     );
     expect(isSyncedField({ sourceKey: "name" })).toBe(true);
     expect(isSyncedField({})).toBe(false);
+  });
+
+  it("allows live-markets Symbol and Asset class identity fields", () => {
+    expect(
+      isInlineEditableField({ ...field("text"), sourceKey: "symbol" })
+    ).toBe(true);
+    expect(
+      isInlineEditableField({
+        ...field("select"),
+        sourceKey: "assetClass",
+      })
+    ).toBe(true);
   });
 });
 

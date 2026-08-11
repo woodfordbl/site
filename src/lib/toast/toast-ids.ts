@@ -26,6 +26,12 @@ export const TOAST_ID_RESTORE_SNAPSHOT_MISSING = "restore-snapshot-missing";
 
 export const TOAST_ID_ROW_HIDDEN_BY_FILTER = "row-hidden-by-filter";
 
+export const TOAST_ID_LIVE_MARKET_INVALID_SYMBOL = "live-market-invalid-symbol";
+export const TOAST_ID_LIVE_MARKET_DUPLICATE_SYMBOL =
+  "live-market-duplicate-symbol";
+export const TOAST_ID_LIVE_MARKET_AT_CAPACITY = "live-market-at-capacity";
+export const TOAST_ID_LIVE_MARKET_KEEP_ONE = "live-market-keep-one";
+
 export const TOAST_ID_COPY_TEMPLATE_TOKEN = "copy-template-token";
 export const TOAST_ID_COPY_TEMPLATE_TOKEN_ERROR = "copy-template-token-error";
 

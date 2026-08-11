@@ -9,6 +9,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  refreshBrowserChromeTint,
+  releaseBrowserChromeTintToCanvas,
+} from "@/lib/appearance/browser-chrome-tint.ts";
 import type { SiteAppearanceHints } from "@/lib/appearance/read-site-appearance.server.ts";
 import {
   readSystemPrefersDark,
@@ -22,7 +26,9 @@ import type {
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type {
   ResolvedTheme,
+  SiteAppearance,
   ThemePreference,
+  TooltipStyle,
 } from "@/lib/schemas/site-appearance.ts";
 
 interface ThemeContextValue {
@@ -35,22 +41,13 @@ interface ThemeContextValue {
   setChartPalette: (chartPalette: ChartPaletteId) => void;
   setTextScale: (textScale: PageTextScale) => void;
   setTheme: (theme: ThemePreference) => void;
+  setTooltipStyle: (tooltipStyle: TooltipStyle) => void;
   textScale: PageTextScale;
   theme: ThemePreference;
+  tooltipStyle: TooltipStyle;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-/**
- * Rest iOS Safari bar tint per theme — the `--background` token as hex (see
- * styles.css). Rendered as `prefers-color-scheme` media metas in __root so iOS
- * picks the right one natively; not set from JS (iOS doesn't reliably re-read a
- * JS-updated `theme-color`, and a JS write would clobber the media variants).
- */
-export const THEME_COLOR_BY_APPEARANCE = {
-  dark: "#181611",
-  light: "#f9f9f5",
-} as const;
 
 function applyResolvedTheme(resolvedTheme: ResolvedTheme): void {
   document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
@@ -66,6 +63,10 @@ function applyChartPalette(chartPalette: ChartPaletteId): void {
 
 function applyChartDither(chartDither: ChartDitherMode): void {
   document.documentElement.dataset.chartDither = chartDither;
+}
+
+function applyTooltipStyle(tooltipStyle: TooltipStyle): void {
+  document.documentElement.dataset.tooltipStyle = tooltipStyle;
 }
 
 interface ThemeProviderProps {
@@ -87,6 +88,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   const [chartDither, setChartDitherState] = useState<ChartDitherMode>(
     initialHints.appearance.chartDither
   );
+  const [tooltipStyle, setTooltipStyleState] = useState<TooltipStyle>(
+    initialHints.appearance.tooltipStyle
+  );
   const [prefersDark, setPrefersDark] = useState(() =>
     initialHints.appearance.theme === "system"
       ? readSystemPrefersDark()
@@ -102,9 +106,30 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     chartDither === "on" ||
     (chartDither === "dark" && resolvedTheme === "dark");
 
+  const appearanceSnapshot = useMemo<SiteAppearance>(
+    () => ({
+      theme,
+      textScale,
+      chartPalette,
+      chartDither,
+      tooltipStyle,
+    }),
+    [theme, textScale, chartPalette, chartDither, tooltipStyle]
+  );
+
   useEffect(() => {
     applyResolvedTheme(resolvedTheme);
+    // Safari only re-samples the canvas off touch-driven paints, so a theme flip
+    // nobody touched would leave the chrome bands on the old theme's color —
+    // a light page in black bands. Nudge it (see browser-chrome-tint.ts).
+    refreshBrowserChromeTint(resolvedTheme);
   }, [resolvedTheme]);
+
+  // After first paint, let the iOS Safari chrome bands track the document canvas
+  // instead of the frozen SSR `theme-color` (see browser-chrome-tint.ts).
+  useEffect(() => {
+    releaseBrowserChromeTintToCanvas();
+  }, []);
 
   useEffect(() => {
     applyTextScale(textScale);
@@ -117,6 +142,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   useEffect(() => {
     applyChartDither(chartDither);
   }, [chartDither]);
+
+  useEffect(() => {
+    applyTooltipStyle(tooltipStyle);
+  }, [tooltipStyle]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -133,52 +162,55 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     (nextTheme: ThemePreference) => {
       setThemeState(nextTheme);
       writeSiteAppearanceToDocument({
+        ...appearanceSnapshot,
         theme: nextTheme,
-        textScale,
-        chartPalette,
-        chartDither,
       });
     },
-    [textScale, chartPalette, chartDither]
+    [appearanceSnapshot]
   );
 
   const setTextScale = useCallback(
     (nextTextScale: PageTextScale) => {
       setTextScaleState(nextTextScale);
       writeSiteAppearanceToDocument({
-        theme,
+        ...appearanceSnapshot,
         textScale: nextTextScale,
-        chartPalette,
-        chartDither,
       });
     },
-    [theme, chartPalette, chartDither]
+    [appearanceSnapshot]
   );
 
   const setChartPalette = useCallback(
     (nextChartPalette: ChartPaletteId) => {
       setChartPaletteState(nextChartPalette);
       writeSiteAppearanceToDocument({
-        theme,
-        textScale,
+        ...appearanceSnapshot,
         chartPalette: nextChartPalette,
-        chartDither,
       });
     },
-    [theme, textScale, chartDither]
+    [appearanceSnapshot]
   );
 
   const setChartDither = useCallback(
     (nextChartDither: ChartDitherMode) => {
       setChartDitherState(nextChartDither);
       writeSiteAppearanceToDocument({
-        theme,
-        textScale,
-        chartPalette,
+        ...appearanceSnapshot,
         chartDither: nextChartDither,
       });
     },
-    [theme, textScale, chartPalette]
+    [appearanceSnapshot]
+  );
+
+  const setTooltipStyle = useCallback(
+    (nextTooltipStyle: TooltipStyle) => {
+      setTooltipStyleState(nextTooltipStyle);
+      writeSiteAppearanceToDocument({
+        ...appearanceSnapshot,
+        tooltipStyle: nextTooltipStyle,
+      });
+    },
+    [appearanceSnapshot]
   );
 
   const value = useMemo<ThemeContextValue>(
@@ -191,8 +223,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
       setChartPalette,
       setTextScale,
       setTheme,
+      setTooltipStyle,
       textScale,
       theme,
+      tooltipStyle,
     }),
     [
       chartDither,
@@ -203,8 +237,10 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
       setChartPalette,
       setTextScale,
       setTheme,
+      setTooltipStyle,
       textScale,
       theme,
+      tooltipStyle,
     ]
   );
 
@@ -228,7 +264,8 @@ export function useSiteAppearance(): ThemeContextValue {
 
 /** Persists appearance preferences cookie after client changes. */
 export function SyncSiteAppearanceCookieEffect() {
-  const { chartDither, chartPalette, textScale, theme } = useSiteAppearance();
+  const { chartDither, chartPalette, textScale, theme, tooltipStyle } =
+    useSiteAppearance();
 
   useEffect(() => {
     writeSiteAppearanceToDocument({
@@ -236,8 +273,9 @@ export function SyncSiteAppearanceCookieEffect() {
       textScale,
       chartPalette,
       chartDither,
+      tooltipStyle,
     });
-  }, [chartDither, chartPalette, textScale, theme]);
+  }, [chartDither, chartPalette, textScale, theme, tooltipStyle]);
 
   return null;
 }

@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -29,7 +30,15 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-  const { page, pageHasLocalDraft: hasLocalDraft } = Route.useLoaderData();
+  const { page: loaderPage, pageHasLocalDraft: hasLocalDraft } =
+    Route.useLoaderData();
+  // Subscribe so author Save all can `setQueryData` the just-written document
+  // and the open canvas picks it up without awaiting `router.invalidate()`
+  // (which SSR-revalidates and can hang on unrelated client-only trees).
+  const { data: page = loaderPage } = useQuery({
+    ...pageBySlugQueryOptions("home"),
+    initialData: loaderPage,
+  });
 
   return (
     <SiteShell>

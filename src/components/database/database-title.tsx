@@ -1,5 +1,6 @@
 import { IconDatabase } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 
 import { DatabaseSettingsMenu } from "@/components/database/database-settings-menu.tsx";
@@ -12,6 +13,7 @@ import { setDatabaseIcon } from "@/db/queries/database-collection-ops.ts";
 import { renameDatabase } from "@/db/queries/database-page-ops.ts";
 import { headingTypographyClassNames } from "@/lib/blocks/heading-typography.ts";
 import type { ChartData } from "@/lib/databases/chart-data.ts";
+import { navigateAfterDatabaseHubRename } from "@/lib/databases/navigate-after-database-rename.ts";
 import { ensurePageIconPickerReady } from "@/lib/pages/preload-page-icon-picker.ts";
 import type { DatabaseView, LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
@@ -30,6 +32,8 @@ const TITLE_NAME_MAX_CLASS = "max-w-[min(100%,40ch)]";
 interface DatabaseTitleProps {
   /** The resolved active view — settings menu scope (Properties/Group/…). */
   activeView: DatabaseView;
+  /** Keeps title-row tools visible at rest for full-page database hubs. */
+  alwaysShowTools?: boolean;
   /** Chart dataset for a chart active view — the settings menu color rows. */
   chartData?: ChartData;
   /** Extra right-aligned controls before the ⋯ menu (filter/sort icon triggers). */
@@ -38,8 +42,6 @@ interface DatabaseTitleProps {
   /** Hide the name; the row keeps only right-aligned controls. */
   hideTitle?: boolean;
   mode: "view" | "edit";
-  /** Settings menu "Delete database" hook — removes the hosting block after. */
-  onDeleteDatabase?: () => void;
   /** Threads the block's `hideTitle` toggle into the settings menu. */
   onHideTitleChange?: (hideTitle: boolean) => void;
   /** Activates a view (settings menu Add/Duplicate switch to the new view). */
@@ -133,17 +135,18 @@ function DatabaseTitleIcon({
  */
 export function DatabaseTitle({
   activeView,
+  alwaysShowTools = false,
   chartData,
   controls,
   database,
   hideTitle = false,
   mode,
-  onDeleteDatabase,
   onHideTitleChange,
   onViewIdChange,
   totalRowCount,
   viewSwitcher,
 }: DatabaseTitleProps): ReactNode {
+  const navigate = useNavigate();
   const { id: databaseId, name } = database;
   // `null` = display mode; a string is the in-flight draft.
   const [draft, setDraft] = useState<string | null>(null);
@@ -153,7 +156,8 @@ export function DatabaseTitle({
   const commit = (value: string) => {
     const trimmed = value.trim();
     if (trimmed !== "" && trimmed !== name) {
-      renameDatabase(databaseId, trimmed);
+      const change = renameDatabase(databaseId, trimmed);
+      navigateAfterDatabaseHubRename(navigate, change);
     }
     setDraft(null);
   };
@@ -178,20 +182,17 @@ export function DatabaseTitle({
     nameDisplay = (
       <span
         className={cn(
-          "inline-grid min-w-0",
+          "relative inline-block min-w-0",
           TITLE_NAME_MAX_CLASS,
           TITLE_TYPOGRAPHY_CLASS
         )}
       >
-        <span
-          aria-hidden
-          className="invisible col-start-1 row-start-1 whitespace-pre px-1.5"
-        >
+        <span aria-hidden className="invisible block whitespace-pre px-1.5">
           {mirrorText}
         </span>
         {draft === null ? (
           <button
-            className="col-start-1 row-start-1 min-w-0 truncate rounded-sm px-1.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
+            className="absolute inset-0 min-w-0 truncate rounded-sm px-1.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50"
             onClick={() => {
               finishedRef.current = false;
               setDraft(name);
@@ -203,7 +204,7 @@ export function DatabaseTitle({
         ) : (
           <input
             aria-label="Database name"
-            className="col-start-1 row-start-1 w-full min-w-0 rounded-sm border-none bg-transparent px-1.5 py-0 outline-none placeholder:text-muted-foreground"
+            className="absolute inset-0 w-full min-w-0 rounded-sm border-none bg-transparent px-1.5 py-0 outline-none placeholder:text-muted-foreground"
             onBlur={(event) => {
               if (finishedRef.current) {
                 return;
@@ -236,7 +237,10 @@ export function DatabaseTitle({
 
   return (
     <div
-      className="flex min-w-0 items-center gap-1"
+      className={cn(
+        "flex min-w-0 items-center gap-1",
+        alwaysShowTools && "[&_.hover-reveal]:opacity-100"
+      )}
       data-database-title=""
       data-reveal-group
     >
@@ -260,7 +264,6 @@ export function DatabaseTitle({
             chartData={chartData}
             database={database}
             hideTitle={hideTitle}
-            onDeleted={onDeleteDatabase}
             onHideTitleChange={onHideTitleChange}
             onViewIdChange={onViewIdChange}
             rowCount={totalRowCount}

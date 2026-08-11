@@ -1,4 +1,7 @@
+import { InlinePageLink } from "@/components/editor/inline-page-link.tsx";
+import { InlineLink } from "@/components/editor/link-preview.tsx";
 import { segmentRichText } from "@/lib/blocks/rich-text.ts";
+import { pageLinkTitleMarks } from "@/lib/editor/rich-text-dom.ts";
 import type { InlineMark, InlineMarkType } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -23,7 +26,9 @@ interface RichTextContentProps {
 
 /**
  * Read-only rich text: plain runs as bare text, marked runs as styled spans.
- * Newlines stay literal — parents render with `whitespace-pre-wrap`.
+ * Plain link marks use {@link InlineLink} for hover OG previews; page-link marks
+ * (`pageId`) use {@link InlinePageLink}. Newlines stay literal — parents render
+ * with `whitespace-pre-wrap`.
  */
 export function RichTextContent({ text, marks }: RichTextContentProps) {
   if (!marks || marks.length === 0) {
@@ -32,21 +37,28 @@ export function RichTextContent({ text, marks }: RichTextContentProps) {
 
   let offset = 0;
   return segmentRichText(text, marks).map((segment) => {
-    const key = `${offset}:${segment.marks.join("-")}`;
+    const key = `${offset}:${segment.marks.join("-")}:${segment.pageId ?? ""}`;
     offset += segment.text.length;
     const className =
       segment.marks.length > 0 ? classNameForMarks(segment.marks) : undefined;
+    if (segment.pageId) {
+      const styleMarks = pageLinkTitleMarks(segment.marks);
+      return (
+        <InlinePageLink
+          className={
+            styleMarks.length > 0 ? classNameForMarks(styleMarks) : undefined
+          }
+          key={key}
+          label={segment.text}
+          pageId={segment.pageId}
+        />
+      );
+    }
     if (segment.href) {
       return (
-        <a
-          className={className}
-          href={segment.href}
-          key={key}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
+        <InlineLink className={className} href={segment.href} key={key}>
           {segment.text}
-        </a>
+        </InlineLink>
       );
     }
     return (

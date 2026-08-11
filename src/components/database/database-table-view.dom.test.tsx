@@ -56,6 +56,16 @@ vi.mock("@/lib/databases/formula-relations.ts", () => ({
 vi.mock("@/db/queries/database-collection-ops.ts", () => ({
   updateDatabaseView: vi.fn(),
 }));
+// Live-markets derivation is a connector-only overlay layered AFTER formulas
+// (and it opens a react-query subscription). Out of scope here: pass the
+// formula rows straight through so this stays a filter → sort pipeline test.
+vi.mock("@/lib/databases/use-live-markets-derived.ts", () => ({
+  useLiveMarketsDerivedRows: (
+    _database: unknown,
+    _fields: unknown,
+    rows: readonly LocalDatabaseRow[]
+  ) => ({ changePending: false, rows }),
+}));
 
 const database = vi.hoisted(() => ({ current: null as LocalDatabase | null }));
 const dbRows = vi.hoisted(() => ({ current: [] as LocalDatabaseRow[] }));

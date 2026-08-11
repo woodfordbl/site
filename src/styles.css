@@ -484,12 +484,25 @@
   /* The root element is the surface iOS Safari samples for the areas *behind*
      the top/bottom bars and the overscroll region (with `viewport-fit=cover`,
      content does not reach into the safe-area insets, so an inner element's
-     background can't tint them — only the root can). Set it on `html`, not just
-     `body`: `body` is only as tall as its content, so on a short page it leaves
-     the bottom inset showing whatever is below it. Mix content background →
-     sidebar as the mobile sidebar is revealed (`--sidebar-reveal`, driven by
-     PageSidebarSwipeReveal) so the bars fade to the sidebar color *with the
-     swipe* rather than being permanently gray (var unset = 0 = bg-background). */
+     background can't tint them — only the root can), and, with `theme-color`
+     dropped on iOS (browser-chrome-tint.ts), for the chrome bands themselves.
+     Set it on `html`, not just `body`: `body` is only as tall as its content, so
+     on a short page it leaves the bottom inset showing whatever is below it. Mix
+     content background → sidebar as the mobile sidebar is revealed
+     (`--sidebar-reveal`, driven by PageSidebarSwipeReveal) so the bars fade to
+     the sidebar color *with the swipe* rather than being permanently gray (var
+     unset = 0 = bg-background).
+
+     Safari re-samples this canvas for the chrome tint while an opening drag is
+     under the finger, not on every paint (measured frame by frame at 30fps): it
+     followed the open across 8 distinct shades, but held the old tint through a
+     whole closing drag and then ran its own ~100ms crossfade after the lift. So
+     the fade is only as smooth as the color still moving under the finger —
+     hence a finger-tracked canvas (`data-swipe-dragging` drops the transition
+     mid-drag) and a linear `--sidebar-reveal`, which spends the most drag
+     distance on visible shades. The transition below only covers the remainder
+     after release. The close cut is Safari's, not ours: it survived a longer
+     transition, a linear curve, and removing the open-sidebar scroll lock. */
   html,
   body {
     overscroll-behavior: none;
@@ -498,21 +511,55 @@
       var(--background),
       var(--sidebar) calc(var(--sidebar-reveal, 0) * 100%)
     );
-    transition: background-color 200ms var(--ease-drawer);
+    transition: background-color 250ms var(--ease-drawer);
   }
 
   body {
     @apply text-foreground;
   }
 
-  /* While dragging, the bar tint tracks the finger 1:1 (no settle animation). */
+  /* Mid-drag the tint tracks the finger 1:1 — see above: those touch events are
+     exactly when Safari re-samples the canvas for its chrome tint. */
   html[data-swipe-dragging],
   html[data-swipe-dragging] body {
     transition: none;
   }
 
   html {
+    --sidebar-solid: var(--sidebar);
     @apply font-sans;
+  }
+
+  /* The mobile drawer fades in from --background rather than being revealed
+     already-solid, by re-deriving `--sidebar` for its whole subtree from the
+     SAME `--sidebar-reveal` ramp the canvas uses — and carrying the same
+     transition, so the two also settle together after the finger lifts.
+
+     Otherwise the drawer and the canvas disagree for the entire gesture: a solid
+     gray drawer against a canvas still most of the way to white. That mismatch
+     is the seam along the page's top and bottom edges mid-swipe, and the band
+     under the drawer staying white until it snaps at the end. (The drawer can't
+     simply BE the canvas — `main` and the sidebar shell paint opaque surfaces
+     in between, so a transparent drawer reveals those, not the canvas.)
+
+     Only the surface: --sidebar-accent and friends stay solid, so rows, hovers
+     and borders keep their contrast while the surface comes in. */
+  [data-sidebar-reveal-surface] {
+    --sidebar: color-mix(
+      in oklab,
+      var(--background),
+      var(--sidebar-solid) calc(var(--sidebar-reveal, 0) * 100%)
+    );
+  }
+
+  [data-sidebar-reveal-surface].bg-sidebar,
+  [data-sidebar-reveal-surface] .bg-sidebar {
+    transition: background-color 250ms var(--ease-drawer);
+  }
+
+  html[data-swipe-dragging] [data-sidebar-reveal-surface].bg-sidebar,
+  html[data-swipe-dragging] [data-sidebar-reveal-surface] .bg-sidebar {
+    transition: none;
   }
 
   /*
@@ -945,8 +992,9 @@
 
 /*
  * Grouped drawer menu (touch presentation of dropdown/context menus). Runs of
- * adjacent item rows read as one iOS/Linear "grouped list" card: shared muted
- * background, rounded only at the run's outer corners, hairline dividers
+ * adjacent item rows read as one iOS/Linear "grouped list" card: shared --card
+ * background over the drawer's recessed --sidebar surface, rounded only at the
+ * run's outer corners, hairline dividers
  * between rows. Any non-item sibling — search input, section label, stats
  * footer, or a `data-menu-card-break` separator — breaks the run and stays
  * plain. Done in CSS (not by wrapping rows) so it sees through caller wrapper
@@ -954,7 +1002,7 @@
  * sibling in the scroll body.
  */
 .cn-drawer-menu-group [data-menu-card-item] {
-  background-color: var(--muted);
+  background-color: var(--card);
   border-radius: 0;
 }
 .cn-drawer-menu-group [data-menu-card-item]:first-child,
@@ -970,11 +1018,40 @@
 .cn-drawer-menu-group [data-menu-card-item] + [data-menu-card-item] {
   border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
 }
-/* Press feedback layered over the muted card (plain `bg-accent` == muted). */
+/* Press feedback layered over the card (row's own `bg-accent` sits below it). */
 .cn-drawer-menu-group [data-menu-card-item]:active {
-  background-color: color-mix(in oklch, var(--foreground) 10%, var(--muted));
+  background-color: color-mix(in oklch, var(--foreground) 10%, var(--card));
 }
 /* Separator between cards collapses to a pure gap — no hairline. */
 .cn-drawer-menu-group [data-menu-card-break] {
   background-color: transparent;
+}
+
+/*
+ * Menu separators must never paint as leading, trailing, or adjacent bands.
+ * Call sites often pair an unconditional <Separator /> with a section that
+ * returns null; React Fragments add no DOM node, so sibling selectors see the
+ * real layout and suppress the orphans. Covers dropdown, context, and drawer
+ * presentations of the shared menu primitives.
+ */
+[data-slot="dropdown-menu-separator"]:first-child,
+[data-slot="context-menu-separator"]:first-child,
+[data-menu-card-break]:first-child {
+  display: none;
+}
+
+[data-slot="dropdown-menu-separator"] + [data-slot="dropdown-menu-separator"],
+[data-slot="context-menu-separator"] + [data-slot="context-menu-separator"],
+[data-menu-card-break] + [data-menu-card-break] {
+  display: none;
+}
+
+[data-slot="dropdown-menu-separator"]:not(
+  :has(~ :not([data-slot="dropdown-menu-separator"]))
+),
+[data-slot="context-menu-separator"]:not(
+  :has(~ :not([data-slot="context-menu-separator"]))
+),
+[data-menu-card-break]:not(:has(~ :not([data-menu-card-break]))) {
+  display: none;
 }

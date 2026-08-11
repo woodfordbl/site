@@ -44,6 +44,14 @@ type TooltipShortcutProps =
       sequence?: SequenceCommandId;
     };
 
+/**
+ * Tooltip popup surface. Styling is driven by `html[data-tooltip-style]`:
+ * - `normal` (default) — `bg-popover` / `text-popover-foreground`
+ * - `inverted` — opposite of page chrome (`bg-foreground` / `text-background`)
+ *
+ * No border, outline, or ring — soft `shadow-md` only. Nested keycaps inherit
+ * filled `Kbd` chrome (no outline islands).
+ */
 function TooltipContent({
   className,
   side = "top",
@@ -84,7 +92,13 @@ function TooltipContent({
       >
         <TooltipPrimitive.Popup
           className={cn(
-            "overlay-popover-surface z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-popover px-3 py-1.5 font-normal text-popover-foreground text-xs shadow-md ring-1 ring-foreground/10 has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:border **:data-[slot=kbd]:border-border **:data-[slot=kbd]:bg-background **:data-[slot=kbd]:text-muted-foreground",
+            "overlay-popover-surface z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-popover px-3 py-1.5 font-normal text-popover-foreground text-xs shadow-md has-data-[slot=kbd]:pr-1.5",
+            // Inverted = opposite of page chrome (dark in light mode, light in dark).
+            "in-[[data-tooltip-style=inverted]]:bg-foreground in-[[data-tooltip-style=inverted]]:text-background",
+            // Filled keycaps stay readable on inverted surfaces; skip inherit (text-only).
+            "in-[[data-tooltip-style=inverted]]:**:data-[slot=kbd]:data-[variant=outline]:bg-background/20 in-[[data-tooltip-style=inverted]]:**:data-[slot=kbd]:data-[variant=outline]:text-inherit",
+            "in-[[data-tooltip-style=inverted]]:**:data-[slot=kbd]:data-[variant=default]:bg-background/20 in-[[data-tooltip-style=inverted]]:**:data-[slot=kbd]:data-[variant=default]:text-inherit",
+            "in-[[data-tooltip-style=inverted]]:**:data-[slot=sequence-shortcut]>span:text-background/60",
             // Interruptible enter/exit from the trigger; instant for adjacent tooltips.
             "transition-[opacity,scale] duration-[125ms] ease-[var(--ease-out-strong)]",
             "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
@@ -100,7 +114,12 @@ function TooltipContent({
           {command ? <Shortcut command={command} /> : null}
           {sequence ? <SequenceShortcut sequenceId={sequence} /> : null}
           {showArrow ? (
-            <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-popover fill-popover data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=right]:top-1/2! data-[side=inline-start]:-right-1 data-[side=left]:-right-1 data-[side=top]:-bottom-2.5 data-[side=inline-end]:-left-1 data-[side=right]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2" />
+            <TooltipPrimitive.Arrow
+              className={cn(
+                "z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-popover fill-popover data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-start]:top-1/2! data-[side=left]:top-1/2! data-[side=right]:top-1/2! data-[side=inline-start]:-right-1 data-[side=left]:-right-1 data-[side=top]:-bottom-2.5 data-[side=inline-end]:-left-1 data-[side=right]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:-translate-y-1/2 data-[side=right]:-translate-y-1/2",
+                "in-[[data-tooltip-style=inverted]]:bg-foreground in-[[data-tooltip-style=inverted]]:fill-foreground"
+              )}
+            />
           ) : null}
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>

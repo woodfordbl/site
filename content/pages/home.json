@@ -1,21 +1,102 @@
 {
   "id": "home",
   "slug": "/",
-  "title": "Home",
-  "icon": "tabler:IconHome2Filled",
+  "title": "Blake Woodford",
+  "icon": "tabler:IconUser",
   "parentId": null,
+  "createdAt": "2026-07-31T02:30:32.819Z",
+  "updatedAt": "2026-07-31T03:25:24.835Z",
   "blocks": [
     {
-      "id": "0f314bf7-727b-4f41-8344-0983901261b5",
+      "id": "3182267b-7c17-4600-82a7-78659158cf5c",
       "type": "text",
       "props": {
         "text": ""
       }
     },
     {
-      "id": "036955d8-8076-46ff-9c02-86a19a811b07",
+      "id": "ff988d3f-de0b-4a9c-8fc7-79d6aaa4dc03",
       "parentId": null,
       "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "hi i'm blake",
+        "marks": []
+      }
+    },
+    {
+      "id": "3a12bd3e-cddf-4e2f-afc7-91d6d5b2d90a",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "currently ceo/co-founder @altitude",
+        "marks": [
+          {
+            "type": "link",
+            "start": 25,
+            "end": 34,
+            "href": "https://altitude.so"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3e6f1a43-a48f-4696-95d9-4b5dbf08702a",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "3e8814c0-e832-40d9-a671-ca90d1e13be3",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "i like space, engineering, and ai"
+      }
+    },
+    {
+      "id": "6aa1f0fd-4bc0-4f2e-8fff-a90ab4157399",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "\n"
+      }
+    },
+    {
+      "id": "10cced2c-b6fd-4b9f-9825-897ad0fd6711",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": "more to come soon"
+      }
+    },
+    {
+      "id": "58449015-4334-45dc-b5c5-ccf49904d49b",
+      "parentId": null,
+      "indent": 0,
+      "type": "text",
+      "props": {
+        "text": ""
+      }
+    },
+    {
+      "id": "7fd53f0b-d3b8-4884-85b4-ae22dfb85e1f",
+      "parentId": null,
+      "indent": 0,
+      "type": "database",
+      "props": {
+        "databaseId": "282bddac-7bb0-4ee7-9313-ee99a933eeb1"
+      }
+    },
+    {
+      "id": "8a03d41c-3b9c-42aa-a3a4-65b966e6be8a",
       "type": "text",
       "props": {
         "text": ""

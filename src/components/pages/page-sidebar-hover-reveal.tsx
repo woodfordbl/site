@@ -6,6 +6,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { sidebarWidthRemToCss } from "@/lib/pages/page-sidebar-layout-cookie.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -21,8 +27,38 @@ const BACKDROP_EXIT_MS = 150;
 
 interface PageSidebarHoverRevealProps {
   children: ReactNode;
+  onPin: () => void;
   sidebar: ReactNode;
   sidebarWidthRem: number;
+}
+
+function HoverPanelPinRail({ onPin }: { onPin: () => void }) {
+  return (
+    <TooltipProvider delay={300}>
+      <Tooltip trackCursorAxis="y">
+        <TooltipTrigger
+          render={
+            <button
+              aria-label="Pin sidebar open"
+              className="absolute inset-y-0 left-0 z-30 hidden w-3 -translate-x-1/2 cursor-pointer border-0 bg-transparent p-0 outline-none after:absolute after:inset-y-2 after:left-1/2 after:w-0.5 after:transition-colors hover:after:bg-selection-primary focus-visible:ring-0 sm:block"
+              onClick={onPin}
+              tabIndex={-1}
+              type="button"
+            />
+          }
+        />
+        <TooltipContent
+          command="toggle-sidebar"
+          showArrow={false}
+          side="right"
+          sideOffset={8}
+        >
+          <span className="font-medium">Click</span>
+          to pin open
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function useMainPanelRect(containerRef: RefObject<HTMLDivElement | null>) {
@@ -64,6 +100,7 @@ function useMainPanelRect(containerRef: RefObject<HTMLDivElement | null>) {
 
 export function PageSidebarHoverReveal({
   children,
+  onPin,
   sidebar,
   sidebarWidthRem,
 }: PageSidebarHoverRevealProps) {
@@ -172,6 +209,7 @@ export function PageSidebarHoverReveal({
         }}
       >
         {sidebar}
+        <HoverPanelPinRail onPin={onPin} />
       </div>
     </div>
   );

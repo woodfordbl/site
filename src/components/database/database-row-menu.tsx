@@ -31,6 +31,7 @@ import {
 } from "@/db/collections/local-collections.ts";
 import {
   deleteDatabaseRows,
+  deleteLiveMarketRows,
   duplicateDatabaseRows,
   setDatabaseRowIcon,
 } from "@/db/queries/database-collection-ops.ts";
@@ -39,6 +40,7 @@ import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { databaseRowNavTarget } from "@/lib/databases/database-page-paths.ts";
+import { isLiveMarketsDatabase } from "@/lib/databases/live-markets-instruments.ts";
 import { ensureDatabaseRowPage } from "@/lib/databases/materialize-row-page.ts";
 import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
 
@@ -103,8 +105,9 @@ export function DatabaseRowMenu({
 
   const selectionCount = actionRowIds.length;
   const isSyncedContext = contextRow.externalId !== undefined;
+  const isLiveMarkets = database ? isLiveMarketsDatabase(database) : false;
 
-  const canMutateRows = useMemo(
+  const canMutateLocalRows = useMemo(
     () =>
       actionRowIds.some((rowId) => {
         const row = localDatabaseRowsCollection.get(rowId);
@@ -112,6 +115,10 @@ export function DatabaseRowMenu({
       }),
     [actionRowIds]
   );
+  // Live-markets: delete removes watchlist tickers (including synced rows).
+  // Duplicate stays off — tickers aren't copyable.
+  const canDeleteRows = isLiveMarkets || canMutateLocalRows;
+  const canDuplicateRows = !isLiveMarkets && canMutateLocalRows;
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -175,20 +182,24 @@ export function DatabaseRowMenu({
   }, [contextRow.id, isSyncedContext]);
 
   const handleDuplicate = useCallback(() => {
-    if (mode !== "edit") {
+    if (mode !== "edit" || !canDuplicateRows) {
       return;
     }
     duplicateDatabaseRows([...actionRowIds]);
     onSelectionCleared?.();
-  }, [actionRowIds, mode, onSelectionCleared]);
+  }, [actionRowIds, canDuplicateRows, mode, onSelectionCleared]);
 
   const handleDelete = useCallback(() => {
-    if (mode !== "edit") {
+    if (mode !== "edit" || !canDeleteRows) {
       return;
     }
-    deleteDatabaseRows([...actionRowIds]);
+    if (isLiveMarkets) {
+      deleteLiveMarketRows([...actionRowIds]);
+    } else {
+      deleteDatabaseRows([...actionRowIds]);
+    }
     onSelectionCleared?.();
-  }, [actionRowIds, mode, onSelectionCleared]);
+  }, [actionRowIds, canDeleteRows, isLiveMarkets, mode, onSelectionCleared]);
 
   // Keep favorite label reactive when materialize just linked a pageId.
   const favoriteLabel = isFavorite
@@ -232,7 +243,7 @@ export function DatabaseRowMenu({
               <>
                 <ContextMenuSeparator />
                 <ContextMenuItem
-                  disabled={!canMutateRows}
+                  disabled={!canDuplicateRows}
                   onClick={handleDuplicate}
                 >
                   <IconCopy />
@@ -241,7 +252,7 @@ export function DatabaseRowMenu({
                     : "Duplicate"}
                 </ContextMenuItem>
                 <ContextMenuItem
-                  disabled={!canMutateRows}
+                  disabled={!canDeleteRows}
                   onClick={handleDelete}
                   variant="destructive"
                 >

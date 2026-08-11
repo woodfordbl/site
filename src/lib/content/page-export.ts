@@ -11,6 +11,7 @@ export function exportPageBlocks(rows: CanvasRow[]): Block[] {
 export function exportPageDocument(
   rows: CanvasRow[],
   meta: {
+    createdAt?: string;
     font?: PageFont;
     fullWidth?: boolean;
     icon?: string;
@@ -19,6 +20,7 @@ export function exportPageDocument(
     slug: string;
     textScale?: PageTextScale;
     title: string;
+    updatedAt?: string;
   }
 ) {
   return {
@@ -27,6 +29,8 @@ export function exportPageDocument(
     title: meta.title,
     parentId: meta.parentId,
     ...(meta.icon === undefined ? {} : { icon: meta.icon }),
+    ...(meta.createdAt === undefined ? {} : { createdAt: meta.createdAt }),
+    ...(meta.updatedAt === undefined ? {} : { updatedAt: meta.updatedAt }),
     ...(meta.font === undefined || meta.font === "default"
       ? {}
       : { font: meta.font }),

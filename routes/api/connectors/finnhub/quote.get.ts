@@ -1,10 +1,20 @@
 import { defineHandler } from "nitro";
 import { getQuery, setResponseHeader, setResponseStatus } from "nitro/h3";
 
+import {
+  finnhubMarketCapFromMillions,
+  finnhubSharesFromMillions,
+  normalizeFinnhubCompanyName,
+} from "@/lib/connectors/finnhub-profile.ts";
+
 /**
  * `GET /api/connectors/finnhub/quote?symbols=AAPL,MSFT` — server-side proxy for
- * Finnhub's per-symbol `/quote` endpoint, used to seed the "Live stocks"
- * connector (and as the unwatched-refresh fallback).
+ * Finnhub's per-symbol `/quote` + `/stock/profile2` endpoints, used to seed the
+ * "Stocks and Crypto" equity rows (and as the unwatched-refresh fallback).
+ *
+ * Each response entry carries live quote fields (`c`/`dp`/`t`) plus company
+ * enrichment (`name`, absolute-unit `marketCap` and `float` / shares outstanding —
+ * Finnhub's profile millions values are scaled here).
  *
  * The Finnhub API key lives only in `FINNHUB_API_KEY` (server env) and never
  * reaches the browser — the client calls this same-origin route instead.
@@ -15,6 +25,7 @@ import { getQuery, setResponseHeader, setResponseStatus } from "nitro/h3";
 const SYMBOL_PATTERN = /^[A-Z0-9.:_-]{1,20}$/;
 const MAX_SYMBOLS = 30;
 const QUOTE_ENDPOINT = "https://finnhub.io/api/v1/quote";
+const PROFILE_ENDPOINT = "https://finnhub.io/api/v1/stock/profile2";
 const HTTP_UNAVAILABLE = 503;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_BAD_GATEWAY = 502;
@@ -22,6 +33,9 @@ const HTTP_BAD_GATEWAY = 502;
 interface ProxyQuote {
   c: number;
   dp: number | null;
+  float: number | null;
+  marketCap: number | null;
+  name: string | null;
   symbol: string;
   t: number;
 }
@@ -30,6 +44,12 @@ interface RawFinnhubQuote {
   c: number;
   dp: number | null;
   t: number;
+}
+
+interface RawFinnhubProfile {
+  marketCapitalization?: number;
+  name?: string;
+  shareOutstanding?: number;
 }
 
 function firstString(value: unknown): string {
@@ -54,6 +74,21 @@ function parseSymbols(raw: string): string[] {
   return [...seen];
 }
 
+async function fetchJson(
+  endpoint: string,
+  symbol: string,
+  apiKey: string
+): Promise<unknown | null> {
+  const url = new URL(endpoint);
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("token", apiKey);
+  const response = await fetch(url);
+  if (!response.ok) {
+    return null;
+  }
+  return await response.json();
+}
+
 export default defineHandler(
   async (event): Promise<ProxyQuote[] | { error: string }> => {
     const apiKey = process.env.FINNHUB_API_KEY;
@@ -70,19 +105,26 @@ export default defineHandler(
 
     const quotes = await Promise.all(
       symbols.map(async (symbol): Promise<ProxyQuote | null> => {
-        const url = new URL(QUOTE_ENDPOINT);
-        url.searchParams.set("symbol", symbol);
-        url.searchParams.set("token", apiKey);
-        const response = await fetch(url);
-        if (!response.ok) {
+        const [quoteRaw, profileRaw] = await Promise.all([
+          fetchJson(QUOTE_ENDPOINT, symbol, apiKey),
+          fetchJson(PROFILE_ENDPOINT, symbol, apiKey),
+        ]);
+        if (quoteRaw === null) {
           return null;
         }
-        const quote = (await response.json()) as RawFinnhubQuote;
+        const quote = quoteRaw as RawFinnhubQuote;
+        const profile =
+          profileRaw !== null && typeof profileRaw === "object"
+            ? (profileRaw as RawFinnhubProfile)
+            : {};
         return {
           symbol,
           c: Number(quote.c),
           dp: quote.dp === null ? null : Number(quote.dp),
           t: Number(quote.t),
+          name: normalizeFinnhubCompanyName(profile.name),
+          marketCap: finnhubMarketCapFromMillions(profile.marketCapitalization),
+          float: finnhubSharesFromMillions(profile.shareOutstanding),
         };
       })
     );

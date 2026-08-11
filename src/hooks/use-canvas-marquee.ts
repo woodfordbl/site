@@ -20,6 +20,14 @@ import { collectCanvasRowRects } from "@/lib/canvas/resolve-drop-target.ts";
 const MARQUEE_IGNORE_SELECTOR =
   "input, textarea, button, a, select, [contenteditable], [role='button'], [data-canvas-row-content], [data-canvas-row-select], [data-canvas-row-menu]";
 
+/**
+ * Marker on the canvas scroll root while a marquee is active. The scroll root
+ * pins every descendant to the default arrow through it (see PageCanvasEditor),
+ * so dragging across text fields or the rich-text surface never flips to an
+ * I-beam mid-drag.
+ */
+const MARQUEE_ACTIVE_ATTRIBUTE = "data-canvas-marquee";
+
 /** Edge band of the scroll root that auto-scrolls while the marquee is held there. */
 const AUTOSCROLL_EDGE_PX = 72;
 const AUTOSCROLL_MAX_STEP_PX = 16;
@@ -154,6 +162,7 @@ export function useCanvasMarquee(
       window.removeEventListener("blur", handleWindowBlur);
       if (session?.active) {
         document.body.style.userSelect = "";
+        root?.removeAttribute(MARQUEE_ACTIVE_ATTRIBUTE);
       }
       session = null;
       setRect(null);
@@ -165,6 +174,7 @@ export function useCanvasMarquee(
       clearFocus();
       window.getSelection()?.removeAllRanges();
       document.body.style.userSelect = "none";
+      root?.setAttribute(MARQUEE_ACTIVE_ATTRIBUTE, "");
       frame = requestAnimationFrame(autoScrollTick);
     };
 

@@ -1,12 +1,18 @@
 "use client";
 
 import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
+import { motion } from "motion/react";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
@@ -26,27 +32,44 @@ interface PageHeaderProps extends PageCanvasFooterActionsInput {
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */
 function PageHeaderSidebarToggle() {
   const isNarrowViewport = useIsNarrowViewport();
-  const { isCollapsed, pinSidebar } = usePageSidebarChrome();
+  const { isCollapsed, isCollapsing, pinSidebar } = usePageSidebarChrome();
 
   if (isNarrowViewport) {
     return <SidebarTrigger className="shrink-0 text-muted-foreground" />;
   }
 
-  if (!isCollapsed) {
+  if (!(isCollapsed || isCollapsing)) {
     return null;
   }
 
   return (
-    <Button
-      aria-label="Expand sidebar"
-      className="shrink-0"
-      onClick={pinSidebar}
-      size="icon-sm"
-      type="button"
-      variant="ghost"
+    <motion.div
+      animate={{ opacity: 1, transform: "translateX(0px)" }}
+      className="flex shrink-0 items-center"
+      initial={
+        isCollapsing ? { opacity: 0, transform: "translateX(-6px)" } : false
+      }
+      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
     >
-      <IconLayoutSidebar aria-hidden />
-    </Button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              aria-label="Pin sidebar open"
+              onClick={pinSidebar}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <IconLayoutSidebar aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent command="toggle-sidebar" side="bottom">
+          Pin sidebar open
+        </TooltipContent>
+      </Tooltip>
+    </motion.div>
   );
 }
 

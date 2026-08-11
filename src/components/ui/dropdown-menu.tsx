@@ -12,6 +12,7 @@ import {
   DrawerMenuSectionLabel,
   DrawerMenuSeparator,
   DrawerMenuTrigger,
+  ignoreKeysFromNestedSurfaces,
   MenuDrawerRoot,
   MenuDrawerSubDrawer,
   MenuDrawerSubProvider,
@@ -108,6 +109,7 @@ function DropdownMenuContent({
   sideOffset = 4,
   className,
   children,
+  onKeyDown,
   ...props
 }: MenuPrimitive.Popup.Props &
   Pick<
@@ -144,10 +146,14 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           className={cn(
-            "overlay-popover-surface z-50 max-h-(--available-height) w-56 min-w-56 origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 data-closed:overflow-hidden",
+            "overlay-popover-surface z-50 max-h-(--available-height) w-56 min-w-0 max-w-(--available-width) origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none ring-1 ring-foreground/10 data-closed:overflow-hidden",
             className
           )}
           data-slot="dropdown-menu-content"
+          onKeyDown={(event) => {
+            ignoreKeysFromNestedSurfaces(event);
+            onKeyDown?.(event);
+          }}
           {...props}
         >
           {children}
@@ -363,7 +369,7 @@ function DropdownMenuSubContent({
       align={align}
       alignOffset={alignOffset}
       className={cn(
-        "overlay-popover-surface w-56 min-w-56 rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10",
+        "overlay-popover-surface w-56 min-w-0 max-w-(--available-width) rounded-lg bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10",
         className
       )}
       data-slot="dropdown-menu-sub-content"
@@ -582,6 +588,9 @@ function DropdownMenuSeparator({
   if (presentation === "drawer") {
     return <DrawerMenuSeparator />;
   }
+  // Orphan / adjacent separators are suppressed in styles.css via
+  // `[data-slot=dropdown-menu-separator]` sibling selectors so conditional
+  // sections that return null cannot leave empty divider bands.
   return (
     <MenuPrimitive.Separator
       className={cn("-mx-1 my-1 h-px bg-border", className)}

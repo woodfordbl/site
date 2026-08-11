@@ -15,6 +15,7 @@ import type {
   ConnectorFieldDef,
   ConnectorRow,
 } from "@/lib/connectors/types.ts";
+import { marketCapFromFloatAndPrice } from "@/lib/databases/series-values.ts";
 import type {
   DatabaseCellValue,
   LocalDatabase,
@@ -326,6 +327,96 @@ function recordCapturedHistory(
   }
 }
 
+function enrichTickMarketCap(
+  rowValues: ConnectorRow["values"],
+  existing: LocalDatabaseRow | undefined,
+  fieldIds: {
+    floatFieldId: string | undefined;
+    marketCapFieldId: string | undefined;
+    priceFieldId: string | undefined;
+  }
+): ConnectorRow["values"] {
+  const { floatFieldId, marketCapFieldId, priceFieldId } = fieldIds;
+  if (
+    !(marketCapFieldId && floatFieldId && priceFieldId) ||
+    rowValues.marketCap !== undefined
+  ) {
+    return rowValues;
+  }
+
+  let price: unknown = rowValues.price;
+  if (typeof price !== "number") {
+    price = existing?.values[priceFieldId] ?? null;
+  }
+  const floatShares = existing?.values[floatFieldId] ?? null;
+  const derived = marketCapFromFloatAndPrice(
+    typeof floatShares === "number" ? floatShares : null,
+    typeof price === "number" ? price : null
+  );
+  if (derived === null) {
+    return rowValues;
+  }
+  return { ...rowValues, marketCap: derived };
+}
+
+function planStreamTickMutations(
+  database: LocalDatabase,
+  batchByExternalId: Map<string, ConnectorRow>,
+  rowsByExternalId: Map<string, LocalDatabaseRow>,
+  fieldIdBySourceKey: Map<string, string>,
+  timestamp: string,
+  startingOrder: number
+): {
+  inserts: LocalDatabaseRow[];
+  updates: { rowId: string; values: Record<string, DatabaseCellValue> }[];
+} {
+  const inserts: LocalDatabaseRow[] = [];
+  const updates: {
+    rowId: string;
+    values: Record<string, DatabaseCellValue>;
+  }[] = [];
+  let appendOrder = startingOrder;
+  const marketCapFieldIds = {
+    floatFieldId: fieldIdBySourceKey.get("float"),
+    marketCapFieldId: fieldIdBySourceKey.get("marketCap"),
+    priceFieldId: fieldIdBySourceKey.get("price"),
+  };
+
+  for (const [externalId, connectorRow] of batchByExternalId) {
+    const existing = rowsByExternalId.get(externalId);
+    // Live ticks usually carry price only — recompute marketCap = float × price
+    // from the existing row's float so Market cap tracks ticks without waiting
+    // for the next poll.
+    const rowValues = enrichTickMarketCap(
+      connectorRow.values,
+      existing,
+      marketCapFieldIds
+    );
+    const syncedValues = toSyncedValues(rowValues, fieldIdBySourceKey);
+    if (!existing) {
+      appendOrder += ORDER_STEP;
+      inserts.push({
+        id: crypto.randomUUID(),
+        databaseId: database.id,
+        externalId,
+        values: syncedValues,
+        order: appendOrder,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      continue;
+    }
+    const changed = Object.entries(syncedValues).some(
+      ([fieldId, value]) => !cellValuesEqual(existing.values[fieldId], value)
+    );
+    if (changed) {
+      updates.push({ rowId: existing.id, values: syncedValues });
+    }
+  }
+
+  return { inserts, updates };
+}
+
 /**
  * Apply one streaming tick batch to a synced database's rows — a lighter
  * partial-upsert counterpart to {@link applySyncSnapshot} for live feeds.
@@ -371,47 +462,23 @@ export function applyStreamTick(
   }
 
   const timestamp = nowIso();
-  let appendOrder = Math.max(
+  const startingOrder = Math.max(
     -ORDER_STEP,
     ...databaseRows.map((row, index) => row.order ?? index * ORDER_STEP)
   );
-
-  const inserts: LocalDatabaseRow[] = [];
-  const updates: {
-    rowId: string;
-    values: Record<string, DatabaseCellValue>;
-  }[] = [];
 
   // Last-write-wins if a batch repeats an externalId.
   const batchByExternalId = new Map(
     connectorRows.map((row) => [row.externalId, row])
   );
-  for (const [externalId, connectorRow] of batchByExternalId) {
-    const syncedValues = toSyncedValues(
-      connectorRow.values,
-      fieldIdBySourceKey
-    );
-    const existing = rowsByExternalId.get(externalId);
-    if (!existing) {
-      appendOrder += ORDER_STEP;
-      inserts.push({
-        id: crypto.randomUUID(),
-        databaseId: database.id,
-        externalId,
-        values: syncedValues,
-        order: appendOrder,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
-      continue;
-    }
-    const changed = Object.entries(syncedValues).some(
-      ([fieldId, value]) => !cellValuesEqual(existing.values[fieldId], value)
-    );
-    if (changed) {
-      updates.push({ rowId: existing.id, values: syncedValues });
-    }
-  }
+  const { inserts, updates } = planStreamTickMutations(
+    database,
+    batchByExternalId,
+    rowsByExternalId,
+    fieldIdBySourceKey,
+    timestamp,
+    startingOrder
+  );
 
   if (inserts.length === 0 && updates.length === 0) {
     return;

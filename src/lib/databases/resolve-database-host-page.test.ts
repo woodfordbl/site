@@ -173,6 +173,51 @@ describe("findDatabaseHostPageId", () => {
     ).toBe("d");
   });
 
+  it("skips the hub page even when its id sorts first", () => {
+    const hub: PageSummary = {
+      ...page("0a-hub", "/hub", "home"),
+      databaseSource: { databaseId: DB_ID },
+    };
+    expect(
+      findDatabaseHostPageId({
+        blocks: [databaseBlock("home", DB_ID), databaseBlock(hub.id, DB_ID)],
+        databaseId: DB_ID,
+        pages: [page("home", "/"), hub],
+      })
+    ).toBe("home");
+  });
+
+  it("skips materialized row pages", () => {
+    const rowPage: PageSummary = {
+      ...page("0a-row", "/hub/row", "0a-hub"),
+      databaseRowSource: { databaseId: DB_ID, rowId: "row-1" },
+    };
+    expect(
+      findDatabaseHostPageId({
+        blocks: [
+          databaseBlock("home", DB_ID),
+          databaseBlock(rowPage.id, DB_ID),
+        ],
+        databaseId: DB_ID,
+        pages: [page("home", "/"), rowPage],
+      })
+    ).toBe("home");
+  });
+
+  it("falls back to the hub's parent when only the hub hosts the database", () => {
+    const hub: PageSummary = {
+      ...page("0a-hub", "/host/tracker", "host"),
+      databaseSource: { databaseId: DB_ID },
+    };
+    expect(
+      findDatabaseHostPageId({
+        blocks: [databaseBlock(hub.id, DB_ID)],
+        databaseId: DB_ID,
+        pages: [page("host", "/host"), hub],
+      })
+    ).toBe("host");
+  });
+
   it("picks the smallest pageId across linked views and null when absent", () => {
     const pages = [page("b-host", "/b"), page("a-host", "/a")];
     expect(

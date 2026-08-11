@@ -3,8 +3,8 @@
 import {
   IconCopy,
   IconCopyOff,
-  IconEdit,
   IconLayoutGrid,
+  IconLink,
   IconPencil,
   IconPhoto,
   IconRefresh,
@@ -89,9 +89,9 @@ export interface PageRowMenuContentProps {
   canResetToRemote: boolean;
   isFavorite: boolean;
   onChangeIcon: () => void;
+  onCopyLink: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
-  onEditTemplate: () => void;
   onMoveTo: (parentId: string | null) => void;
   onRename: () => void;
   onResetToRemote: () => void;
@@ -104,24 +104,24 @@ export interface PageRowMenuContentProps {
 }
 
 /**
- * Maps a row menu's actions to its `scope: "menu"` command handlers, for
- * {@link useMenuCommandKeys}. Keeps the single-key bindings (favorite/duplicate/
- * delete/save-template/edit-template) firing against the same target as the
- * clicked menu items.
+ * Maps a row menu's actions to its menu-local command handlers, for
+ * {@link useMenuCommandKeys}. Keeps the bindings (favorite/duplicate/delete/
+ * save-template, plus the global `copy-page-link` chord) firing against this
+ * row while the menu is open — not the active page.
  */
 export function rowMenuCommandHandlers(actions: {
   canDelete: boolean;
+  onCopyLink: () => void;
   onDelete: () => void;
   onDuplicate: (withContent: boolean) => void;
-  onEditTemplate: () => void;
   onSaveAsTemplate: () => void;
   onToggleFavorite: () => void;
 }): MenuCommandHandlers {
   return {
+    "copy-page-link": actions.onCopyLink,
     // Omit when delete is disabled so the shortcut matches the greyed-out item.
     "delete-page": actions.canDelete ? actions.onDelete : undefined,
     "duplicate-page": () => actions.onDuplicate(true),
-    "edit-template": actions.onEditTemplate,
     "save-as-template": actions.onSaveAsTemplate,
     "toggle-favorite": actions.onToggleFavorite,
   };
@@ -138,9 +138,9 @@ export function PageRowMenuContent({
   canResetToRemote,
   isFavorite,
   onChangeIcon,
+  onCopyLink,
   onDelete,
   onDuplicate,
-  onEditTemplate,
   onMoveTo,
   onRename,
   onResetToRemote,
@@ -170,6 +170,13 @@ export function PageRowMenuContent({
         <P.Item onClick={onChangeIcon}>
           <IconPhoto />
           Change icon
+        </P.Item>
+        <P.Item onClick={onCopyLink}>
+          <IconLink />
+          Copy link
+          <P.Shortcut>
+            <Shortcut command="copy-page-link" />
+          </P.Shortcut>
         </P.Item>
         <P.Sub>
           <P.SubTrigger>
@@ -212,13 +219,6 @@ export function PageRowMenuContent({
           Save as template
           <P.Shortcut>
             <Shortcut command="save-as-template" />
-          </P.Shortcut>
-        </P.Item>
-        <P.Item onClick={onEditTemplate}>
-          <IconEdit />
-          Edit template
-          <P.Shortcut>
-            <Shortcut command="edit-template" />
           </P.Shortcut>
         </P.Item>
         {canResetToRemote ? (

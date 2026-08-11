@@ -155,6 +155,77 @@ export async function readFieldHistory(
   return [...(cache.get(key) ?? [])];
 }
 
+/**
+ * Sync peek at an already-hydrated series (empty when missing / not yet loaded).
+ * Used by derived live-markets metrics after {@link ensureSeriesCoverage} has
+ * warmed the cache — never triggers IndexedDB IO.
+ */
+export function peekFieldHistory(
+  databaseId: string,
+  externalId: string,
+  fieldId: string
+): FieldHistoryPoint[] {
+  if (isUnavailable()) {
+    return [];
+  }
+  const key = seriesKey(databaseId, externalId, fieldId);
+  if (!hydrated.has(key)) {
+    return [];
+  }
+  return [...(cache.get(key) ?? [])];
+}
+
+/** One batch of historical points to merge into a series (any age order). */
+export interface FieldHistoryMerge {
+  databaseId: string;
+  externalId: string;
+  fieldId: string;
+  points: readonly FieldHistoryPoint[];
+}
+
+/**
+ * Merge historical (backfill) points into series. Unlike
+ * {@link appendFieldHistory}, older-than-latest points are kept — candles sit
+ * under live ticks. Same-`t` collisions prefer the incoming value; the merged
+ * series is thinned afterward. Safe to call fire-and-forget.
+ */
+export async function mergeFieldHistory(
+  batches: readonly FieldHistoryMerge[]
+): Promise<void> {
+  if (isUnavailable() || batches.length === 0) {
+    return;
+  }
+
+  const nowMs = Date.now();
+  await Promise.all(
+    batches.map(async (batch) => {
+      const finite = batch.points.filter(
+        (point) => Number.isFinite(point.t) && Number.isFinite(point.v)
+      );
+      if (finite.length === 0) {
+        return;
+      }
+      const key = seriesKey(batch.databaseId, batch.externalId, batch.fieldId);
+      await hydrate(key);
+      const existing = cache.get(key) ?? [];
+      const byT = new Map<number, FieldHistoryPoint>();
+      for (const point of existing) {
+        byT.set(point.t, point);
+      }
+      for (const point of finite) {
+        byT.set(point.t, point);
+      }
+      const merged = [...byT.values()].sort((a, b) => a.t - b.t);
+      cache.set(key, thinFieldHistory(merged, nowMs));
+      dirty.add(key);
+    })
+  );
+
+  if (dirty.size > 0) {
+    schedulePersist();
+  }
+}
+
 /** Delete every series belonging to a database (used when it's removed). */
 export async function clearDatabaseFieldHistory(
   databaseId: string

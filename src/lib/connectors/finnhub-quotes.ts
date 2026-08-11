@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  finnhubMarketCapFromMillions,
+  finnhubSharesFromMillions,
+  normalizeFinnhubCompanyName,
+} from "@/lib/connectors/finnhub-profile.ts";
+import {
   HTTP_STATUS_TOO_MANY_REQUESTS,
   HTTP_STATUS_UNAUTHORIZED,
 } from "@/lib/connectors/http.ts";
@@ -12,10 +17,10 @@ import {
 } from "@/lib/connectors/types.ts";
 
 /**
- * Finnhub stocks transport: the price/daily-change plumbing behind the unified
- * "Live" connector's `stocks` type (see `live-markets.ts`). One row per
- * configured symbol (e.g. AAPL), seeded from the `/quote` REST endpoint and
- * streamed in real time from Finnhub's `trade` WebSocket.
+ * Finnhub equity transport: the price/daily-change plumbing behind the unified
+ * "Stocks and Crypto" connector (see `live-markets.ts`). One row per
+ * equity symbol (e.g. AAPL), seeded from `/quote` + `/stock/profile2` (name +
+ * market cap) and streamed in real time from Finnhub's `trade` WebSocket.
  *
  * Finnhub requires an API key, so the transport is resolved from whether the
  * user supplied their own token:
@@ -23,13 +28,16 @@ import {
  * - **No BYO token** (the default) → the browser talks only to a same-origin
  *   proxy (`/api/connectors/finnhub/*`). The proxy injects the app's
  *   `FINNHUB_API_KEY` (a server-only env var) so users get live data with zero
- *   setup and the key never reaches the client.
+ *   setup and the key never reaches the client. The quote proxy also fans out
+ *   to `profile2` and returns absolute-unit `marketCap` (Finnhub's raw value is
+ *   in millions).
  * - **BYO token** → the browser connects directly to Finnhub with the user's
- *   own token (their token, their choice), skipping the proxy entirely.
+ *   own token (their token, their choice), skipping the proxy entirely — still
+ *   pairing `/quote` with `/stock/profile2` on seed.
  *
- * Either way the wire shapes are identical — the REST proxy mirrors Finnhub's
- * quote payload and the WS proxy relays Finnhub's native `trade` frames — so
- * the parsing below is transport-agnostic; only the endpoint and token differ.
+ * Stream ticks only carry price; name/float/marketCap/change keep their last seeded
+ * values via `applyStreamTick` merge semantics. Market cap is float × price when
+ * shares outstanding is known (else the profile market-cap millions value).
  */
 
 const finnhubConfigSchema = z.object({
@@ -46,13 +54,23 @@ const finnhubQuoteSchema = z.object({
   t: z.number(), // quote time (unix seconds)
 });
 
-/** Proxy-mode `/quote` payload — one entry per symbol, symbol included. */
+/** Direct-mode `/stock/profile2` — company name + market cap / shares (millions). */
+const finnhubProfileSchema = z.object({
+  name: z.string().optional(),
+  marketCapitalization: z.number().optional(),
+  shareOutstanding: z.number().optional(),
+});
+
+/** Proxy-mode seed payload — quote + profile enrichment per symbol. */
 const proxyQuoteListSchema = z.array(
   z.object({
     symbol: z.string(),
     c: z.number(),
     dp: z.number().nullable(),
     t: z.number(),
+    name: z.string().nullable().optional(),
+    marketCap: z.number().nullable().optional(),
+    float: z.number().nullable().optional(),
   })
 );
 
@@ -74,6 +92,7 @@ const PERCENT_TO_FRACTION = 100;
 const SECOND_MS = 1000;
 
 const DIRECT_REST_ENDPOINT = "https://finnhub.io/api/v1/quote";
+const DIRECT_PROFILE_ENDPOINT = "https://finnhub.io/api/v1/stock/profile2";
 const DIRECT_WS_ENDPOINT = "wss://ws.finnhub.io";
 const PROXY_REST_PATH = "/api/connectors/finnhub/quote";
 const PROXY_WS_PATH = "/api/connectors/finnhub/stream";
@@ -106,18 +125,37 @@ function isoTimestampFromMs(ms: number): string {
   return new Date(safeMs).toISOString();
 }
 
-/** Full row from a quote seed (price + percent change + time). */
+/** Full row from a quote + profile seed. */
 function quoteToRow(
   symbol: string,
   price: number,
   percent: number | null,
-  timeMs: number
+  timeMs: number,
+  enrichment: {
+    name: string | null;
+    marketCap: number | null;
+    float: number | null;
+  } = {
+    name: null,
+    marketCap: null,
+    float: null,
+  }
 ): ConnectorRow {
+  const safePrice = Number.isFinite(price) ? price : null;
+  const derivedCap =
+    enrichment.float !== null &&
+    safePrice !== null &&
+    Number.isFinite(enrichment.float)
+      ? enrichment.float * safePrice
+      : enrichment.marketCap;
   return {
     externalId: symbol,
     values: {
       symbol,
-      price: Number.isFinite(price) ? price : null,
+      name: enrichment.name,
+      float: enrichment.float,
+      marketCap: derivedCap,
+      price: safePrice,
       change:
         percent !== null && Number.isFinite(percent)
           ? percent / PERCENT_TO_FRACTION
@@ -166,43 +204,78 @@ function assertResponseOk(response: Response, provider: string): void {
   }
 }
 
-/** Seed via direct per-symbol `/quote` calls with the user's BYO token. */
+/** Seed via direct per-symbol `/quote` + `/stock/profile2` with the BYO token. */
 async function fetchDirect(
   ctx: ConnectorFetchContext & { token: string },
   symbols: string[]
 ): Promise<ConnectorRow[]> {
   return await Promise.all(
     symbols.map(async (symbol) => {
-      const params = new URLSearchParams({ symbol, token: ctx.token });
-      const url = `${DIRECT_REST_ENDPOINT}?${params.toString()}`;
-      let response: Response;
+      const quoteParams = new URLSearchParams({ symbol, token: ctx.token });
+      const profileParams = new URLSearchParams({ symbol, token: ctx.token });
+      const quoteUrl = `${DIRECT_REST_ENDPOINT}?${quoteParams.toString()}`;
+      const profileUrl = `${DIRECT_PROFILE_ENDPOINT}?${profileParams.toString()}`;
+
+      let quoteResponse: Response;
+      let profileResponse: Response | null = null;
       try {
-        response = await ctx.fetchFn(url);
+        const [quoteSettled, profileSettled] = await Promise.all([
+          ctx.fetchFn(quoteUrl),
+          ctx.fetchFn(profileUrl).catch(() => null),
+        ]);
+        quoteResponse = quoteSettled;
+        profileResponse = profileSettled;
       } catch (cause) {
         throw new ConnectorError("Finnhub request failed", {
           kind: "network",
           cause,
         });
       }
-      assertResponseOk(response, "Finnhub");
-      const quote = finnhubQuoteSchema.safeParse(await response.json());
+      assertResponseOk(quoteResponse, "Finnhub");
+      const quote = finnhubQuoteSchema.safeParse(await quoteResponse.json());
       if (!quote.success) {
         throw new ConnectorError("Unexpected Finnhub response shape", {
           kind: "network",
           cause: quote.error,
         });
       }
+
+      let enrichment: {
+        name: string | null;
+        marketCap: number | null;
+        float: number | null;
+      } = {
+        name: null,
+        marketCap: null,
+        float: null,
+      };
+      if (profileResponse?.ok) {
+        const profile = finnhubProfileSchema.safeParse(
+          await profileResponse.json()
+        );
+        if (profile.success) {
+          enrichment = {
+            name: normalizeFinnhubCompanyName(profile.data.name),
+            marketCap: finnhubMarketCapFromMillions(
+              profile.data.marketCapitalization
+            ),
+            float: finnhubSharesFromMillions(profile.data.shareOutstanding),
+          };
+        }
+      }
+
       return quoteToRow(
         symbol,
         quote.data.c,
         quote.data.dp,
-        quote.data.t * SECOND_MS
+        quote.data.t * SECOND_MS,
+        enrichment
       );
     })
   );
 }
 
-/** Seed via the same-origin proxy (server injects the app key). */
+/** Seed via the same-origin proxy (server injects the app key + profile). */
 async function fetchProxy(
   ctx: ConnectorFetchContext,
   symbols: string[]
@@ -227,7 +300,17 @@ async function fetchProxy(
     });
   }
   return list.data.map((quote) =>
-    quoteToRow(quote.symbol, quote.c, quote.dp, quote.t * SECOND_MS)
+    quoteToRow(quote.symbol, quote.c, quote.dp, quote.t * SECOND_MS, {
+      name: normalizeFinnhubCompanyName(quote.name),
+      marketCap:
+        typeof quote.marketCap === "number" && Number.isFinite(quote.marketCap)
+          ? Math.round(quote.marketCap)
+          : null,
+      float:
+        typeof quote.float === "number" && Number.isFinite(quote.float)
+          ? quote.float
+          : null,
+    })
   );
 }
 

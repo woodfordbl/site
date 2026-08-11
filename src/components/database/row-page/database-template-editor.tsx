@@ -11,6 +11,7 @@ import {
 } from "@/components/database/row-page/row-properties-rail.tsx";
 import { RowTemplatePreviewBody } from "@/components/database/row-page/row-template-preview.tsx";
 import {
+  hasRowTemplateDefaultFields,
   RowTemplateDefaultsList,
   RowTemplateTitleSection,
 } from "@/components/database/row-page/row-template-title-section.tsx";
@@ -75,6 +76,7 @@ export function DatabaseTemplateEditorClient({
   );
   const previewRows = useMemo(() => pickPreviewRows(rows), [rows]);
   const chrome = useRowPageWorkspaceChrome(database, {
+    hasProperties: database ? hasRowTemplateDefaultFields(database) : false,
     propertiesPanel: database ? (
       <RowTemplateDefaultsList database={database} />
     ) : null,
@@ -139,6 +141,7 @@ export function DatabaseTemplateEditorClient({
           templatePage={templatePage}
         />
       }
+      topLevelBlockAlign={chrome.topLevelBlockAlign}
     />
   );
 

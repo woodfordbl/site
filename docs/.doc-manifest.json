@@ -180,9 +180,13 @@
       "globs": [
         "src/lib/media/**",
         "src/hooks/use-asset-object-url.ts",
-        "src/hooks/use-unfurl-embed-url.ts"
+        "src/hooks/use-unfurl-embed-url.ts",
+        "src/hooks/use-url-preview.ts"
       ],
-      "docs": ["docs/architecture/block-types.md"]
+      "docs": [
+        "docs/architecture/block-types.md",
+        "docs/architecture/canvas-editor.md"
+      ]
     },
     {
       "globs": [
@@ -201,6 +205,7 @@
         "src/lib/pages/page-content-layout.ts",
         "src/lib/pages/page-content-layout-context.tsx",
         "src/lib/pages/copy-page-link.ts",
+        "src/lib/pages/resolve-page-from-url.ts",
         "src/lib/pages/page-move-targets.ts",
         "src/components/pages/page-version-history-submenu.tsx",
         "src/components/pages/page-version-preview.tsx",
@@ -213,6 +218,8 @@
       ],
       "docs": ["docs/architecture/pages.md"],
       "majorGlobs": [
+        "src/lib/pages/page-activity-summary.ts",
+        "src/components/pages/page-activity-panel.tsx",
         "src/components/pages/page-header-menu.tsx",
         "src/lib/schemas/page-settings.ts",
         "src/db/snapshots/page-snapshot-store.ts"
@@ -240,6 +247,7 @@
         "src/db/queries/read-bootstrap-page-blocks.ts",
         "src/lib/content/save-media-assets.ts",
         "src/lib/content/save-all-pages.ts",
+        "src/lib/content/publish-saved-page-to-client.ts",
         "src/lib/content/prepare-page-document-for-author-save.ts",
         "src/lib/content/workspace-export.ts",
         "src/lib/content/workspace-import.ts",
@@ -261,9 +269,21 @@
         "src/hooks/use-page-canvas-footer-actions.ts",
         "src/lib/content/save-page.ts",
         "src/lib/content/save-all-pages.ts",
+        "src/lib/content/publish-saved-page-to-client.ts",
+        "src/lib/content/shipped-pages-cache.ts",
+        "src/lib/content/preserve-shipped-created-at.ts",
+        "src/lib/content/page-store.server.ts",
         "src/lib/pages/refresh-site-content.ts"
       ],
-      "docs": ["docs/architecture/author-dev-mode.md"]
+      "docs": ["docs/architecture/author-dev-mode.md"],
+      "majorGlobs": [
+        "src/lib/content/save-all-pages.ts",
+        "src/lib/content/save-page.ts",
+        "src/lib/content/publish-saved-page-to-client.ts",
+        "src/lib/content/shipped-pages-cache.ts",
+        "src/lib/content/preserve-shipped-created-at.ts",
+        "src/hooks/use-page-canvas-footer-actions.ts"
+      ]
     },
     {
       "globs": [
@@ -299,6 +319,8 @@
         "src/components/database/**",
         "src/components/blocks/types/database/**",
         "src/lib/databases/**",
+        "src/components/canvas/database-block-delete-dialog.tsx",
+        "src/components/pages/delete-database-confirm-dialog.tsx",
         "src/lib/schemas/database.ts",
         "src/db/collections/database-sharded-row-storage.ts",
         "src/db/queries/database-collection-ops.ts",
@@ -311,6 +333,10 @@
         "src/db/queries/database-collection-ops.ts",
         "src/db/queries/database-page-ops.ts",
         "src/lib/databases/materialize-row-page.ts",
+        "src/lib/databases/delete-database-block-references.ts",
+        "src/lib/databases/delete-database-everywhere.ts",
+        "src/lib/databases/resolve-database-block-deletion.ts",
+        "src/components/canvas/database-block-delete-dialog.tsx",
         "src/components/database/database-table-grid.tsx",
         "src/components/database/database-filter-bar.tsx",
         "src/components/database/database-column-menu.tsx",

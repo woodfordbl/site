@@ -12,8 +12,8 @@ import {
 
 /**
  * Binance live-tick transport: the keyless price streaming/backfill plumbing
- * behind the unified "Live" connector's `crypto` type (see `live-markets.ts`).
- * CoinGecko seeds the rows (price + market cap in the chosen currency); Binance
+ * behind the unified "Stocks and Crypto" connector (see `live-markets.ts`).
+ * CoinGecko seeds crypto rows (price + market cap in the chosen currency); Binance
  * overlays live price updates. Config symbols are BASE tickers (e.g. "BTC") —
  * the trading pair is composed from the display `currency` (USD→USDT, EUR→EUR,
  * …). Rows are keyed by the base ticker so ticks land on the CoinGecko row.
@@ -92,7 +92,8 @@ function isoTimestampFromMs(ms: number): string {
 /**
  * Partial tick row keyed by the base ticker (`externalId`). Only price /
  * change / updatedAt are written; `applyStreamTick` merges, so the CoinGecko
- * seed's name and market cap are preserved.
+ * seed's name and float are preserved, and marketCap is recomputed as
+ * float × price when float is on the existing row.
  */
 function tickToRow(
   base: string,

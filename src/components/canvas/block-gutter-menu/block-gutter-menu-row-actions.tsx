@@ -24,9 +24,10 @@ export function BlockGutterMenuRowActions() {
         Duplicate
         <Shortcut className="ml-auto" command="duplicate-block" />
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={handleDelete}>
+      <DropdownMenuItem onClick={handleDelete} variant="destructive">
         <IconTrash />
         Delete
+        <Shortcut className="ml-auto" command="delete-page" />
       </DropdownMenuItem>
     </>
   );
