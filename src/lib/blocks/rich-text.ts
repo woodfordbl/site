@@ -24,10 +24,10 @@ export function linkMarkExtras(
 }
 
 /**
- * Identity for merging two adjacent same-type marks. Links only merge with an
- * adjoining link of the same destination, and formula tokens only with an
- * identical expression — though in practice two tokens never touch, since each
- * occupies its own sentinel character.
+ * Identity for merging two adjacent same-type marks: links only merge with an
+ * adjoining link of the same destination. Formula tokens never merge at all
+ * (see {@link normalizeInlineMarks}), so `expression` is compared here only for
+ * completeness.
  */
 function linksMatch(a: InlineMark, b: InlineMark): boolean {
   return (
@@ -119,6 +119,13 @@ export function normalizeInlineMarks(
 
   const merged: InlineMark[] = [];
   for (const mark of clipped) {
+    if (mark.type === "formula") {
+      // Each token is exactly one sentinel, so two adjacent tokens are two
+      // tokens — never one two-character run, even when their expressions
+      // match. A merged run would cover two sentinels and project neither.
+      merged.push({ ...mark });
+      continue;
+    }
     let previous: InlineMark | undefined;
     for (let i = merged.length - 1; i >= 0; i -= 1) {
       // Links merge only with an adjoining link of the same destination, and

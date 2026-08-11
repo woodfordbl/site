@@ -28,12 +28,14 @@ import {
 import { extractPrimaryPastedUrl } from "@/lib/canvas/paste-url.ts";
 import { getFieldSelection } from "@/lib/editor/caret-navigation.ts";
 import {
+  createInlineFormulaToken,
   createInlinePageLinkAnchor,
   insertLinkedTextAtSelection,
   insertLinkOverSelection,
   insertPlainTextAtSelection,
   pageLinkTitleMarks,
   type RichTextDomSnapshot,
+  repairInlineFormulaTokenDom,
   repairInlinePageLinkDom,
   richTextToHtml,
   serializeRichTextDom,
@@ -78,7 +80,8 @@ function snapshotEquals(
       mark.start === other.start &&
       mark.end === other.end &&
       mark.href === other.href &&
-      mark.pageId === other.pageId
+      mark.pageId === other.pageId &&
+      mark.expression === other.expression
     );
   });
 }
@@ -89,6 +92,17 @@ function buildContent(root: HTMLElement, value: string, marks: InlineMark[]) {
   for (const segment of segmentRichText(value, marks)) {
     if (segment.marks.length === 0) {
       fragment.append(doc.createTextNode(segment.text));
+      continue;
+    }
+    if (segment.expression !== undefined) {
+      // Rebuilt as a fresh element: the value is chrome, so a rebuild drops it
+      // back to the placeholder until the next value pass writes it in.
+      fragment.append(
+        createInlineFormulaToken(doc, {
+          className: classNameForMarks(segment.marks),
+          expression: segment.expression,
+        })
+      );
       continue;
     }
     if (segment.href && segment.pageId) {
@@ -221,6 +235,9 @@ export function RichTextArea({
     // Typing at a link edge can still land inside the anchor; lift it out
     // before reading, so the run's marks never spread onto the new text.
     repairInlinePageLinkDom(root);
+    // The same at a token edge, where the stakes are higher: a token's subtree
+    // is not serialized, so text left inside would vanish on this read.
+    repairInlineFormulaTokenDom(root);
     const snapshot = serializeRichTextDom(root);
     onInput(
       multiline

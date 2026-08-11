@@ -6,6 +6,7 @@ import {
 import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
 import { pageTitleUnderlineClassName } from "@/lib/pages/page-link-display.ts";
 import type { InlineMark, InlineMarkType } from "@/lib/schemas/rich-text.ts";
+import { FORMULA_TOKEN_SENTINEL } from "@/lib/schemas/rich-text.ts";
 
 /**
  * DOM ↔ model bridge for the rich-text contenteditable surface. The model is
@@ -19,6 +20,15 @@ import type { InlineMark, InlineMarkType } from "@/lib/schemas/rich-text.ts";
  * browser deletes it as one unit. Its icon/arrow chrome hosts
  * (`data-inline-page-link-chrome`) are excluded from text/mark serialization,
  * so the model text of a page link is exactly its title run.
+ *
+ * Inline formula tokens (`data-formula-token`) are atomic too, but invert the
+ * relationship: **none** of their DOM is serialized. The element stands in for
+ * exactly one {@link FORMULA_TOKEN_SENTINEL} character, the way a `<br>` stands
+ * in for one `\n` — so the value on screen is pure presentation and can be
+ * rewritten (see {@link applyInlineFormulaValues}) without the model, the undo
+ * history, or the conflict baseline noticing. Keeping the sentinel out of the
+ * DOM entirely also means the browser has no text node to split, merge, or
+ * autocorrect it into something else.
  */
 
 /** Anchors that render an inline page link (icon + title + arrow). */
@@ -26,6 +36,12 @@ export const PAGE_LINK_ANCHOR_SELECTOR = "a[data-page-id]";
 /** The title span inside a page-link anchor — the only serialized child. */
 const PAGE_LINK_TITLE_SELECTOR =
   ":scope > span:not([data-inline-page-link-chrome])";
+/** Elements standing in for one inline formula token. */
+export const FORMULA_TOKEN_SELECTOR = "[data-formula-token]";
+/** The presentation host inside a token — holds the rendered value. */
+const FORMULA_VALUE_SELECTOR = "[data-inline-formula-chrome]";
+/** Shown in a token whose value has not resolved yet. */
+export const PENDING_FORMULA_VALUE = "…";
 
 export interface RichTextDomSnapshot {
   marks: InlineMark[];
@@ -51,12 +67,38 @@ interface NodeMarks {
   types: InlineMarkType[];
 }
 
+function elementFor(node: Node): Element | null {
+  return node.nodeType === Node.ELEMENT_NODE
+    ? (node as Element)
+    : node.parentElement;
+}
+
 function isInlinePageLinkChrome(node: Node): boolean {
-  const start =
-    node.nodeType === Node.ELEMENT_NODE
-      ? (node as Element)
-      : node.parentElement;
-  return Boolean(start?.closest("[data-inline-page-link-chrome]"));
+  return Boolean(elementFor(node)?.closest("[data-inline-page-link-chrome]"));
+}
+
+/** Whether `node` is the element standing in for a formula token. */
+export function isFormulaTokenElement(node: Node): boolean {
+  return (
+    node.nodeType === Node.ELEMENT_NODE &&
+    (node as Element).matches(FORMULA_TOKEN_SELECTOR)
+  );
+}
+
+/**
+ * Everything strictly *inside* a token is presentation. Checking descendancy
+ * rather than a chrome attribute is deliberate: whatever the browser drops in
+ * there — an autocorrect text node, an IME composition — is excluded from the
+ * model on the same terms as the value we put there ourselves.
+ */
+function isInsideFormulaToken(node: Node): boolean {
+  const token = elementFor(node)?.closest(FORMULA_TOKEN_SELECTOR);
+  return token !== null && token !== undefined && token !== node;
+}
+
+/** Nodes that carry no model text of their own. */
+function isChrome(node: Node): boolean {
+  return isInlinePageLinkChrome(node) || isInsideFormulaToken(node);
 }
 
 function marksForNode(node: Node, root: HTMLElement): NodeMarks {
@@ -101,14 +143,19 @@ function walkTextAndBreaks(
     NodeFilter.SHOW_TEXT + NodeFilter.SHOW_ELEMENT
   );
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (isInlinePageLinkChrome(node)) {
+    if (isChrome(node)) {
       continue;
     }
     if (node.nodeType === Node.TEXT_NODE) {
       if (visit(node, (node.textContent ?? "").length)) {
         return;
       }
-    } else if ((node as Element).tagName === "BR" && visit(node, 1)) {
+    } else if (
+      // Both stand in for exactly one character: `<br>` for `\n`, a formula
+      // token for its sentinel.
+      ((node as Element).tagName === "BR" || isFormulaTokenElement(node)) &&
+      visit(node, 1)
+    ) {
       return;
     }
   }
@@ -184,6 +231,77 @@ export function createInlinePageLinkAnchor(
   return anchor;
 }
 
+export interface InlineFormulaTokenOptions {
+  /** Class for the token element. */
+  className: string;
+  /** The token's source, round-tripped through `data-expression`. */
+  expression: string;
+  /** Rendered value; defaults to the pending placeholder. */
+  value?: string;
+}
+
+/**
+ * Builds the atomic formula-token element. Like the page-link anchor this is
+ * the single source of the DOM shape — `richTextToHtml`, the field rebuild, and
+ * any insertion path must agree, or the field would flicker between two
+ * spellings of the same token.
+ */
+export function createInlineFormulaToken(
+  doc: Document,
+  options: InlineFormulaTokenOptions
+): HTMLSpanElement {
+  const token = doc.createElement("span");
+  token.dataset.formulaToken = "";
+  token.dataset.expression = options.expression;
+  token.dataset.marks = "formula";
+  token.className = options.className;
+  token.title = options.expression;
+  // Atomic, and for a stronger reason than page links: the model text is a
+  // sentinel that lives nowhere in this subtree, so a caret inside would have
+  // no offset to map to. Set as an attribute rather than via `contentEditable`
+  // so the element matches the parsed HTML exactly (jsdom has no IDL property).
+  token.setAttribute("contenteditable", "false");
+  const value = doc.createElement("span");
+  value.dataset.inlineFormulaChrome = "value";
+  value.textContent = options.value ?? PENDING_FORMULA_VALUE;
+  token.append(value);
+  return token;
+}
+
+/**
+ * Rewrite each token's displayed value in place, keyed by the token's model
+ * offset (the same key {@link InlineMark.start} uses, so the map from
+ * `useInlineFormulaValues` applies directly).
+ *
+ * Writes only to chrome, so it never dirties the field: a following
+ * serialization returns byte-identical `(text, marks)`. Offsets are read from
+ * the live DOM rather than trusted from the caller, so a value that arrives
+ * mid-edit lands on the right token or on none at all.
+ */
+export function applyInlineFormulaValues(
+  root: HTMLElement,
+  values: ReadonlyMap<number, string>
+): void {
+  const tokens: Array<{ element: Element; offset: number }> = [];
+  let offset = 0;
+  walkTextAndBreaks(root, (node, length) => {
+    if (isFormulaTokenElement(node)) {
+      tokens.push({ element: node as Element, offset });
+    }
+    offset += length;
+    return false;
+  });
+  // Applied after the walk: writing into the tree mid-traversal would move the
+  // walker's feet under it.
+  for (const { element, offset: at } of tokens) {
+    const host = element.querySelector(FORMULA_VALUE_SELECTOR);
+    const next = values.get(at) ?? PENDING_FORMULA_VALUE;
+    if (host && host.textContent !== next) {
+      host.textContent = next;
+    }
+  }
+}
+
 /**
  * `(text, marks)` → the field's DOM as an HTML string. Used for the initial
  * (and server-rendered) markup of the editable surface; after mount the field
@@ -199,6 +317,15 @@ export function richTextToHtml(
     .map((segment) => {
       if (segment.marks.length === 0) {
         return escapeHtml(segment.text);
+      }
+      if (segment.expression !== undefined) {
+        // The sentinel is never written out: the element *is* the character.
+        const expression = escapeHtml(segment.expression);
+        return `<span data-formula-token="" data-expression="${expression}" data-marks="formula" class="${classForMarks(
+          segment.marks
+        )}" title="${expression}" contenteditable="false"><span data-inline-formula-chrome="value">${escapeHtml(
+          PENDING_FORMULA_VALUE
+        )}</span></span>`;
       }
       if (segment.href && segment.pageId) {
         const url = escapeHtml(segment.href);
@@ -250,6 +377,14 @@ export function serializeRichTextDom(root: HTMLElement): RichTextDomSnapshot {
           ...(type === "link" ? linkMarkExtras({ href, pageId }) : {}),
         });
       }
+    } else if (isFormulaTokenElement(node)) {
+      text += FORMULA_TOKEN_SENTINEL;
+      marks.push({
+        type: "formula",
+        start,
+        end: start + FORMULA_TOKEN_SENTINEL.length,
+        expression: (node as HTMLElement).dataset.expression ?? "",
+      });
     } else {
       text += "\n";
     }
@@ -305,16 +440,21 @@ export function resolveRichTextPosition(
         return true;
       }
       lastText = { node, offset: length };
-    } else if (remaining === 0) {
-      // Caret directly before a <br>.
+    } else {
       const parent = node.parentNode;
-      if (parent) {
-        position = {
-          node: parent,
-          offset: Array.prototype.indexOf.call(parent.childNodes, node),
-        };
+      const index = parent
+        ? Array.prototype.indexOf.call(parent.childNodes, node)
+        : -1;
+      if (parent && remaining === 0) {
+        // Caret directly before the atomic node (a `<br>` or a token).
+        position = { node: parent, offset: index };
+        return true;
       }
-      return true;
+      if (parent) {
+        // …and directly after it, so an offset at the very end of a field that
+        // ends in one does not fall back to the text before it.
+        lastText = { node: parent, offset: index + 1 };
+      }
     }
     remaining -= length;
     return false;
@@ -360,6 +500,35 @@ export function repairInlinePageLinkDom(root: HTMLElement): boolean {
 }
 
 /**
+ * The same lift-out for formula tokens, and more load-bearing: a token's whole
+ * subtree is excluded from serialization, so anything stranded inside it would
+ * be *silently deleted* on the next read rather than merely mis-marked.
+ *
+ * Returns true when the DOM changed.
+ */
+export function repairInlineFormulaTokenDom(root: HTMLElement): boolean {
+  let repaired = false;
+  for (const token of root.querySelectorAll(FORMULA_TOKEN_SELECTOR)) {
+    const parent = token.parentNode;
+    if (!parent) {
+      continue;
+    }
+    const children = [...token.childNodes];
+    const host = token.querySelector(FORMULA_VALUE_SELECTOR);
+    const hostIndex = host ? children.indexOf(host) : -1;
+    for (const [index, child] of children.entries()) {
+      if (child === host) {
+        continue;
+      }
+      const beforeHost = hostIndex >= 0 && index < hostIndex;
+      parent.insertBefore(child, beforeHost ? token : token.nextSibling);
+      repaired = true;
+    }
+  }
+  return repaired;
+}
+
+/**
  * DOM point → model offset: length of the content between the field start and
  * the point. Skips inline page-link chrome so caret math matches serialization.
  */
@@ -370,7 +539,14 @@ function textOffsetForPoint(
 ): number {
   let endNode = targetNode;
   let endOffset = targetOffset;
-  if (isInlinePageLinkChrome(targetNode)) {
+  const token = elementFor(targetNode)?.closest(FORMULA_TOKEN_SELECTOR);
+  if (token?.parentNode && token !== targetNode) {
+    // A click landed on the value. There is no offset *within* a token, so
+    // resolve to the caret position after it.
+    endNode = token.parentNode;
+    endOffset =
+      Array.prototype.indexOf.call(token.parentNode.childNodes, token) + 1;
+  } else if (isInlinePageLinkChrome(targetNode)) {
     const anchor = (
       targetNode.nodeType === Node.ELEMENT_NODE
         ? (targetNode as Element)
