@@ -51,6 +51,24 @@ const POPOVER_WIDTH_PX = 720;
 const POPOVER_HEIGHT_PX = 340;
 const VIEWPORT_MARGIN_PX = 12;
 
+/**
+ * Everything that counts as "inside the panel" for dismissal: the panel
+ * itself, plus the surfaces it portals OUT of itself — the chip menu, the
+ * preview-row select, the mobile drawers. Those render at the document root,
+ * so a plain `contains` check on the panel would read a click on a menu item
+ * as a click outside and close the thing the menu belongs to.
+ */
+const PANEL_SURFACE_SELECTOR = [
+  "[data-inline-formula-popover]",
+  ".overlay-popover-surface",
+  '[data-slot^="drawer"]',
+].join(",");
+
+function isInsidePanel(node: Node | null): boolean {
+  const element = node instanceof Element ? node : node?.parentElement;
+  return Boolean(element?.closest(PANEL_SURFACE_SELECTOR));
+}
+
 interface PopoverTarget {
   expression: string;
   /** Model offset of the token being edited — its identity in the marks. */
@@ -115,13 +133,21 @@ export function InlineFormulaPopover() {
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
-      const next = resolveTarget(event.target as Node | null);
+      const node = event.target as Node | null;
+      const next = resolveTarget(node);
       if (next) {
         // The token is `contenteditable=false`; claiming the click keeps the
         // browser from dropping a caret beside it as the panel opens.
         event.preventDefault();
+        setTarget(next);
+        return;
       }
-      setTarget(next);
+      if (isInsidePanel(node)) {
+        // Working inside the panel — typing, picking a reference, opening a
+        // chip menu. Only a click that leaves it dismisses.
+        return;
+      }
+      setTarget(null);
     };
     const handleEditRequest = (event: Event) => {
       const { offset, rowId } = (event as CustomEvent<InlineFormulaEditRequest>)
@@ -160,13 +186,20 @@ export function InlineFormulaPopover() {
         close();
       }
     };
+    // Capture, so a scroll in any ancestor counts — but the panel's own
+    // reference list scrolls too, and that must not dismiss it.
+    const handleScroll = (event: Event) => {
+      if (!isInsidePanel(event.target as Node | null)) {
+        close();
+      }
+    };
     document.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, [target]);
 
