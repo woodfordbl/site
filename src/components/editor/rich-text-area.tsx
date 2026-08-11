@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { InlineFormulaValues } from "@/components/editor/inline-formula-values.tsx";
 import {
   collectInlinePageLinkChromeHosts,
   InlinePageLinkChrome,
@@ -28,6 +29,7 @@ import {
 import { extractPrimaryPastedUrl } from "@/lib/canvas/paste-url.ts";
 import { getFieldSelection } from "@/lib/editor/caret-navigation.ts";
 import {
+  applyInlineFormulaValues,
   createInlineFormulaToken,
   createInlinePageLinkAnchor,
   insertLinkedTextAtSelection,
@@ -60,6 +62,9 @@ interface RichTextAreaProps {
   placeholder?: string;
   value: string;
 }
+
+/** Stable empty map — a fresh one per render would re-run the value pass. */
+const NO_FORMULA_VALUES: ReadonlyMap<number, string> = new Map();
 
 function snapshotEquals(
   snapshot: RichTextDomSnapshot,
@@ -188,6 +193,11 @@ export function RichTextArea({
   const [chromeHosts, setChromeHosts] = useState<InlinePageLinkChromeHost[]>(
     []
   );
+  const hasFormulaTokens = normalizedMarks.some(
+    (mark) => mark.type === "formula"
+  );
+  const [formulaValues, setFormulaValues] =
+    useState<ReadonlyMap<number, string>>(NO_FORMULA_VALUES);
 
   // Initial (and server-rendered) content. Computed once — the identity stays
   // stable so React never rewrites the DOM; after mount the layout effect owns
@@ -219,6 +229,12 @@ export function RichTextArea({
           end: Math.min(selection.end, value.length),
         });
       }
+    }
+
+    // After any rebuild: a rebuilt token starts at its placeholder, and this
+    // writes chrome only, so it never dirties the field it just synced.
+    if (hasFormulaTokens) {
+      applyInlineFormulaValues(root, formulaValues);
     }
 
     const nextHosts = collectInlinePageLinkChromeHosts(root);
@@ -390,6 +406,12 @@ export function RichTextArea({
         tabIndex={0}
       />
       <InlinePageLinkChrome hosts={chromeHosts} />
+      {hasFormulaTokens && (
+        <InlineFormulaValues
+          marks={normalizedMarks}
+          onValues={setFormulaValues}
+        />
+      )}
     </>
   );
 }

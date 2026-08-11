@@ -89,10 +89,23 @@ export function useInlineFormulaValues(
   /** Bumped by the engine when a referenced database changes. */
   const [revision, setRevision] = useState(0);
 
-  const hasTokens = useMemo(
-    () => marks.some((mark) => mark.type === "formula"),
-    [marks]
+  /**
+   * Content identity of the field's tokens. Callers rebuild their mark array
+   * every render, so memoizing on `marks` itself would re-evaluate every token
+   * on every keystroke — including keystrokes nowhere near one.
+   */
+  const signature = marks
+    .filter((mark) => mark.type === "formula")
+    // JSON-quoted so no expression can forge the separator.
+    .map((mark) => `${mark.start}:${JSON.stringify(mark.expression ?? "")}`)
+    .join(",");
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signature is the content identity of marks; depending on the array itself defeats the memo
+  const tokens = useMemo(
+    () => marks.filter((mark) => mark.type === "formula"),
+    [signature]
   );
+  const hasTokens = tokens.length > 0;
 
   const context = useMemo(
     () =>
@@ -126,9 +139,9 @@ export function useInlineFormulaValues(
       relations: localFormulaRelationResolver({ now: () => new Date() }),
       userFunctions,
     });
-    return evaluateInlineTokens(marks, scope, pageContext);
+    return evaluateInlineTokens(tokens, scope, pageContext);
     // `revision` and the clock tick are inputs: both mean "re-read the world".
-  }, [hasTokens, page, marks, pageContext, userFunctions, revision]);
+  }, [hasTokens, page, tokens, pageContext, userFunctions, revision]);
 
   const tick = useVolatileClock(evaluation?.volatile === true);
   // Re-evaluate on the tick without making it a second memo.
