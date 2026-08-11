@@ -5,6 +5,7 @@ import {
   formulaTokenMark,
   hasUnprojectedToken,
   insertFormulaToken,
+  matchInlineFormulaTrigger,
   projectPlainText,
   setFormulaTokenExpression,
 } from "@/lib/blocks/inline-formula.ts";
@@ -256,5 +257,60 @@ describe("setFormulaTokenExpression", () => {
       "z"
     );
     expect(marks.map((mark) => mark.expression)).toEqual(["z", "b"]);
+  });
+});
+
+describe("matchInlineFormulaTrigger", () => {
+  const caretAt = (offset: number) => ({ start: offset, end: offset });
+
+  it("turns a just-typed {{ into a token", () => {
+    const result = matchInlineFormulaTrigger("Total: {{", [], caretAt(9));
+    expect(result?.text).toBe(`Total: ${S}`);
+    expect(result?.marks).toEqual([formulaTokenMark(7, "")]);
+  });
+
+  it("works mid-sentence, where the slash menu cannot reach", () => {
+    const result = matchInlineFormulaTrigger(
+      "We have {{ open tasks.",
+      [],
+      caretAt(10)
+    );
+    expect(result?.text).toBe(`We have ${S} open tasks.`);
+  });
+
+  it("ignores a single brace", () => {
+    expect(matchInlineFormulaTrigger("a {", [], caretAt(3))).toBeNull();
+  });
+
+  it("ignores {{ that is not right behind the caret", () => {
+    // Editing elsewhere in a line that happens to contain the trigger must
+    // not silently convert it.
+    expect(
+      matchInlineFormulaTrigger("{{ later text", [], caretAt(13))
+    ).toBeNull();
+  });
+
+  it("ignores a non-collapsed selection", () => {
+    expect(
+      matchInlineFormulaTrigger("ab{{", [], { start: 2, end: 4 })
+    ).toBeNull();
+  });
+
+  it("ignores a caret at the very start", () => {
+    expect(matchInlineFormulaTrigger("{{x", [], caretAt(0))).toBeNull();
+  });
+
+  it("leaves the caret after the new token", () => {
+    const result = matchInlineFormulaTrigger("x{{", [], caretAt(3));
+    expect(result?.selection).toEqual({ start: 2, end: 2 });
+  });
+
+  it("keeps surrounding marks, rebased across the replacement", () => {
+    const result = matchInlineFormulaTrigger(
+      "{{tail",
+      [{ type: "bold", start: 2, end: 6 }],
+      caretAt(2)
+    );
+    expect(result?.marks).toContainEqual({ type: "bold", start: 1, end: 5 });
   });
 });

@@ -605,12 +605,15 @@ export interface FormulaEditorPanelProps {
    * status, preview, and Save on the left; the reference browser and detail
    * strip on the right, with a taller editor and reference list. The host
    * dialog owns the heading, so `wide` drops the panel's own "Formula" label.
+   * `popover` is `wide` sized to its content instead of to a dialog — same
+   * two columns, no fixed height, and the preview/detail strip sits directly
+   * under the status rather than being anchored to the bottom.
    * `sheet` is the mobile form for the coarse-pointer submenu drawer:
    * Cancel/Formula/Done header (Done replaces Save), the CM6 editor even on
    * coarse pointers, a tappable status pill, and the keyboard-anchored
    * accessory row + picker drawers instead of the inline reference list.
    */
-  layout?: "sheet" | "stack" | "wide";
+  layout?: "popover" | "sheet" | "stack" | "wide";
   /**
    * Sheet header's Cancel — backs out without saving (typically closes the
    * host drawer). Only rendered in the `sheet` layout.
@@ -800,12 +803,20 @@ function ReferenceList({
 
 /** The fixed-height docs strip fed by hover/focus on reference rows. */
 function DetailStrip({
+  className,
   detail,
 }: {
+  /** Height override — the compact form stretches it to the column's foot. */
+  className?: string;
   detail: ReferenceDetail | null;
 }): ReactNode {
   return (
-    <div className="flex h-20 flex-col gap-0.5 overflow-hidden rounded-md border border-border px-2 py-1.5">
+    <div
+      className={cn(
+        "flex h-20 flex-col gap-0.5 overflow-hidden rounded-md border border-border px-2 py-1.5",
+        className
+      )}
+    >
       {detail === null ? (
         <span className="text-muted-foreground text-xs">
           Select an item to see how it works.
@@ -830,6 +841,8 @@ function DetailStrip({
 }
 
 interface PanelLayoutProps {
+  /** Two columns, but sized to the content rather than to a dialog. */
+  compact: boolean;
   detail: ReactNode;
   /** In the wide form Save lives INSIDE this slot (the editor's InputGroup). */
   editor: ReactNode;
@@ -848,8 +861,14 @@ interface PanelLayoutProps {
  * into an editor column (input with Save inside, status, then preview and
  * the detail strip anchored to the bottom) and a full-height reference
  * column, so the extra width and height are actually used.
+ *
+ * `compact` keeps the two columns but drops the fixed height and the
+ * bottom-anchoring, so the left column closes up under the editor. A dialog
+ * can afford to spend the vertical space; a popover hovering over the
+ * paragraph you are reading cannot.
  */
 function PanelLayout({
+  compact,
   detail,
   editor,
   preview,
@@ -874,11 +893,21 @@ function PanelLayout({
     );
   }
   return (
-    <div className="code-no-ligatures grid h-[30rem] max-h-[65svh] w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+    <div
+      className={cn(
+        "code-no-ligatures grid w-full grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3",
+        compact ? "h-[22rem] max-h-[70svh]" : "h-[30rem] max-h-[65svh]"
+      )}
+    >
       <div className="flex min-w-0 flex-col gap-1.5">
         {editor}
         {status}
-        <div className="mt-auto flex flex-col gap-1.5">
+        <div
+          className={cn(
+            "flex flex-col gap-1.5",
+            compact ? "min-h-0 flex-1" : "mt-auto"
+          )}
+        >
           {preview}
           {detail}
         </div>
@@ -1067,6 +1096,39 @@ function StatusPill({
   );
 }
 
+/**
+ * The layout-dependent sizing, resolved once. Kept out of the panel body
+ * because it is pure class-name arithmetic, and inlining four conditionals
+ * there pushes the component past the complexity cap for no benefit.
+ */
+function layoutClasses(
+  wide: boolean,
+  compact: boolean,
+  chromeless: string
+): {
+  codeEditor: string | undefined;
+  reference: string | undefined;
+  textarea: string | undefined;
+} {
+  if (!wide) {
+    return { codeEditor: undefined, reference: undefined, textarea: undefined };
+  }
+  if (compact) {
+    return {
+      codeEditor: "w-full [&_.cm-content]:min-h-24! [&_.cm-scroller]:max-h-40!",
+      // Fills the column, same as the dialog form — the grid's own height is
+      // what keeps the popover compact, and both columns end on one line.
+      reference: "max-h-none min-h-0 flex-1",
+      textarea: cn("max-h-40 min-h-24", chromeless),
+    };
+  }
+  return {
+    codeEditor: "w-full [&_.cm-content]:min-h-40! [&_.cm-scroller]:max-h-72!",
+    reference: "max-h-none min-h-0 flex-1",
+    textarea: cn("max-h-72 min-h-40", chromeless),
+  };
+}
+
 /** The formula builder panel (see module docs). */
 export function FormulaEditorPanel({
   expression,
@@ -1080,7 +1142,10 @@ export function FormulaEditorPanel({
   relations,
   userFunctions,
 }: FormulaEditorPanelProps): ReactNode {
-  const wide = layout === "wide";
+  // `popover` is the wide form everywhere the editor chrome is concerned —
+  // it differs only in how PanelLayout spends vertical space.
+  const compact = layout === "popover";
+  const wide = layout === "wide" || compact;
   const sheet = layout === "sheet";
   // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
   // natively; the textarea path humanizes for display below.
@@ -1446,13 +1511,14 @@ export function FormulaEditorPanel({
   // goes chromeless.
   const chromeless =
     "rounded-none border-0 bg-transparent focus-visible:border-transparent dark:bg-transparent";
+  const sizing = layoutClasses(wide, compact, chromeless);
   const expressionTextarea = (
     <Textarea
       aria-label="Formula expression"
       autoComplete="off"
       className={cn(
         "max-h-32 min-h-16 font-mono text-xs md:text-xs",
-        wide && cn("max-h-72 min-h-40", chromeless)
+        sizing.textarea
       )}
       onChange={(event) => {
         setDraft(
@@ -1478,12 +1544,7 @@ export function FormulaEditorPanel({
   // CM injects its theme stylesheet after ours, so the height overrides need
   // `!` to beat the theme's fixed min/max rules at equal specificity.
   const editorSurface = (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col",
-        wide && "w-full [&_.cm-content]:min-h-40! [&_.cm-scroller]:max-h-72!"
-      )}
-    >
+    <div className={cn("flex min-w-0 flex-col", sizing.codeEditor)}>
       {usesTextarea ? (
         expressionTextarea
       ) : (
@@ -1584,7 +1645,7 @@ export function FormulaEditorPanel({
         ) : null}
       </div>
       <ReferenceList
-        className={wide ? "max-h-none min-h-0 flex-1" : undefined}
+        className={sizing.reference}
         entries={{
           customFunctionEntries,
           functionEntries,
@@ -1650,7 +1711,13 @@ export function FormulaEditorPanel({
 
   return (
     <PanelLayout
-      detail={<DetailStrip detail={detail} />}
+      compact={compact}
+      detail={
+        <DetailStrip
+          className={compact ? "h-auto min-h-20 flex-1" : undefined}
+          detail={detail}
+        />
+      }
       editor={editor}
       preview={previewLine}
       reference={reference}

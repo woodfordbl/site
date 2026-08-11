@@ -17,7 +17,6 @@ import {
   useCanvasMenu,
 } from "@/components/canvas/canvas-menu-context.tsx";
 import type { SlashMenuSession } from "@/components/canvas/canvas-menu-types.ts";
-import { requestInlineFormulaEdit } from "@/components/canvas/inline-formula-popover.tsx";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { type SlashPhase, useSlashState } from "@/hooks/use-slash-state.ts";
 import { findRowById } from "@/lib/blocks/block-tree.ts";
@@ -35,6 +34,7 @@ import {
   type FieldSelection,
   isCanvasTextField,
 } from "@/lib/editor/caret-navigation.ts";
+import { requestInlineFormulaEdit } from "@/lib/editor/inline-formula-edit-request.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 
 /**

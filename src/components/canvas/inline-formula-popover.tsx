@@ -18,6 +18,10 @@ import {
   pageFormulaPreviewRow,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
+  INLINE_FORMULA_EDIT_EVENT,
+  type InlineFormulaEditRequest,
+} from "@/lib/editor/inline-formula-edit-request.ts";
+import {
   collectInlineFormulaTokens,
   FORMULA_TOKEN_SELECTOR,
 } from "@/lib/editor/rich-text-dom.ts";
@@ -39,28 +43,13 @@ import { cn } from "@/lib/utils.ts";
 /** Space between the token and the panel. */
 const POPOVER_GAP_PX = 8;
 /**
- * Sized for the panel's two-column `wide` form — editor and detail strip on
- * the left, reference browser on the right. Height is the panel's own `30rem`
- * plus this container's padding, used only to decide which side of the token
- * to open on.
+ * Sized for the panel's two-column `popover` form — editor and detail strip
+ * on the left, reference browser on the right. The height is an estimate used
+ * only to decide which side of the token to open on.
  */
 const POPOVER_WIDTH_PX = 720;
-const POPOVER_HEIGHT_PX = 504;
+const POPOVER_HEIGHT_PX = 340;
 const VIEWPORT_MARGIN_PX = 12;
-
-/**
- * Asks the popover to open on a token that was just inserted. A DOM event
- * rather than context: the only caller is the slash handler, and threading a
- * callback from there to a sibling of the canvas would be more plumbing than
- * the one message is worth.
- */
-const EDIT_REQUEST_EVENT = "inline-formula:edit";
-
-export function requestInlineFormulaEdit(rowId: string, offset: number): void {
-  document.dispatchEvent(
-    new CustomEvent(EDIT_REQUEST_EVENT, { detail: { offset, rowId } })
-  );
-}
 
 interface PopoverTarget {
   expression: string;
@@ -135,9 +124,8 @@ export function InlineFormulaPopover() {
       setTarget(next);
     };
     const handleEditRequest = (event: Event) => {
-      const { offset, rowId } = (
-        event as CustomEvent<{ offset: number; rowId: string }>
-      ).detail;
+      const { offset, rowId } = (event as CustomEvent<InlineFormulaEditRequest>)
+        .detail;
       // A timeout, not rAF: the canvas rebuilds the field in a layout effect
       // during this dispatch's commit, and rAF is throttled to nothing in a
       // background tab — where a freshly inserted token would then never open.
@@ -146,10 +134,13 @@ export function InlineFormulaPopover() {
       }, 0);
     };
     document.addEventListener("click", handleClick);
-    document.addEventListener(EDIT_REQUEST_EVENT, handleEditRequest);
+    document.addEventListener(INLINE_FORMULA_EDIT_EVENT, handleEditRequest);
     return () => {
       document.removeEventListener("click", handleClick);
-      document.removeEventListener(EDIT_REQUEST_EVENT, handleEditRequest);
+      document.removeEventListener(
+        INLINE_FORMULA_EDIT_EVENT,
+        handleEditRequest
+      );
     };
   }, []);
 
@@ -264,7 +255,7 @@ export function InlineFormulaPopover() {
       <FormulaEditorPanel
         expression={target.expression}
         fields={fields}
-        layout="wide"
+        layout="popover"
         onCancel={() => {
           setTarget(null);
         }}

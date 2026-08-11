@@ -144,6 +144,45 @@ export function insertFormulaToken(
   };
 }
 
+/**
+ * Typing this anywhere in a line inserts a token. The slash menu only opens
+ * on a line that STARTS with `/`, so it cannot put a value mid-sentence —
+ * this is the trigger that can, and it matches the `{{ }}` spelling the
+ * proposal already uses for tokens in serialized text.
+ */
+export const INLINE_FORMULA_TRIGGER = "{{";
+
+/**
+ * The edit for a `{{` just typed at `caret`, or null when the text before the
+ * caret is something else.
+ *
+ * Deliberately narrow: it fires only when the trigger sits immediately behind
+ * a collapsed caret, so pasting a block of text containing `{{` — or editing
+ * elsewhere in a line that happens to hold one — never silently turns prose
+ * into a token.
+ */
+export function matchInlineFormulaTrigger(
+  text: string,
+  marks: readonly InlineMark[],
+  caret: TextRange
+): FormulaTokenEdit | null {
+  if (caret.start !== caret.end) {
+    return null;
+  }
+  const start = caret.start - INLINE_FORMULA_TRIGGER.length;
+  if (start < 0 || text.slice(start, caret.start) !== INLINE_FORMULA_TRIGGER) {
+    return null;
+  }
+  return insertFormulaToken(
+    text,
+    marks,
+    { start, end: caret.start },
+    // Empty: the editor opens on the new token, and what the user types there
+    // is the expression.
+    ""
+  );
+}
+
 /** The token covering `offset`, or null — the lookup behind click-to-edit. */
 export function formulaTokenAt(
   marks: readonly InlineMark[],
