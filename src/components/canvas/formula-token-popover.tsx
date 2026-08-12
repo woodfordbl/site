@@ -60,9 +60,9 @@ export function FormulaTokenPopover(): ReactNode {
     close();
   }, [close]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
   const relations = useMemo(
     () => localFormulaRelationResolver(),
-    // biome-ignore lint/correctness/useExhaustiveDependencies: invalidate when DBs change
     [relatedDatabases]
   );
   const fields = useMemo(() => pageFormulaFields(), []);
