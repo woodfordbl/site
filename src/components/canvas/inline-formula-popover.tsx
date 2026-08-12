@@ -132,7 +132,24 @@ export function InlineFormulaPopover() {
   const [target, setTarget] = useState<PopoverTarget | null>(null);
 
   useEffect(() => {
+    /**
+     * Did the press behind the pending click land inside the panel? Recorded
+     * at pointerdown because the click is too late to ask: a control that
+     * unmounts on activation — a chip-menu row is gone the instant it is
+     * picked — is already detached by the time the click reaches the
+     * document, and `closest` on a detached node walks a stump that no longer
+     * reaches the panel surface. Read as "outside", that closed the very
+     * panel the menu belonged to.
+     */
+    let pressedInsidePanel = false;
+    const handlePointerDown = (event: PointerEvent) => {
+      pressedInsidePanel = isInsidePanel(event.target as Node | null);
+    };
     const handleClick = (event: MouseEvent) => {
+      const pressedInside = pressedInsidePanel;
+      // A keyboard-activated click has no press of its own, and must not
+      // inherit the verdict of whatever was last pressed.
+      pressedInsidePanel = false;
       const node = event.target as Node | null;
       const next = resolveTarget(node);
       if (next) {
@@ -142,7 +159,7 @@ export function InlineFormulaPopover() {
         setTarget(next);
         return;
       }
-      if (isInsidePanel(node)) {
+      if (pressedInside || isInsidePanel(node)) {
         // Working inside the panel — typing, picking a reference, opening a
         // chip menu. Only a click that leaves it dismisses.
         return;
@@ -159,9 +176,14 @@ export function InlineFormulaPopover() {
         setTarget(targetForToken(rowId, offset));
       }, 0);
     };
+    // The press listener is in capture so nothing can consume it first — the
+    // click stays in bubble, where it has always been, to keep the panel
+    // mounting after the canvas has finished with the press.
+    document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("click", handleClick);
     document.addEventListener(INLINE_FORMULA_EDIT_EVENT, handleEditRequest);
     return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("click", handleClick);
       document.removeEventListener(
         INLINE_FORMULA_EDIT_EVENT,

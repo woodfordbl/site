@@ -19,8 +19,8 @@ import { cn } from "@/lib/utils.ts";
  * §7: "chip tap = menu, not caret gymnastics"). Property chips offer
  * **Change property** (a submenu-style property list with the field-type
  * icons); database chips — `db("…")` references — offer **Change database**
- * (the workspace databases, database glyphs); both offer **Remove**, which
- * deletes the whole canonical span. The host owns the splices — this
+ * (the workspace databases, database glyphs); both offer **Delete**, which
+ * removes the whole canonical span. The host owns the splices — this
  * component only reports which action was picked.
  *
  * Built on the ui Popover with an imperative `anchor` (the chip's DOM node
@@ -46,6 +46,20 @@ const chipMenuIconClassName =
   "size-4 shrink-0 stroke-[1.5px] text-muted-foreground";
 
 /**
+ * The destructive row's tint, matching `DropdownMenuItem variant="destructive"`
+ * — the standard everywhere else in the app: normal label and muted icon at
+ * rest, the accent background on hover, and label plus icon turning
+ * destructive only while the row is under the pointer, pressed, or focused.
+ * (The plain buttons here cannot BE a DropdownMenuItem — see the module docs —
+ * so the one thing to keep in sync by hand is this tint. `active:` carries it
+ * to the drawer presentation, where `DrawerMenuRow destructive` tints on press
+ * because touch has no hover.) Merged after {@link chipMenuRowClassName},
+ * whose `hover:text-accent-foreground` these override.
+ */
+const chipMenuDestructiveClassName =
+  "hover:text-destructive focus-visible:text-destructive active:text-destructive hover:[&_svg]:text-destructive focus-visible:[&_svg]:text-destructive active:[&_svg]:text-destructive";
+
+/**
  * Mount-focus ref for each mode's first row (module-level so the callback
  * identity is stable and never re-runs on re-render). The editor keeps focus
  * through the chip tap (the press is swallowed), so without this Escape
@@ -67,9 +81,9 @@ function focusOnMount(node: HTMLButtonElement | null): void {
 
 /**
  * The two-option root: a change action (expands to the pick list — "Change
- * property" for property chips, "Change database" for db chips) and Remove
+ * property" for property chips, "Change database" for db chips) and Delete
  * (destructive). `onChange` undefined (nothing to swap to — e.g. a db chip
- * with no databases wired) drops the change row and leaves Remove alone.
+ * with no databases wired) drops the change row and leaves Delete alone.
  */
 function ChipMenuOptions({
   changeLabel,
@@ -99,21 +113,18 @@ function ChipMenuOptions({
         </button>
       )}
       <button
-        className={cn(
-          chipMenuRowClassName,
-          "text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive"
-        )}
+        className={cn(chipMenuRowClassName, chipMenuDestructiveClassName)}
         onClick={() => {
           haptic("selection");
           onRemove();
         }}
-        // Without a change row, Remove is the first (only) option and takes
+        // Without a change row, Delete is the first (only) option and takes
         // the mount focus (see focusOnMount's contract).
         ref={onChange === undefined ? focusOnMount : undefined}
         type="button"
       >
-        <IconTrash className="size-4 shrink-0 stroke-[1.5px]" />
-        Remove
+        <IconTrash className={chipMenuIconClassName} />
+        Delete
       </button>
     </div>
   );
@@ -210,7 +221,7 @@ function ChipMenuDatabaseList({
 export interface FormulaChipMenuProps {
   /**
    * Workspace databases — feeds the Change-database list for db-chip taps.
-   * Omitted (or empty), a db chip's menu offers Remove only.
+   * Omitted (or empty), a db chip's menu offers Delete only.
    */
   databases?: readonly FormulaRefDatabase[];
   /** Live schema — feeds the Change-property list. */
@@ -230,7 +241,7 @@ export interface FormulaChipMenuProps {
    * splices `canonicalPropertyReference(field.id)` over the tap's span.
    */
   onPickProperty: (field: DatabaseField) => void;
-  /** Remove: delete the tap's whole canonical span. */
+  /** Delete: remove the tap's whole canonical span. */
   onRemove: () => void;
   /** The active chip tap; `null` renders the menu closed. */
   tap: FormulaChipTap | null;

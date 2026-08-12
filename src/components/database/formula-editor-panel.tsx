@@ -7,7 +7,6 @@ import {
 import {
   Component,
   type KeyboardEvent,
-  lazy,
   type ReactNode,
   type RefObject,
   // biome-ignore lint/correctness/noUnresolvedImports: React 19 exports Suspense; Biome types lag
@@ -28,6 +27,10 @@ import {
   FormulaRollupWizard,
   formulaRollupRelationFields,
 } from "@/components/database/formula-rollup-wizard.tsx";
+import {
+  loadedFormulaCodeEditor,
+  preloadFormulaCodeEditor,
+} from "@/components/database/preload-formula-code-editor.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { TokenChip } from "@/components/ui/chip.tsx";
 import {
@@ -114,7 +117,7 @@ import { cn } from "@/lib/utils.ts";
  * what gets stored), so parse/check/preview/save all operate on it directly.
  * The CM6 editor edits the canonical text natively and renders property
  * spans as schema-labeled chips; the plain textarea (coarse pointers, and
- * the Suspense/error fallback on fine ones) displays
+ * the not-yet-loaded/error fallback on fine ones) displays
  * `humanizeExpression(draft)` and re-canonicalizes on every change —
  * humanize∘canonicalize is display-stable, so users still only ever see
  * names there. Save/Done require a VALID formula — blocked by parse errors
@@ -131,10 +134,14 @@ import { cn } from "@/lib/utils.ts";
  * lazy-loaded CodeMirror 6 editor (formula-code-editor.tsx): chips, syntax
  * highlighting, diagnostic squiggles (fed the panel's memoized check context
  * via `checkContext`), the argument info card, soft wrap, Mod+Enter saves —
- * with the plain textarea as the Suspense fallback while the CM6 chunk
- * loads. Tapping a chip in the CM6 surface opens the chip option menu
+ * with the plain textarea standing in until the CM6 chunk lands
+ * (preload-formula-code-editor.ts — surfaces that can open this panel warm
+ * the chunk in advance, because the stand-in spells references
+ * `thisPage.Title` where the real editor chips them, and swapping spelling
+ * mid-open reads as the editor changing its mind). Tapping a chip in the CM6
+ * surface opens the chip option menu
  * (formula-chip-menu.tsx, anchored at the chip; a bottom drawer on coarse
- * pointers): Change property swaps the reference in place and Remove deletes
+ * pointers): Change property swaps the reference in place and Delete removes
  * the whole canonical span, both applied through the editor handle's
  * `replaceRange` against the span the tap reported. Coarse pointers outside
  * the sheet keep the textarea entirely (the
@@ -144,17 +151,6 @@ import { cn } from "@/lib/utils.ts";
  * chip with the caret placed after it), else through the textarea's
  * selection range (properties insert the display `thisPage.Name` form).
  */
-
-/**
- * Warms lazily so ~85 KB gz of CM6 stays out of the main bundle and is paid
- * only when a formula editor actually opens (same code-split pattern as
- * `preload-page-icon-picker.ts`).
- */
-const FormulaCodeEditor = lazy(() =>
-  import("@/components/database/formula-code-editor.tsx").then((module) => ({
-    default: module.FormulaCodeEditor,
-  }))
-);
 
 /**
  * Degrades a failed code-editor mount to the plain textarea instead of
@@ -1165,11 +1161,45 @@ export function FormulaEditorPanel({
   const usesTextarea = coarsePointer && !sheet;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const codeEditorRef = useRef<FormulaCodeEditorHandle>(null);
+  /**
+   * The CM6 editor once its chunk is in hand; null means the textarea stands
+   * in. Seeded synchronously so a WARMED chunk mounts CM6 on the first render
+   * — `lazy` would suspend even on an already-resolved import, committing the
+   * fallback textarea (which spells references `thisPage.Title` rather than
+   * chipping them) for a frame.
+   */
+  const [codeEditor, setCodeEditor] = useState(loadedFormulaCodeEditor);
+
+  // Load the chunk for the surfaces that use it. A cold open still starts on
+  // the textarea; the point of the seeded state above is that everything
+  // AFTER the first load — and any open at all on a page that warmed the
+  // chunk — skips it.
+  useEffect(() => {
+    if (codeEditor !== null || usesTextarea) {
+      return;
+    }
+    let alive = true;
+    preloadFormulaCodeEditor()
+      .then((component) => {
+        if (alive) {
+          // Functional updater: a component IS a function, so the plain form
+          // would be read as a state initializer.
+          setCodeEditor(() => component);
+        }
+      })
+      .catch(() => {
+        // Chunk fetch failed (rotated hash after a deploy, offline): stay on
+        // the textarea, which is a working editor, not an error state.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [codeEditor, usesTextarea]);
 
   // Mounted only while the (sub)menu is open — steal focus from the popup
   // after Base UI's initial focus pass (same rAF pattern as the rename
   // input). Targets the textarea when it's rendered (coarse pointers, or the
-  // Suspense fallback while the CM6 chunk loads); the code editor handles
+  // stand-in while the CM6 chunk loads); the code editor handles
   // its own autofocus once mounted.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -1281,7 +1311,7 @@ export function FormulaEditorPanel({
     });
   };
 
-  /** Chip menu → Remove: delete the tapped reference's whole canonical span. */
+  /** Chip menu → Delete: remove the tapped reference's whole canonical span. */
   const removeChipReference = () => {
     if (chipTap !== null) {
       codeEditorRef.current?.replaceRange(chipTap.from, chipTap.to, "");
@@ -1504,7 +1534,7 @@ export function FormulaEditorPanel({
   );
 
   // The plain-textarea input: the whole editor on coarse pointers outside
-  // the sheet layout, and the Suspense fallback while the CM6 chunk loads
+  // the sheet layout, and the stand-in until the CM6 chunk lands
   // everywhere else.
   // In the wide layout the editing surface sits inside an InputGroup that
   // draws the border (the Save addon lives inside it), so the surface itself
@@ -1540,17 +1570,22 @@ export function FormulaEditorPanel({
     </Button>
   );
 
+  // Capitalized binding so JSX reads it as a component, not a host tag.
+  const CodeEditorSurface = codeEditor;
+
   // The wide (dialog) editor gets more vertical room than the menu form.
   // CM injects its theme stylesheet after ours, so the height overrides need
   // `!` to beat the theme's fixed min/max rules at equal specificity.
   const editorSurface = (
     <div className={cn("flex min-w-0 flex-col", sizing.codeEditor)}>
-      {usesTextarea ? (
+      {usesTextarea || CodeEditorSurface === null ? (
         expressionTextarea
       ) : (
         <FormulaCodeEditorBoundary fallback={expressionTextarea}>
+          {/* The chunk is loaded, but a mock or a nested lazy read can still
+              suspend the mount — keep the same fallback either way. */}
           <Suspense fallback={expressionTextarea}>
-            <FormulaCodeEditor
+            <CodeEditorSurface
               ariaLabel="Formula expression"
               autoFocus
               checkContext={checkContext}
