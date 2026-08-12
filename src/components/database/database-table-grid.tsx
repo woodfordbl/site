@@ -92,6 +92,10 @@ import {
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
 import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
+import {
+  blockSelectionLaneUnderlayClassName,
+  blockSelectionSurfaceProps,
+} from "@/lib/canvas/block-selection-surface.ts";
 import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
@@ -966,8 +970,9 @@ export function DatabaseTableGrid({
               {/* biome-ignore lint/a11y/useFocusableInteractive: focus lives on the header menu triggers, not the row. */}
               <div
                 aria-rowindex={1}
-                className="sticky top-0 z-20 flex bg-background"
+                className="sticky top-0 z-20 flex bg-background transition-colors"
                 role="row"
+                {...blockSelectionSurfaceProps}
               >
                 {showSelectColumnPeek ? (
                   <div
@@ -1038,8 +1043,9 @@ export function DatabaseTableGrid({
                   // Once data columns overflow, it returns to that minimum and
                   // scrolls with the rest of the grid.
                   <div
-                    className="relative isolate flex h-9 min-w-0 flex-1 items-stretch overflow-hidden border-border border-b-[0.5px] bg-background text-muted-foreground"
+                    className="relative isolate flex h-9 min-w-0 flex-1 items-stretch overflow-hidden border-border border-b-[0.5px] bg-background text-muted-foreground transition-colors"
                     style={{ minWidth: ADD_FIELD_CELL_WIDTH_PX }}
+                    {...blockSelectionSurfaceProps}
                   >
                     <button
                       aria-label="Add property"
@@ -1181,7 +1187,7 @@ function GridSelectionHeaderCell({
     <div
       aria-colindex={1}
       className={cn(
-        "flex h-9 shrink-0 items-center justify-center",
+        "relative flex h-9 shrink-0 items-center justify-center",
         selectColumnPinnedClass(selectColumnPinned),
         showPeek && "pointer-events-none"
       )}
@@ -1189,9 +1195,11 @@ function GridSelectionHeaderCell({
       role="columnheader"
       style={{ width: SELECTION_COLUMN_WIDTH_PX }}
     >
+      <span aria-hidden className={blockSelectionLaneUnderlayClassName} />
       <Checkbox
         aria-label={allSelected ? "Deselect all rows" : "Select all rows"}
         checked={allSelected}
+        className="relative"
         indeterminate={someSelected}
         onCheckedChange={(checked) => {
           onCheckedChange(checked === true);
@@ -1286,7 +1294,7 @@ function GridHeaderCell({
         // sticky pinned header (z-10) while scrolling underneath it.
         // Header cells carry no inter-column separators (only body cells do);
         // the freeze-boundary border on the last pinned column still applies.
-        "relative isolate flex h-9 shrink-0 items-stretch overflow-visible border-border border-b-[0.5px] bg-background text-muted-foreground",
+        "relative isolate flex h-9 shrink-0 items-stretch overflow-visible border-border border-b-[0.5px] bg-background text-muted-foreground transition-colors",
         column.pinned && "sticky z-10",
         column.isLastPinned && "border-r border-r-border",
         isDragging && "opacity-50"
@@ -1294,6 +1302,7 @@ function GridHeaderCell({
       onContextMenu={handleHeaderContextMenu}
       role="columnheader"
       style={{ width, left: column.left ?? undefined }}
+      {...blockSelectionSurfaceProps}
       {...{
         [DATABASE_COLUMN_DRAG_ATTRIBUTE]:
           mode === "edit" ? field.id : undefined,
@@ -1818,6 +1827,18 @@ function renderGridCellContent({
   return label;
 }
 
+/**
+ * A pinned cell paints an opaque background over the canvas block's selection
+ * fill, so it follows that fill — unless the grid row is itself selected and
+ * already owns a tint.
+ */
+function pinnedCellSelectionSurfaceProps(
+  column: GridColumn,
+  isRowSelected: boolean
+) {
+  return column.pinned && !isRowSelected ? blockSelectionSurfaceProps : null;
+}
+
 function GridCell({
   ariaColIndex,
   column,
@@ -1890,12 +1911,13 @@ function GridCell({
         inlineEditable ? "p-0" : "px-2",
         field.type === "number" && "justify-end",
         isCheckbox && "justify-center",
-        column.pinned && "sticky z-10",
+        column.pinned && "sticky z-10 transition-colors",
         column.pinned && (isSelected ? "bg-muted/40" : "bg-background"),
         column.isLastPinned && "border-r border-r-border"
       )}
       role="gridcell"
       style={{ width: column.width, left: column.left ?? undefined }}
+      {...pinnedCellSelectionSurfaceProps(column, isSelected)}
     >
       {inlineEditable ? (
         <div className="size-full min-w-0 px-2">{content}</div>

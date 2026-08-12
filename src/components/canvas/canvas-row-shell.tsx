@@ -15,6 +15,7 @@ import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useBlockTouchGesture } from "@/hooks/use-block-touch-gesture.ts";
 import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
+import { blockSelectionSurfaceFillClassName } from "@/lib/canvas/block-selection-surface.ts";
 import type { DropTarget } from "@/lib/canvas/resolve-drop-target.ts";
 import {
   pageCanvasGutterMobileClassName,
@@ -105,11 +106,6 @@ export function CanvasRowShell({
   const { isRowSelected } = useCanvasSelection();
   const { setOpenRowId } = useBlockActionsMenu();
   const isSelected = isRowSelected(row.rowId);
-  // Database and table blocks own their own chrome; a selection fill reads as
-  // a block "ring" around the whole surface and fights the select gutter.
-  const suppressSelectionFill =
-    row.effectiveBlock.type === "database" ||
-    row.effectiveBlock.type === "table";
   const isNarrowViewport = useIsNarrowViewport();
   const rowLayoutRef = useRef<HTMLDivElement>(null);
   const gutterOpenTimeout = useTimeout();
@@ -234,14 +230,10 @@ export function CanvasRowShell({
         {gutterHost}
         <div
           className={cn(
-            "min-h-0 min-w-0 flex-1 transition-colors",
-            // Database/table surfaces own their chrome — no rounded selection
-            // plate (reads as a ring around the whole block).
-            !suppressSelectionFill && "rounded-lg",
+            "min-h-0 min-w-0 flex-1 rounded-lg transition-colors",
             contentSpacingClassName,
-            !suppressSelectionFill &&
-              (isSelected || (enableTouchGesture && touchGesture.isPressing)) &&
-              "bg-selection",
+            (isSelected || (enableTouchGesture && touchGesture.isPressing)) &&
+              cn("bg-selection", blockSelectionSurfaceFillClassName),
             enableTouchGesture && touchGesture.isDragging && "opacity-60",
             contentClassName
           )}
