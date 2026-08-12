@@ -14,6 +14,10 @@ import {
   FormulaCodeEditorBoundary,
   FormulaEditorPanel,
 } from "@/components/database/formula-editor-panel.tsx";
+import {
+  loadedFormulaCodeEditor,
+  preloadFormulaCodeEditor,
+} from "@/components/database/preload-formula-code-editor.ts";
 import type { FormulaRelatedDatabase } from "@/lib/databases/formula-values.ts";
 import { prepareUserFunctions } from "@/lib/formula/user-functions.ts";
 import type { FormulaRelationResolver } from "@/lib/formula/values.ts";
@@ -611,8 +615,11 @@ describe("FormulaEditorPanel", () => {
     it("mounts CM6 lazily, inserts through its caret API, and saves canonical text", async () => {
       const onSave = renderPanel();
 
-      // The textarea renders as the Suspense fallback until the lazy CM6
-      // chunk resolves and replaces it.
+      // COLD path: nothing has warmed the chunk yet, so the textarea stands
+      // in until the import resolves. Asserted explicitly because the next
+      // test warms the module for the rest of the file — reordering these two
+      // should fail here, loudly, rather than in a confusing place.
+      expect(loadedFormulaCodeEditor()).toBeNull();
       expect(screen.getByLabelText("Formula expression").tagName).toBe(
         "TEXTAREA"
       );
@@ -643,6 +650,26 @@ describe("FormulaEditorPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
       expect(onSave).toHaveBeenCalledTimes(2);
       expect(onSave).toHaveBeenLastCalledWith('average(prop("f-price"))');
+    });
+
+    it("opens straight into CM6 once the chunk is warm", async () => {
+      // A page holding a formula token warms this chunk on mount, so by the
+      // time the user clicks a token the editor should mount on the FIRST
+      // render. Suspending on an already-resolved import would still commit
+      // the fallback textarea for a frame — and the textarea spells
+      // references `thisPage.Name` where CM6 chips them, so that frame reads
+      // as the editor changing its mind about the formula.
+      await preloadFormulaCodeEditor();
+      renderPanel(vi.fn(), 'average(prop("f-price"))');
+
+      // No await: the assertions run on the first commit.
+      expect(document.querySelector(".cm-content")).not.toBeNull();
+      expect(document.querySelector("textarea")).toBeNull();
+      // …and the reference is a labeled chip from that first paint, not the
+      // textarea's `thisPage.Price` spelling.
+      expect(document.querySelector(".cm-formula-chip")?.textContent).toBe(
+        "Price"
+      );
     });
 
     it("inserts reference-list functions as argument-placeholder snippets", async () => {

@@ -46,22 +46,28 @@ const chipButtonClassName = cn(
   "hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
 );
 
-const tokenChipVariants = cva(
-  "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs",
-  {
-    variants: {
-      tone: {
-        neutral: "bg-muted text-foreground",
-        blue: "bg-(--block-bg-blue) text-(--block-text-blue)",
-        purple: "bg-(--block-bg-purple) text-(--block-text-purple)",
-        destructive: "bg-destructive/10 text-destructive",
-      },
+/**
+ * Shape only — no color. For surfaces that own their own palette: the CM6
+ * formula chips take their fill and text from the ACTIVE SYNTAX THEME
+ * (`--code-token-*`), so a tone here would only be a color they immediately
+ * override. Everything else should use a {@link tokenChipVariants} tone.
+ */
+const tokenChipShapeClassName =
+  "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs";
+
+const tokenChipVariants = cva(tokenChipShapeClassName, {
+  variants: {
+    tone: {
+      neutral: "bg-muted text-foreground",
+      blue: "bg-(--block-bg-blue) text-(--block-text-blue)",
+      purple: "bg-(--block-bg-purple) text-(--block-text-purple)",
+      destructive: "bg-destructive/10 text-destructive",
     },
-    defaultVariants: {
-      tone: "neutral",
-    },
-  }
-);
+  },
+  defaultVariants: {
+    tone: "neutral",
+  },
+});
 
 /** Segmented chip container; dashed variants double as standalone triggers. */
 function Chip({
@@ -164,5 +170,6 @@ export {
   ChipSegment,
   chipVariants,
   TokenChip,
+  tokenChipShapeClassName,
   tokenChipVariants,
 };

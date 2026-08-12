@@ -34,7 +34,10 @@ import {
 } from "@codemirror/view";
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { DATABASE_FIELD_TYPE_ICON_NODES } from "@/components/database/database-field-icons.ts";
-import { tokenChipVariants } from "@/components/ui/chip.tsx";
+import {
+  tokenChipShapeClassName,
+  tokenChipVariants,
+} from "@/components/ui/chip.tsx";
 import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
 import {
   FORMULA_FUNCTION_CATALOG,
@@ -100,7 +103,7 @@ import { cn } from "@/lib/utils.ts";
  * keys skip a chip, backspace/delete removes the whole reference, and
  * selection treats it as one unit. Property chips ({@link PropertyChipWidget})
  * label from the live schema (`fields` prop → {@link chipFields} state
- * field); database chips ({@link DatabaseChipWidget}, purple tone, database
+ * field); database chips ({@link DatabaseChipWidget}, the theme's name color, database
  * glyph) label from the workspace databases (`databases` prop →
  * {@link chipDatabases}), so a rename while the editor is open relabels
  * chips in place; ids matching nothing render a destructive
@@ -509,11 +512,13 @@ function chipIcon(field: DatabaseField): Element {
 
 /**
  * Inline chip for one canonical `prop("<id>")` span. Extends the TokenChip
- * look by class (widget DOM is built directly — no React inside CM): blue
- * tone + field icon + current name for known fields; destructive tone,
+ * look by class (widget DOM is built directly — no React inside CM): field
+ * icon + current name in the syntax theme's PROPERTY color for known fields
+ * (see the chip rules in {@link formulaEditorTheme}); destructive tone,
  * strikethrough raw id, and "Unknown property" semantics when the id matches
- * no field. Vertical padding is stripped (`py-0`, baseline-aligned) so chips
- * don't disturb the line height.
+ * no field — a broken reference is an app-level error, not a token kind any
+ * syntax theme has an opinion about. Vertical padding is stripped (`py-0`,
+ * baseline-aligned) so chips don't disturb the line height.
  */
 class PropertyChipWidget extends WidgetType {
   private readonly diagnosed: boolean;
@@ -540,7 +545,9 @@ class PropertyChipWidget extends WidgetType {
   toDOM(): HTMLElement {
     const chip = document.createElement("span");
     chip.className = cn(
-      tokenChipVariants({ tone: this.field === null ? "destructive" : "blue" }),
+      this.field === null
+        ? tokenChipVariants({ tone: "destructive" })
+        : cn(tokenChipShapeClassName, "cm-formula-chip-property"),
       // items-baseline (over the variant's items-center) makes the LABEL's
       // baseline the chip's baseline, so align-baseline lines the chip up
       // with the surrounding code text instead of synthesizing from the
@@ -583,9 +590,10 @@ const DATABASE_CHIP_ICON_NODE: TablerIconNode = [
 /**
  * Inline chip for one `db("<id>")` span — {@link PropertyChipWidget}'s
  * database analog, sharing its baseline-alignment and unknown-id rules but
- * with a distinct purple tone (property chips are blue) and the database
- * glyph, so whole-database references read differently from same-row
- * property reads at a glance.
+ * taking the theme's NAME color rather than its property color, plus the
+ * database glyph, so whole-database references read differently from same-row
+ * property reads at a glance. (The tokenizer calls both spans `property`, so
+ * the split is a deliberate editor choice, not a highlighter one.)
  */
 class DatabaseChipWidget extends WidgetType {
   private readonly diagnosed: boolean;
@@ -610,9 +618,9 @@ class DatabaseChipWidget extends WidgetType {
   toDOM(): HTMLElement {
     const chip = document.createElement("span");
     chip.className = cn(
-      tokenChipVariants({
-        tone: this.name === null ? "destructive" : "purple",
-      }),
+      this.name === null
+        ? tokenChipVariants({ tone: "destructive" })
+        : cn(tokenChipShapeClassName, "cm-formula-chip-database"),
       // Same baseline trick as the property chip (see its toDOM comment).
       "cm-formula-chip select-none items-baseline py-0 align-baseline",
       this.name === null && "line-through",
@@ -1991,7 +1999,7 @@ const formulaEditorTheme = EditorView.theme({
     padding: "6px 8px",
   },
   // Argument placeholder pills: muted, dashed — deliberately quieter than
-  // the blue property chips and unlike the destructive squiggles, since a
+  // the reference chips and unlike the destructive squiggles, since a
   // placeholder is an invitation, not an error. Tapping one selects it.
   ".cm-formula-placeholder": {
     backgroundColor: "var(--color-muted)",
@@ -2009,6 +2017,22 @@ const formulaEditorTheme = EditorView.theme({
   },
   ".cm-formula-chip-diagnosed": {
     boxShadow: "inset 0 0 0 1px var(--color-destructive)",
+  },
+  // Reference chips take the same theme colors as the token text they
+  // replace, so a chip never reads as a foreign object dropped into the
+  // expression. The fill is the chip's own text color at low alpha rather
+  // than a second theme variable: syntax themes publish foregrounds, and a
+  // hand-picked background would drift from whichever theme is selected.
+  // 14% lands close to the app's own `--block-bg-*` fills in both modes.
+  ".cm-formula-chip-property": {
+    backgroundColor:
+      "color-mix(in oklch, var(--code-token-property, var(--block-text-blue)) 14%, transparent)",
+    color: "var(--code-token-property, var(--block-text-blue))",
+  },
+  ".cm-formula-chip-database": {
+    backgroundColor:
+      "color-mix(in oklch, var(--code-token-name, var(--block-text-purple)) 14%, transparent)",
+    color: "var(--code-token-name, var(--block-text-purple))",
   },
   // Argument info card (origin-anchored tooltip; wrapper look comes from the
   // shared .cm-tooltip popover rules above).
