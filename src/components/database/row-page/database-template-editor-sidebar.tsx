@@ -1,5 +1,6 @@
 import {
   IconChevronLeft,
+  IconEraser,
   IconEye,
   IconPencil,
   IconRefresh,
@@ -16,13 +17,21 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar.tsx";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import {
+  clearDatabaseRowPage,
   clearDatabaseRowPages,
+  isDatabaseRowPageMaterialized,
   listMaterializedDatabaseRowPageIds,
 } from "@/lib/databases/clear-database-row-pages.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
@@ -70,6 +79,7 @@ export function DatabaseTemplateEditorSidebar({
   const { pages } = useMergedPageListItems();
   const dispatch = usePageDispatch(pages);
   const [clearOpen, setClearOpen] = useState(false);
+  const [clearRow, setClearRow] = useState<LocalDatabaseRow | null>(null);
 
   const materializedCount = useMemo(
     () => listMaterializedDatabaseRowPageIds(database.id, pages).length,
@@ -91,6 +101,24 @@ export function DatabaseTemplateEditorSidebar({
         ? "Cleared 1 row page. It will re-seed from this template when opened."
         : `Cleared ${cleared} row pages. They will re-seed from this template when opened.`;
     appToast.success(toastMessage, { id: TOAST_ID_CLEAR_ROW_PAGES });
+  };
+
+  const handleClearRowConfirm = () => {
+    if (!clearRow) {
+      return;
+    }
+    const cleared = clearDatabaseRowPage({
+      dispatchPage: dispatch,
+      pages,
+      row: clearRow,
+    });
+    setClearRow(null);
+    if (cleared) {
+      appToast.success(
+        `Cleared content for ${resolveDatabaseRowPageTitle(database, clearRow)}. It will re-seed from this template when opened.`,
+        { id: TOAST_ID_CLEAR_ROW_PAGES }
+      );
+    }
   };
 
   return (
@@ -138,21 +166,47 @@ export function DatabaseTemplateEditorSidebar({
                     <span>Editing template</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {previewRows.map((row) => (
-                  <SidebarMenuItem key={row.id}>
-                    <SidebarMenuButton
-                      isActive={previewRowId === row.id}
-                      onClick={() => {
-                        setPreviewRowId(row.id);
-                      }}
-                    >
-                      <IconEye />
-                      <span className="min-w-0 truncate">
-                        {resolveDatabaseRowPageTitle(database, row)}
-                      </span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {previewRows.map((row) => {
+                  const materialized = isDatabaseRowPageMaterialized(
+                    row,
+                    pages
+                  );
+                  return (
+                    <SidebarMenuItem key={row.id}>
+                      <SidebarMenuButton
+                        className={materialized ? "pr-7" : undefined}
+                        disabled={materialized}
+                        isActive={!materialized && previewRowId === row.id}
+                        onClick={() => {
+                          setPreviewRowId(row.id);
+                        }}
+                      >
+                        <IconEye />
+                        <span className="min-w-0 truncate">
+                          {resolveDatabaseRowPageTitle(database, row)}
+                        </span>
+                      </SidebarMenuButton>
+                      {materialized ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <SidebarMenuAction
+                                aria-label={`Clear content for ${resolveDatabaseRowPageTitle(database, row)}`}
+                                className="hover:text-destructive"
+                                onClick={() => {
+                                  setClearRow(row);
+                                }}
+                              >
+                                <IconEraser />
+                              </SidebarMenuAction>
+                            }
+                          />
+                          <TooltipContent>Clear content</TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -184,6 +238,16 @@ export function DatabaseTemplateEditorSidebar({
         onOpenChange={setClearOpen}
         open={clearOpen}
         pageCount={materializedCount}
+      />
+      <ClearRowPagesConfirmDialog
+        onConfirm={handleClearRowConfirm}
+        onOpenChange={(open) => {
+          if (!open) {
+            setClearRow(null);
+          }
+        }}
+        open={clearRow !== null}
+        pageCount={1}
       />
     </div>
   );

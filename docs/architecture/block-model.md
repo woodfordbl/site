@@ -21,7 +21,7 @@
 
 ## Inline marks
 
-Primary-text leaves store optional `props.marks` — half-open `[start, end)` ranges into `props.text` ([`src/lib/schemas/rich-text.ts`](../../src/lib/schemas/rich-text.ts)). Mark types: `bold`, `italic`, `underline`, `strikethrough`, `code`, `link`. Link marks carry `href`; when the destination is a workspace page they also carry `pageId` and render as an inline page link (icon + underlined title + arrow) rather than a plain URL — see [pages — Page links](./pages.md#page-links).
+Primary-text leaves store optional `props.marks` — half-open `[start, end)` ranges into `props.text` ([`src/lib/schemas/rich-text.ts`](../../src/lib/schemas/rich-text.ts)). Mark types: `bold`, `italic`, `underline`, `strikethrough`, `code`, `link`. Link marks carry `href`; when the destination is a workspace page they also carry `pageId` and render as an inline page link (icon + title under one shared rule) rather than a plain URL — see [pages — Page links](./pages.md#page-links).
 
 Two capability levels ([`rich-text.ts`](../../src/lib/blocks/rich-text.ts)): `blockSupportsLinkMarks` (any primary-text block except `code`) gates **link** marks, and `blockSupportsInlineMarks` additionally excludes `heading` / `toggleHeading` to gate the **styling** marks. So headings stay structural — no bold/italic/color from the selection toolbar — but they can still hold a pasted inline page link. `getBlockMarks` / `withBlockRichText` filter marks to the block's capability on read and write, so styling marks can never persist on a heading.
 

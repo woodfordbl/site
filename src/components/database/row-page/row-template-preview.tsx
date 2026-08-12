@@ -1,43 +1,49 @@
-import { IconExternalLink, IconEye } from "@tabler/icons-react";
+import { IconExternalLink } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useMemo } from "react";
-import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
+import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { RowPageTitleSection } from "@/components/database/row-page/row-page-title-section.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import {
   RowPropertiesOptionsMenu,
   useRowPageWorkspaceChrome,
 } from "@/components/database/row-page/row-properties-rail.tsx";
+import { RowTemplateBreadcrumb } from "@/components/database/row-page/row-template-breadcrumb.tsx";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
+import {
+  PageHeaderSidebarToggle,
+  pageHeaderShellClassName,
+} from "@/components/pages/page-header.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useRowTemplate } from "@/hooks/use-row-template.ts";
+import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
-import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
-import { instantiateTemplateBlocks } from "@/lib/databases/row-template.ts";
+import type { InlineFormulaPageModel } from "@/lib/databases/page-formula-fields.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import type { LocalPage } from "@/lib/schemas/local-page.ts";
 import { resolvePageFont } from "@/lib/schemas/page-settings.ts";
 
 /**
- * Live preview for the template editor: renders EXACTLY what a fresh row-page
- * seed would show for the chosen row — same title/properties section, same
- * per-render token evaluation, same inherited icon/font — inside the editor
- * shell. The sidebar's "Editing template" item returns. Properties edit the
- * real row (live values, same as the row page); the body is read-only and
- * never materializes.
+ * Mixed editor for one template-backed row: icon, name, and properties write
+ * to the row, while the canvas writes to the shared `db-template:…` page.
+ * Materialized rows never mount this surface — their separate body must be
+ * cleared from the sidebar first.
  */
 export function RowTemplatePreviewBody({
   database,
   row,
+  templatePage,
 }: {
   database: LocalDatabase;
   row: LocalDatabaseRow;
+  templatePage: LocalPage;
 }): ReactNode {
   const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed } = usePageSidebarChrome();
@@ -49,17 +55,19 @@ export function RowTemplatePreviewBody({
 
   const template = useRowTemplate(database.id);
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
-  const templateBlocks = useMemo(
-    () =>
-      instantiateTemplateBlocks(
-        template?.blocks,
-        database.fields,
-        row.values,
-        // relations: template tokens can traverse relation fields — the
-        // preview must evaluate them like the materialized copy does.
-        { now: () => new Date(), relations: localFormulaRelationResolver() }
-      ),
-    [template?.blocks, database.fields, row.values]
+  const displayIcon = resolveDatabaseRowIcon(row, template?.icon);
+
+  const inlineFormulaModel = useMemo<InlineFormulaPageModel>(
+    () => ({
+      cellValues: row.values,
+      databaseFields: database.fields,
+      page: {
+        createdAt: row.createdAt,
+        title: displayTitle,
+        updatedAt: row.updatedAt,
+      },
+    }),
+    [database.fields, displayTitle, row.createdAt, row.updatedAt, row.values]
   );
 
   const canvasRegion = (
@@ -70,15 +78,23 @@ export function RowTemplatePreviewBody({
       })}
       className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
     >
-      <CanvasBlocksReadOnly
-        blocks={templateBlocks}
+      <PageCanvas
+        fullWidth={false}
+        inlineFormulaModel={inlineFormulaModel}
         isNarrowViewport={isNarrowViewport}
-        mode="view"
-        pageId={`db-template-preview:${row.id}`}
+        pageHasLocalDraft={true}
+        serverPage={{
+          blocks: [],
+          icon: templatePage.icon,
+          id: templatePage.id,
+          parentId: templatePage.parentId ?? null,
+          sidebarOrder: templatePage.sidebarOrder,
+          slug: templatePage.slug,
+          title: templatePage.title,
+        }}
         titleSlot={
           <RowPageTitleSection
             database={database}
-            displayTitle={displayTitle}
             icon={template?.icon}
             propertiesExtra={
               <RowPropertiesOptionsMenu
@@ -103,12 +119,13 @@ export function RowTemplatePreviewBody({
           className="relative flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-background max-md:flex-none max-md:overflow-visible max-md:border-0 md:overflow-hidden md:rounded-xl"
           data-page-main-panel=""
         >
-          <div className="flex h-[37px] shrink-0 items-center gap-2 border-sidebar-border border-b px-3 text-muted-foreground text-sm">
-            <IconEye aria-hidden className="size-4 shrink-0 stroke-[1.5px]" />
-            <span className="min-w-0 flex-1 truncate">
-              Live preview ·{" "}
-              <span className="text-foreground">{displayTitle}</span>
-            </span>
+          <header className={pageHeaderShellClassName}>
+            <PageHeaderSidebarToggle />
+            <RowTemplateBreadcrumb
+              databaseId={database.id}
+              icon={displayIcon}
+              title={displayTitle}
+            />
             {rowTarget ? (
               <Button
                 className="shrink-0 text-muted-foreground"
@@ -118,10 +135,10 @@ export function RowTemplatePreviewBody({
                 variant="ghost"
               >
                 <IconExternalLink />
-                Open row page
+                Open
               </Button>
             ) : null}
-          </div>
+          </header>
           {chrome.contentWrapper
             ? chrome.contentWrapper(canvasRegion)
             : canvasRegion}

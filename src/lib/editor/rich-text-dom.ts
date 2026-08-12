@@ -4,7 +4,7 @@ import {
   segmentRichText,
 } from "@/lib/blocks/rich-text.ts";
 import type { FieldSelection } from "@/lib/editor/caret-navigation.ts";
-import { pageTitleUnderlineClassName } from "@/lib/pages/page-link-display.ts";
+import { EMPTY_INLINE_FORMULA_LABEL } from "@/lib/formula/display.ts";
 import type { InlineMark, InlineMarkType } from "@/lib/schemas/rich-text.ts";
 import { FORMULA_TOKEN_SENTINEL } from "@/lib/schemas/rich-text.ts";
 
@@ -17,8 +17,8 @@ import { FORMULA_TOKEN_SENTINEL } from "@/lib/schemas/rich-text.ts";
  *
  * Inline page links (`data-page-id`) are **atomic**: the whole anchor is
  * `contenteditable=false`, so the caret can only sit before or after it and the
- * browser deletes it as one unit. Its icon/arrow chrome hosts
- * (`data-inline-page-link-chrome`) are excluded from text/mark serialization,
+ * browser deletes it as one unit. Its icon chrome host
+ * (`data-inline-page-link-chrome`) is excluded from text/mark serialization,
  * so the model text of a page link is exactly its title run.
  *
  * Inline formula tokens (`data-formula-token`) are atomic too, but invert the
@@ -31,7 +31,7 @@ import { FORMULA_TOKEN_SENTINEL } from "@/lib/schemas/rich-text.ts";
  * autocorrect it into something else.
  */
 
-/** Anchors that render an inline page link (icon + title + arrow). */
+/** Anchors that render an inline page link (icon + title). */
 export const PAGE_LINK_ANCHOR_SELECTOR = "a[data-page-id]";
 /** The title span inside a page-link anchor — the only serialized child. */
 const PAGE_LINK_TITLE_SELECTOR =
@@ -179,7 +179,7 @@ export interface RichTextHtmlOptions {
 
 /**
  * Styling marks carried by a page-link run. `link` is dropped — page links wear
- * their own chrome (icon + bordered underline + arrow), not the link palette.
+ * their own chrome (icon + bordered underline), not the link palette.
  */
 export function pageLinkTitleMarks(
   marks: readonly InlineMarkType[]
@@ -220,14 +220,14 @@ export function createInlinePageLinkAnchor(
   anchor.contentEditable = "false";
   const icon = doc.createElement("span");
   icon.dataset.inlinePageLinkChrome = "icon";
+  // The underline lives on the anchor (it spans the icon too), so the title
+  // span carries only the run's styling marks.
   const title = doc.createElement("span");
-  title.className = options.titleClassName
-    ? `${pageTitleUnderlineClassName} ${options.titleClassName}`
-    : pageTitleUnderlineClassName;
+  if (options.titleClassName) {
+    title.className = options.titleClassName;
+  }
   title.textContent = options.text;
-  const arrow = doc.createElement("span");
-  arrow.dataset.inlinePageLinkChrome = "arrow";
-  anchor.append(icon, title, arrow);
+  anchor.append(icon, title);
   return anchor;
 }
 
@@ -316,6 +316,14 @@ export function applyInlineFormulaValues(
     if (host && host.textContent !== next) {
       host.textContent = next;
     }
+    // Blank results render as the reserved `None` chip — stamp the empty
+    // marker so CSS can swap the prose underline for a muted pill.
+    const isEmpty = values.has(at) && next === EMPTY_INLINE_FORMULA_LABEL;
+    if (isEmpty) {
+      element.setAttribute("data-formula-empty", "");
+    } else {
+      element.removeAttribute("data-formula-empty");
+    }
     // The value may be truncated on screen, so the tooltip carries it in full
     // alongside the expression that produced it.
     const expression = (element as HTMLElement).dataset.expression ?? "";
@@ -358,16 +366,17 @@ export function richTextToHtml(
           segment.marks
         );
         const styleMarks = pageLinkTitleMarks(segment.marks);
-        const titleClassName = escapeHtml(
+        // The underline is on the anchor so it runs under the icon as well;
+        // the title span carries only the run's styling marks.
+        const titleClass =
           styleMarks.length > 0
-            ? `${pageTitleUnderlineClassName} ${classForMarks(styleMarks)}`
-            : pageTitleUnderlineClassName
-        );
+            ? ` class="${escapeHtml(classForMarks(styleMarks))}"`
+            : "";
         return `<a href="${url}" data-href="${url}" data-page-id="${pageId}" data-marks="${segment.marks.join(
           " "
-        )}" class="${className}" contenteditable="false"><span data-inline-page-link-chrome="icon"></span><span class="${titleClassName}">${escapeHtml(
+        )}" class="${className}" contenteditable="false"><span data-inline-page-link-chrome="icon"></span><span${titleClass}>${escapeHtml(
           segment.text
-        )}</span><span data-inline-page-link-chrome="arrow"></span></a>`;
+        )}</span></a>`;
       }
       const attrs = `data-marks="${segment.marks.join(
         " "

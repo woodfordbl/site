@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { formulaTokenMark } from "@/lib/blocks/inline-formula.ts";
 import type { FormulaCheckContext } from "@/lib/formula/check.ts";
+import { EMPTY_INLINE_FORMULA_LABEL } from "@/lib/formula/display.ts";
 import { evaluateInlineTokens } from "@/lib/formula/inline-token-eval.ts";
 import {
   createPageFormulaScope,
@@ -122,5 +123,19 @@ describe("evaluateInlineTokens", () => {
     const missing: InlineMark = { type: "formula", start: 2, end: 3 };
     const result = evaluate([blank, missing]);
     expect(result.values.size).toBe(0);
+  });
+
+  it("shows None for a blank page title so the chip stays visible", () => {
+    const emptyPage: PageFormulaSource = {
+      title: "",
+      createdAt: PAGE.createdAt,
+      updatedAt: PAGE.updatedAt,
+    };
+    const result = evaluateInlineTokens(
+      [formulaTokenMark(0, "thisPage.Title")],
+      createPageFormulaScope(emptyPage),
+      CONTEXT
+    );
+    expect(result.values.get(0)).toBe(EMPTY_INLINE_FORMULA_LABEL);
   });
 });

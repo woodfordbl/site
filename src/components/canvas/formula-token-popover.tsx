@@ -34,7 +34,7 @@ const POPOVER_WIDTH_PX = 720;
 
 export function FormulaTokenPopover(): ReactNode {
   const canvas = useCanvasEditorContext();
-  const page = useInlineFormulaPage();
+  const model = useInlineFormulaPage();
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
 
@@ -65,10 +65,16 @@ export function FormulaTokenPopover(): ReactNode {
     () => localFormulaRelationResolver(),
     [relatedDatabases]
   );
-  const fields = useMemo(() => pageFormulaFields(), []);
+  const fields = useMemo(
+    () => pageFormulaFields(model?.databaseFields),
+    [model?.databaseFields]
+  );
   const previewRows = useMemo(
-    () => (page === null ? [] : [pageFormulaPreviewRow(page)]),
-    [page]
+    () =>
+      model === null
+        ? []
+        : [pageFormulaPreviewRow(model.page, model.cellValues)],
+    [model]
   );
 
   const handleInsert = useCallback(

@@ -275,13 +275,17 @@ read site — word count, search indexing, clipboard, `page-to-markdown`, OG
 description — routed through it. That audit is the feature's real cost and
 should not be deferred; a missed site is how a stray sentinel reaches a user.
 
-**P2 — row pages.** Extend the page scope with the database's fields on row
-pages, plus the shadowing warning. Decide here whether row *templates* should
-also stay live rather than baking at materialization.
+**P2 — row pages.** ✅ Page scope layers the database's fields on row and
+template pages ([`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts),
+[`InlineFormulaPageProvider`](../../src/components/editor/inline-formula-page.tsx)).
+Live inline tokens evaluate against the open row (or template `rowDefaults`);
+mustache `{{ … }}` tokens still bake at materialization. Shadowing *warning*
+diagnostics remain deferred — collisions already favor the database field by
+name, with base ids reachable as `prop("page:…")`.
 
 **P3 — polish.** `{{` autocompletion, richer chrome (hover showing the
-expression, reusing the formula editor's LSP tooltip), and `CreatedBy` if a user
-model has appeared by then.
+expression, reusing the formula editor's LSP tooltip), checker shadowing
+warnings, and `CreatedBy` if a user model has appeared by then.
 
 ## Risks
 

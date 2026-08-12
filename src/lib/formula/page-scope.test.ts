@@ -104,8 +104,8 @@ describe("pageFormulaCheckProperties", () => {
   });
 
   it("uses ids that cannot collide with a database field id", () => {
-    // Row pages layer database fields over these (P2); a `page:` prefix keeps
-    // the two id spaces disjoint.
+    // Row/template pages layer database fields over these; a `page:` prefix
+    // keeps the two id spaces disjoint (see page-formula-fields.ts).
     for (const property of pageFormulaCheckProperties()) {
       expect(property.id.startsWith("page:")).toBe(true);
     }

@@ -48,10 +48,9 @@ export function ClearRowPagesConfirmDialog({
         <DialogHeader>
           <DialogTitle>Clear {pageLabel}?</DialogTitle>
           <DialogDescription>
-            Already-opened row pages keep their old body until cleared. Clearing
-            removes covers and body edits on those pages; each row re-seeds from
-            this template the next time it is opened. Row property values are
-            kept. This cannot be undone.
+            Removes covers and body edits from already-opened row pages. They
+            re-seed from this template on next open. Property values stay. This
+            cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <ConfirmDialogFooter

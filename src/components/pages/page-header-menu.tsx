@@ -23,27 +23,19 @@ import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
-import { PageHeaderMenuExportSubmenu } from "@/components/pages/page-header-menu-export-submenu.tsx";
 import { PageHeaderMenuFontSubmenu } from "@/components/pages/page-header-menu-font-submenu.tsx";
+import { PageHeaderMenuLifecycleSection } from "@/components/pages/page-header-menu-lifecycle.tsx";
 import { PageHeaderMenuTextSizeSubmenu } from "@/components/pages/page-header-menu-text-size-submenu.tsx";
-import { PageMenuMoveSubmenu } from "@/components/pages/page-menu-move-submenu.tsx";
-import { PageVersionHistorySubmenu } from "@/components/pages/page-version-history-submenu.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuSwitchItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
-import { Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
@@ -55,8 +47,10 @@ import {
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import type { ActionMenuEntry } from "@/lib/canvas/filter-action-menu-items.ts";
 import { exportPageArchive } from "@/lib/content/workspace-export.ts";
+import { isDatabaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { exportPageMarkdown } from "@/lib/markdown/export-page-markdown.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
+import { isTemplatePageId } from "@/lib/pages/template-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 import { appToast } from "@/lib/toast/app-toast.ts";
 import {
@@ -77,6 +71,173 @@ interface PageHeaderMenuProps extends PageCanvasFooterActionsInput {
   > | null;
 }
 
+/** Cover + (for navigable pages) lifecycle search rows for the ⋯ menu filter. */
+function buildPageHeaderMenuSearchEntries({
+  coverOpenPicker,
+  duplicate,
+  footerActions,
+  headerImage,
+  isFavorite,
+  isNarrowViewport,
+  isTemplatePage,
+  pageId,
+  runCopyLink,
+  runExportMarkdown,
+  runExportPage,
+  runImportMarkdown,
+  setDeleteOpen,
+  toggleFavorite,
+}: {
+  coverOpenPicker: (() => void) | undefined;
+  duplicate: (withContent: boolean) => void;
+  footerActions: ReturnType<typeof usePageCanvasFooterActions>;
+  headerImage: Page["headerImage"] | null | undefined;
+  isFavorite: boolean;
+  isNarrowViewport: boolean;
+  isTemplatePage: boolean;
+  pageId: string;
+  runCopyLink: () => void;
+  runExportMarkdown: () => void;
+  runExportPage: () => void;
+  runImportMarkdown: () => void;
+  setDeleteOpen: (open: boolean) => void;
+  toggleFavorite: (pageId: string) => void;
+}): ActionMenuEntry[] {
+  const entries: ActionMenuEntry[] = [
+    {
+      id: "cover-image",
+      label: headerImage ? "Change cover" : "Add cover",
+      icon: <IconPhoto />,
+      keywords: ["cover", "header", "image", "photo", "banner", "unsplash"],
+      onSelect: () => {
+        coverOpenPicker?.();
+      },
+    },
+  ];
+
+  if (!isTemplatePage) {
+    entries.push(
+      {
+        id: "copy-link",
+        label: "Copy link",
+        icon: <IconLink />,
+        keywords: ["copy", "link", "url", "share"],
+        command: "copy-page-link",
+        onSelect: runCopyLink,
+      },
+      {
+        id: "favorite",
+        label: isFavorite ? "Remove from favorites" : "Add to favorites",
+        icon: isFavorite ? <IconStarOff /> : <IconStar />,
+        keywords: ["favorite", "favourite", "star", "pin", "bookmark"],
+        onSelect: () => {
+          toggleFavorite(pageId);
+        },
+      },
+      {
+        id: "duplicate",
+        label: "Duplicate page",
+        icon: <IconCopy />,
+        keywords: ["duplicate", "copy", "clone"],
+        onSelect: () => {
+          duplicate(true);
+        },
+      },
+      {
+        id: "duplicate-shell",
+        label: "Duplicate without content",
+        icon: <IconCopyOff />,
+        keywords: ["duplicate", "copy", "clone", "shell", "empty", "blank"],
+        onSelect: () => {
+          duplicate(false);
+        },
+      },
+      {
+        id: "export-zip",
+        label: "Export page (.zip)",
+        icon: <IconFileExport />,
+        keywords: ["export", "download", "backup", "zip", "archive", "save"],
+        onSelect: runExportPage,
+      },
+      {
+        id: "export-markdown",
+        label: "Export page (.md)",
+        icon: <IconMarkdown />,
+        keywords: ["export", "markdown", "md", "download", "text"],
+        onSelect: runExportMarkdown,
+      },
+      {
+        id: "import-markdown",
+        label: "Import Markdown",
+        icon: <IconFileImport />,
+        keywords: ["import", "markdown", "md", "upload", "new page"],
+        onSelect: runImportMarkdown,
+      },
+      {
+        id: "delete",
+        label: "Delete",
+        icon: <IconTrash />,
+        keywords: ["delete", "remove", "trash"],
+        destructive: true,
+        onSelect: () => {
+          setDeleteOpen(true);
+        },
+      }
+    );
+  }
+
+  if (isTemplatePage || !(isNarrowViewport && footerActions.visible)) {
+    return entries;
+  }
+
+  if (footerActions.hasUpdates) {
+    entries.push({
+      id: "refresh",
+      label: "Refresh site content",
+      icon: <IconRefresh />,
+      keywords: ["refresh", "sync", "remote", "site"],
+      onSelect: () => {
+        footerActions.setConfirmAction("refresh");
+      },
+    });
+  }
+  if (footerActions.isDev) {
+    entries.push({
+      id: "save-all",
+      label: "Save all to source",
+      icon: <IconDeviceFloppy />,
+      keywords: ["save", "source", "dev", "export"],
+      onSelect: () => {
+        footerActions.setConfirmAction("saveAll");
+      },
+    });
+  }
+  if (footerActions.hasLocalChanges) {
+    entries.push({
+      id: "reset-page",
+      label: "Reset page",
+      icon: <IconRefresh />,
+      keywords: ["reset", "revert", "remote"],
+      destructive: true,
+      onSelect: () => {
+        footerActions.setConfirmAction("reset");
+      },
+    });
+    entries.push({
+      id: "reset-all",
+      label: "Reset all",
+      icon: <IconRefresh />,
+      keywords: ["reset", "all", "revert"],
+      destructive: true,
+      onSelect: () => {
+        footerActions.setConfirmAction("resetAll");
+      },
+    });
+  }
+
+  return entries;
+}
+
 export function PageHeaderMenu({
   onAfterReset,
   pageId,
@@ -86,6 +247,10 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Site page template + per-database row templates sit outside the page tree —
+  // duplicate / export / favorites / move / delete don't apply to them.
+  const isTemplatePage =
+    isTemplatePageId(pageId) || isDatabaseTemplatePageId(pageId);
   const cover = usePageCover();
   const headerImage = cover?.headerImage;
   const { font, fullWidth, setFont, setFullWidth, setTextScale, textScale } =
@@ -174,147 +339,40 @@ export function PageHeaderMenu({
     [importMarkdownPage]
   );
 
-  const searchableEntries = useMemo((): ActionMenuEntry[] => {
-    const entries: ActionMenuEntry[] = [
-      {
-        id: "cover-image",
-        label: headerImage ? "Change cover" : "Add cover",
-        icon: <IconPhoto />,
-        keywords: ["cover", "header", "image", "photo", "banner", "unsplash"],
-        onSelect: () => {
-          cover?.openPicker();
-        },
-      },
-      {
-        id: "copy-link",
-        label: "Copy link",
-        icon: <IconLink />,
-        keywords: ["copy", "link", "url", "share"],
-        command: "copy-page-link",
-        onSelect: runCopyLink,
-      },
-      {
-        id: "favorite",
-        label: isFavorite ? "Remove from favorites" : "Add to favorites",
-        icon: isFavorite ? <IconStarOff /> : <IconStar />,
-        keywords: ["favorite", "favourite", "star", "pin", "bookmark"],
-        onSelect: () => {
-          toggleFavorite(pageId);
-        },
-      },
-      {
-        id: "duplicate",
-        label: "Duplicate page",
-        icon: <IconCopy />,
-        keywords: ["duplicate", "copy", "clone"],
-        onSelect: () => {
-          duplicate(true);
-        },
-      },
-      {
-        id: "duplicate-shell",
-        label: "Duplicate without content",
-        icon: <IconCopyOff />,
-        keywords: ["duplicate", "copy", "clone", "shell", "empty", "blank"],
-        onSelect: () => {
-          duplicate(false);
-        },
-      },
-      {
-        id: "export-zip",
-        label: "Export page (.zip)",
-        icon: <IconFileExport />,
-        keywords: ["export", "download", "backup", "zip", "archive", "save"],
-        onSelect: runExportPage,
-      },
-      {
-        id: "export-markdown",
-        label: "Export page (.md)",
-        icon: <IconMarkdown />,
-        keywords: ["export", "markdown", "md", "download", "text"],
-        onSelect: runExportMarkdown,
-      },
-      {
-        id: "import-markdown",
-        label: "Import Markdown",
-        icon: <IconFileImport />,
-        keywords: ["import", "markdown", "md", "upload", "new page"],
-        onSelect: runImportMarkdown,
-      },
-      {
-        id: "delete",
-        label: "Delete",
-        icon: <IconTrash />,
-        keywords: ["delete", "remove", "trash"],
-        destructive: true,
-        onSelect: () => {
-          setDeleteOpen(true);
-        },
-      },
-    ];
-
-    if (isNarrowViewport && footerActions.visible) {
-      if (footerActions.hasUpdates) {
-        entries.push({
-          id: "refresh",
-          label: "Refresh site content",
-          icon: <IconRefresh />,
-          keywords: ["refresh", "sync", "remote", "site"],
-          onSelect: () => {
-            footerActions.setConfirmAction("refresh");
-          },
-        });
-      }
-      if (footerActions.isDev) {
-        entries.push({
-          id: "save-all",
-          label: "Save all to source",
-          icon: <IconDeviceFloppy />,
-          keywords: ["save", "source", "dev", "export"],
-          onSelect: () => {
-            footerActions.setConfirmAction("saveAll");
-          },
-        });
-      }
-      if (footerActions.hasLocalChanges) {
-        entries.push({
-          id: "reset-page",
-          label: "Reset page",
-          icon: <IconRefresh />,
-          keywords: ["reset", "revert", "remote"],
-          destructive: true,
-          onSelect: () => {
-            footerActions.setConfirmAction("reset");
-          },
-        });
-        entries.push({
-          id: "reset-all",
-          label: "Reset all",
-          icon: <IconRefresh />,
-          keywords: ["reset", "all", "revert"],
-          destructive: true,
-          onSelect: () => {
-            footerActions.setConfirmAction("resetAll");
-          },
-        });
-      }
-    }
-
-    return entries;
-  }, [
-    cover,
-    duplicate,
-    footerActions,
-    headerImage,
-    isFavorite,
-    isNarrowViewport,
-    pageId,
-    runCopyLink,
-    runExportMarkdown,
-    runExportPage,
-    runImportMarkdown,
-    toggleFavorite,
-  ]);
+  const searchableEntries = useMemo(
+    () =>
+      buildPageHeaderMenuSearchEntries({
+        coverOpenPicker: cover?.openPicker,
+        duplicate,
+        footerActions,
+        headerImage,
+        isFavorite,
+        isNarrowViewport,
+        isTemplatePage,
+        pageId,
+        runCopyLink,
+        runExportMarkdown,
+        runExportPage,
+        runImportMarkdown,
+        setDeleteOpen,
+        toggleFavorite,
+      }),
+    [
+      cover?.openPicker,
+      duplicate,
+      footerActions,
+      headerImage,
+      isFavorite,
+      isNarrowViewport,
+      isTemplatePage,
+      pageId,
+      runCopyLink,
+      runExportMarkdown,
+      runExportPage,
+      runImportMarkdown,
+      toggleFavorite,
+    ]
+  );
 
   const handleDelete = () => {
     deletePage();
@@ -388,152 +446,43 @@ export function PageHeaderMenu({
               <IconPhoto />
               {headerImage ? "Change cover" : "Add cover"}
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={runCopyLink}>
-                <IconLink />
-                Copy link
-                <DropdownMenuShortcut>
-                  <Shortcut command="copy-page-link" />
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  runAfterClose(() => {
-                    toggleFavorite(pageId);
-                  });
+            {isTemplatePage ? null : (
+              <PageHeaderMenuLifecycleSection
+                canDelete={canDelete}
+                duplicate={duplicate}
+                footerActions={footerActions}
+                isFavorite={isFavorite}
+                isNarrowViewport={isNarrowViewport}
+                moveTo={moveTo}
+                onCopyLink={runCopyLink}
+                onDelete={() => {
+                  setDeleteOpen(true);
                 }}
-              >
-                {isFavorite ? <IconStarOff /> : <IconStar />}
-                {isFavorite ? "Remove from favorites" : "Add to favorites"}
-              </DropdownMenuItem>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <IconCopy />
-                  Duplicate page
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      runAfterClose(() => {
-                        duplicate(true);
-                      });
-                    }}
-                  >
-                    <IconCopy />
-                    With content
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      runAfterClose(() => {
-                        duplicate(false);
-                      });
-                    }}
-                  >
-                    <IconCopyOff />
-                    Without content
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <PageHeaderMenuExportSubmenu
-                onExportMarkdown={() => {
-                  runAfterClose(runExportMarkdown);
-                }}
-                onExportZip={() => {
-                  runAfterClose(runExportPage);
-                }}
-              />
-              <DropdownMenuItem
-                onClick={() => {
-                  runAfterClose(runImportMarkdown);
-                }}
-              >
-                <IconFileImport />
-                Import Markdown
-              </DropdownMenuItem>
-              <PageVersionHistorySubmenu pageId={pageId} />
-              <PageMenuMoveSubmenu
-                onMoveTo={(parentId) => {
-                  runAfterClose(() => {
-                    moveTo(parentId);
-                  });
+                onExportMarkdown={runExportMarkdown}
+                onExportZip={runExportPage}
+                onImportMarkdown={runImportMarkdown}
+                onToggleFavorite={() => {
+                  toggleFavorite(pageId);
                 }}
                 pageId={pageId}
                 pages={pages}
-                variant="dropdown"
+                runAfterClose={runAfterClose}
               />
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              {isNarrowViewport && footerActions.visible ? (
-                <>
-                  {footerActions.hasUpdates ? (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        footerActions.setConfirmAction("refresh");
-                      }}
-                    >
-                      <IconRefresh />
-                      Refresh site content
-                    </DropdownMenuItem>
-                  ) : null}
-                  {footerActions.isDev ? (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        footerActions.setConfirmAction("saveAll");
-                      }}
-                    >
-                      <IconDeviceFloppy />
-                      Save all to source
-                    </DropdownMenuItem>
-                  ) : null}
-                  {footerActions.hasLocalChanges ? (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          footerActions.setConfirmAction("reset");
-                        }}
-                        variant="destructive"
-                      >
-                        <IconRefresh />
-                        Reset page
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          footerActions.setConfirmAction("resetAll");
-                        }}
-                        variant="destructive"
-                      >
-                        <IconRefresh />
-                        Reset all
-                      </DropdownMenuItem>
-                    </>
-                  ) : null}
-                </>
-              ) : null}
-              <DropdownMenuItem
-                disabled={!canDelete}
-                onClick={() => {
-                  setDeleteOpen(true);
-                }}
-                variant="destructive"
-              >
-                <IconTrash />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            )}
             <DropdownMenuSeparator />
             <PageActivityPanel pageId={pageId} />
           </ActionMenuSearchSection>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DeletePageConfirmDialog
-        onConfirm={handleDelete}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
-        pageId={pageId}
-      />
+      {isTemplatePage ? null : (
+        <DeletePageConfirmDialog
+          onConfirm={handleDelete}
+          onOpenChange={setDeleteOpen}
+          open={deleteOpen}
+          pageId={pageId}
+        />
+      )}
 
       <PageCanvasConfirmDialog
         confirmAction={footerActions.confirmAction}

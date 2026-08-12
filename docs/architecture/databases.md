@@ -714,16 +714,41 @@ mounted via
 [`DatabaseSlugPathPage`](../../src/components/database/database-slug-path-page.tsx)),
 entered from the database ⋯ menu's **Row pages** item. The chrome matches a real
 row page (icon + defaults properties band + canvas); the template sidebar adds
-**Live preview** (pick a row to evaluate tokens without materializing; **Open
-row page** jumps to that row's seeded URL) and **Clear row pages** (destructive —
-[`clearDatabaseRowPages`](../../src/lib/databases/clear-database-row-pages.ts)
-deletes already-materialized `databaseRowSource` pages and clears `row.pageId`
-links so the next open re-seeds via `ensureDatabaseRowPage`). Authors can leave
+**Live preview**. Neither template editing nor Live Preview has a page in the
+sidebar tree, so both pass a shared
+[`RowTemplateBreadcrumb`](../../src/components/database/row-page/row-template-breadcrumb.tsx)
+(host → … → hub → `Template` / the row) — template editing through
+`PageWorkspace`'s `breadcrumbSlot`, the preview through its own header. Without
+it the page-tree breadcrumb renders nothing and the header collapses to the
+height of its action button, so the chrome jumps when switching modes;
+`pageHeaderShellClassName` pins the shared bar with `min-h-10`.
+The template editor's ⋯ menu is appearance-only (Font / Text size / Full width /
+Cover + stats) — page-lifecycle actions (copy link, favorites, duplicate,
+export/import, version history, move, delete) are omitted because the template
+page is outside the navigable tree (same reduction as the site page template;
+see [pages — Page header menu](./pages.md#page-header-menu)).
+A template-backed row is a mixed editor: icon, name, and
+properties write to the selected row, while the editable canvas stays bound to
+the shared `db-template:<databaseId>` block shard. Inline formula values use the
+selected row's scope; mustache source remains visible for authoring and bakes
+only when a row page seeds. Rows with a separate/materialized body remain listed
+but cannot enter Live Preview; their trailing **Clear content** icon deletes only
+that row page and clears only its `row.pageId`, preserving icon/property values.
+The bulk **Clear row pages** action remains destructive —
+[`clearDatabaseRowPage` / `clearDatabaseRowPages`](../../src/lib/databases/clear-database-row-pages.ts)
+delete materialized `databaseRowSource` pages and clear the matching links so
+the next open re-seeds via `ensureDatabaseRowPage`. Authors can leave
 the body blank or insert `{{ thisPage.Field }}` property tokens (copy from a
 property row), type `#` for the formula builder under the caret (Save inserts an
-inline formula token; Escape leaves `#` so markdown headings still work), or type
-`@` to mention a page inline. Edits are live for new opens; already-seeded pages
-keep their body until cleared (live tokens inside seeded pages remain deferred).
+inline formula token whose Properties list includes the database's fields plus
+base page fields — Title / Created at / Updated at — via
+[`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts);
+Escape leaves `#` so markdown headings still work), or type
+`@` to mention a page inline. Live inline tokens on the template and on seeded
+row pages evaluate against the same layered `thisPage` scope (template preview
+uses `rowDefaults`; row pages use the open row's values). Mustache `{{ … }}`
+tokens still bake at materialization. Already-seeded pages keep their body
+until cleared.
 Rendering uses [`useRowTemplate`](../../src/hooks/use-row-template.ts);
 materialization uses `readRowTemplateSnapshot`. Row pages inherit the
 template's **icon** (overridden by `row.icon` when set) and **font** when

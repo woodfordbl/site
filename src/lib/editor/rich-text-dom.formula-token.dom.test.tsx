@@ -11,6 +11,7 @@ import {
   richTextToHtml,
   serializeRichTextDom,
 } from "@/lib/editor/rich-text-dom.ts";
+import { EMPTY_INLINE_FORMULA_LABEL } from "@/lib/formula/display.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 import { FORMULA_TOKEN_SENTINEL as S } from "@/lib/schemas/rich-text.ts";
 
@@ -132,6 +133,14 @@ describe("applyInlineFormulaValues", () => {
     applyInlineFormulaValues(root, new Map([[8, "12"]]));
     applyInlineFormulaValues(root, new Map());
     expect(tokenIn(root).textContent).toBe(PENDING_FORMULA_VALUE);
+  });
+
+  it("marks blank None values with data-formula-empty for the muted chip", () => {
+    const root = mountField(TEXT, MARKS);
+    applyInlineFormulaValues(root, new Map([[8, EMPTY_INLINE_FORMULA_LABEL]]));
+    expect(tokenIn(root).hasAttribute("data-formula-empty")).toBe(true);
+    applyInlineFormulaValues(root, new Map([[8, "This, Other"]]));
+    expect(tokenIn(root).hasAttribute("data-formula-empty")).toBe(false);
   });
 
   it("leaves the field's own text nodes untouched", () => {

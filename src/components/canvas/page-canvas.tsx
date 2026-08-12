@@ -11,6 +11,7 @@ import { InlineFormulaPageProvider } from "@/components/editor/inline-formula-pa
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
+import type { InlineFormulaPageModel } from "@/lib/databases/page-formula-fields.ts";
 
 import { PageCanvasLocalView } from "./page-canvas-local-view.tsx";
 import { PageCanvasServer } from "./page-canvas-server.tsx";
@@ -21,6 +22,11 @@ interface PageCanvasProps {
   fullWidth: boolean;
   /** Rendered flush at the top of the scroll region so it scrolls with content (mobile header). */
   headerSlot?: ReactNode;
+  /**
+   * Overrides inferred `thisPage` values while editing a shared template body
+   * through a selected row's Live Preview.
+   */
+  inlineFormulaModel?: InlineFormulaPageModel;
   isNarrowViewport: boolean;
   pageHasLocalDraft: boolean;
   serverPage: ServerPageSource;
@@ -34,9 +40,14 @@ interface PageCanvasProps {
   topLevelBlockAlign?: TopLevelBlockAlign;
 }
 
-type PageCanvasEditorComponent = ComponentType<PageCanvasProps>;
+type PageCanvasEditorComponent = ComponentType<
+  Omit<PageCanvasProps, "inlineFormulaModel">
+>;
 
-function PageCanvasClient(props: PageCanvasProps) {
+function PageCanvasClient({
+  inlineFormulaModel: _inlineFormulaModel,
+  ...props
+}: PageCanvasProps) {
   const [Editor, setEditor] = useState<PageCanvasEditorComponent | null>(null);
   // Dirty pages render the synchronous local view on the first client render so
   // the stale server frame is never shown (SSR also skips server blocks for
@@ -103,6 +114,7 @@ export function PageCanvas({
   coverSlot,
   fullWidth,
   headerSlot,
+  inlineFormulaModel,
   isNarrowViewport,
   pageHasLocalDraft,
   serverPage,
@@ -135,7 +147,11 @@ export function PageCanvas({
 
   return (
     // Supplies `thisPage` to inline formula tokens anywhere in the block tree.
-    <InlineFormulaPageProvider pageId={serverPage.id} title={serverPage.title}>
+    <InlineFormulaPageProvider
+      modelOverride={inlineFormulaModel}
+      pageId={serverPage.id}
+      title={serverPage.title}
+    >
       <PageCanvasClient
         coverSlot={coverSlot}
         fullWidth={fullWidth}

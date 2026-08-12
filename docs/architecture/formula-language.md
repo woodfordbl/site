@@ -794,6 +794,16 @@ an expression doesn't close the token; an unterminated `{{` is literal text), an
 `evaluateTemplateText` parses/evaluates each span as a full v2 formula, rendering
 errors inline as "⚠ message". Never throws.
 
+**Inline formula tokens** (the `formula` rich-text mark) share the same `thisPage`
+vocabulary. Ordinary pages expose the base fields from
+[`page-scope.ts`](../../src/lib/formula/page-scope.ts) (Title / Created at /
+Updated at). Database row and template pages layer the database's columns on top
+via [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts)
+(`createInlinePageFormulaScope` / `inlinePageFormulaCheckProperties` /
+`pageFormulaFields`) — name collisions favor the column; base ids stay reachable
+as `prop("page:…")`. [`InlineFormulaPageProvider`](../../src/components/editor/inline-formula-page.tsx)
+resolves the overlay from `databaseRowSource` or a `db-template:…` page id.
+
 ## Contracts
 
 - **Never throw** — tokenize/parse return Results, check returns diagnostics,

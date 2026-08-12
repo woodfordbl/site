@@ -1568,6 +1568,29 @@ export function setDatabaseRowPageId(rowId: string, pageId: string): void {
 }
 
 /**
+ * Clear one row's materialized-page link so its next open re-seeds from the
+ * current row template. The caller owns deleting the linked page first.
+ */
+export function clearDatabaseRowPageLink(rowId: string): void {
+  const row = localDatabaseRowsCollection.get(rowId);
+  if (!row?.pageId) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    localDatabaseRowsCollection.update(rowId, (draft) => {
+      draft.pageId = null;
+      draft.updatedAt = timestamp;
+    });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
  * Clear every `pageId` link for rows in `databaseId` so the next open
  * re-seeds via {@link ensureDatabaseRowPage}. Used after deleting
  * materialized row pages when applying an updated template.

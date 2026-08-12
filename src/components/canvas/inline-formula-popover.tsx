@@ -126,7 +126,7 @@ function targetForToken(rowId: string, offset: number): PopoverTarget | null {
 
 export function InlineFormulaPopover() {
   const canvas = useCanvasEditorContext();
-  const page = useInlineFormulaPage();
+  const model = useInlineFormulaPage();
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
   const [target, setTarget] = useState<PopoverTarget | null>(null);
@@ -230,10 +230,16 @@ export function InlineFormulaPopover() {
     () => localFormulaRelationResolver(),
     [relatedDatabases]
   );
-  const fields = useMemo(() => pageFormulaFields(), []);
+  const fields = useMemo(
+    () => pageFormulaFields(model?.databaseFields),
+    [model?.databaseFields]
+  );
   const previewRows = useMemo(
-    () => (page === null ? [] : [pageFormulaPreviewRow(page)]),
-    [page]
+    () =>
+      model === null
+        ? []
+        : [pageFormulaPreviewRow(model.page, model.cellValues)],
+    [model]
   );
 
   const handleSave = useCallback(
