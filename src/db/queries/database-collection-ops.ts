@@ -1540,11 +1540,9 @@ export function updateDatabaseSource(
  * `updatedAt`. This is the copy-on-write commit point for rows-as-pages —
  * the id references a REAL user page created from the database's row
  * template (see `lib/databases/row-template.ts`); until this runs the row's
- * page exists only virtually. v1 never CLEARS a link — callers only invoke
- * this from the virtual state (pageId unset, or dangling after the target
- * page was deleted, which the row route treats as virtual again).
- * Unlink/cascade semantics land with the page-delete integration
- * (databases proposal §2.5).
+ * page exists only virtually. Callers invoke this from the virtual state
+ * (`pageId` unset, or dangling after the target page was deleted). To wipe
+ * links when re-applying a template, use {@link clearDatabaseRowPageLinks}.
  *
  * Applies to local and connector-synced rows alike — synced rows still seed
  * a normal page on open so header/cover/menu match ordinary pages; property
@@ -1564,6 +1562,34 @@ export function setDatabaseRowPageId(rowId: string, pageId: string): void {
       draft.pageId = pageId;
       draft.updatedAt = timestamp;
     });
+  });
+
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Clear every `pageId` link for rows in `databaseId` so the next open
+ * re-seeds via {@link ensureDatabaseRowPage}. Used after deleting
+ * materialized row pages when applying an updated template.
+ */
+export function clearDatabaseRowPageLinks(databaseId: string): void {
+  const linkedRows = localDatabaseRowsCollection.toArray.filter(
+    (row) => row.databaseId === databaseId && row.pageId
+  );
+  if (linkedRows.length === 0) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+
+  tx.mutate(() => {
+    for (const row of linkedRows) {
+      localDatabaseRowsCollection.update(row.id, (draft) => {
+        draft.pageId = null;
+        draft.updatedAt = timestamp;
+      });
+    }
   });
 
   commitDatabaseTransaction(tx);

@@ -35,6 +35,8 @@ export const TOAST_ID_LIVE_MARKET_KEEP_ONE = "live-market-keep-one";
 export const TOAST_ID_COPY_TEMPLATE_TOKEN = "copy-template-token";
 export const TOAST_ID_COPY_TEMPLATE_TOKEN_ERROR = "copy-template-token-error";
 
+export const TOAST_ID_CLEAR_ROW_PAGES = "clear-row-pages";
+
 export const TOAST_ID_PERSISTENCE_ERROR = "persistence-error";
 
 export function orphanLocalPageToastId(pageId: string): string {

@@ -1129,6 +1129,26 @@ describe("database collection ops", () => {
     expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
 
+  it("clearDatabaseRowPageLinks nulls every linked pageId for the database", async () => {
+    const linked = { ...makeRow("row-1"), pageId: "page-1" };
+    const otherDb = {
+      ...makeRow("row-2"),
+      databaseId: "db-other",
+      pageId: "page-2",
+    };
+    const unlinked = makeRow("row-3");
+    mocks.rowState = [linked, otherDb, unlinked];
+    const drafts = captureRowDrafts([linked, otherDb, unlinked]);
+
+    ops.clearDatabaseRowPageLinks(databaseId);
+    await flushAsync();
+
+    expect(drafts.get("row-1")?.pageId).toBeNull();
+    expect(drafts.has("row-2")).toBe(false);
+    expect(drafts.has("row-3")).toBe(false);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
   it("duplicateDatabaseField regenerates select option ids and remaps row values", async () => {
     const database = makeDatabase();
     database.fields = [

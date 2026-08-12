@@ -706,17 +706,24 @@ id `db-template:<databaseId>`
 record + block shard managed by
 [`row-template-store.ts`](../../src/lib/databases/row-template-store.ts) — mirroring the
 site page template: excluded from the merged page list, slug resolution, id resolution,
-and `saveAllLocalPages`. Edited as a NORMAL page at
+and `saveAllLocalPages`. Edited as a NORMAL row-page shell at
 `{hostSlug}/{dbSlug}/template` (legacy `/db/$databaseId/template` redirects;
 editor UI in
 [`database-template-editor.tsx`](../../src/components/database/row-page/database-template-editor.tsx),
 mounted via
 [`DatabaseSlugPathPage`](../../src/components/database/database-slug-path-page.tsx)),
-entered from the database ⋯ menu's **Row pages** item. Authors can leave the
-body blank or insert `{{ thisPage.Field }}` property tokens (copy from a property
-row), type `#` for the formula builder under the caret (Save inserts an inline
-formula token; Escape leaves `#` so markdown headings still work), or type `@`
-to mention a page inline. Preview-as-row demonstrates live evaluation.
+entered from the database ⋯ menu's **Row pages** item. The chrome matches a real
+row page (icon + defaults properties band + canvas); the template sidebar adds
+**Live preview** (pick a row to evaluate tokens without materializing; **Open
+row page** jumps to that row's seeded URL) and **Clear row pages** (destructive —
+[`clearDatabaseRowPages`](../../src/lib/databases/clear-database-row-pages.ts)
+deletes already-materialized `databaseRowSource` pages and clears `row.pageId`
+links so the next open re-seeds via `ensureDatabaseRowPage`). Authors can leave
+the body blank or insert `{{ thisPage.Field }}` property tokens (copy from a
+property row), type `#` for the formula builder under the caret (Save inserts an
+inline formula token; Escape leaves `#` so markdown headings still work), or type
+`@` to mention a page inline. Edits are live for new opens; already-seeded pages
+keep their body until cleared (live tokens inside seeded pages remain deferred).
 Rendering uses [`useRowTemplate`](../../src/hooks/use-row-template.ts);
 materialization uses `readRowTemplateSnapshot`. Row pages inherit the
 template's **icon** (overridden by `row.icon` when set) and **font** when
