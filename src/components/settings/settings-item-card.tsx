@@ -63,16 +63,23 @@ export function SettingsItemRow({
 
 interface SettingsItemFieldProps {
   action: ReactNode;
+  /**
+   * Optional body under the title/action row, for settings whose effect needs
+   * showing rather than describing (a live preview). The row keeps its own
+   * layout; children stack beneath it inside the same item.
+   */
+  children?: ReactNode;
   description: string;
   title: string;
 }
 
 export function SettingsItemField({
   action,
+  children,
   description,
   title,
 }: SettingsItemFieldProps) {
-  return (
+  const row = (
     <SettingsItemRow>
       <ItemContent>
         <ItemTitle>{title}</ItemTitle>
@@ -80,6 +87,19 @@ export function SettingsItemField({
       </ItemContent>
       <ItemActions>{action}</ItemActions>
     </SettingsItemRow>
+  );
+  if (children === undefined) {
+    return row;
+  }
+  return (
+    <div className="flex flex-col">
+      {row}
+      {/* Horizontal padding MUST match `settingsItemRowClassName`'s, or the
+          body sits a few px off the title and description above it. The top
+          padding adds to the row's own, separating the body from the
+          description rather than letting them run together. */}
+      <div className="px-3 pt-2 pb-3">{children}</div>
+    </div>
   );
 }
 

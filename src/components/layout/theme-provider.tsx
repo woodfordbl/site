@@ -23,6 +23,8 @@ import type {
   ChartDitherMode,
   ChartPaletteId,
 } from "@/lib/charts/chart-palettes.ts";
+import type { CodeThemeId } from "@/lib/code/code-themes.ts";
+import { setCodeTheme as setCodeThemeRuntime } from "@/lib/code/highlighter.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type {
   ResolvedTheme,
@@ -36,9 +38,12 @@ interface ThemeContextValue {
   /** Resolved from `chartDither` + the active theme: should charts dither right now? */
   chartDitherEnabled: boolean;
   chartPalette: ChartPaletteId;
+  /** Syntax theme shared by code blocks, inline code, and the formula editor. */
+  codeTheme: CodeThemeId;
   resolvedTheme: ResolvedTheme;
   setChartDither: (chartDither: ChartDitherMode) => void;
   setChartPalette: (chartPalette: ChartPaletteId) => void;
+  setCodeTheme: (codeTheme: CodeThemeId) => void;
   setTextScale: (textScale: PageTextScale) => void;
   setTheme: (theme: ThemePreference) => void;
   setTooltipStyle: (tooltipStyle: TooltipStyle) => void;
@@ -63,6 +68,10 @@ function applyChartPalette(chartPalette: ChartPaletteId): void {
 
 function applyChartDither(chartDither: ChartDitherMode): void {
   document.documentElement.dataset.chartDither = chartDither;
+}
+
+function applyCodeTheme(codeThemeId: CodeThemeId): void {
+  document.documentElement.dataset.codeTheme = codeThemeId;
 }
 
 function applyTooltipStyle(tooltipStyle: TooltipStyle): void {
@@ -91,6 +100,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   const [tooltipStyle, setTooltipStyleState] = useState<TooltipStyle>(
     initialHints.appearance.tooltipStyle
   );
+  const [codeThemeId, setCodeThemeState] = useState<CodeThemeId>(
+    initialHints.appearance.codeTheme
+  );
   const [prefersDark, setPrefersDark] = useState(() =>
     initialHints.appearance.theme === "system"
       ? readSystemPrefersDark()
@@ -113,8 +125,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
       chartPalette,
       chartDither,
       tooltipStyle,
+      codeTheme: codeThemeId,
     }),
-    [theme, textScale, chartPalette, chartDither, tooltipStyle]
+    [theme, textScale, chartPalette, chartDither, tooltipStyle, codeThemeId]
   );
 
   useEffect(() => {
@@ -142,6 +155,16 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   useEffect(() => {
     applyChartDither(chartDither);
   }, [chartDither]);
+
+  // Loads the pair into Shiki and publishes the formula editor's token
+  // variables. Async and non-blocking: until it resolves, code surfaces keep
+  // the previous theme rather than flashing unstyled.
+  useEffect(() => {
+    applyCodeTheme(codeThemeId);
+    setCodeThemeRuntime(codeThemeId).catch(() => {
+      // Theming is cosmetic; the previous theme stays applied on failure.
+    });
+  }, [codeThemeId]);
 
   useEffect(() => {
     applyTooltipStyle(tooltipStyle);
@@ -213,14 +236,27 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     [appearanceSnapshot]
   );
 
+  const setCodeTheme = useCallback(
+    (nextCodeTheme: CodeThemeId) => {
+      setCodeThemeState(nextCodeTheme);
+      writeSiteAppearanceToDocument({
+        ...appearanceSnapshot,
+        codeTheme: nextCodeTheme,
+      });
+    },
+    [appearanceSnapshot]
+  );
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       chartDither,
       chartDitherEnabled,
       chartPalette,
+      codeTheme: codeThemeId,
       resolvedTheme,
       setChartDither,
       setChartPalette,
+      setCodeTheme,
       setTextScale,
       setTheme,
       setTooltipStyle,
@@ -232,9 +268,11 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
       chartDither,
       chartDitherEnabled,
       chartPalette,
+      codeThemeId,
       resolvedTheme,
       setChartDither,
       setChartPalette,
+      setCodeTheme,
       setTextScale,
       setTheme,
       setTooltipStyle,
@@ -264,8 +302,14 @@ export function useSiteAppearance(): ThemeContextValue {
 
 /** Persists appearance preferences cookie after client changes. */
 export function SyncSiteAppearanceCookieEffect() {
-  const { chartDither, chartPalette, textScale, theme, tooltipStyle } =
-    useSiteAppearance();
+  const {
+    chartDither,
+    chartPalette,
+    codeTheme,
+    textScale,
+    theme,
+    tooltipStyle,
+  } = useSiteAppearance();
 
   useEffect(() => {
     writeSiteAppearanceToDocument({
@@ -274,8 +318,9 @@ export function SyncSiteAppearanceCookieEffect() {
       chartPalette,
       chartDither,
       tooltipStyle,
+      codeTheme,
     });
-  }, [chartDither, chartPalette, textScale, theme, tooltipStyle]);
+  }, [chartDither, chartPalette, codeTheme, textScale, theme, tooltipStyle]);
 
   return null;
 }

@@ -121,6 +121,7 @@ export function DatabaseViewEditActions({
 }: DatabaseViewEditActionsProps): ReactNode {
   return (
     <>
+      {/* Same height as the h-8 rename input; explicit size keeps 16px glyphs. */}
       <Button
         aria-label={`Duplicate view ${view.name}`}
         onClick={() => {
@@ -129,10 +130,10 @@ export function DatabaseViewEditActions({
             onViewIdChange?.(copy.id);
           }
         }}
-        size="icon-xs"
+        size="icon"
         variant="ghost"
       >
-        <IconCopy />
+        <IconCopy className="size-4" />
       </Button>
       <Button
         aria-label={`Delete view ${view.name}`}
@@ -140,10 +141,10 @@ export function DatabaseViewEditActions({
         onClick={() => {
           removeDatabaseView(databaseId, view.id);
         }}
-        size="icon-xs"
+        size="icon"
         variant="ghost"
       >
-        <IconTrash />
+        <IconTrash className="size-4" />
       </Button>
     </>
   );

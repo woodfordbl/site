@@ -1,0 +1,638 @@
+/**
+ * Static reference extraction for the incremental formula engine (proposal
+ * §5.1): given a checked-context and a parsed formula, produce the same-row
+ * field ids it reads, the relation traversals it performs, and whether it is
+ * clock-volatile. Pure and never-throwing, like everything in `lib/formula`.
+ *
+ * Same-row references reuse the checker's own extraction
+ * (`checkFormula(...).references` — exact id first, then normalized name for
+ * the `thisPage.X` spelling, unresolved ids kept so dependency tracking can
+ * heal a restored field).
+ *
+ * Traversals are extracted by a provenance walk: relation-typed property
+ * references mint a tracked source, and sources flow through the
+ * row-preserving list functions (`map`/`filter`/`first`/…), lambda
+ * parameters, `let`/`lets` bindings, `if`/`switch` branches, `??`, and list
+ * literals. Each member access on a tracked source emits a precise traversal
+ * (member resolved against the target database's properties in
+ * `context.databases`, id-then-name — the same rule `resolveFormulaRowMember`
+ * applies at evaluation; unresolvable → `memberFieldId: null`). A source
+ * consumed WITHOUT member access — an opaque function argument (`length()`,
+ * `join()`), an operator operand, an un-analyzable lambda value, or the
+ * formula's own result (row labels read the target's title) — emits a
+ * conservative `memberFieldId: null` traversal instead: dirtied by any
+ * change to a target row.
+ *
+ * Chained hops (A→B→C): a member access that resolves to a RELATION field of
+ * the target mints a new tracked source for the second hop, so
+ * `prop("RelB").first().RelC.first().X` yields TWO traversals — one on
+ * `RelB` (member `RelC`, source = the formula's own database) and one on
+ * `RelC` (member `X`, source = B). `sourceDatabaseId: null` means "the
+ * formula's own database" — only the graph builder knows that id.
+ *
+ * `db("…")` whole-database references ride the same provenance walk but come
+ * out as {@link FormulaDatabaseReference}s, not traversals: there is no
+ * relation field (and so no reverse index) to map a target-row change back
+ * through, which is exactly the proposal's coarse contract — any change in
+ * the target database dirties EVERY row of the referencing column
+ * (`FORMULA_ALL_ROWS`). Member precision is kept identically (`memberFieldId`
+ * per the same rules), and a member resolving to a relation field of the
+ * target chains into an ordinary relation traversal whose source database is
+ * the db ref's target.
+ *
+ * User-defined function calls (`context.userFunctions`) are expanded INLINE
+ * during the walk: parameters bind to the CALL's argument source sets, so
+ * `weightedScore(prop("f-rel").map(r => r.Est), 2)` composes traversals
+ * through the argument subtree and a body reading `prop("f-x")` contributes
+ * a same-row reference to every caller (the checker's own extraction walks
+ * bodies too, so `sameRowFieldIds` sees through calls). A per-walk visited
+ * set terminates recursive definitions (re-entry consumes arguments
+ * opaquely); a body that doesn't parse contributes NO references — the cell
+ * shows the broken-definition error anyway. Volatility expands the same way:
+ * `now()` inside a called body marks the caller volatile
+ * (`isVolatileFormula(ast, userFunctions)`).
+ *
+ * Known imprecision (documented, deliberate): row values flowing OUT of
+ * another formula field of the same row (`prop("F").X` where `F` computes a
+ * row) carry no provenance — no traversal is emitted; the dependent still
+ * recomputes whenever `F`'s own value changes. A user-function argument
+ * whose parameter the body never reads drops its provenance the same way an
+ * unused lambda parameter does.
+ */
+
+import type {
+  FormulaBinaryNode,
+  FormulaCallNode,
+  FormulaLambdaNode,
+  FormulaMemberNode,
+  FormulaNode,
+  FormulaPropertyNode,
+} from "@/lib/formula/ast.ts";
+import { formulaFunctionForName } from "@/lib/formula/catalog.ts";
+import {
+  checkFormula,
+  type FormulaCheckContext,
+  type FormulaCheckProperty,
+  normalizeFormulaPropertyName,
+} from "@/lib/formula/check.ts";
+import { isVolatileFormula } from "@/lib/formula/evaluate.ts";
+
+/** One static relation traversal a formula performs. */
+export interface FormulaTraversal {
+  /**
+   * The target field the traversal reads, or `null` for "any field of the
+   * target" — an unresolvable member, or a relation value consumed without
+   * member access (labels/opaque use). Null-member traversals are
+   * conservatively dirtied by any target-row change.
+   */
+  readonly memberFieldId: string | null;
+  /** The relation field whose reverse index maps target rows to referrers. */
+  readonly relationFieldId: string;
+  /**
+   * Database owning the relation field; `null` means the formula's own
+   * database (first hop — the extractor doesn't know its own database id).
+   */
+  readonly sourceDatabaseId: string | null;
+  /** The database the relation points into. */
+  readonly targetDatabaseId: string;
+}
+
+/**
+ * One whole-database `db("…")` reference a formula performs. No relation
+ * field is involved, so row mapping is coarse by construction: any change to
+ * any row of `targetDatabaseId` dirties every row of the referencing column.
+ * `memberFieldId` keeps the same member precision as relation traversals
+ * (`null` = "any field of the target").
+ */
+export interface FormulaDatabaseReference {
+  readonly memberFieldId: string | null;
+  readonly targetDatabaseId: string;
+}
+
+/** Everything {@link formulaStaticReferences} produces. */
+export interface FormulaStaticReferences {
+  /** Whole-database `db("…")` references, deduplicated. */
+  readonly databaseRefs: readonly FormulaDatabaseReference[];
+  /**
+   * Same-row field ids the formula reads (data, formula, and relation
+   * fields alike; unresolved `prop("id")` references included).
+   */
+  readonly sameRowFieldIds: ReadonlySet<string>;
+  /** Relation traversals, deduplicated. */
+  readonly traversals: readonly FormulaTraversal[];
+  /** Whether the formula reads the clock (`now()`/`today()`). */
+  readonly volatile: boolean;
+}
+
+/**
+ * One tracked provenance source: rows of `targetDatabaseId` reached through
+ * a relation field, or through a whole-database `db("…")` reference (which
+ * has no relation hop to map rows back through). Identity is per
+ * property/db-node occurrence (or per chained-hop member), so
+ * `needsAnyMember` marking stays occurrence-precise.
+ */
+type TrackedSource =
+  | {
+      readonly kind: "relation";
+      readonly relationFieldId: string;
+      readonly sourceDatabaseId: string | null;
+      readonly targetDatabaseId: string;
+    }
+  | { readonly kind: "database"; readonly targetDatabaseId: string };
+
+type SourceSet = ReadonlySet<TrackedSource>;
+
+const NO_SOURCES: SourceSet = new Set();
+
+/** One binding frame (lambda parameter or `let`/`lets` binding). */
+interface SourceBinding {
+  readonly name: string;
+  readonly parent: SourceBinding | null;
+  readonly sources: SourceSet;
+}
+
+function lookupSources(
+  env: SourceBinding | null,
+  name: string
+): SourceSet | null {
+  for (let frame = env; frame !== null; frame = frame.parent) {
+    if (frame.name === name) {
+      return frame.sources;
+    }
+  }
+  return null;
+}
+
+function unionSources(...sets: readonly SourceSet[]): SourceSet {
+  const merged = new Set<TrackedSource>();
+  for (const set of sets) {
+    for (const source of set) {
+      merged.add(source);
+    }
+  }
+  return merged;
+}
+
+/**
+ * How the row-aware list functions treat their arguments: which argument the
+ * lambda parameter's elements come from, and what the result carries.
+ * `passthrough` — result rows are the input list's rows (filter/sort/first/…);
+ * `body` — result rows are whatever the lambda body produced (map);
+ * `none` — the result is scalar (some/every/findIndex).
+ */
+interface RowAwareSpec {
+  readonly lambdaArg?: number;
+  readonly result: "body" | "none" | "passthrough";
+}
+
+const ROW_AWARE_FUNCTIONS: ReadonlyMap<string, RowAwareSpec> = new Map([
+  ["at", { result: "passthrough" }],
+  ["every", { lambdaArg: 1, result: "none" }],
+  ["filter", { lambdaArg: 1, result: "passthrough" }],
+  ["find", { lambdaArg: 1, result: "passthrough" }],
+  ["findIndex", { lambdaArg: 1, result: "none" }],
+  ["first", { result: "passthrough" }],
+  ["flat", { result: "passthrough" }],
+  ["last", { result: "passthrough" }],
+  ["map", { lambdaArg: 1, result: "body" }],
+  ["reverse", { result: "passthrough" }],
+  ["slice", { result: "passthrough" }],
+  ["some", { lambdaArg: 1, result: "none" }],
+  ["sort", { lambdaArg: 1, result: "passthrough" }],
+  ["unique", { result: "passthrough" }],
+]);
+
+function traversalKey(traversal: FormulaTraversal): string {
+  return [
+    traversal.sourceDatabaseId ?? "",
+    traversal.relationFieldId,
+    traversal.targetDatabaseId,
+    traversal.memberFieldId ?? "*",
+  ].join(" ");
+}
+
+function databaseRefKey(reference: FormulaDatabaseReference): string {
+  // NUL separator, matching traversalKey's collision-free convention.
+  return [reference.targetDatabaseId, reference.memberFieldId ?? "*"].join(
+    "\0"
+  );
+}
+
+/** Both reference kinds the provenance walk extracts. */
+interface ExtractedReferences {
+  readonly databaseRefs: FormulaDatabaseReference[];
+  readonly traversals: FormulaTraversal[];
+}
+
+/**
+ * Provenance walker. Collects member traversals as it goes; sources that
+ * were consumed opaquely (or escape as the result) are marked and emitted as
+ * null-member traversals at the end.
+ */
+class TraversalExtractor {
+  /** Lowercased user-function names on the current expansion stack. */
+  private readonly activeUserFunctions = new Set<string>();
+  private readonly context: FormulaCheckContext;
+  private readonly databaseRefs = new Map<string, FormulaDatabaseReference>();
+  private readonly fieldsById = new Map<string, FormulaCheckProperty>();
+  private readonly fieldsByName = new Map<string, FormulaCheckProperty>();
+  private readonly needsAnyMember = new Set<TrackedSource>();
+  private readonly traversals = new Map<string, FormulaTraversal>();
+
+  constructor(context: FormulaCheckContext) {
+    this.context = context;
+    for (const property of context.properties) {
+      this.fieldsById.set(property.id, property);
+      const key = normalizeFormulaPropertyName(property.name);
+      if (!this.fieldsByName.has(key)) {
+        this.fieldsByName.set(key, property);
+      }
+    }
+  }
+
+  extract(ast: FormulaNode): ExtractedReferences {
+    // The result value itself may carry rows — their display labels read the
+    // target's primary field, so they count as "any member" consumers.
+    this.markOpaque(this.walk(ast, null));
+    for (const source of this.needsAnyMember) {
+      this.emit(source, null);
+    }
+    return {
+      databaseRefs: [...this.databaseRefs.values()],
+      traversals: [...this.traversals.values()],
+    };
+  }
+
+  private emit(source: TrackedSource, memberFieldId: string | null): void {
+    if (source.kind === "database") {
+      const reference: FormulaDatabaseReference = {
+        memberFieldId,
+        targetDatabaseId: source.targetDatabaseId,
+      };
+      this.databaseRefs.set(databaseRefKey(reference), reference);
+      return;
+    }
+    const traversal: FormulaTraversal = {
+      memberFieldId,
+      relationFieldId: source.relationFieldId,
+      sourceDatabaseId: source.sourceDatabaseId,
+      targetDatabaseId: source.targetDatabaseId,
+    };
+    this.traversals.set(traversalKey(traversal), traversal);
+  }
+
+  private markOpaque(sources: SourceSet): void {
+    for (const source of sources) {
+      this.needsAnyMember.add(source);
+    }
+  }
+
+  private walk(node: FormulaNode, env: SourceBinding | null): SourceSet {
+    switch (node.kind) {
+      case "property":
+        return this.walkProperty(node);
+      case "database":
+        // db("…") mints a db-rooted source; validity of the id is the
+        // checker's concern — an unknown target simply resolves no members.
+        return new Set([
+          { kind: "database", targetDatabaseId: node.databaseId },
+        ]);
+      case "name":
+        return lookupSources(env, node.name) ?? NO_SOURCES;
+      case "member":
+        return this.walkMember(node, env);
+      case "call":
+        return this.walkCall(node, env);
+      case "binary":
+        return this.walkBinary(node, env);
+      case "unary":
+        this.markOpaque(this.walk(node.operand, env));
+        return NO_SOURCES;
+      case "lambda":
+        // A lambda VALUE (let-bound or misplaced): walk the body so member
+        // accesses inside still extract, params carrying no provenance.
+        this.walkLambdaBody(node, NO_SOURCES, env);
+        return NO_SOURCES;
+      case "list":
+        return unionSources(...node.items.map((item) => this.walk(item, env)));
+      default:
+        return NO_SOURCES;
+    }
+  }
+
+  /** Same resolution rule as the checker's `synthProperty` (id, then name). */
+  private walkProperty(node: FormulaPropertyNode): SourceSet {
+    const byId = this.fieldsById.get(node.name);
+    const field =
+      byId ??
+      (node.via === "scope"
+        ? this.fieldsByName.get(normalizeFormulaPropertyName(node.name))
+        : undefined);
+    if (field?.kind === "relation" && field.targetDatabaseId !== undefined) {
+      return new Set([
+        {
+          kind: "relation",
+          relationFieldId: field.id,
+          sourceDatabaseId: null,
+          targetDatabaseId: field.targetDatabaseId,
+        },
+      ]);
+    }
+    return NO_SOURCES;
+  }
+
+  /** Member lookup on a target database: exact id, then normalized name. */
+  private resolveMember(
+    targetDatabaseId: string,
+    name: string
+  ): FormulaCheckProperty | null {
+    const database = this.context.databases?.get(targetDatabaseId);
+    if (database === undefined) {
+      return null;
+    }
+    const byId = database.properties.find((entry) => entry.id === name);
+    if (byId !== undefined) {
+      return byId;
+    }
+    const key = normalizeFormulaPropertyName(name);
+    return (
+      database.properties.find(
+        (entry) => normalizeFormulaPropertyName(entry.name) === key
+      ) ?? null
+    );
+  }
+
+  private walkMember(
+    node: FormulaMemberNode,
+    env: SourceBinding | null
+  ): SourceSet {
+    const receiver = this.walk(node.receiver, env);
+    const result = new Set<TrackedSource>();
+    for (const source of receiver) {
+      const member = this.resolveMember(source.targetDatabaseId, node.name);
+      this.emit(source, member?.id ?? null);
+      if (member?.kind === "relation" && member.targetDatabaseId) {
+        // Chained hop: the member is itself a relation — its rows become a
+        // new tracked source rooted in the previous hop's target database
+        // (db-rooted sources chain identically; the hop is concrete).
+        result.add({
+          kind: "relation",
+          relationFieldId: member.id,
+          sourceDatabaseId: source.targetDatabaseId,
+          targetDatabaseId: member.targetDatabaseId,
+        });
+      }
+    }
+    return result;
+  }
+
+  private walkBinary(
+    node: FormulaBinaryNode,
+    env: SourceBinding | null
+  ): SourceSet {
+    if (node.op === "coalesce") {
+      return unionSources(
+        this.walk(node.left, env),
+        this.walk(node.right, env)
+      );
+    }
+    this.markOpaque(this.walk(node.left, env));
+    this.markOpaque(this.walk(node.right, env));
+    return NO_SOURCES;
+  }
+
+  /**
+   * A lambda in a row-aware argument position: bind the first parameter to
+   * the list's element sources and walk the body. A non-lambda expression
+   * here (a `let`-bound function value) is un-analyzable — the list's rows
+   * are conservatively marked as needing any-member traversals.
+   */
+  private walkLambdaArgument(
+    fn: FormulaNode,
+    elements: SourceSet,
+    env: SourceBinding | null
+  ): SourceSet {
+    if (fn.kind !== "lambda") {
+      this.markOpaque(this.walk(fn, env));
+      this.markOpaque(elements);
+      return NO_SOURCES;
+    }
+    return this.walkLambdaBody(fn, elements, env);
+  }
+
+  private walkLambdaBody(
+    fn: FormulaLambdaNode,
+    firstParamSources: SourceSet,
+    env: SourceBinding | null
+  ): SourceSet {
+    let scope = env;
+    for (const [index, param] of fn.params.entries()) {
+      scope = {
+        name: param.name,
+        parent: scope,
+        sources: index === 0 ? firstParamSources : NO_SOURCES,
+      };
+    }
+    return this.walk(fn.body, scope);
+  }
+
+  private walkCall(
+    node: FormulaCallNode,
+    env: SourceBinding | null
+  ): SourceSet {
+    const lower = node.name.toLowerCase();
+    if (lower === "let" || lower === "lets") {
+      return this.walkLet(node, env);
+    }
+    if (lookupSources(env, node.name) !== null) {
+      // Calling a bound value — un-analyzable; arguments consumed opaquely.
+      this.walkOpaqueArguments(node.args, env);
+      return NO_SOURCES;
+    }
+    const entry = formulaFunctionForName(node.name);
+    if (entry === undefined) {
+      // Catalog-first, like the evaluator: only a non-catalog name can be a
+      // user-defined function call.
+      const userFunction = this.context.userFunctions?.get(
+        node.name.toLowerCase()
+      );
+      if (userFunction !== undefined) {
+        return this.walkUserFunctionCall(node, userFunction, env);
+      }
+      this.walkOpaqueArguments(node.args, env);
+      return NO_SOURCES;
+    }
+    if (entry.name === "if") {
+      return this.walkIf(node, env);
+    }
+    if (entry.name === "switch") {
+      return this.walkSwitch(node, env);
+    }
+    const spec = ROW_AWARE_FUNCTIONS.get(entry.name);
+    if (spec === undefined || node.args.length === 0) {
+      this.walkOpaqueArguments(node.args, env);
+      return NO_SOURCES;
+    }
+    return this.walkRowAwareCall(node, spec, env);
+  }
+
+  /**
+   * Expand a user-defined function call inline: walk each argument in the
+   * CALLER's environment, bind the definition's parameters to the argument
+   * source sets, and walk the body in a standalone environment (parameters
+   * only — caller bindings never leak in), so traversals compose through
+   * argument subtrees exactly like lambda parameters. Recursive re-entry
+   * (the visited set) and unparseable bodies degrade conservatively:
+   * argument sources are consumed opaquely, no body references contribute.
+   * Extra arguments past the parameter list (an arity mistake — the cell
+   * errors anyway) are consumed opaquely too.
+   */
+  private walkUserFunctionCall(
+    node: FormulaCallNode,
+    def: { body: FormulaNode | null; params: readonly string[] },
+    env: SourceBinding | null
+  ): SourceSet {
+    const lower = node.name.toLowerCase();
+    const argSources = node.args.map((arg) => this.walk(arg, env));
+    if (def.body === null || this.activeUserFunctions.has(lower)) {
+      for (const sources of argSources) {
+        this.markOpaque(sources);
+      }
+      return NO_SOURCES;
+    }
+    let scope: SourceBinding | null = null;
+    for (const [index, param] of def.params.entries()) {
+      scope = {
+        name: param,
+        parent: scope,
+        sources: argSources[index] ?? NO_SOURCES,
+      };
+    }
+    for (const sources of argSources.slice(def.params.length)) {
+      this.markOpaque(sources);
+    }
+    this.activeUserFunctions.add(lower);
+    try {
+      return this.walk(def.body, scope);
+    } finally {
+      this.activeUserFunctions.delete(lower);
+    }
+  }
+
+  private walkRowAwareCall(
+    node: FormulaCallNode,
+    spec: RowAwareSpec,
+    env: SourceBinding | null
+  ): SourceSet {
+    const list = this.walk(node.args[0], env);
+    let body: SourceSet = NO_SOURCES;
+    for (const [index, arg] of node.args.entries()) {
+      if (index === 0) {
+        continue;
+      }
+      if (index === spec.lambdaArg) {
+        body = this.walkLambdaArgument(arg, list, env);
+        continue;
+      }
+      this.markOpaque(this.walk(arg, env));
+    }
+    if (spec.result === "body") {
+      return body;
+    }
+    // The lambda's own result is consumed by the function (predicate/sort
+    // key) — rows escaping it are read beyond identity, so mark them.
+    this.markOpaque(body);
+    return spec.result === "passthrough" ? list : NO_SOURCES;
+  }
+
+  private walkIf(node: FormulaCallNode, env: SourceBinding | null): SourceSet {
+    const [condition, ...branches] = node.args;
+    if (condition !== undefined) {
+      this.markOpaque(this.walk(condition, env));
+    }
+    return unionSources(...branches.map((branch) => this.walk(branch, env)));
+  }
+
+  private walkSwitch(
+    node: FormulaCallNode,
+    env: SourceBinding | null
+  ): SourceSet {
+    const results: SourceSet[] = [];
+    if (node.args.length > 0) {
+      this.markOpaque(this.walk(node.args[0], env));
+    }
+    let index = 1;
+    while (index + 1 < node.args.length) {
+      this.markOpaque(this.walk(node.args[index], env));
+      results.push(this.walk(node.args[index + 1], env));
+      index += 2;
+    }
+    if (index < node.args.length) {
+      results.push(this.walk(node.args[index], env));
+    }
+    return unionSources(...results);
+  }
+
+  /** `let(name, value, body)` / `lets(…)`: bindings carry provenance. */
+  private walkLet(node: FormulaCallNode, env: SourceBinding | null): SourceSet {
+    const count = node.args.length;
+    if (count === 0) {
+      return NO_SOURCES;
+    }
+    let scope = env;
+    let index = 0;
+    while (index + 2 <= count - 1) {
+      const binder = node.args[index];
+      const sources = this.walk(node.args[index + 1], scope);
+      if (binder.kind === "name") {
+        scope = { name: binder.name, parent: scope, sources };
+      } else {
+        this.markOpaque(this.walk(binder, scope));
+        this.markOpaque(sources);
+      }
+      index += 2;
+    }
+    for (; index < count - 1; index += 1) {
+      const orphan = node.args[index];
+      if (orphan.kind !== "name") {
+        this.markOpaque(this.walk(orphan, scope));
+      }
+    }
+    return this.walk(node.args[count - 1], scope);
+  }
+
+  private walkOpaqueArguments(
+    args: readonly FormulaNode[],
+    env: SourceBinding | null
+  ): void {
+    for (const arg of args) {
+      this.markOpaque(this.walk(arg, env));
+    }
+  }
+}
+
+/**
+ * Extract a formula's static references against a schema context (build the
+ * context with `formulaCheckContext(fields, relatedDatabases)` so
+ * `context.databases` covers every traversal target). Never throws.
+ */
+export function formulaStaticReferences(
+  ast: FormulaNode,
+  context: FormulaCheckContext
+): FormulaStaticReferences {
+  const sameRowFieldIds = new Set(checkFormula(ast, context).references);
+  let extracted: ExtractedReferences = { databaseRefs: [], traversals: [] };
+  try {
+    extracted = new TraversalExtractor(context).extract(ast);
+  } catch {
+    // Never throw: a failed provenance walk degrades to "no traversals" —
+    // same-row edges still dirty correctly, cross-db precision is lost.
+    extracted = { databaseRefs: [], traversals: [] };
+  }
+  return {
+    databaseRefs: extracted.databaseRefs,
+    sameRowFieldIds,
+    traversals: extracted.traversals,
+    volatile: isVolatileFormula(ast, context.userFunctions),
+  };
+}

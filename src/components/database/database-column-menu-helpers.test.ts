@@ -15,6 +15,7 @@ import {
   numberDecimalsPatch,
   numberGroupingPatch,
   recoloredSelectOptions,
+  relationTargetPatch,
   renamedSelectOptions,
   selectFieldForOptionEdit,
   showsEditPropertySubmenu,
@@ -268,6 +269,32 @@ describe("fieldTypeChangePatch", () => {
       options: undefined,
       format: undefined,
       expression: "",
+    });
+  });
+
+  it("sets the picked target when changing to relation", () => {
+    expect(fieldTypeChangePatch("relation", "db-target")).toEqual({
+      type: "relation",
+      options: undefined,
+      format: undefined,
+      expression: undefined,
+      targetDatabaseId: "db-target",
+    });
+  });
+
+  it("clears targetDatabaseId when changing away from relation", () => {
+    // The patch type collapses to the union's common keys, so read through a
+    // plain record to assert the cleared per-variant key.
+    const patch = fieldTypeChangePatch("text") as Record<string, unknown>;
+    expect(Object.hasOwn(patch, "targetDatabaseId")).toBe(true);
+    expect(patch.targetDatabaseId).toBeUndefined();
+  });
+});
+
+describe("relationTargetPatch", () => {
+  it("carries the target database id only", () => {
+    expect(relationTargetPatch("db-next")).toEqual({
+      targetDatabaseId: "db-next",
     });
   });
 });

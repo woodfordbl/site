@@ -980,6 +980,11 @@
  * light `color` plus a `--shiki-dark` variable (see lib/code/highlighter.ts);
  * under `.dark` we swap to the dark variable. Plaintext spans have no variable
  * and fall back to the inherited foreground.
+ *
+ * `!important` is load-bearing, not laziness: Shiki bakes the light color into
+ * each span's INLINE style, which outranks any selector, so without it dark
+ * mode renders the light theme's palette — near-black identifiers on a dark
+ * surface. Shiki's own dual-theme docs prescribe the same.
  */
 .code-shiki {
   font-family: var(--font-mono);
@@ -987,7 +992,22 @@
 }
 
 .dark .code-shiki span {
-  color: var(--shiki-dark, inherit);
+  color: var(--shiki-dark, inherit) !important;
+}
+
+/*
+ * Code is TYPED, not just read. Geist Mono ligates the comparison operators —
+ * `==` renders as `=`, `!=` as `≠`, `<=` as `≤`, `>=` as `≥` — so a formula
+ * reference list, editor, or inline code span would show glyphs no keyboard
+ * produces. Every such surface opts out, on the element and its descendants,
+ * so operators always read exactly as they must be entered.
+ */
+.code-no-ligatures,
+.code-no-ligatures * {
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  font-variant-ligatures: none;
 }
 
 /*

@@ -5,6 +5,7 @@ import {
 } from "@/lib/code/code-languages.ts";
 import {
   highlightToHtml,
+  useCodeThemeRevision,
   useHighlighterReady,
 } from "@/lib/code/highlighter.ts";
 
@@ -13,6 +14,8 @@ type CodeViewProps = BlockViewProps<"code">;
 export function CodeView({ props }: CodeViewProps) {
   // Repaint once the async Shiki highlighter resolves.
   useHighlighterReady();
+  // Repaint when the selected syntax theme changes (settings → appearance).
+  useCodeThemeRevision();
   const language = props.language ?? DEFAULT_CODE_LANGUAGE;
   const html = highlightToHtml(props.text, language);
 

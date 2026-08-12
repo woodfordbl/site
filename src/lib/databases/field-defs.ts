@@ -143,6 +143,14 @@ export const FIELD_TYPE_DEFS: {
     defaultOperator: "contains",
     valueKind: "string",
   },
+  relation: {
+    label: "Relation",
+    // Emptiness only in v1 — a contains-row filter needs a target-row picker
+    // in the filter bar's value editor, which is deferred.
+    operators: ["isEmpty", "isNotEmpty"],
+    defaultOperator: "isNotEmpty",
+    valueKind: "optionIds",
+  },
 };
 
 /**
@@ -161,6 +169,11 @@ export function createDatabaseField(
       return { id, name, type, options: [] };
     case "formula":
       return { id, name, type, expression: "" };
+    case "relation":
+      // Relations are created only through the column menu's Change-type
+      // target picker (`fieldTypeChangePatch`), which always supplies a real
+      // target — this default is a defensive placeholder, never reached by UI.
+      return { id, name, type, targetDatabaseId: "" };
     default:
       return { id, name, type };
   }

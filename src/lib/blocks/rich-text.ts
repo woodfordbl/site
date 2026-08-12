@@ -14,16 +14,37 @@ export const INLINE_MARK_TYPES = inlineMarkTypeSchema.options;
 
 /** Optional link destination fields carried on `link` marks. */
 export function linkMarkExtras(
-  mark: Pick<InlineMark, "href" | "pageId">
-): Pick<InlineMark, "href" | "pageId"> {
+  mark: Pick<InlineMark, "expression" | "href" | "pageId">
+): Pick<InlineMark, "expression" | "href" | "pageId"> {
   return {
     ...(mark.href === undefined ? {} : { href: mark.href }),
     ...(mark.pageId === undefined ? {} : { pageId: mark.pageId }),
+    ...(mark.expression === undefined ? {} : { expression: mark.expression }),
   };
 }
 
+/**
+ * Identity for merging two adjacent same-type marks: links only merge with an
+ * adjoining link of the same destination. Formula tokens never merge at all
+ * (see {@link normalizeInlineMarks}), so `expression` is compared here only for
+ * completeness.
+ */
 function linksMatch(a: InlineMark, b: InlineMark): boolean {
-  return a.href === b.href && a.pageId === b.pageId;
+  return (
+    a.href === b.href && a.pageId === b.pageId && a.expression === b.expression
+  );
+}
+
+/**
+ * Runs that behave as one indivisible unit: inline page links and formula
+ * tokens. A styling mark either covers a whole run or stops at its edges, so
+ * bolding across one can never split it into two chrome-bearing halves.
+ */
+function isAtomicRunMark(mark: InlineMark): boolean {
+  return (
+    (mark.type === "link" && mark.pageId !== undefined) ||
+    mark.type === "formula"
+  );
 }
 
 interface MarkRange {
@@ -46,15 +67,16 @@ function subtractRange(piece: MarkRange, cut: MarkRange): MarkRange[] {
 }
 
 /**
- * Inline page links are atomic runs: a styling mark either covers a whole page
- * link or stops at its edges. Partial coverage is clipped away, so a page link
- * never splits into two chrome-bearing anchors when the user bolds across it.
+ * Clip a styling mark to the atomic runs it overlaps (see
+ * {@link isAtomicRunMark}). Partial coverage is dropped, so an atomic run never
+ * splits when the user bolds across it. Atomic marks themselves pass through —
+ * they define the runs rather than being clipped by them.
  */
 function clipToPageLinkRuns(
   mark: InlineMark,
   runs: readonly MarkRange[]
 ): InlineMark[] {
-  if (mark.type === "link") {
+  if (mark.type === "link" || mark.type === "formula") {
     return [mark];
   }
   let pieces: MarkRange[] = [{ start: mark.start, end: mark.end }];
@@ -87,7 +109,7 @@ export function normalizeInlineMarks(
     .sort((a, b) => a.start - b.start || a.end - b.end);
 
   const pageLinkRuns = clamped
-    .filter((mark) => mark.type === "link" && mark.pageId !== undefined)
+    .filter(isAtomicRunMark)
     .map((mark) => ({ start: mark.start, end: mark.end }));
   const clipped = (
     pageLinkRuns.length === 0
@@ -97,10 +119,17 @@ export function normalizeInlineMarks(
 
   const merged: InlineMark[] = [];
   for (const mark of clipped) {
+    if (mark.type === "formula") {
+      // Each token is exactly one sentinel, so two adjacent tokens are two
+      // tokens — never one two-character run, even when their expressions
+      // match. A merged run would cover two sentinels and project neither.
+      merged.push({ ...mark });
+      continue;
+    }
     let previous: InlineMark | undefined;
     for (let i = merged.length - 1; i >= 0; i -= 1) {
-      // Links only merge with an adjoining link of the *same* href/pageId —
-      // two different destinations must stay distinct runs.
+      // Links merge only with an adjoining link of the same destination, and
+      // formula tokens only with an identical expression (see linksMatch).
       if (merged[i]?.type === mark.type && linksMatch(merged[i], mark)) {
         previous = merged[i];
         break;
@@ -304,6 +333,11 @@ export function isLikelyUrl(text: string): boolean {
 }
 
 export interface RichTextSegment {
+  /**
+   * Formula source when a `formula` mark covers the segment — an inline token,
+   * whose `text` is the sentinel rather than anything a reader should see.
+   */
+  expression?: string;
   /** Destination when a `link` mark covers the segment. */
   href?: string;
   marks: InlineMarkType[];
@@ -344,11 +378,18 @@ export function segmentRichText(
     const linkMark = normalized.find(
       (mark) => mark.type === "link" && mark.start <= start && mark.end >= end
     );
+    const formulaMark = normalized.find(
+      (mark) =>
+        mark.type === "formula" && mark.start <= start && mark.end >= end
+    );
     segments.push({
       text: text.slice(start, end),
       marks: segmentMarks,
       ...(linkMark?.href === undefined ? {} : { href: linkMark.href }),
       ...(linkMark?.pageId === undefined ? {} : { pageId: linkMark.pageId }),
+      ...(formulaMark?.expression === undefined
+        ? {}
+        : { expression: formulaMark.expression }),
     });
   }
   return segments;

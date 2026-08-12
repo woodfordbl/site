@@ -100,6 +100,16 @@ describe("isGroupableField", () => {
     expect(isGroupableField(multiSelectField)).toBe(true);
     expect(isGroupableField(formulaField)).toBe(false);
   });
+
+  it("excludes relation — bucket labels would need cross-DB titles", () => {
+    const relationField: DatabaseField = {
+      id: "f-rel",
+      name: "Projects",
+      type: "relation",
+      targetDatabaseId: "db-target",
+    };
+    expect(isGroupableField(relationField)).toBe(false);
+  });
 });
 
 describe("resolveGroupByField", () => {

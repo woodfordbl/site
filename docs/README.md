@@ -15,6 +15,7 @@ Start here for canvas, pages, and data-layer behavior.
 - [Block types](./architecture/block-types.md) — BlockSpec / ContainerSpec; how-to: [Adding a block type](./architecture/block-types.md#adding-a-block-type)
 - [Table blocks](./architecture/table-blocks.md) — grid model, keyboard, row/column DnD
 - [Databases](./architecture/databases.md) — typed fields, views, sharded rows, table grid, filter bar
+- [Formula language](./architecture/formula-language.md) — v2 engine: tokenize → parse → check → evaluate, id-canonical refs, read-time overlay
 - [Haptics](./architecture/haptics.md) — semantic moments, device support, when (not) to buzz
 - [BlockNote comparison](./architecture/blocknote-comparison.md)
 - [Editor tracks](./architecture/editor-tracks.md)

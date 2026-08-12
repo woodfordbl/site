@@ -32,6 +32,13 @@ vi.mock("@/db/collections/local-collections.ts", () => ({
   },
 }));
 
+// The panel reads computed formula values from the stateful engine, which
+// subscribes to the real collections on first use. This spacing test stubs
+// the collections, so serve an empty overlay instead of booting the engine.
+vi.mock("@/db/formula-engine.ts", () => ({
+  useFormulaOverlay: () => new Map(),
+}));
+
 vi.mock("@/components/ui/menu-icon-rename-input.tsx", () => ({
   MenuIconRenameInput: () => <div data-testid="column-rename">Rename</div>,
   shouldCancelMenuCloseForIconPicker: () => false,

@@ -48,6 +48,13 @@ const multiSelectField: DatabaseField = {
 
 const dateField: DatabaseField = { id: "f-due", name: "Due", type: "date" };
 
+const relationField: DatabaseField = {
+  id: "f-rel",
+  name: "Projects",
+  type: "relation",
+  targetDatabaseId: "db-target",
+};
+
 describe("isCellEmpty", () => {
   const cases: [DatabaseCellValue | undefined, boolean][] = [
     [null, true],
@@ -133,6 +140,21 @@ describe("coerceCellValue", () => {
     expect(coerceCellValue(textField, null)).toBeNull();
     expect(coerceCellValue(textField, undefined)).toBeNull();
   });
+
+  it("passes relation row-id arrays through and nulls other shapes", () => {
+    expect(coerceCellValue(relationField, ["row-1", "row-2"])).toEqual([
+      "row-1",
+      "row-2",
+    ]);
+    // Mixed arrays can only come from corrupted data — collapse to empty.
+    expect(
+      coerceCellValue(relationField, [
+        "row-1",
+        42,
+      ] as unknown as DatabaseCellValue)
+    ).toBeNull();
+    expect(coerceCellValue(relationField, "row-1")).toBeNull();
+  });
 });
 
 describe("cellToPlainText", () => {
@@ -172,6 +194,10 @@ describe("cellToPlainText", () => {
   it("renders empty and wrong-shaped cells as empty strings", () => {
     expect(cellToPlainText(textField, null)).toBe("");
     expect(cellToPlainText(numberField, "42")).toBe("");
+  });
+
+  it("projects relation cells to empty text (no cross-DB titles in v1)", () => {
+    expect(cellToPlainText(relationField, ["row-1"])).toBe("");
   });
 });
 

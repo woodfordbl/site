@@ -32,6 +32,7 @@ import { CanvasRowList } from "@/components/canvas/canvas-row.tsx";
 import { CanvasSlashProvider } from "@/components/canvas/canvas-slash-context.tsx";
 import { DatabaseBlockDeleteDialog } from "@/components/canvas/database-block-delete-dialog.tsx";
 import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
+import { InlineFormulaPopover } from "@/components/canvas/inline-formula-popover.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
 import { PageLinkDeleteDialog } from "@/components/canvas/page-link-delete-dialog.tsx";
@@ -738,6 +739,7 @@ function PageCanvasEditorBody({
                         <CanvasMarquee scrollRootRef={scrollRootRef} />
                         <CanvasMenuRoot />
                         <SelectionFormatToolbar />
+                        <InlineFormulaPopover />
                         <MobileBlockActionsDrawer />
                         <MobileEditorToolbar />
                         <PageLinkDeleteDialog
