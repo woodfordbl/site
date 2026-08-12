@@ -198,9 +198,6 @@ export function RowTemplateTitleSection({
           type="text"
         />
       </div>
-      <p className="mt-2 text-muted-foreground text-sm">
-        Type @ to mention a page, or # to insert a formula token.
-      </p>
       {showProperties && hasPanelFields ? (
         <RowPropertiesUnderTitleBand propertiesExtra={propertiesExtra}>
           <RowTemplateDefaultsList database={database} />
