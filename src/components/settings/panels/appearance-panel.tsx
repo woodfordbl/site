@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
+import { CodeThemePreview } from "@/components/settings/code-theme-preview.tsx";
 import {
   SettingsItemCard,
   SettingsItemField,
@@ -18,6 +19,11 @@ import {
   type ChartDitherMode,
   type ChartPaletteId,
 } from "@/lib/charts/chart-palettes.ts";
+import {
+  CODE_THEME_IDS,
+  CODE_THEMES,
+  type CodeThemeId,
+} from "@/lib/code/code-themes.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
 import type {
   ThemePreference,
@@ -48,6 +54,9 @@ const PALETTE_SWATCH_TOKENS = [
   "var(--chart-4)",
   "var(--chart-5)",
 ];
+
+const CODE_THEME_OPTIONS: Array<{ label: string; value: CodeThemeId }> =
+  CODE_THEME_IDS.map((id) => ({ value: id, label: CODE_THEMES[id].label }));
 
 /** Live preview of a palette's five chart colors. */
 function PaletteSwatch({ palette }: { palette: ChartPaletteId }) {
@@ -84,8 +93,10 @@ export function AppearancePanel() {
   const {
     chartDither,
     chartPalette,
+    codeTheme,
     setChartDither,
     setChartPalette,
+    setCodeTheme,
     setTextScale,
     setTheme,
     setTooltipStyle,
@@ -100,63 +111,91 @@ export function AppearancePanel() {
       description="Choose how the site looks on this device."
       section={section}
     >
-      <SettingsItemCard>
-        <SettingsItemField
-          action={
-            <SettingsItemSelect
-              onValueChange={setTheme}
-              options={THEME_OPTIONS}
-              value={theme}
-            />
-          }
-          description="Select your interface color scheme."
-          title="Interface theme"
-        />
-        <SettingsItemField
-          action={
-            <SettingsItemSelect
-              onValueChange={setTextScale}
-              options={TEXT_SIZE_OPTIONS}
-              value={textScale}
-            />
-          }
-          description="Default text size for pages. Individual pages can override this."
-          title="Text size"
-        />
-        <SettingsItemField
-          action={
-            <SettingsItemSelect
-              onValueChange={setTooltipStyle}
-              options={TOOLTIP_STYLE_OPTIONS}
-              value={tooltipStyle}
-            />
-          }
-          description="Normal matches menus and dialogs. Inverted uses the opposite of the page chrome (dark tooltips in light mode, light in dark)."
-          title="Tooltip style"
-        />
-        <SettingsItemField
-          action={
-            <SettingsItemSelect
-              onValueChange={setChartPalette}
-              options={CHART_PALETTE_OPTIONS}
-              value={chartPalette}
-            />
-          }
-          description="Default color palette for analytics charts across the workspace."
-          title="Chart palette"
-        />
-        <SettingsItemField
-          action={
-            <SettingsItemSelect
-              onValueChange={setChartDither}
-              options={CHART_DITHER_OPTIONS}
-              value={chartDither}
-            />
-          }
-          description="Render charts with a dithered texture. Dark mode only applies it when the dark theme is active."
-          title="Chart dither"
-        />
-      </SettingsItemCard>
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium text-sm">General</h2>
+        <SettingsItemCard>
+          <SettingsItemField
+            action={
+              <SettingsItemSelect
+                onValueChange={setTheme}
+                options={THEME_OPTIONS}
+                value={theme}
+              />
+            }
+            description="Select your interface color scheme."
+            title="Interface theme"
+          />
+          <SettingsItemField
+            action={
+              <SettingsItemSelect
+                onValueChange={setTextScale}
+                options={TEXT_SIZE_OPTIONS}
+                value={textScale}
+              />
+            }
+            description="Default text size for pages. Individual pages can override this."
+            title="Text size"
+          />
+          <SettingsItemField
+            action={
+              <SettingsItemSelect
+                onValueChange={setTooltipStyle}
+                options={TOOLTIP_STYLE_OPTIONS}
+                value={tooltipStyle}
+              />
+            }
+            description="Normal matches menus and dialogs. Inverted uses the opposite of the page chrome (dark tooltips in light mode, light in dark)."
+            title="Tooltip style"
+          />
+        </SettingsItemCard>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium text-sm">Charts</h2>
+        <SettingsItemCard>
+          <SettingsItemField
+            action={
+              <SettingsItemSelect
+                onValueChange={setChartPalette}
+                options={CHART_PALETTE_OPTIONS}
+                value={chartPalette}
+              />
+            }
+            description="Default color palette for analytics charts across the workspace."
+            title="Palette"
+          />
+          <SettingsItemField
+            action={
+              <SettingsItemSelect
+                onValueChange={setChartDither}
+                options={CHART_DITHER_OPTIONS}
+                value={chartDither}
+              />
+            }
+            description="Render charts with a dithered texture. Dark mode only applies it when the dark theme is active."
+            title="Dither"
+          />
+        </SettingsItemCard>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium text-sm">Code</h2>
+        <SettingsItemCard>
+          <SettingsItemField
+            action={
+              <SettingsItemSelect
+                onValueChange={setCodeTheme}
+                options={CODE_THEME_OPTIONS}
+                value={codeTheme}
+              />
+            }
+            description="Syntax colors for code blocks, inline code, and formulas."
+            title="Syntax theme"
+          >
+            <CodeThemePreview />
+          </SettingsItemField>
+        </SettingsItemCard>
+      </section>
     </SettingsPanelShell>
   );
 }

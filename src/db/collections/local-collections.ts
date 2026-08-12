@@ -20,14 +20,17 @@ import {
   BLOCK_COLLECTION_STORAGE_KEY,
   pageShardedBlockStorage,
 } from "@/db/collections/page-sharded-block-storage.ts";
+import { migrateFormulaExpressionsToIdRefs } from "@/db/queries/formula-ref-migration.ts";
 import { scheduleSnapshotPurge } from "@/db/snapshots/snapshot-purge.ts";
 import { reconcileDirtyPagesCookie } from "@/lib/local-draft/reconcile-dirty-pages-cookie.ts";
+import type { DatabaseField } from "@/lib/schemas/database.ts";
 import {
   localDatabaseRowSchema,
   localDatabaseSchema,
 } from "@/lib/schemas/database.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
 import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
+import { localFormulaFunctionSchema } from "@/lib/schemas/local-formula-function.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
 
@@ -134,6 +137,25 @@ export const localFavoritesCollection = getOrCreateHotCollection(
 );
 
 /**
+ * Named user-defined formula functions (Sheets Named Functions model) —
+ * workspace-level like keybindings: one row per definition, callable from
+ * any formula. Small rows, plain single-key localStorage persistence. CRUD
+ * + name validation: `db/queries/formula-function-ops.ts`.
+ */
+export const localFormulaFunctionsCollection = getOrCreateHotCollection(
+  "localFormulaFunctionsCollection",
+  () =>
+    createCollection(
+      localStorageCollectionOptions({
+        id: "local-formula-functions",
+        storageKey: "site-local-formula-functions",
+        getKey: (item) => item.id,
+        schema: localFormulaFunctionSchema,
+      })
+    )
+);
+
+/**
  * Notion-style database definitions (fields, views, source config). Small,
  * page-metadata-sized rows — plain single-key localStorage persistence.
  */
@@ -224,8 +246,28 @@ function startLocalCollectionsSync(): void {
   localBlocksCollection.startSyncImmediate();
   localKeybindingsCollection.startSyncImmediate();
   localFavoritesCollection.startSyncImmediate();
+  localFormulaFunctionsCollection.startSyncImmediate();
   localDatabasesCollection.startSyncImmediate();
   localDatabaseRowsCollection.startSyncImmediate();
+  // Canonicalize stored formula references (name → field id) now that the
+  // databases collection is live. The writer is injected to keep the module
+  // graph acyclic; direct collection updates persist like any other
+  // localStorage-collection write.
+  migrateFormulaExpressionsToIdRefs(
+    localDatabasesCollection.toArray,
+    (databaseId, fieldId, expression) => {
+      localDatabasesCollection.update(databaseId, (draft) => {
+        draft.fields = draft.fields.map((field) =>
+          field.id === fieldId
+            ? // The migration only ever targets formula fields, so the merged
+              // object stays a valid union member.
+              ({ ...field, expression } as DatabaseField)
+            : field
+        );
+        draft.updatedAt = new Date().toISOString();
+      });
+    }
+  );
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;

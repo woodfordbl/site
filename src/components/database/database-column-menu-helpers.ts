@@ -1,3 +1,6 @@
+import type { FormulaPreviewRow } from "@/components/database/formula-editor-panel.tsx";
+import { cellToPlainText } from "@/lib/databases/cell-values.ts";
+import { compareManualOrder } from "@/lib/databases/row-sort.ts";
 import type {
   DatabaseAggregateFn,
   DatabaseDateFormat,
@@ -5,6 +8,7 @@ import type {
   DatabaseFieldType,
   DatabaseNumberFormat,
   DatabaseSelectOption,
+  LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 
@@ -183,23 +187,41 @@ type DatabaseFieldPatch = Partial<Omit<DatabaseField, "id">>;
 /**
  * Field patch for "Change type": the new type plus fresh per-type defaults
  * (empty option lists for selects, no number format → "plain", an empty
- * expression for formulas — the user writes one via Edit property), clearing
- * the other variants' config keys. Cell values are NOT migrated this wave —
- * `coerceCellValue` already renders mismatched stored values as empty, so a
- * type change simply blanks incompatible cells until value coercion lands.
+ * expression for formulas — the user writes one via Edit property, the
+ * picked target database for relations), clearing the other variants' config
+ * keys. Cell values are NOT migrated this wave — `coerceCellValue` already
+ * renders mismatched stored values as empty, so a type change simply blanks
+ * incompatible cells until value coercion lands.
  *
  * The cast is required because `Partial` over the field union collapses to
  * its common keys; `updateDatabaseField` documents that per-variant patches
  * come from typed field editors like this one.
  */
 export function fieldTypeChangePatch(
-  type: DatabaseFieldType
+  type: DatabaseFieldType,
+  targetDatabaseId?: string
 ): DatabaseFieldPatch {
   const options: DatabaseSelectOption[] | undefined =
     type === "select" || type === "multiSelect" ? [] : undefined;
   const format: DatabaseNumberFormat | undefined = undefined;
   const expression: string | undefined = type === "formula" ? "" : undefined;
-  return { type, options, format, expression } as DatabaseFieldPatch;
+  return {
+    type,
+    options,
+    format,
+    expression,
+    targetDatabaseId: type === "relation" ? targetDatabaseId : undefined,
+  } as DatabaseFieldPatch;
+}
+
+/**
+ * Field patch retargeting a relation field. Stored cell ids are kept — they
+ * simply stop resolving against the new target (rendered as nothing).
+ */
+export function relationTargetPatch(
+  targetDatabaseId: string
+): DatabaseFieldPatch {
+  return { targetDatabaseId } as DatabaseFieldPatch;
 }
 
 /** Field patch replacing a formula field's expression source. */
@@ -345,7 +367,8 @@ export function withoutSelectOption(
 
 /**
  * Whether the column menu's Edit property submenu has a body for this field
- * (formula expression, number/date display config, or select options).
+ * (formula expression, number/date display config, select options, or the
+ * relation target picker).
  */
 export function hasPropertyEditorMenu(field: DatabaseField): boolean {
   return (
@@ -353,7 +376,8 @@ export function hasPropertyEditorMenu(field: DatabaseField): boolean {
     field.type === "number" ||
     field.type === "date" ||
     field.type === "select" ||
-    field.type === "multiSelect"
+    field.type === "multiSelect" ||
+    field.type === "relation"
   );
 }
 
@@ -382,4 +406,32 @@ export function showsEditPropertySubmenu(
     return hasDisplayOnlyPropertyEditor(field);
   }
   return hasPropertyEditorMenu(field);
+}
+
+/** Rows offered to the formula panel's preview picker (keeps it compact). */
+export const FORMULA_PREVIEW_ROW_LIMIT = 20;
+
+/**
+ * The first rows (manual/table order, capped) as formula preview-picker
+ * entries, labeled by their primary-field text with a "Row N" fallback for
+ * blank titles.
+ */
+export function formulaPreviewRows(
+  rows: readonly LocalDatabaseRow[],
+  primaryField: DatabaseField | undefined
+): FormulaPreviewRow[] {
+  return [...rows]
+    .sort(compareManualOrder)
+    .slice(0, FORMULA_PREVIEW_ROW_LIMIT)
+    .map((row, index) => {
+      const title =
+        primaryField === undefined
+          ? ""
+          : cellToPlainText(primaryField, row.values[primaryField.id]).trim();
+      return {
+        id: row.id,
+        label: title === "" ? `Row ${index + 1}` : title,
+        values: row.values,
+      };
+    });
 }

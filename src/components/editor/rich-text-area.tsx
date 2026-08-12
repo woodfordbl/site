@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { InlineFormulaValues } from "@/components/editor/inline-formula-values.tsx";
 import {
   collectInlinePageLinkChromeHosts,
   InlinePageLinkChrome,
@@ -28,12 +29,15 @@ import {
 import { extractPrimaryPastedUrl } from "@/lib/canvas/paste-url.ts";
 import { getFieldSelection } from "@/lib/editor/caret-navigation.ts";
 import {
+  applyInlineFormulaValues,
+  createInlineFormulaToken,
   createInlinePageLinkAnchor,
   insertLinkedTextAtSelection,
   insertLinkOverSelection,
   insertPlainTextAtSelection,
   pageLinkTitleMarks,
   type RichTextDomSnapshot,
+  repairInlineFormulaTokenDom,
   repairInlinePageLinkDom,
   richTextToHtml,
   serializeRichTextDom,
@@ -59,6 +63,9 @@ interface RichTextAreaProps {
   value: string;
 }
 
+/** Stable empty map — a fresh one per render would re-run the value pass. */
+const NO_FORMULA_VALUES: ReadonlyMap<number, string> = new Map();
+
 function snapshotEquals(
   snapshot: RichTextDomSnapshot,
   value: string,
@@ -78,7 +85,8 @@ function snapshotEquals(
       mark.start === other.start &&
       mark.end === other.end &&
       mark.href === other.href &&
-      mark.pageId === other.pageId
+      mark.pageId === other.pageId &&
+      mark.expression === other.expression
     );
   });
 }
@@ -89,6 +97,17 @@ function buildContent(root: HTMLElement, value: string, marks: InlineMark[]) {
   for (const segment of segmentRichText(value, marks)) {
     if (segment.marks.length === 0) {
       fragment.append(doc.createTextNode(segment.text));
+      continue;
+    }
+    if (segment.expression !== undefined) {
+      // Rebuilt as a fresh element: the value is chrome, so a rebuild drops it
+      // back to the placeholder until the next value pass writes it in.
+      fragment.append(
+        createInlineFormulaToken(doc, {
+          className: classNameForMarks(segment.marks),
+          expression: segment.expression,
+        })
+      );
       continue;
     }
     if (segment.href && segment.pageId) {
@@ -174,6 +193,11 @@ export function RichTextArea({
   const [chromeHosts, setChromeHosts] = useState<InlinePageLinkChromeHost[]>(
     []
   );
+  const hasFormulaTokens = normalizedMarks.some(
+    (mark) => mark.type === "formula"
+  );
+  const [formulaValues, setFormulaValues] =
+    useState<ReadonlyMap<number, string>>(NO_FORMULA_VALUES);
 
   // Initial (and server-rendered) content. Computed once — the identity stays
   // stable so React never rewrites the DOM; after mount the layout effect owns
@@ -207,6 +231,12 @@ export function RichTextArea({
       }
     }
 
+    // After any rebuild: a rebuilt token starts at its placeholder, and this
+    // writes chrome only, so it never dirties the field it just synced.
+    if (hasFormulaTokens) {
+      applyInlineFormulaValues(root, formulaValues);
+    }
+
     const nextHosts = collectInlinePageLinkChromeHosts(root);
     setChromeHosts((previous) =>
       inlinePageLinkChromeHostsEqual(previous, nextHosts) ? previous : nextHosts
@@ -221,6 +251,9 @@ export function RichTextArea({
     // Typing at a link edge can still land inside the anchor; lift it out
     // before reading, so the run's marks never spread onto the new text.
     repairInlinePageLinkDom(root);
+    // The same at a token edge, where the stakes are higher: a token's subtree
+    // is not serialized, so text left inside would vanish on this read.
+    repairInlineFormulaTokenDom(root);
     const snapshot = serializeRichTextDom(root);
     onInput(
       multiline
@@ -373,6 +406,12 @@ export function RichTextArea({
         tabIndex={0}
       />
       <InlinePageLinkChrome hosts={chromeHosts} />
+      {hasFormulaTokens && (
+        <InlineFormulaValues
+          marks={normalizedMarks}
+          onValues={setFormulaValues}
+        />
+      )}
     </>
   );
 }

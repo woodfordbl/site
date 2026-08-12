@@ -1,22 +1,38 @@
 import {
-  type ExprValue,
-  evaluateExpression,
-  isExprError,
-  isVolatileExpression,
-} from "@/lib/expr/evaluate.ts";
+  checkFormula,
+  type FormulaCheckContext,
+  type FormulaCheckDatabase,
+  type FormulaCheckProperty,
+} from "@/lib/formula/check.ts";
+import type { FormulaValueDisplayOptions } from "@/lib/formula/display.ts";
+import { evaluateFormula, isVolatileFormula } from "@/lib/formula/evaluate.ts";
+import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
-  exprValueToCellValue,
-  exprValueToDisplay,
-} from "@/lib/expr/format-result.ts";
+  createFormulaRowScope,
+  formulaRowLabelOf,
+} from "@/lib/formula/row-scope.ts";
+import { type FormulaType, UNKNOWN_TYPE } from "@/lib/formula/types.ts";
 import {
-  type ExprNode,
-  type ParseExpressionResult,
-  parseExpression,
-} from "@/lib/expr/parse.ts";
-import { createRowScope } from "@/lib/expr/row-scope.ts";
+  type FormulaPreparedUserFunctions,
+  type FormulaRelationResolver,
+  type FormulaScope,
+  type FormulaValue,
+  formulaError,
+} from "@/lib/formula/values.ts";
+import {
+  FORMULA_EMPTY_CELL_RESULT,
+  type FormulaCellResult,
+  formulaCellResultOf,
+} from "@/lib/formula-engine/project.ts";
+import {
+  formulaCycleMessage,
+  formulaCyclePathFrom,
+  formulaTopoOrder,
+} from "@/lib/formula-engine/topo.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
+  LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
@@ -26,21 +42,22 @@ import type {
  * results into COPIES of the rows (`withFormulaValues`) so the existing
  * filter/sort/aggregate/grid machinery sees formula columns like any other
  * column. Nothing here is ever persisted.
+ *
+ * Formulas may reference other formulas in the same database: each overlay
+ * call checks every formula field once (`checkFormula`, never per row) for
+ * its static references, orders the fields topologically over the
+ * formula→formula edges, and evaluates column-major — every field's values
+ * land in a per-row `resolved` map the next field's scope reads. Reference
+ * cycles are detected up front: every field in a cycle yields an error
+ * result for all rows, named by the cycle path (`Circular reference:
+ * Total → Subtotal → Total`), and references INTO a cycle propagate that
+ * error value.
  */
 
-/** One computed formula cell. */
-export interface FormulaCellResult {
-  /**
-   * The result projected into the cell-value domain
-   * (`exprValueToCellValue`): evaluation errors and non-finite numbers
-   * collapse to `null` so filters/sorts/aggregates treat them as empty.
-   */
-  cellValue: DatabaseCellValue;
-  /** Human display string (`exprValueToDisplay`); errors read "⚠ …". */
-  display: string;
-  /** Whether evaluation produced an `ExprError` for this cell. */
-  isError: boolean;
-}
+// The cell-result shape and its projection moved to the engine core
+// (`formula-engine/project.ts`) so the incremental evaluator shares one
+// projection rule; the type stays exported from here for existing consumers.
+export type { FormulaCellResult } from "@/lib/formula-engine/project.ts";
 
 /** Computed formula values: rowId → fieldId → result. */
 export type FormulaOverlay = Map<string, Record<string, FormulaCellResult>>;
@@ -49,29 +66,22 @@ export type FormulaOverlay = Map<string, Record<string, FormulaCellResult>>;
 export interface ComputeFormulaOverlayOptions {
   /** Injected clock for `now()`/`today()`; omit for the fixed epoch. */
   now?: () => Date;
+  /**
+   * Cross-database reader for relation cells and row members — pass
+   * `localFormulaRelationResolver()` (`formula-relations.ts`) from
+   * interactive call sites. Omitted (pure tests, legacy paths), relation
+   * cells read as blank and members can't resolve.
+   */
+  relations?: FormulaRelationResolver;
+  /**
+   * Named user-defined functions (prepared registry) — threads into the
+   * plan's check contexts (formula→formula deps see through call bodies)
+   * and every row scope. Omitted, user-function calls read as unknown.
+   */
+  userFunctions?: FormulaPreparedUserFunctions;
 }
 
-/** Shared result for cells with no computable value (blank/parse-error). */
-const EMPTY_RESULT: FormulaCellResult = {
-  cellValue: null,
-  display: "",
-  isError: false,
-};
-
-function resultOf(value: ExprValue): FormulaCellResult {
-  if (isExprError(value)) {
-    return {
-      cellValue: null,
-      display: exprValueToDisplay(value),
-      isError: true,
-    };
-  }
-  return {
-    cellValue: exprValueToCellValue(value),
-    display: exprValueToDisplay(value),
-    isError: false,
-  };
-}
+// --- evaluation plan ---------------------------------------------------------
 
 /**
  * Parse a formula field's expression, caching by expression string. Blank
@@ -79,26 +89,157 @@ function resultOf(value: ExprValue): FormulaCellResult {
  * those fields to null cells and the display layer surfaces the parse error
  * separately (`formulaDisplayInfo`).
  */
-function astFor(
-  cache: Map<string, ParseExpressionResult>,
-  expression: string
-): ExprNode | null {
+function astFor(cache: Map<string, ParseFormulaResult>, expression: string) {
   if (expression.trim() === "") {
     return null;
   }
   let parsed = cache.get(expression);
   if (!parsed) {
-    parsed = parseExpression(expression);
+    parsed = parseFormula(expression);
     cache.set(expression, parsed);
   }
   return parsed.ok ? parsed.ast : null;
 }
 
+type FormulaField = Extract<DatabaseField, { type: "formula" }>;
+
+interface PlannedField {
+  ast: ReturnType<typeof astFor>;
+  /** Formula fields this field references (same database), source order. */
+  deps: string[];
+  field: FormulaField;
+}
+
 /**
- * Evaluate every formula field over every row. Each expression parses once
- * per call (cached by expression string); each row builds one shared
- * `createRowScope`. Blank and parse-error expressions yield null cells for
- * every row — including rows with stale stored values under the field id
+ * How the overlay evaluates one schema: `cycleErrors` pre-seeds every row's
+ * resolved map (and result) for cycle members; `ordered` lists the remaining
+ * formula fields in dependency order.
+ */
+interface FormulaPlan {
+  cycleErrors: Map<string, FormulaValue>;
+  ordered: PlannedField[];
+}
+
+/** One field as a checker property; formula fields type from `types` (or unknown). */
+function checkPropertyOf(
+  field: DatabaseField,
+  types?: ReadonlyMap<string, FormulaType>
+): FormulaCheckProperty {
+  return {
+    id: field.id,
+    kind: field.type,
+    name: field.name,
+    ...(field.type === "relation"
+      ? { targetDatabaseId: field.targetDatabaseId }
+      : {}),
+    type: types?.get(field.id) ?? UNKNOWN_TYPE,
+  };
+}
+
+/** Build a check context over one schema. */
+function checkContextOf(
+  fields: readonly DatabaseField[],
+  types?: ReadonlyMap<string, FormulaType>,
+  userFunctions?: FormulaPreparedUserFunctions
+): FormulaCheckContext {
+  return {
+    properties: fields.map((field) => checkPropertyOf(field, types)),
+    ...(userFunctions === undefined ? {} : { userFunctions }),
+  };
+}
+
+/** Parse + check every formula field, extracting formula→formula edges. */
+function planFields(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): PlannedField[] {
+  const parseCache = new Map<string, ParseFormulaResult>();
+  const context = checkContextOf(fields, undefined, userFunctions);
+  const formulaIds = new Set<string>();
+  for (const field of fields) {
+    if (field.type === "formula") {
+      formulaIds.add(field.id);
+    }
+  }
+  const planned: PlannedField[] = [];
+  for (const field of fields) {
+    if (field.type !== "formula") {
+      continue;
+    }
+    const ast = astFor(parseCache, field.expression);
+    const deps =
+      ast === null
+        ? []
+        : checkFormula(ast, context).references.filter((id) =>
+            formulaIds.has(id)
+          );
+    planned.push({ ast, deps, field });
+  }
+  return planned;
+}
+
+/** Build the evaluation plan: parse, check, detect cycles, order fields. */
+function buildFormulaPlan(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): FormulaPlan {
+  const planned = planFields(fields, userFunctions);
+  const deps = new Map<string, readonly string[]>(
+    planned.map((plan) => [plan.field.id, plan.deps])
+  );
+  const names = new Map(
+    planned.map((plan) => [plan.field.id, plan.field.name])
+  );
+  const cycleErrors = new Map<string, FormulaValue>();
+  for (const plan of planned) {
+    const path = formulaCyclePathFrom(plan.field.id, deps);
+    if (path !== null) {
+      cycleErrors.set(
+        plan.field.id,
+        formulaError(formulaCycleMessage(path, (id) => names.get(id) ?? id))
+      );
+    }
+  }
+  return {
+    cycleErrors,
+    ordered: formulaTopoOrder(
+      planned,
+      (plan) => plan.field.id,
+      (plan) => plan.deps,
+      new Set(cycleErrors.keys())
+    ),
+  };
+}
+
+// --- evaluation ---------------------------------------------------------------
+
+interface RowEvaluation {
+  resolved: Map<string, FormulaValue>;
+  scope: FormulaScope;
+}
+
+/** One row's scope + resolved map, pre-seeded with the plan's cycle errors. */
+function rowEvaluationOf(
+  plan: FormulaPlan,
+  fields: readonly DatabaseField[],
+  values: Record<string, DatabaseCellValue>,
+  opts?: ComputeFormulaOverlayOptions
+): RowEvaluation {
+  const resolved = new Map<string, FormulaValue>(plan.cycleErrors);
+  const scope = createFormulaRowScope(fields, values, resolved, {
+    now: opts?.now,
+    relations: opts?.relations,
+    userFunctions: opts?.userFunctions,
+  });
+  return { resolved, scope };
+}
+
+/**
+ * Evaluate every formula field over every row. Expressions parse and check
+ * once per call (per field, never per row); evaluation is column-major in
+ * topological order so each field's scope sees every dependency's value for
+ * that row in `resolved`. Blank and parse-error expressions yield null cells
+ * for every row — including rows with stale stored values under the field id
  * (e.g. after a type change), which the overlay deliberately shadows.
  */
 export function computeFormulaOverlay(
@@ -107,41 +248,136 @@ export function computeFormulaOverlay(
   opts?: ComputeFormulaOverlayOptions
 ): FormulaOverlay {
   const overlay: FormulaOverlay = new Map();
-  const parseCache = new Map<string, ParseExpressionResult>();
-  const formulaFields: { fieldId: string; ast: ExprNode | null }[] = [];
-  for (const field of fields) {
-    if (field.type === "formula") {
-      formulaFields.push({
-        fieldId: field.id,
-        ast: astFor(parseCache, field.expression),
-      });
-    }
-  }
-  if (formulaFields.length === 0) {
+  if (!fields.some((field) => field.type === "formula")) {
     return overlay;
   }
-
-  const scopeFields = [...fields];
-  const now = opts?.now;
+  const display: FormulaValueDisplayOptions = {
+    rowLabel: formulaRowLabelOf(opts?.relations),
+  };
+  const plan = buildFormulaPlan(fields, opts?.userFunctions);
+  const evaluations: RowEvaluation[] = [];
   for (const row of rows) {
-    const scope = createRowScope(
-      scopeFields,
-      row.values,
-      now === undefined ? undefined : { now }
-    );
+    evaluations.push(rowEvaluationOf(plan, fields, row.values, opts));
     const entry: Record<string, FormulaCellResult> = {};
-    for (const { fieldId, ast } of formulaFields) {
-      entry[fieldId] =
-        ast === null ? EMPTY_RESULT : resultOf(evaluateExpression(ast, scope));
+    for (const [fieldId, error] of plan.cycleErrors) {
+      entry[fieldId] = formulaCellResultOf(error, display);
     }
     overlay.set(row.id, entry);
+  }
+  for (const { ast, field } of plan.ordered) {
+    for (const [index, row] of rows.entries()) {
+      const { resolved, scope } = evaluations[index];
+      const value = ast === null ? null : evaluateFormula(ast, scope);
+      resolved.set(field.id, value);
+      const entry = overlay.get(row.id);
+      if (entry) {
+        entry[field.id] =
+          ast === null
+            ? FORMULA_EMPTY_CELL_RESULT
+            : formulaCellResultOf(value, display);
+      }
+    }
   }
   return overlay;
 }
 
 /**
+ * Every formula field's computed value for ONE row (same plan the overlay
+ * uses: topological order, cycle members as error values, blank/parse-error
+ * expressions as blank). Feeds single-row surfaces — the row-page
+ * properties panel and the editor preview — and the preview scope's
+ * `resolved` map, so a draft formula can reference other formulas.
+ */
+export function computeFormulaRowValues(
+  fields: readonly DatabaseField[],
+  values: Record<string, DatabaseCellValue>,
+  opts?: ComputeFormulaOverlayOptions
+): ReadonlyMap<string, FormulaValue> {
+  const plan = buildFormulaPlan(fields, opts?.userFunctions);
+  const { resolved, scope } = rowEvaluationOf(plan, fields, values, opts);
+  for (const { ast, field } of plan.ordered) {
+    resolved.set(field.id, ast === null ? null : evaluateFormula(ast, scope));
+  }
+  return resolved;
+}
+
+// --- static typing for the editor ----------------------------------------------
+
+/**
+ * Result types of every formula field, computed in the same topological
+ * order the overlay evaluates in, so a formula referencing another formula
+ * types against its dependency's real result type. Cycle members and
+ * blank/unparseable expressions type as `unknown`.
+ */
+export function formulaFieldTypes(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): ReadonlyMap<string, FormulaType> {
+  const plan = buildFormulaPlan(fields, userFunctions);
+  const types = new Map<string, FormulaType>();
+  for (const fieldId of plan.cycleErrors.keys()) {
+    types.set(fieldId, UNKNOWN_TYPE);
+  }
+  for (const { ast, field } of plan.ordered) {
+    if (ast === null) {
+      types.set(field.id, UNKNOWN_TYPE);
+      continue;
+    }
+    types.set(
+      field.id,
+      checkFormula(ast, checkContextOf(fields, types, userFunctions)).resultType
+    );
+  }
+  return types;
+}
+
+/** The related-database slice {@link formulaCheckContext} consumes. */
+export type FormulaRelatedDatabase = Pick<
+  LocalDatabase,
+  "fields" | "id" | "name"
+>;
+
+/**
+ * The check context for a database schema, formula fields typed via
+ * {@link formulaFieldTypes} — what the formula editor checks drafts against.
+ * Pass `relatedDatabases` (every database, own included — self-relations
+ * are legal) to type member access on relation rows: each related schema's
+ * formula fields get their real result types through the same per-database
+ * topological pass, so `r.SomeRollup` types precisely too.
+ */
+export function formulaCheckContext(
+  fields: readonly DatabaseField[],
+  relatedDatabases?: readonly FormulaRelatedDatabase[],
+  userFunctions?: FormulaPreparedUserFunctions
+): FormulaCheckContext {
+  const context = checkContextOf(
+    fields,
+    formulaFieldTypes(fields, userFunctions),
+    userFunctions
+  );
+  if (relatedDatabases === undefined) {
+    return context;
+  }
+  const databases = new Map<string, FormulaCheckDatabase>(
+    relatedDatabases.map((database) => [
+      database.id,
+      {
+        name: database.name,
+        properties: checkContextOf(
+          database.fields,
+          formulaFieldTypes(database.fields, userFunctions)
+        ).properties,
+      },
+    ])
+  );
+  return { ...context, databases };
+}
+
+// --- merged rows ----------------------------------------------------------------
+
+/**
  * Display prefix every evaluation-error marker starts with (matches
- * `exprValueToDisplay`'s error rendering).
+ * `formulaValueToDisplay`'s error rendering).
  */
 const ERROR_DISPLAY_PREFIX = "⚠ ";
 
@@ -213,21 +449,26 @@ export function formulaDisplayInfo(field: DatabaseField): {
   if (field.type !== "formula" || field.expression.trim() === "") {
     return {};
   }
-  const parsed = parseExpression(field.expression);
+  const parsed = parseFormula(field.expression);
   return parsed.ok ? {} : { parseError: parsed.error.message };
 }
 
 /**
  * Whether any formula field's expression depends on the clock
  * (`now()`/`today()`) — callers re-evaluate the overlay on an interval when
- * true. Blank/unparseable expressions are never volatile.
+ * true. Blank/unparseable expressions are never volatile. `userFunctions`
+ * expands user-defined function bodies, so `now()` inside a called
+ * definition counts.
  */
-export function hasVolatileFormula(fields: readonly DatabaseField[]): boolean {
+export function hasVolatileFormula(
+  fields: readonly DatabaseField[],
+  userFunctions?: FormulaPreparedUserFunctions
+): boolean {
   return fields.some((field) => {
     if (field.type !== "formula") {
       return false;
     }
-    const parsed = parseExpression(field.expression);
-    return parsed.ok && isVolatileExpression(parsed.ast);
+    const parsed = parseFormula(field.expression);
+    return parsed.ok && isVolatileFormula(parsed.ast, userFunctions);
   });
 }

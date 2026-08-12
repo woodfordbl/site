@@ -20,6 +20,12 @@ import type { SlashMenuSession } from "@/components/canvas/canvas-menu-types.ts"
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { type SlashPhase, useSlashState } from "@/hooks/use-slash-state.ts";
 import { findRowById } from "@/lib/blocks/block-tree.ts";
+import {
+  getTextFromBlock,
+  stripSlashCommandText,
+} from "@/lib/blocks/create-block.ts";
+import { insertFormulaToken } from "@/lib/blocks/inline-formula.ts";
+import { getBlockMarks, withBlockRichText } from "@/lib/blocks/rich-text.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import { buildRootSlashMenuItems } from "@/lib/canvas/slash-menu-list.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
@@ -28,6 +34,7 @@ import {
   type FieldSelection,
   isCanvasTextField,
 } from "@/lib/editor/caret-navigation.ts";
+import { requestInlineFormulaEdit } from "@/lib/editor/inline-formula-edit-request.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 
 /**
@@ -165,6 +172,39 @@ export function CanvasSlashProvider({
     [close, dispatch, resolveActiveRow]
   );
 
+  /**
+   * Inserts an empty token where the slash query sits and opens its editor.
+   * The token is inserted first and edited second — that way the document is
+   * always in a valid state, and cancelling leaves a token you can delete like
+   * any other character rather than a half-finished modal.
+   */
+  const handleFormulaSelect = useCallback(() => {
+    const targetRow = resolveActiveRow();
+    close();
+    if (!targetRow) {
+      return;
+    }
+    const block = targetRow.effectiveBlock;
+    const text = stripSlashCommandText(getTextFromBlock(block));
+    const inserted = insertFormulaToken(
+      text,
+      getBlockMarks(block),
+      {
+        start: text.length,
+        end: text.length,
+      },
+      ""
+    );
+    queueMicrotask(() => {
+      dispatch({
+        type: "row.update",
+        rowId: targetRow.rowId,
+        block: withBlockRichText(block, inserted.text, inserted.marks),
+      });
+      requestInlineFormulaEdit(targetRow.rowId, inserted.selection.start - 1);
+    });
+  }, [close, dispatch, resolveActiveRow]);
+
   const handlePageLinkSelect = useCallback(
     (pageId: string) => {
       const targetRow = resolveActiveRow();
@@ -283,6 +323,9 @@ export function CanvasSlashProvider({
       case "block":
         handleBlockSlashSelect(selected.blockItem);
         return;
+      case "formula":
+        handleFormulaSelect();
+        return;
       case "page.create":
         handlePageCreate();
         return;
@@ -297,6 +340,7 @@ export function CanvasSlashProvider({
   }, [
     enterLinkPhase,
     handleBlockSlashSelect,
+    handleFormulaSelect,
     handlePageCreate,
     rootItems,
     selectedIndex,
@@ -316,6 +360,7 @@ export function CanvasSlashProvider({
     slashPhase,
     linkSubOpen,
     onSelectBlock: handleBlockSlashSelect,
+    onSelectFormula: handleFormulaSelect,
     onSelectPageCreate: handlePageCreate,
     onSelectPageLink: handlePageLinkSelect,
     confirmSelection: confirm,

@@ -23,6 +23,18 @@ export function useDatabase(databaseId: string): LocalDatabase | undefined {
 }
 
 /**
+ * Live list of every database definition — the relation target pickers
+ * (Change type, Edit property) enumerate all databases from it.
+ */
+export function useAllDatabases(): LocalDatabase[] {
+  const { data: databases = [] } = useLiveQuery((query) =>
+    query.from({ database: localDatabasesCollection })
+  );
+
+  return databases;
+}
+
+/**
  * Live rows for one database. Unordered and unfiltered by view — view-level
  * filter/sort/order application happens in the view layer. The declarative
  * `eq` predicate lets the collection's `databaseId` index serve the query.

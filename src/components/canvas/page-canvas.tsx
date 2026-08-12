@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import { WarmInlineLinkPreviewsEffect } from "@/components/canvas/warm-inline-link-previews-effect.tsx";
+import { InlineFormulaPageProvider } from "@/components/editor/inline-formula-page.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
@@ -133,15 +134,18 @@ export function PageCanvas({
   }
 
   return (
-    <PageCanvasClient
-      coverSlot={coverSlot}
-      fullWidth={fullWidth}
-      headerSlot={headerSlot}
-      isNarrowViewport={isNarrowViewport}
-      pageHasLocalDraft={pageHasLocalDraft}
-      serverPage={serverPage}
-      titleSlot={titleSlot}
-      topLevelBlockAlign={topLevelBlockAlign}
-    />
+    // Supplies `thisPage` to inline formula tokens anywhere in the block tree.
+    <InlineFormulaPageProvider pageId={serverPage.id} title={serverPage.title}>
+      <PageCanvasClient
+        coverSlot={coverSlot}
+        fullWidth={fullWidth}
+        headerSlot={headerSlot}
+        isNarrowViewport={isNarrowViewport}
+        pageHasLocalDraft={pageHasLocalDraft}
+        serverPage={serverPage}
+        titleSlot={titleSlot}
+        topLevelBlockAlign={topLevelBlockAlign}
+      />
+    </InlineFormulaPageProvider>
   );
 }

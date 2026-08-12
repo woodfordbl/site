@@ -52,12 +52,23 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Popup
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-popover-foreground text-sm outline-none ring-1 ring-foreground/10 sm:max-w-sm",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-xl bg-popover p-4 text-popover-foreground text-sm outline-none ring-1 ring-foreground/10 sm:max-w-sm",
+          // Nested dialogs (base-ui): each open child sinks this one back and
+          // down by `--nested-dialogs`, so the stack reads as depth rather than
+          // as stacked cards. Replaces the plain -translate-*-1/2 centering,
+          // which would otherwise fight the offset.
+          "[translate:-50%_calc(-50%+1.25rem*var(--nested-dialogs,0))]",
+          "[scale:calc(1-0.1*var(--nested-dialogs,0))]",
           // Modal: interruptible scale+fade from center (not trigger-anchored).
-          "transition-[opacity,scale] duration-200 ease-[var(--ease-out-strong)]",
+          "transition-[opacity,scale,translate] duration-200 ease-[var(--ease-out-strong)]",
           "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
           "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0 data-[ending-style]:duration-150",
           "motion-reduce:transition-opacity motion-reduce:data-[ending-style]:scale-100 motion-reduce:data-[starting-style]:scale-100",
+          // Dim the parent while a child is open — base-ui suppresses child
+          // backdrops so the parent stays visible behind, and without this it
+          // reads as fully active rather than behind.
+          "after:pointer-events-none after:absolute after:inset-0 after:rounded-xl after:bg-foreground/5 after:opacity-0 after:transition-opacity after:duration-200",
+          "data-[nested-dialog-open]:after:opacity-100",
           className
         )}
         data-slot="dialog-content"

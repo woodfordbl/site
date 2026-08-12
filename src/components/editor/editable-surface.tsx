@@ -9,6 +9,7 @@ import { EditableInlineLinkPreview } from "@/components/editor/link-preview.tsx"
 import { RichTextArea } from "@/components/editor/rich-text-area.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
+import { matchInlineFormulaTrigger } from "@/lib/blocks/inline-formula.ts";
 import { toggleMarkInRange } from "@/lib/blocks/rich-text.ts";
 import { matchMarkdownShortcut } from "@/lib/canvas/markdown-shortcuts.ts";
 import {
@@ -28,6 +29,7 @@ import {
   resolveStructuralDeleteKey,
   shouldDeleteSelectedBlocks,
 } from "@/lib/editor/field-keydown.ts";
+import { requestInlineFormulaEditInField } from "@/lib/editor/inline-formula-edit-request.ts";
 import type { RichTextDomSnapshot } from "@/lib/editor/rich-text-dom.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
@@ -403,6 +405,17 @@ export function EditableSurface({
       const caret = field
         ? getFieldSelection(field)
         : { start: snapshot.text.length, end: snapshot.text.length };
+
+      // `{{` becomes a token wherever it is typed — the slash menu only opens
+      // on a line that starts with `/`, so it cannot insert one mid-sentence.
+      const triggered = field
+        ? matchInlineFormulaTrigger(snapshot.text, snapshot.marks, caret)
+        : null;
+      if (field && triggered) {
+        onChange(triggered.text, triggered.marks);
+        requestInlineFormulaEditInField(field, triggered.selection.start - 1);
+        return;
+      }
 
       onChange(snapshot.text, snapshot.marks);
       emitSlash(snapshot.text, caret);

@@ -23,7 +23,13 @@ function readLiveLocalPages(): LocalPage[] {
   return localPagesCollection.toArray;
 }
 
-function useLocalPagesSnapshot(): LocalPage[] {
+/**
+ * Live local page rows straight from the collection — no router context, no
+ * preview-cookie merge. Prefer {@link useLocalPages}; this is for consumers
+ * that render outside a route (or in tests without a router) and only need
+ * whatever the collection currently holds.
+ */
+export function useLocalPagesSnapshot(): LocalPage[] {
   const liveSnapshotRef = useRef<LocalPage[]>(readLiveLocalPages());
 
   const subscribe = useCallback((onStoreChange: () => void) => {

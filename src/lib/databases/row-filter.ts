@@ -18,7 +18,7 @@ import {
   FIELD_TYPE_DEFS,
   isRelativeDateOperator,
 } from "@/lib/databases/field-defs.ts";
-import { formatExprValueDefault } from "@/lib/expr/evaluate.ts";
+import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import type {
   DatabaseCellValue,
   DatabaseField,
@@ -38,8 +38,8 @@ import type {
 
 /**
  * Display-text projection of a computed formula cell for string filtering,
- * matching what the grid renders (`exprValueToDisplay` in
- * `lib/expr/format-result.ts`): numbers via `Intl` (en-US, grouped, trimmed),
+ * matching what the grid renders (`formulaValueToDisplay` in
+ * `lib/formula/display.ts`): numbers via `Intl` (en-US, grouped, trimmed),
  * booleans "Yes"/"No", strings as-is, anything else "". Without this,
  * numeric/boolean formula results would collapse to "" in `matchString` and
  * be unfilterable.
@@ -50,7 +50,7 @@ function formulaCellDisplayText(cell: DatabaseCellValue): string {
     typeof cell === "number" ||
     typeof cell === "boolean"
   ) {
-    return formatExprValueDefault(cell);
+    return formulaValueToDisplay(cell);
   }
   return "";
 }

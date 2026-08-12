@@ -19,6 +19,8 @@ export interface SlashMenuSession {
   onLinkSubOpenChange: (open: boolean) => void;
   onPopoverOpenChange: (open: boolean) => void;
   onSelectBlock: (item: SlashMenuItem) => void;
+  /** Inserts an inline formula token and opens its editor. */
+  onSelectFormula: () => void;
   onSelectPageCreate: () => void;
   onSelectPageLink: (pageId: string) => void;
   pages: PageSummary[];
