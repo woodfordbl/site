@@ -823,11 +823,11 @@ describe("FormulaEditorPanel", () => {
         });
       }
 
-      it("opens on chip tap; Remove deletes the reference from the draft", async () => {
+      it("opens on chip tap; Delete removes the reference from the draft", async () => {
         const onSave = renderPanel(vi.fn(), 'prop("f-price")');
 
         const popup = await tapChip();
-        fireEvent.click(within(popup).getByRole("button", { name: "Remove" }));
+        fireEvent.click(within(popup).getByRole("button", { name: "Delete" }));
 
         // The whole canonical span is gone from the CM6 doc…
         await waitFor(() => {
@@ -888,11 +888,11 @@ describe("FormulaEditorPanel", () => {
         expect(onSave).toHaveBeenCalledWith('db("db-projects").length()');
       });
 
-      it("Remove deletes a db reference's whole canonical span", async () => {
+      it("Delete removes a db reference's whole canonical span", async () => {
         const onSave = renderPanelWithDatabases(vi.fn(), 'db("db-tasks")');
 
         const popup = await tapChip();
-        fireEvent.click(within(popup).getByRole("button", { name: "Remove" }));
+        fireEvent.click(within(popup).getByRole("button", { name: "Delete" }));
 
         await waitFor(() => {
           expect(document.querySelector(".cm-formula-chip")).toBeNull();
@@ -1127,7 +1127,7 @@ describe("FormulaEditorPanel", () => {
       return { onClose, onPickDatabase, onPickProperty, onRemove };
     }
 
-    it("presents the options as a bottom drawer and routes Remove", async () => {
+    it("presents the options as a bottom drawer and routes Delete", async () => {
       const { onRemove } = renderMenu();
 
       // Coarse pointers get the vaul drawer, not an anchored popover.
@@ -1140,7 +1140,7 @@ describe("FormulaEditorPanel", () => {
         document.querySelector("[data-slot='popover-content']")
       ).toBeNull();
 
-      fireEvent.click(within(drawer).getByRole("button", { name: "Remove" }));
+      fireEvent.click(within(drawer).getByRole("button", { name: "Delete" }));
       expect(onRemove).toHaveBeenCalledTimes(1);
     });
 

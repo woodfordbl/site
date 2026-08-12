@@ -697,7 +697,7 @@ describe("FormulaCodeEditor", () => {
         'prop("f-qty")'.length
       );
 
-      // The menu's Remove path: empty text deletes the span outright.
+      // The menu's Delete path: empty text removes the span outright.
       act(() => {
         editorRef.current?.replaceRange(0, 'prop("f-qty")'.length, "");
       });

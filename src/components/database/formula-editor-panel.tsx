@@ -141,7 +141,7 @@ import { cn } from "@/lib/utils.ts";
  * mid-open reads as the editor changing its mind). Tapping a chip in the CM6
  * surface opens the chip option menu
  * (formula-chip-menu.tsx, anchored at the chip; a bottom drawer on coarse
- * pointers): Change property swaps the reference in place and Remove deletes
+ * pointers): Change property swaps the reference in place and Delete removes
  * the whole canonical span, both applied through the editor handle's
  * `replaceRange` against the span the tap reported. Coarse pointers outside
  * the sheet keep the textarea entirely (the
@@ -1311,7 +1311,7 @@ export function FormulaEditorPanel({
     });
   };
 
-  /** Chip menu → Remove: delete the tapped reference's whole canonical span. */
+  /** Chip menu → Delete: remove the tapped reference's whole canonical span. */
   const removeChipReference = () => {
     if (chipTap !== null) {
       codeEditorRef.current?.replaceRange(chipTap.from, chipTap.to, "");

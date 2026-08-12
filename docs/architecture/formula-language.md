@@ -600,11 +600,11 @@ referenced id (`refId`). The panel opens
 [`formula-chip-menu.tsx`](../../src/components/database/formula-chip-menu.tsx)
 anchored at the chip: **Change property** (a property list with field-type icons)
 splices `canonicalPropertyReference(id)` over the span via the editor handle's
-`replaceRange`, and **Remove** deletes the whole span. Database chips get the
+`replaceRange`, and **Delete** removes the whole span. Database chips get the
 same menu with **Change database** instead — the workspace databases behind
 the database glyph, the current one check-marked, a pick splicing
 `canonicalDatabaseReference(id)` over the span (the change row drops out
-entirely when there is nothing to swap to, leaving Remove). It's a ui Popover with plain
+entirely when there is nothing to swap to, leaving Delete). It's a ui Popover with plain
 buttons — not a DropdownMenu, because the stack layout lives inside a Base UI menu
 popup where nested menus are illegal (the rollup wizard's constraint) — and on coarse
 pointers it renders as a vaul bottom drawer (`variant="menu"`) automatically, matching
