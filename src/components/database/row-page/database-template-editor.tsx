@@ -15,7 +15,6 @@ import {
   RowTemplateDefaultsList,
   RowTemplateTitleSection,
 } from "@/components/database/row-page/row-template-title-section.tsx";
-import { RowTemplateTokenAutocomplete } from "@/components/database/row-page/row-template-token-autocomplete.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -157,7 +156,6 @@ export function DatabaseTemplateEditorClient({
           workspace
         )}
       </PageSidebarChromeProvider>
-      {previewRow ? null : <RowTemplateTokenAutocomplete database={database} />}
     </SiteShell>
   );
 }

@@ -199,7 +199,7 @@ export function RowTemplateTitleSection({
         />
       </div>
       <p className="mt-2 text-muted-foreground text-sm">
-        Type {"{{"} in the template body to insert property tokens.
+        Type @ to mention a page, or # to insert a formula token.
       </p>
       {showProperties && hasPanelFields ? (
         <RowPropertiesUnderTitleBand propertiesExtra={propertiesExtra}>

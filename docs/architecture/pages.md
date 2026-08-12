@@ -76,7 +76,8 @@ Shipped page content is **bundled at build time** via [`page-store.server.ts`](.
 2. `PageWorkspace` renders editable title + canvas with one empty text block
 3. **Slash menu → New Page** creates a child page titled “New Page” and converts the current block to a `pageLink` with `props.variant: child` (stays on the current page; no external arrow icon)
 4. **Slash menu → Link To Page** opens a native searchable submenu (`DropdownMenuSub` + search input + `DropdownMenuItem` targets) to pick an existing page and insert a `pageLink` with `props.variant: linked` (shows external arrow icon)
-5. Canvas always shows at least one row (see [Empty canvas](#empty-canvas))
+5. **`@` mention** while typing in rich text opens a page autocomplete ([`PageMentionAutocomplete`](../../src/components/canvas/page-mention-autocomplete.tsx)) and inserts an **inline** page-link mark (same as paste) — Escape leaves `@query` as plain text
+6. Canvas always shows at least one row (see [Empty canvas](#empty-canvas))
 
 ## Page links
 

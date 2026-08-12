@@ -713,8 +713,10 @@ editor UI in
 mounted via
 [`DatabaseSlugPathPage`](../../src/components/database/database-slug-path-page.tsx)),
 entered from the database ⋯ menu's **Row pages** item. Authors can leave the
-body blank or insert `{{ thisPage.Field }}` property tokens (`{{` autocomplete +
-an empty-template hint). Preview-as-row demonstrates live evaluation.
+body blank or insert `{{ thisPage.Field }}` property tokens (copy from a property
+row), type `#` for the formula builder under the caret (Save inserts an inline
+formula token; Escape leaves `#` so markdown headings still work), or type `@`
+to mention a page inline. Preview-as-row demonstrates live evaluation.
 Rendering uses [`useRowTemplate`](../../src/hooks/use-row-template.ts);
 materialization uses `readRowTemplateSnapshot`. Row pages inherit the
 template's **icon** (overridden by `row.icon` when set) and **font** when
