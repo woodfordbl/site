@@ -6,6 +6,10 @@ import {
   selectColumnPinnedClass,
 } from "@/components/database/database-grid-helpers.ts";
 import {
+  blockSelectionLaneUnderlayClassName,
+  blockSelectionSurfaceProps,
+} from "@/lib/canvas/block-selection-surface.ts";
+import {
   computeAggregate,
   formatAggregateValue,
 } from "@/lib/databases/row-aggregate.ts";
@@ -168,25 +172,28 @@ export function DatabaseCalculateRow({
 
   return (
     <div
-      className="sticky bottom-0 z-20 flex bg-background"
+      className="sticky bottom-0 z-20 flex bg-background transition-colors"
       style={{ width: totalWidth, minWidth: "100%" }}
+      {...blockSelectionSurfaceProps}
     >
       {rowSelectLeadingWidth > 0 ? (
         <div
           aria-hidden
           className={cn(
-            "h-9 shrink-0",
+            "relative h-9 shrink-0",
             selectColumnPinnedClass(selectColumnPinned)
           )}
           style={{ width: rowSelectLeadingWidth }}
-        />
+        >
+          <span className={blockSelectionLaneUnderlayClassName} />
+        </div>
       ) : null}
       {columns.map((column) => {
         const result = results.get(column.field.id);
         return (
           <div
             className={cn(
-              "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden border-border border-t px-2 py-2",
+              "flex h-9 shrink-0 items-baseline gap-1.5 overflow-hidden border-border border-t px-2 py-2 transition-colors",
               column.showVerticalLine && "border-border/60 border-r",
               result?.alignEnd && "justify-end",
               column.pinned && "sticky z-10 bg-background",
@@ -197,6 +204,7 @@ export function DatabaseCalculateRow({
               width: column.width,
               left: column.left ?? undefined,
             }}
+            {...blockSelectionSurfaceProps}
           >
             {result ? <AggregateCellContent result={result} /> : null}
           </div>
