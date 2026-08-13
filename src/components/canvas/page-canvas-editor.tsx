@@ -34,6 +34,7 @@ import { DatabaseBlockDeleteDialog } from "@/components/canvas/database-block-de
 import { FormulaTokenPopover } from "@/components/canvas/formula-token-popover.tsx";
 import { EditorHeadingCollapseProvider } from "@/components/canvas/heading-collapse-context.tsx";
 import { InlineFormulaPopover } from "@/components/canvas/inline-formula-popover.tsx";
+import { InlineFormulaTokenTooltip } from "@/components/canvas/inline-formula-tooltip.tsx";
 import { MobileBlockActionsDrawer } from "@/components/canvas/mobile-block-actions-drawer.tsx";
 import { MobileEditorToolbar } from "@/components/canvas/mobile-editor-toolbar.tsx";
 import { PageLinkDeleteDialog } from "@/components/canvas/page-link-delete-dialog.tsx";
@@ -744,6 +745,7 @@ function PageCanvasEditorBody({
                         <CanvasMenuRoot />
                         <SelectionFormatToolbar />
                         <InlineFormulaPopover />
+                        <InlineFormulaTokenTooltip />
                         <MobileBlockActionsDrawer />
                         <MobileEditorToolbar />
                         <PageLinkDeleteDialog

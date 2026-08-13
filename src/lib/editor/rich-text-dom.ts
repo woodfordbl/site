@@ -255,7 +255,9 @@ export function createInlineFormulaToken(
   token.dataset.expression = options.expression;
   token.dataset.marks = "formula";
   token.className = options.className;
-  token.title = options.expression;
+  // No `title`: the expression is shown by `InlineFormulaTokenTooltip`, which
+  // can also say what a click does. A native tooltip alongside it would be a
+  // second, slower, worse-placed copy of the same hint.
   // Atomic, and for a stronger reason than page links: the model text is a
   // sentinel that lives nowhere in this subtree, so a caret inside would have
   // no offset to map to. Set as an attribute rather than via `contentEditable`
@@ -355,7 +357,7 @@ export function richTextToHtml(
         const expression = escapeHtml(segment.expression);
         return `<span data-formula-token="" data-expression="${expression}" data-marks="formula" class="${classForMarks(
           segment.marks
-        )}" title="${expression}" contenteditable="false"><span data-inline-formula-chrome="value">${escapeHtml(
+        )}" contenteditable="false"><span data-inline-formula-chrome="value">${escapeHtml(
           PENDING_FORMULA_VALUE
         )}</span></span>`;
       }

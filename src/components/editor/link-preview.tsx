@@ -15,21 +15,20 @@ import {
 import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useDelegatedLinkHover } from "@/hooks/use-delegated-link-hover.ts";
 import {
   usePrefetchUrlPreview,
   useUrlPreview,
 } from "@/hooks/use-url-preview.ts";
+import {
+  HOVER_PREVIEW_CLOSE_DELAY_MS,
+  HOVER_PREVIEW_OPEN_DELAY_CACHED_MS,
+  HOVER_PREVIEW_OPEN_DELAY_COLD_MS,
+} from "@/lib/editor/hover-preview-timing.ts";
 import type { UrlPreview } from "@/lib/media/parse-url-preview.ts";
 import { urlPreviewQueryKey } from "@/lib/media/url-preview-query.ts";
 import { warmUrlPreviewAssets } from "@/lib/media/warm-url-preview-assets.ts";
 import { cn } from "@/lib/utils.ts";
-
-/** Anti-flyover delay when OG is already cached (idle warm / prior hover). */
-export const LINK_PREVIEW_OPEN_DELAY_CACHED_MS = 120;
-/** Open delay when the cache is cold; prefetch starts immediately on enter. */
-export const LINK_PREVIEW_OPEN_DELAY_COLD_MS = 280;
-/** Grace period when leaving the link before closing (allows moving to popover). */
-export const LINK_PREVIEW_CLOSE_DELAY_MS = 150;
 
 /**
  * Compact 16:9 OG thumbnail inside the 272px horizontal card.
@@ -311,7 +310,7 @@ function useLinkPreviewHoverControllers(enabled: boolean) {
       setOpen(false);
       setAnchor(null);
       setUrl("");
-    }, LINK_PREVIEW_CLOSE_DELAY_MS);
+    }, HOVER_PREVIEW_CLOSE_DELAY_MS);
   }, []);
 
   const cancelClose = useCallback(() => {
@@ -341,8 +340,8 @@ function useLinkPreviewHoverControllers(enabled: boolean) {
       }
 
       const openDelay = cached
-        ? LINK_PREVIEW_OPEN_DELAY_CACHED_MS
-        : LINK_PREVIEW_OPEN_DELAY_COLD_MS;
+        ? HOVER_PREVIEW_OPEN_DELAY_CACHED_MS
+        : HOVER_PREVIEW_OPEN_DELAY_COLD_MS;
 
       openTimerRef.current = setTimeout(() => {
         openTimerRef.current = null;
@@ -425,23 +424,13 @@ export function InlineLink({ children, className, href }: InlineLinkProps) {
   );
 }
 
-function resolveHoveredLinkAnchor(
-  target: EventTarget | null,
-  root: HTMLElement
-): HTMLAnchorElement | null {
-  if (!(target instanceof Element && root.contains(target))) {
-    return null;
-  }
-  const anchor = target.closest("a[href], a[data-href]");
-  if (!(anchor instanceof HTMLAnchorElement && root.contains(anchor))) {
-    return null;
-  }
-  return anchor;
-}
-
 function hrefFromAnchor(anchor: HTMLAnchorElement): string {
   return (anchor.dataset.href ?? anchor.getAttribute("href") ?? "").trim();
 }
+
+/** Page links carry their own richer preview — see `page-link-preview.tsx`. */
+const ownsExternalLink = (anchor: HTMLAnchorElement) =>
+  !anchor.dataset.pageId && hrefFromAnchor(anchor) !== "";
 
 /**
  * Hover OG preview for links inside a contenteditable rich-text field.
@@ -466,70 +455,21 @@ export function EditableInlineLinkPreview({
     url,
   } = useLinkPreviewHoverControllers(hoverEnabled);
 
-  useEffect(() => {
-    const root = fieldRef.current;
-    if (!(root && hoverEnabled)) {
-      return;
-    }
+  const handleEnter = useCallback(
+    (next: HTMLAnchorElement) => {
+      scheduleOpen(next, hrefFromAnchor(next));
+    },
+    [scheduleOpen]
+  );
 
-    const onPointerOver = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") {
-        return;
-      }
-      const next = resolveHoveredLinkAnchor(event.target, root);
-      if (!next) {
-        return;
-      }
-      if (next.dataset.pageId) {
-        return;
-      }
-      const related = event.relatedTarget;
-      if (related instanceof Node && next.contains(related)) {
-        return;
-      }
-      const selection = root.ownerDocument.getSelection();
-      if (
-        selection &&
-        !selection.isCollapsed &&
-        root.contains(selection.anchorNode)
-      ) {
-        return;
-      }
-      const href = hrefFromAnchor(next);
-      if (!href) {
-        return;
-      }
-      scheduleOpen(next, href);
-    };
-
-    const onPointerOut = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") {
-        return;
-      }
-      const leaving = resolveHoveredLinkAnchor(event.target, root);
-      if (!leaving) {
-        return;
-      }
-      const related = event.relatedTarget;
-      if (related instanceof Node && leaving.contains(related)) {
-        return;
-      }
-      scheduleClose();
-    };
-
-    const onPointerDown = () => {
-      closeNow();
-    };
-
-    root.addEventListener("pointerover", onPointerOver);
-    root.addEventListener("pointerout", onPointerOut);
-    root.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      root.removeEventListener("pointerover", onPointerOver);
-      root.removeEventListener("pointerout", onPointerOut);
-      root.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [closeNow, fieldRef, hoverEnabled, scheduleClose, scheduleOpen]);
+  useDelegatedLinkHover({
+    enabled: hoverEnabled,
+    fieldRef,
+    onEnter: handleEnter,
+    onLeave: scheduleClose,
+    onPointerDown: closeNow,
+    owns: ownsExternalLink,
+  });
 
   if (!(hoverEnabled && url)) {
     return null;
