@@ -281,7 +281,7 @@ describe("FormulaCodeEditor", () => {
     it("renders each property chip with its column type icon", () => {
       const fields: DatabaseField[] = [
         { id: "f-name", name: "Name", type: "text" },
-        { id: "f-tags", name: "Tags", type: "multiSelect" },
+        { id: "f-tags", name: "Tags", type: "multiSelect", options: [] },
         { id: "f-calc", name: "Formula", type: "formula", expression: "" },
       ];
       render(
