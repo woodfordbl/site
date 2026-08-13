@@ -39,7 +39,7 @@ interface DatabaseOptionComboboxProps {
 }
 
 const OPTION_ROW_CLASS =
-  "flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted";
+  "flex h-8 pointer-coarse:h-10 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted";
 
 /**
  * Search-first option list shared by the select/multi-select cell editors and
@@ -157,12 +157,12 @@ interface ComboboxOptionRowProps {
 }
 
 /**
- * One option row: the main button toggles the value; the trailing ⋯ opens the
- * option color palette. The ⋯ is a sibling of the toggle button (never
- * nested), so color edits can't commit or toggle the cell/filter value, and
- * the row is a `data-reveal-group` so the ⋯ follows the standard hover-reveal
- * affordance (always visible on no-hover pointers). Color writes address the
- * owning field schema by field id + option id via `updateSelectOptionColor`.
+ * One option row: full-width toggle button with an absolute ⋯ overlay (same
+ * sibling-over-row pattern as sidebar `SidebarMenuButton` + `SidebarMenuAction`).
+ * Color edits never toggle the cell/filter value; the row is a
+ * `data-reveal-group` so the ⋯ follows hover-reveal (always visible on
+ * no-hover pointers). Color writes address the owning field schema by field id
+ * + option id via `updateSelectOptionColor`.
  */
 function ComboboxOptionRow({
   fieldId,
@@ -171,9 +171,13 @@ function ComboboxOptionRow({
   selected,
 }: ComboboxOptionRowProps): ReactNode {
   return (
-    <div className="flex shrink-0 items-center gap-1" data-reveal-group="">
+    <div
+      className="relative shrink-0 hover-none:[&_[data-option-row-content]]:pr-8 hover:[&_[data-option-row-content]]:pr-8 has-[[data-option-row-action][aria-expanded=true]]:[&_[data-option-row-content]]:pr-8"
+      data-reveal-group=""
+    >
       <button
-        className={cn(OPTION_ROW_CLASS, "min-w-0 flex-1")}
+        className={cn(OPTION_ROW_CLASS, "min-w-0")}
+        data-option-row-content=""
         onClick={onToggle}
         type="button"
       >
@@ -193,10 +197,19 @@ function ComboboxOptionRow({
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger
+          nativeButton
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
           render={
             <Button
               aria-label={`Change color for ${option.name}`}
-              className="hover-reveal shrink-0 aria-expanded:opacity-100"
+              className="hover-reveal absolute top-1/2 right-1 z-10 -translate-y-1/2 aria-expanded:opacity-100"
+              data-option-row-action=""
               size="icon-xs"
               variant="ghost"
             />

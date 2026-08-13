@@ -9,7 +9,6 @@ import {
   IconEye,
   IconEyeOff,
   IconFileText,
-  IconGripVertical,
   IconLayoutGrid,
   IconLayoutKanban,
   IconLayoutList,
@@ -32,6 +31,11 @@ import { DatabasePropertyEditItems } from "@/components/database/database-column
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { resolveRowSelectDisplay } from "@/components/database/database-grid-helpers.ts";
+import {
+  DatabasePropertyReorderHandle,
+  fieldIdsAfterReorderPinningPrimary,
+  TitlePropertyLockTooltip,
+} from "@/components/database/database-properties-list.tsx";
 import {
   DatabaseViewEditActions,
   DatabaseViewRenameField,
@@ -171,17 +175,18 @@ interface PropertyRowProps {
   /** Closes the whole settings menu (rename Enter, formula editor Save). */
   onRequestClose: () => void;
   onToggleVisible: () => void;
-  /** Pointer handlers for the left grip; drives {@link useListReorder}. */
-  reorderHandleProps: ListReorderHandleProps;
+  /** Pointer handlers for the left grip; omitted on the primary field. */
+  reorderHandleProps: ListReorderHandleProps | null;
 }
 
 /**
  * One field row in the Properties list: a left grip that drag-reorders the
- * schema, then the field name as a per-field edit submenu trigger (rename,
- * per-type config, change type — the same editing core as the column
- * menu), a "Title" badge beside the primary field's name, and — for
- * non-primary fields — hide/show and delete controls on the right. The
- * primary field can never be hidden or deleted.
+ * schema (spacer on the primary field — title stays first on the page), then
+ * the field name as a per-field edit submenu trigger (rename, per-type
+ * config, change type — the same editing core as the column menu), a "Title"
+ * badge beside the primary field's name, and — for non-primary fields —
+ * hide/show and delete controls on the right. The primary field can never be
+ * hidden, deleted, or reordered; hovering its name explains why.
  */
 function PropertyRow({
   databaseId,
@@ -209,27 +214,26 @@ function PropertyRow({
     >
       {dropBefore ? <PropertyDropLine position="top" /> : null}
       {dropAfter ? <PropertyDropLine position="bottom" /> : null}
-      <button
-        aria-label={`Reorder ${field.name}`}
-        className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground active:cursor-grabbing"
-        data-vaul-no-drag=""
-        type="button"
-        {...reorderHandleProps}
-      >
-        <IconGripVertical className="size-4 stroke-[1.5px]" />
-      </button>
+      <DatabasePropertyReorderHandle
+        fieldName={field.name}
+        handleProps={reorderHandleProps}
+      />
       <DropdownMenuSub>
         <DropdownMenuSubTrigger
           aria-label={`Edit ${field.name}`}
           className="min-h-7 pointer-coarse:min-h-10 min-w-0 flex-1 gap-1.5 px-1"
         >
           <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-          <span className="min-w-0 truncate">{field.name}</span>
           {isPrimary ? (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-              Title
-            </span>
-          ) : null}
+            <TitlePropertyLockTooltip>
+              <span className="min-w-0 truncate">{field.name}</span>
+              <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                Title
+              </span>
+            </TitlePropertyLockTooltip>
+          ) : (
+            <span className="min-w-0 truncate">{field.name}</span>
+          )}
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent className="w-64 min-w-64">
           <DatabasePropertyEditItems
@@ -285,10 +289,11 @@ interface PropertiesSubmenuProps {
 }
 
 /**
- * Properties submenu: one row per field in schema order with a drag grip, a
- * per-field edit submenu (rename / per-type config / change type), hide/show,
- * and delete. Visibility writes `visibleFieldIds` on the ACTIVE view; reorder
- * and field edits rewrite the schema (all views).
+ * Properties submenu: one row per field in schema order with a drag grip on
+ * non-primary fields, a per-field edit submenu (rename / per-type config /
+ * change type), hide/show, and delete. The primary field stays first (no
+ * grip) and cannot be hidden or deleted. Visibility writes `visibleFieldIds`
+ * on the ACTIVE view; reorder and field edits rewrite the schema (all views).
  */
 function PropertiesSubmenu({
   database,
@@ -299,10 +304,16 @@ function PropertiesSubmenu({
     !view.visibleFieldIds || view.visibleFieldIds.includes(fieldId);
 
   const reorderFields = (from: number, to: number) => {
-    const ids = database.fields.map((field) => field.id);
-    const [moved] = ids.splice(from, 1);
-    ids.splice(to, 0, moved);
-    reorderDatabaseFields(database.id, ids);
+    const next = fieldIdsAfterReorderPinningPrimary(
+      database.fields.map((field) => field.id),
+      database.primaryFieldId,
+      from,
+      to
+    );
+    if (!next) {
+      return;
+    }
+    reorderDatabaseFields(database.id, next);
   };
 
   const { containerRef, getHandleProps, state } = useListReorder(reorderFields);
@@ -326,30 +337,35 @@ function PropertiesSubmenu({
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-64 min-w-64">
         <div ref={containerRef}>
-          {database.fields.map((field, index) => (
-            <PropertyRow
-              databaseId={database.id}
-              dropAfter={
-                isReordering &&
-                index === lastIndex &&
-                state.overIndex === index + 1
-              }
-              dropBefore={isReordering && state.overIndex === index}
-              field={field}
-              isDragging={state.fromIndex === index}
-              isPrimary={field.id === database.primaryFieldId}
-              isVisible={isVisible(field.id)}
-              key={field.id}
-              onDelete={() => {
-                removeDatabaseField(database.id, field.id);
-              }}
-              onRequestClose={onRequestClose}
-              onToggleVisible={() => {
-                toggleVisible(field.id);
-              }}
-              reorderHandleProps={getHandleProps(index)}
-            />
-          ))}
+          {database.fields.map((field, index) => {
+            const isPrimary = field.id === database.primaryFieldId;
+            return (
+              <PropertyRow
+                databaseId={database.id}
+                dropAfter={
+                  isReordering &&
+                  index === lastIndex &&
+                  state.overIndex === index + 1
+                }
+                dropBefore={
+                  isReordering && !isPrimary && state.overIndex === index
+                }
+                field={field}
+                isDragging={state.fromIndex === index}
+                isPrimary={isPrimary}
+                isVisible={isVisible(field.id)}
+                key={field.id}
+                onDelete={() => {
+                  removeDatabaseField(database.id, field.id);
+                }}
+                onRequestClose={onRequestClose}
+                onToggleVisible={() => {
+                  toggleVisible(field.id);
+                }}
+                reorderHandleProps={isPrimary ? null : getHandleProps(index)}
+              />
+            );
+          })}
         </div>
       </DropdownMenuSubContent>
     </DropdownMenuSub>

@@ -79,4 +79,11 @@ describe("DatabaseOptionCombobox", () => {
     fireEvent.click(screen.getByRole("button", { name: THAT_OPTION_NAME }));
     expect(onToggleOption).toHaveBeenCalledWith("opt-that");
   });
+
+  it("keeps the color action from toggling the option", () => {
+    const { onToggleOption } = renderCombobox(["opt-this"]);
+
+    fireEvent.click(screen.getByLabelText("Change color for That"));
+    expect(onToggleOption).not.toHaveBeenCalled();
+  });
 });

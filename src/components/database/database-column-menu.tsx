@@ -99,9 +99,11 @@ import {
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
+import { inputGroupIconPickerTriggerClassName } from "@/components/ui/input-group-icon-picker.tsx";
 import {
   MenuIconRenameInput,
   shouldCancelMenuCloseForIconPicker,
@@ -143,6 +145,7 @@ import {
   databaseFieldTypeSchema,
 } from "@/lib/schemas/database.ts";
 import type { BlockColor } from "@/lib/schemas/rich-text.ts";
+import { cn } from "@/lib/utils.ts";
 
 /**
  * Column header menu for the database table grid — mirrors the Notion
@@ -292,9 +295,9 @@ interface SelectOptionRowProps {
 }
 
 /**
- * One editable option row: leading color-swatch submenu (the block-color
- * palette shared with the canvas highlight picker), inline rename input, and
- * a delete button.
+ * One editable option row as a single InputGroup: leading color-swatch
+ * submenu (the block-color palette shared with the canvas highlight picker),
+ * name field, and trailing delete — same chrome as menu rename rows.
  */
 function SelectOptionRow({
   onDelete,
@@ -310,52 +313,62 @@ function SelectOptionRow({
   };
 
   return (
-    <div className="flex items-center gap-1">
-      <DropdownMenuSub>
-        {/* Compact swatch-only trigger: the swatch is the label, so the
-            wrapper's trailing chevron is hidden. Sizing applies in BOTH
-            presentations (the drawer row would otherwise stretch full-width
-            and crush the rename input); touch gets a larger hit area. */}
-        <DropdownMenuSubTrigger
-          aria-label={`Change color for option ${option.name}`}
-          className="pointer-coarse:size-10 size-8 shrink-0 justify-center rounded-md p-0 [&>span]:justify-center [&>svg]:hidden"
-        >
-          <BlockColorSwatch color={option.color} variant="background" />
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent>
-          <DatabaseOptionColorMenuItems
-            color={option.color}
-            onSelectColor={onSelectColor}
-          />
-        </DropdownMenuSubContent>
-      </DropdownMenuSub>
-      <InputGroup className="h-8 pointer-coarse:h-10 flex-1">
-        <InputGroupInput
-          aria-label={`Rename option ${option.name}`}
-          autoComplete="off"
-          defaultValue={option.name}
-          onBlur={(event) => {
-            commit(event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            stopMenuKeys(event);
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commit(event.currentTarget.value);
-            }
-          }}
-        />
-      </InputGroup>
-      <Button
-        aria-label={`Delete option ${option.name}`}
-        onClick={onDelete}
-        size="icon"
-        variant="ghost"
+    <InputGroup className="h-8 pointer-coarse:h-10">
+      <InputGroupAddon
+        align="inline-start"
+        className="has-[>button]:cursor-default"
       >
-        {/* Explicit size: the row matches the h-8 input, the glyph stays 16px. */}
-        <IconTrash className="size-4" />
-      </Button>
-    </div>
+        <DropdownMenuSub>
+          {/* Compact swatch-only trigger: the swatch is the label, so the
+              wrapper's trailing chevron is hidden. `size-6` matches
+              InputGroupButton `icon-xs` and must apply in BOTH presentations
+              (the drawer row would otherwise stretch full-width and crush
+              the rename input). */}
+          <DropdownMenuSubTrigger
+            aria-label={`Change color for option ${option.name}`}
+            className={cn(
+              inputGroupIconPickerTriggerClassName,
+              "size-6 shrink-0 justify-center p-0 [&>span]:justify-center [&>svg]:hidden"
+            )}
+            nativeButton
+            render={<InputGroupButton size="icon-xs" />}
+          >
+            <BlockColorSwatch color={option.color} variant="background" />
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DatabaseOptionColorMenuItems
+              color={option.color}
+              onSelectColor={onSelectColor}
+            />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      </InputGroupAddon>
+      <InputGroupInput
+        aria-label={`Rename option ${option.name}`}
+        autoComplete="off"
+        defaultValue={option.name}
+        onBlur={(event) => {
+          commit(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          stopMenuKeys(event);
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit(event.currentTarget.value);
+          }
+        }}
+      />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          aria-label={`Delete option ${option.name}`}
+          onClick={onDelete}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <IconTrash />
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }
 
@@ -365,9 +378,9 @@ interface SelectOptionsEditorProps {
 }
 
 /**
- * Option list editor for select/multi-select fields: rename inline, recolor
- * via each row's leading swatch submenu, add via the trailing input, delete
- * per row.
+ * Option list editor for select/multi-select fields: each option is an
+ * InputGroup row (leading color-swatch submenu, name field, trailing delete);
+ * add via the trailing input.
  */
 function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
   const [newOptionName, setNewOptionName] = useState("");
@@ -1026,7 +1039,11 @@ interface CalculateSubmenuProps {
   onSelect: (fn: DatabaseAggregateFn | null) => void;
 }
 
-/** "Calculate" submenu: None + the aggregates valid for the field's type. */
+/**
+ * "Calculate" submenu: None + the aggregates valid for the field's type.
+ * When a calculation is active, its label sits muted on the trigger, left of
+ * the submenu chevron — the row stays unlabeled when the column has none.
+ */
 function CalculateSubmenu({
   activeFn,
   field,
@@ -1036,7 +1053,16 @@ function CalculateSubmenu({
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <IconSum />
-        Calculate
+        {activeFn === undefined ? (
+          "Calculate"
+        ) : (
+          <span className="shrink-0">Calculate</span>
+        )}
+        {activeFn === undefined ? null : (
+          <span className="ml-auto min-w-0 truncate pl-3 text-muted-foreground text-xs">
+            {aggregateFnLabel(activeFn)}
+          </span>
+        )}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <DropdownMenuItem
