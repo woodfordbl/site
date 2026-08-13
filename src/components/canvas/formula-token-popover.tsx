@@ -17,6 +17,7 @@ import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.
 import {
   pageFormulaFields,
   pageFormulaPreviewRow,
+  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   type CaretTokenContext,
@@ -180,6 +181,7 @@ export function FormulaTokenPopover(): ReactNode {
         previewRows={previewRows}
         relatedDatabases={relatedDatabases}
         relations={relations}
+        thisRowInScope={pageHasFormulaRowContext(model)}
         userFunctions={userFunctions}
       />
     </div>,

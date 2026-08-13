@@ -5,6 +5,7 @@ import {
   inlinePageFormulaCheckProperties,
   pageFormulaFields,
   pageFormulaPreviewRow,
+  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import { checkFormula } from "@/lib/formula/check.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
@@ -84,6 +85,14 @@ describe("pageFormulaFields", () => {
       "page:createdAt",
       "page:updatedAt",
     ]);
+  });
+});
+
+describe("pageHasFormulaRowContext", () => {
+  it("is false on ordinary pages and true when database fields are layered", () => {
+    expect(pageHasFormulaRowContext({ databaseFields: [] })).toBe(false);
+    expect(pageHasFormulaRowContext({ databaseFields: [TAGS] })).toBe(true);
+    expect(pageHasFormulaRowContext(null)).toBe(false);
   });
 });
 

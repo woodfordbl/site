@@ -41,6 +41,14 @@ describe("canonicalizeExpression", () => {
     );
   });
 
+  it("does not rewrite thisRow as a property when it is out of scope", () => {
+    expect(
+      canonicalizeExpression("thisRow.Price", FIELDS, undefined, {
+        thisRowInScope: false,
+      }).text
+    ).toBe("thisRow.Price");
+  });
+
   it("rewrites bracket references", () => {
     expect(
       canonicalizeExpression('thisPage["Unit Count"] + 1', FIELDS).text

@@ -16,7 +16,7 @@ import type {
 import { walkFormula } from "@/lib/formula/ast.ts";
 import { formulaPropertyReference } from "@/lib/formula/catalog.ts";
 import { normalizeFormulaPropertyName } from "@/lib/formula/check.ts";
-import { parseFormula } from "@/lib/formula/parse.ts";
+import { type ParseFormulaOptions, parseFormula } from "@/lib/formula/parse.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 
 /**
@@ -48,8 +48,11 @@ interface ReferenceNodes {
   properties: FormulaPropertyNode[];
 }
 
-function referenceNodesOf(text: string): ReferenceNodes | null {
-  const parsed = parseFormula(text);
+function referenceNodesOf(
+  text: string,
+  options?: ParseFormulaOptions
+): ReferenceNodes | null {
+  const parsed = parseFormula(text, options);
   if (!parsed.ok) {
     return null;
   }
@@ -120,9 +123,9 @@ function fieldsByNormalizedName(
  * Rewrite every property reference whose name resolves to a field into the
  * canonical `prop("<fieldId>")` form:
  *
- * - Scope syntax (`thisPage.X` / `thisRow["X"]`) resolves by name exactly
- *   like `createFormulaRowScope` — normalized (trimmed, lowercased), first
- *   field in schema order wins on collisions.
+ * - Scope syntax (`thisPage.X` / `thisRow["X"]` when `thisRow` is in scope)
+ *   resolves by name exactly like `createFormulaRowScope` — normalized
+ *   (trimmed, lowercased), first field in schema order wins on collisions.
  * - `prop("X")` where X is NOT a field id but normalizes to a field NAME
  *   also rewrites to `prop("<id>")`, so a pasted name-form `prop` reference
  *   canonicalizes instead of only working by the evaluator's name fallback
@@ -138,14 +141,17 @@ function fieldsByNormalizedName(
  * `prop("id")` references that match a field id stay as-is; a `prop` whose
  * argument matches neither id nor name is a broken id reference (visible in
  * the UI), not an unresolved name. Unparseable input returns unchanged with
- * `changed: false`.
+ * `changed: false`. `options.thisRowInScope` is forwarded to the parser
+ * (default true); on ordinary pages pass `false` so `thisRow` is not
+ * rewritten as a property reference.
  */
 export function canonicalizeExpression(
   text: string,
   fields: readonly DatabaseField[],
-  databases?: readonly FormulaRefDatabase[]
+  databases?: readonly FormulaRefDatabase[],
+  options?: ParseFormulaOptions
 ): CanonicalizeExpressionResult {
-  const collected = collectCanonicalRewrites(text, fields, databases);
+  const collected = collectCanonicalRewrites(text, fields, databases, options);
   if (collected === null) {
     return { text, changed: false, unresolved: [] };
   }
@@ -164,9 +170,12 @@ export function canonicalizeExpression(
  */
 export function canonicalPropertyRewrites(
   text: string,
-  fields: readonly DatabaseField[]
+  fields: readonly DatabaseField[],
+  options?: ParseFormulaOptions
 ): FormulaSpanRewrite[] {
-  return collectCanonicalRewrites(text, fields)?.rewrites ?? [];
+  return (
+    collectCanonicalRewrites(text, fields, undefined, options)?.rewrites ?? []
+  );
 }
 
 /** Name-keyed database index: normalized name → first database in order. */
@@ -218,9 +227,10 @@ function collectDatabaseRewrites(
 function collectCanonicalRewrites(
   text: string,
   fields: readonly DatabaseField[],
-  databases?: readonly FormulaRefDatabase[]
+  databases?: readonly FormulaRefDatabase[],
+  options?: ParseFormulaOptions
 ): { rewrites: FormulaSpanRewrite[]; unresolved: string[] } | null {
-  const nodes = referenceNodesOf(text);
+  const nodes = referenceNodesOf(text, options);
   if (nodes === null) {
     return null;
   }
@@ -261,9 +271,10 @@ function collectCanonicalRewrites(
 export function humanizeExpression(
   text: string,
   fields: readonly DatabaseField[],
-  databases?: readonly FormulaRefDatabase[]
+  databases?: readonly FormulaRefDatabase[],
+  options?: ParseFormulaOptions
 ): string {
-  const nodes = referenceNodesOf(text);
+  const nodes = referenceNodesOf(text, options);
   if (nodes === null) {
     return text;
   }

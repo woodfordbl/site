@@ -53,6 +53,7 @@ import {
   computeFormulaRowValues,
   type FormulaRelatedDatabase,
   formulaCheckContext,
+  formulaPickableFields,
 } from "@/lib/databases/formula-values.ts";
 import {
   FORMULA_FUNCTION_CATALOG,
@@ -148,8 +149,10 @@ import { cn } from "@/lib/utils.ts";
  * cramped in-menu stack has no room for chip affordances). Caret insertion from the
  * reference list goes through the editor's imperative handle when mounted
  * (properties insert the canonical `prop("<id>")` text, which renders as a
- * chip with the caret placed after it), else through the textarea's
- * selection range (properties insert the display `thisPage.Name` form).
+ * chip with the field-type icon and the caret placed after it), else through
+ * the textarea's selection range (properties insert the display
+ * `thisPage.Name` form). The column being edited (`selfFieldId`) is omitted
+ * from every property picker so it cannot insert a reference to itself.
  */
 
 /**
@@ -195,6 +198,7 @@ interface SpliceGeneratedTarget {
   insertAtCaret: (text: string, caretOffset: number) => void;
   setDraft: (draft: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  thisRowInScope: boolean;
 }
 
 /**
@@ -211,7 +215,14 @@ function spliceGeneratedExpression(
   generated: string,
   target: SpliceGeneratedTarget
 ): void {
-  const { codeEditorRef, databases, draft, fields, textareaRef } = target;
+  const {
+    codeEditorRef,
+    databases,
+    draft,
+    fields,
+    textareaRef,
+    thisRowInScope,
+  } = target;
   const blank = draft.trim() === "";
   const editor = codeEditorRef.current;
   if (editor !== null) {
@@ -228,7 +239,9 @@ function spliceGeneratedExpression(
     editor.insertText(generated, generated.length);
     return;
   }
-  const display = humanizeExpression(generated, fields, databases);
+  const display = humanizeExpression(generated, fields, databases, {
+    thisRowInScope,
+  });
   if (!blank) {
     target.insertAtCaret(display, display.length);
     return;
@@ -591,8 +604,9 @@ export interface FormulaEditorPanelProps {
   /** Stored (canonical) expression the draft starts from. */
   expression: string;
   /**
-   * Full database schema: non-formula fields become the Properties section,
-   * and the whole list feeds the preview scope.
+   * Full database schema: properties (including other formula columns) feed
+   * the Properties section, autocomplete, and the preview scope. Pass
+   * {@link selfFieldId} so the column being edited is omitted from pickers.
    */
   fields: readonly DatabaseField[];
   /**
@@ -647,6 +661,22 @@ export interface FormulaEditorPanelProps {
    * preview as blank.
    */
   relations?: FormulaRelationResolver;
+  /**
+   * Field id of the formula column being edited. Omitted from the Properties
+   * list, fused autocomplete, chip Change-property menu, and the mobile
+   * property picker so the column cannot insert a reference to itself.
+   * Omitted (inline tokens, filters), every field stays pickable. A
+   * hand-typed self-reference still chips and evaluates as a named cycle.
+   */
+  selfFieldId?: string;
+  /**
+   * Whether `thisRow` is a scope-root synonym of `thisPage`: offered in
+   * autocomplete and parsed as a property reference. Defaults true
+   * (formula columns, filters, row pages). Inline tokens on ordinary
+   * pages pass false — `thisRow` is then a bare name
+   * (`Unknown name "thisRow"`).
+   */
+  thisRowInScope?: boolean;
   /**
    * Named user-defined functions (prepared registry —
    * `useFormulaUserFunctions()` at interactive call sites): threads into
@@ -1136,6 +1166,8 @@ export function FormulaEditorPanel({
   previewRows,
   relatedDatabases,
   relations,
+  selfFieldId,
+  thisRowInScope = true,
   userFunctions,
 }: FormulaEditorPanelProps): ReactNode {
   // `popover` is the wide form everywhere the editor chrome is concerned —
@@ -1216,8 +1248,9 @@ export function FormulaEditorPanel({
   // round-trip to themselves), so typing never sees the text change under
   // the caret.
   const displayDraft = useMemo(
-    () => humanizeExpression(draft, fields, relatedDatabases),
-    [draft, fields, relatedDatabases]
+    () =>
+      humanizeExpression(draft, fields, relatedDatabases, { thisRowInScope }),
+    [draft, fields, relatedDatabases, thisRowInScope]
   );
 
   /**
@@ -1240,7 +1273,9 @@ export function FormulaEditorPanel({
     const nextDisplay =
       displayDraft.slice(0, start) + text + displayDraft.slice(end);
     setDraft(
-      canonicalizeExpression(nextDisplay, fields, relatedDatabases).text
+      canonicalizeExpression(nextDisplay, fields, relatedDatabases, {
+        thisRowInScope,
+      }).text
     );
     const caret = start + caretOffset;
     requestAnimationFrame(() => {
@@ -1354,18 +1389,23 @@ export function FormulaEditorPanel({
       insertAtCaret,
       setDraft,
       textareaRef,
+      thisRowInScope,
     });
   };
 
   const trimmed = draft.trim();
-  const parsed = trimmed === "" ? null : parseFormula(draft);
+  const parsed =
+    trimmed === "" ? null : parseFormula(draft, { thisRowInScope });
 
   // Static check of the parsed draft against the schema — formula fields
   // typed via the same topological pass the overlay uses; related databases
   // (when supplied) type member access on relation rows.
   const checkContext = useMemo(
-    () => formulaCheckContext(fields, relatedDatabases, userFunctions),
-    [fields, relatedDatabases, userFunctions]
+    () => ({
+      ...formulaCheckContext(fields, relatedDatabases, userFunctions),
+      thisRowInScope,
+    }),
+    [fields, relatedDatabases, thisRowInScope, userFunctions]
   );
   const checked: FormulaCheckResult | null = useMemo(
     () => (parsed?.ok ? checkFormula(parsed.ast, checkContext) : null),
@@ -1382,7 +1422,11 @@ export function FormulaEditorPanel({
     if (saveDisabled) {
       return;
     }
-    onSave(canonicalizeExpression(draft, fields, relatedDatabases).text);
+    onSave(
+      canonicalizeExpression(draft, fields, relatedDatabases, {
+        thisRowInScope,
+      }).text
+    );
   };
 
   // The picked preview row, defaulting to the first (and healing a stale
@@ -1469,13 +1513,18 @@ export function FormulaEditorPanel({
   const normalizedQuery = query.trim().toLowerCase();
 
   // Formula fields are insertable references too (formulas may reference
-  // other formulas); a self-reference surfaces as a named cycle error.
+  // other formulas). The column being edited is omitted so it cannot pick
+  // itself; a hand-typed self-reference still surfaces as a named cycle.
+  const pickableFields = useMemo(
+    () => formulaPickableFields(fields, selfFieldId),
+    [fields, selfFieldId]
+  );
   const propertyFields = useMemo(
     () =>
-      fields.filter((field) =>
+      pickableFields.filter((field) =>
         field.name.toLowerCase().includes(normalizedQuery)
       ),
-    [fields, normalizedQuery]
+    [normalizedQuery, pickableFields]
   );
 
   const functionEntries = useMemo(
@@ -1552,8 +1601,9 @@ export function FormulaEditorPanel({
       )}
       onChange={(event) => {
         setDraft(
-          canonicalizeExpression(event.target.value, fields, relatedDatabases)
-            .text
+          canonicalizeExpression(event.target.value, fields, relatedDatabases, {
+            thisRowInScope,
+          }).text
         );
       }}
       onKeyDown={stopMenuKeys}
@@ -1598,6 +1648,7 @@ export function FormulaEditorPanel({
               onChipTap={setChipTap}
               onSubmit={save}
               placeholder="thisPage.Price * 1.1"
+              selfFieldId={selfFieldId}
               value={draft}
             />
           </Suspense>
@@ -1611,6 +1662,7 @@ export function FormulaEditorPanel({
           onPickDatabase={swapChipDatabase}
           onPickProperty={swapChipReference}
           onRemove={removeChipReference}
+          selfFieldId={selfFieldId}
           tap={chipTap}
         />
       )}
@@ -1739,6 +1791,7 @@ export function FormulaEditorPanel({
           onInsertAtCaret={insertAtCaret}
           onInsertFunction={insertFunctionEntry}
           onInsertProperty={insertPropertyReference}
+          selfFieldId={selfFieldId}
         />
       </>
     );

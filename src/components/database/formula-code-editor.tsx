@@ -38,7 +38,10 @@ import {
   tokenChipShapeClassName,
   tokenChipVariants,
 } from "@/components/ui/chip.tsx";
-import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
+import {
+  formulaCheckContext,
+  formulaPickableFields,
+} from "@/lib/databases/formula-values.ts";
 import {
   FORMULA_FUNCTION_CATALOG,
   type FormulaFunctionEntry,
@@ -63,7 +66,13 @@ import {
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
 import { type FormulaHoverInfo, formulaHoverAt } from "@/lib/formula/hover.ts";
-import { FORMULA_SCOPE_ROOTS, parseFormula } from "@/lib/formula/parse.ts";
+import {
+  FORMULA_PAGE_SCOPE_LABEL,
+  FORMULA_ROW_SCOPE_LABEL,
+  formulaScopeRootLabels,
+  formulaThisRowInScope,
+  parseFormula,
+} from "@/lib/formula/parse.ts";
 import {
   canonicalDatabaseReference,
   canonicalPropertyReference,
@@ -122,7 +131,9 @@ import { cn } from "@/lib/utils.ts";
  * operators/keywords, opened by typing an identifier or explicit Ctrl+Space.
  * Ranking is type-aware: when the caret sits in an argument position whose
  * expected type the catalog knows ({@link expectedArgumentType}), candidates
- * whose result type fits rank first.
+ * whose result type fits rank first. {@link selfFieldId} (the formula column
+ * being edited) is omitted from property options so a column cannot pick
+ * itself; chip labels still resolve that id if the user types it by hand.
  *
  * DIAGNOSTICS (proposal §6): parse errors and checker diagnostics render as
  * destructive wavy underlines, debounced like the canonicalizer
@@ -273,6 +284,14 @@ export interface FormulaCodeEditorProps {
   /** Mod+Enter (Cmd on mac, Ctrl elsewhere) — the panel wires Save here. */
   onSubmit?: () => void;
   placeholder?: string;
+  /**
+   * Field id of the formula column being edited. Omitted from property
+   * autocomplete so the column cannot insert a reference to itself. Chip
+   * labels still resolve it — a hand-typed self-reference chips normally
+   * and evaluates as a named cycle. Omitted (inline tokens, filters),
+   * every field stays pickable.
+   */
+  selfFieldId?: string;
   value: string;
 }
 
@@ -288,37 +307,16 @@ function highlightMark(kind: FormulaHighlightKind): Decoration {
   return mark;
 }
 
-function buildHighlightDecorations(source: string): DecorationSet {
+function buildHighlightDecorations(
+  source: string,
+  thisRowInScope: boolean
+): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  for (const span of highlightFormula(source)) {
+  for (const span of highlightFormula(source, { thisRowInScope })) {
     builder.add(span.start, span.end, highlightMark(span.kind));
   }
   return builder.finish();
 }
-
-/**
- * Whole-document re-highlight on every doc change. Fine at our scale: input
- * is capped at 10k characters (`MAX_EXPRESSION_LENGTH`) and the classifier
- * is a single linear tokenize pass, so incremental ranges aren't worth it.
- */
-const formulaHighlighter = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-
-    constructor(view: EditorView) {
-      this.decorations = buildHighlightDecorations(view.state.doc.toString());
-    }
-
-    update(update: ViewUpdate) {
-      if (update.docChanged) {
-        this.decorations = buildHighlightDecorations(
-          update.state.doc.toString()
-        );
-      }
-    }
-  },
-  { decorations: (plugin) => plugin.decorations }
-);
 
 /** Set by the React side whenever the `fields` prop changes. */
 const setChipFields = StateEffect.define<readonly DatabaseField[]>();
@@ -333,6 +331,26 @@ const chipFields = StateField.define<readonly DatabaseField[]>({
   update(value, transaction) {
     for (const effect of transaction.effects) {
       if (effect.is(setChipFields)) {
+        return effect.value;
+      }
+    }
+    return value;
+  },
+});
+
+/** Set by the React side whenever the `selfFieldId` prop changes. */
+const setSelfFieldId = StateEffect.define<string | undefined>();
+
+/**
+ * The formula column being edited. Property autocomplete reads this to omit
+ * that field; {@link chipFields} still carries it so a hand-typed
+ * self-reference chips with the live name and type icon.
+ */
+const selfFieldIdState = StateField.define<string | undefined>({
+  create: () => undefined,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setSelfFieldId)) {
         return effect.value;
       }
     }
@@ -381,6 +399,39 @@ const checkContextState = StateField.define<FormulaCheckContext>({
     return value;
   },
 });
+
+/**
+ * Whole-document re-highlight on every doc change. Fine at our scale: input
+ * is capped at 10k characters (`MAX_EXPRESSION_LENGTH`) and the classifier
+ * is a single linear tokenize pass, so incremental ranges aren't worth it.
+ * Also rebuilds when `thisRow` enters or leaves scope so `thisRow` restyles
+ * from property-root to bare name (and back).
+ */
+const formulaHighlighter = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+      this.decorations = buildHighlightDecorations(
+        view.state.doc.toString(),
+        formulaThisRowInScope(view.state.field(checkContextState))
+      );
+    }
+
+    update(update: ViewUpdate) {
+      const scopeChanged =
+        formulaThisRowInScope(update.startState.field(checkContextState)) !==
+        formulaThisRowInScope(update.state.field(checkContextState));
+      if (update.docChanged || scopeChanged) {
+        this.decorations = buildHighlightDecorations(
+          update.state.doc.toString(),
+          formulaThisRowInScope(update.state.field(checkContextState))
+        );
+      }
+    }
+  },
+  { decorations: (plugin) => plugin.decorations }
+);
 
 /** Set by the React side whenever the `hoverScope` prop changes. */
 const setHoverScope = StateEffect.define<FormulaScope | null>();
@@ -481,6 +532,10 @@ function tablerIconSvg(node: TablerIconNode): SVGSVGElement {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
+  // Explicit pixels so the glyph paints inside CM widgets even if Tailwind
+  // `size-*` hasn't landed on this node yet (portaled completion rows).
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
   svg.setAttribute("class", "size-3.5 shrink-0 self-center");
   for (const [tag, attrs] of node) {
     const child = document.createElementNS(SVG_NS, tag);
@@ -561,6 +616,7 @@ class PropertyChipWidget extends WidgetType {
       chip.setAttribute("aria-label", `Unknown property ${this.rawId}`);
     } else {
       chip.setAttribute("aria-label", `Property ${this.field.name}`);
+      chip.dataset.fieldType = this.field.type;
       chip.append(chipIcon(this.field));
     }
     const label = document.createElement("span");
@@ -585,6 +641,21 @@ const DATABASE_CHIP_ICON_NODE: TablerIconNode = [
   ["path", { d: "M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" }],
   ["path", { d: "M4 6v6a8 3 0 0 0 16 0v-6" }],
   ["path", { d: "M4 12v6a8 3 0 0 0 16 0v-6" }],
+];
+
+/**
+ * Tabler `IconFile` — the same default page glyph as `DEFAULT_PAGE_ICON` —
+ * as raw node data for the completion-row icon slot. Completions render
+ * without React, matching {@link DATABASE_CHIP_ICON_NODE}.
+ */
+const PAGE_CHIP_ICON_NODE: TablerIconNode = [
+  ["path", { d: "M14 3v4a1 1 0 0 0 1 1h4" }],
+  [
+    "path",
+    {
+      d: "M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2",
+    },
+  ],
 ];
 
 /**
@@ -916,7 +987,9 @@ const typedReferenceCanonicalizer = ViewPlugin.fromClass(
       const { state } = this.view;
       const source = state.doc.toString();
       const rewrites = [
-        ...canonicalPropertyRewrites(source, state.field(chipFields)),
+        ...canonicalPropertyRewrites(source, state.field(chipFields), {
+          thisRowInScope: formulaThisRowInScope(state.field(checkContextState)),
+        }),
         ...canonicalDatabaseRewrites(source, state.field(chipDatabases)),
       ].filter((rewrite) => !selectionTouches(state.selection, rewrite));
       if (rewrites.length === 0) {
@@ -979,7 +1052,7 @@ function rawDiagnosticSpans(
   if (source.trim() === "") {
     return [];
   }
-  const parsed = parseFormula(source);
+  const parsed = parseFormula(source, context);
   if (!parsed.ok) {
     const span = parseErrorSpan(source, parsed.error.position);
     return span === null ? [] : [span];
@@ -1422,15 +1495,16 @@ const IDENTIFIER_VALID_FOR_RE = /^[A-Za-z0-9_]*$/;
  * A scope-root reference prefix (`thisPage.` / `thisRow.`, any casing)
  * directly before a position: completions triggered there narrow to
  * properties and replace the WHOLE reference with one canonical chip.
+ * `thisRow.` is only a prefix when the host has a database row.
  */
-const SCOPE_PREFIX_RE = new RegExp(
-  `(?:${[...FORMULA_SCOPE_ROOTS].join("|")})\\s*\\.\\s*$`,
-  "i"
-);
+function scopePrefixRe(thisRowInScope: boolean): RegExp {
+  const roots = [...formulaScopeRootLabels(thisRowInScope)].join("|");
+  return new RegExp(`(?:${roots})\\s*\\.\\s*$`, "i");
+}
 
 /** Start of the scope-root prefix ending at `prefix`'s end, else its length. */
-function scopePrefixStart(prefix: string): number {
-  const match = SCOPE_PREFIX_RE.exec(prefix);
+function scopePrefixStart(prefix: string, thisRowInScope: boolean): number {
+  const match = scopePrefixRe(thisRowInScope).exec(prefix);
   return match === null ? prefix.length : match.index;
 }
 
@@ -1526,19 +1600,34 @@ const completionFields = new WeakMap<Completion, DatabaseField>();
 /**
  * The leading icon of each completion row (replaces CM's built-in icon
  * classes): the field-type/custom icon for properties, the database glyph
- * for database options, a function glyph for functions, an empty spacer for
- * keywords so columns stay aligned.
+ * for database options, a function glyph for functions, and the default
+ * page/document glyph for `thisPage`/`thisRow`. Completions without an
+ * icon (`db`, keywords, operators) return null so they left-align — no
+ * reserved empty column.
  */
-function renderCompletionIcon(completion: Completion): Node {
+function renderCompletionIcon(completion: Completion): Node | null {
+  const field = completionFields.get(completion);
+  const isScopeRoot =
+    completion.label === FORMULA_PAGE_SCOPE_LABEL ||
+    completion.label === FORMULA_ROW_SCOPE_LABEL;
+  if (
+    field === undefined &&
+    completion.type !== "database" &&
+    completion.type !== "function" &&
+    !isScopeRoot
+  ) {
+    return null;
+  }
   const holder = document.createElement("span");
   holder.className = "cm-formula-completion-icon";
   holder.setAttribute("aria-hidden", "true");
-  const field = completionFields.get(completion);
   if (field !== undefined) {
     holder.append(chipIcon(field));
   } else if (completion.type === "database") {
     holder.append(tablerIconSvg(DATABASE_CHIP_ICON_NODE));
-  } else if (completion.type === "function") {
+  } else if (isScopeRoot) {
+    holder.append(tablerIconSvg(PAGE_CHIP_ICON_NODE));
+  } else {
     holder.textContent = "ƒ";
   }
   return holder;
@@ -1571,7 +1660,10 @@ function propertyCompletion(
 ): Completion {
   const completion: Completion = {
     apply: (view, _completion, from, to) => {
-      const start = scopePrefixStart(view.state.sliceDoc(0, from));
+      const start = scopePrefixStart(
+        view.state.sliceDoc(0, from),
+        formulaThisRowInScope(view.state.field(checkContextState))
+      );
       const insert = canonicalPropertyReference(field.id);
       applyInsert(view, { from: start, to }, insert, start + insert.length);
     },
@@ -1657,17 +1749,21 @@ function keywordCompletions(expected: FormulaType | null): Completion[] {
   }));
 }
 
-/** Display casing for {@link FORMULA_SCOPE_ROOTS} (grammar is case-blind). */
-const SCOPE_ROOT_LABELS = ["thisPage", "thisRow"] as const;
+/** Display info for each scope-root completion. */
+const SCOPE_ROOT_INFO = {
+  thisPage: "This page's properties — picking one inserts its reference.",
+  thisRow: "This row's properties — picking one inserts its reference.",
+} as const;
 
 /**
  * Scope-root references complete too — typing `thi…` lands on `thisPage.`
  * — and accepting one immediately reopens the popup, which the trailing
  * dot puts in property-only mode, so the property pick (which replaces the
- * whole reference with one canonical chip) is a keystroke away.
+ * whole reference with one canonical chip) is a keystroke away. `thisRow`
+ * is offered only when the host has a database row.
  */
-function scopeRootCompletions(): Completion[] {
-  return SCOPE_ROOT_LABELS.map((label) => ({
+function scopeRootCompletions(thisRowInScope: boolean): Completion[] {
+  return formulaScopeRootLabels(thisRowInScope).map((label) => ({
     apply: (
       view: EditorView,
       _completion: Completion,
@@ -1680,7 +1776,7 @@ function scopeRootCompletions(): Completion[] {
     },
     boost: KEYWORD_BASE_BOOST,
     detail: "reference",
-    info: "This row's properties — picking one inserts its reference.",
+    info: SCOPE_ROOT_INFO[label],
     label,
     type: "keyword",
   }));
@@ -1810,8 +1906,12 @@ function dbArgumentCompletions(
 }
 
 /** Is `position` inside a string or comment (no completions there)? */
-function insideStringOrComment(source: string, position: number): boolean {
-  return highlightFormula(source).some(
+function insideStringOrComment(
+  source: string,
+  position: number,
+  thisRowInScope: boolean
+): boolean {
+  return highlightFormula(source, { thisRowInScope }).some(
     (span) =>
       (span.kind === "string" || span.kind === "comment") &&
       span.start < position &&
@@ -1838,17 +1938,23 @@ function formulaCompletionSource(
   if (dbArgument !== null) {
     return dbArgument;
   }
+  const thisRowInScope = formulaThisRowInScope(
+    context.state.field(checkContextState)
+  );
   const word = context.matchBefore(IDENTIFIER_TAIL_RE);
   const from = word?.from ?? context.pos;
-  const scopeStart = scopePrefixStart(doc.slice(0, from));
+  const scopeStart = scopePrefixStart(doc.slice(0, from), thisRowInScope);
   const propertyOnly = scopeStart < from;
   if (word === null && !(context.explicit || propertyOnly)) {
     return null;
   }
-  if (insideStringOrComment(doc, context.pos)) {
+  if (insideStringOrComment(doc, context.pos, thisRowInScope)) {
     return null;
   }
-  const fields = context.state.field(chipFields);
+  const fields = formulaPickableFields(
+    context.state.field(chipFields),
+    context.state.field(selfFieldIdState)
+  );
   const valueTypes = fieldValueTypes(fields);
   const expected = expectedArgumentType(doc, scopeStart);
   const options: Completion[] = fields.map((field) =>
@@ -1873,7 +1979,10 @@ function formulaCompletionSource(
         options.push(userFunctionCompletion(def));
       }
     }
-    options.push(...keywordCompletions(expected), ...scopeRootCompletions());
+    options.push(
+      ...keywordCompletions(expected),
+      ...scopeRootCompletions(thisRowInScope)
+    );
     if (context.state.field(chipDatabases).length > 0) {
       options.push(dbRootCompletion());
     }
@@ -2148,6 +2257,7 @@ export function FormulaCodeEditor({
   onChipTap,
   onSubmit,
   placeholder,
+  selfFieldId,
   value,
 }: FormulaCodeEditorProps): ReactNode {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -2165,6 +2275,8 @@ export function FormulaCodeEditor({
   const valueRef = useRef(value);
   /** Latest schema, read at (re)create time to seed the chip state field. */
   const fieldsRef = useRef(fields);
+  /** Latest self-field id, read at (re)create time to seed its state field. */
+  const selfFieldIdRef = useRef(selfFieldId);
   /** Latest databases, read at (re)create time to seed the db-chip field. */
   const databasesRef = useRef(databases);
   /** Latest check context, read at (re)create time to seed its state field. */
@@ -2181,6 +2293,12 @@ export function FormulaCodeEditor({
     fieldsRef.current = fields;
     viewRef.current?.dispatch({ effects: setChipFields.of(fields) });
   }, [fields]);
+
+  // Push the edited-column id so autocomplete omits it without recreating.
+  useEffect(() => {
+    selfFieldIdRef.current = selfFieldId;
+    viewRef.current?.dispatch({ effects: setSelfFieldId.of(selfFieldId) });
+  }, [selfFieldId]);
 
   // Push database-list changes in so open db chips relabel live too.
   useEffect(() => {
@@ -2289,6 +2407,7 @@ export function FormulaCodeEditor({
           }),
           formulaHighlighter,
           chipFields.init(() => fieldsRef.current),
+          selfFieldIdState.init(() => selfFieldIdRef.current),
           chipDatabases.init(() => databasesRef.current),
           checkContextState.init(() => checkContextRef.current),
           hoverScopeState.init(() => hoverScopeRef.current),

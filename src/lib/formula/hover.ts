@@ -310,7 +310,7 @@ export function formulaHoverAt(
   offset: number,
   options: FormulaHoverOptions
 ): FormulaHoverInfo | null {
-  const parsed = parseFormula(source);
+  const parsed = parseFormula(source, options.context);
   if (!parsed.ok) {
     return null;
   }

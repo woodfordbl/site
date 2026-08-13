@@ -66,6 +66,15 @@ describe("evaluateInlineTokens", () => {
     expect(result.values.get(0)).toBe("Weekly notes");
   });
 
+  it("treats thisRow as an unknown name on an ordinary page", () => {
+    const result = evaluateInlineTokens(
+      [formulaTokenMark(0, "thisRow")],
+      SCOPE,
+      { ...CONTEXT, thisRowInScope: false }
+    );
+    expect(result.values.get(0)).toContain('Unknown name "thisRow"');
+  });
+
   it("keys values by the mark's start offset", () => {
     const result = evaluate([
       formulaTokenMark(0, '"a"'),

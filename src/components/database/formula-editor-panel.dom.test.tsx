@@ -105,6 +105,7 @@ const USER_FN_ARITY_AT_RE =
   /weightedScore\(\) expects 2 arguments, got 1.*\(at character \d+\)/;
 const USER_FN_BROKEN_AT_RE =
   /The custom function "brokenFn" has an error.*\(at character \d+\)/;
+const THIS_ROW_UNKNOWN_AT_RE = /Unknown name "thisRow".*\(at character/;
 const ROLLUP_TITLE_RE = /Rollup: /;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
@@ -201,7 +202,8 @@ describe("FormulaEditorPanel", () => {
     await flushFrames();
 
     // v2: formula fields are insertable references too (formulas may
-    // reference other formulas; a self-reference surfaces as a cycle error).
+    // reference other formulas). The column being edited is omitted from
+    // pickers; a hand-typed self-reference still surfaces as a cycle error.
     expect(screen.getByText("Total")).toBeDefined();
 
     const textarea = screen.getByLabelText("Formula expression");
@@ -210,6 +212,23 @@ describe("FormulaEditorPanel", () => {
 
     fireEvent.change(textarea, { target: { value: "1 +" } });
     expect(screen.getByText(PARSE_ERROR_RE)).toBeDefined();
+  });
+
+  it("omits the column being edited from the Properties list", async () => {
+    render(
+      <FormulaEditorPanel
+        expression=""
+        fields={FIELDS}
+        onSave={vi.fn()}
+        previewRows={PREVIEW_ROWS}
+        selfFieldId="f-total"
+      />
+    );
+    await flushFrames();
+
+    expect(screen.queryByText("Total")).toBeNull();
+    expect(screen.getByText("Price")).toBeDefined();
+    expect(screen.getByText("Unit Count")).toBeDefined();
   });
 
   it("hands the field-id canonical draft to onSave", async () => {
@@ -259,6 +278,23 @@ describe("FormulaEditorPanel", () => {
     expect(save.hasAttribute("disabled")).toBe(false);
     fireEvent.click(save);
     expect(onSave).toHaveBeenCalledWith("abs(-2)");
+  });
+
+  it("treats thisRow as an unknown name when it is not in scope", async () => {
+    render(
+      <FormulaEditorPanel
+        expression=""
+        fields={FIELDS}
+        onSave={vi.fn()}
+        previewRows={PREVIEW_ROWS}
+        thisRowInScope={false}
+      />
+    );
+    await flushFrames();
+
+    const textarea = screen.getByLabelText("Formula expression");
+    fireEvent.change(textarea, { target: { value: "thisRow" } });
+    expect(screen.getByText(THIS_ROW_UNKNOWN_AT_RE)).toBeDefined();
   });
 
   it("humanizes stored canonical expressions into the draft", async () => {
@@ -1100,7 +1136,8 @@ describe("FormulaEditorPanel", () => {
     function renderMenu(
       tap: Partial<
         NonNullable<Parameters<typeof FormulaChipMenu>[0]["tap"]>
-      > = {}
+      > = {},
+      selfFieldId?: string
     ) {
       const onClose = vi.fn();
       const onPickDatabase = vi.fn();
@@ -1114,6 +1151,7 @@ describe("FormulaEditorPanel", () => {
           onPickDatabase={onPickDatabase}
           onPickProperty={onPickProperty}
           onRemove={onRemove}
+          selfFieldId={selfFieldId}
           tap={{
             anchor: document.createElement("span"),
             from: 0,
@@ -1163,6 +1201,25 @@ describe("FormulaEditorPanel", () => {
         id: "f-qty",
         name: "Unit Count",
       });
+    });
+
+    it("omits the column being edited from Change property", async () => {
+      renderMenu({}, "f-total");
+
+      const drawer = await waitFor(() => {
+        const element = document.querySelector("[data-slot='drawer-content']");
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      fireEvent.click(
+        within(drawer).getByRole("button", { name: "Change property" })
+      );
+      expect(
+        within(drawer).queryByRole("button", { name: "Total" })
+      ).toBeNull();
+      expect(
+        within(drawer).getByRole("button", { name: "Price" })
+      ).toBeDefined();
     });
 
     it("offers Change database for db-chip taps and reports the pick", async () => {

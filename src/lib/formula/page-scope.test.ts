@@ -95,6 +95,18 @@ describe("pageFormulaCheckProperties", () => {
     expect(result.diagnostics.length).toBeGreaterThan(0);
   });
 
+  it("treats thisRow as an unknown name, not a page scope root", () => {
+    const parsed = parseFormula("thisRow", { thisRowInScope: false });
+    if (!parsed.ok) {
+      throw new Error("Test setup: should parse");
+    }
+    const result = checkFormula(parsed.ast, {
+      properties: pageFormulaCheckProperties(),
+      thisRowInScope: false,
+    });
+    expect(result.diagnostics[0]?.message).toBe('Unknown name "thisRow"');
+  });
+
   it("agrees with the scope about which names exist", () => {
     for (const property of pageFormulaCheckProperties()) {
       expect(isBasePageField(property.name)).toBe(true);

@@ -4,6 +4,7 @@ import {
   computeFormulaOverlay,
   formulaCellErrorDisplay,
   formulaDisplayInfo,
+  formulaPickableFields,
   hasVolatileFormula,
   withFormulaValues,
 } from "@/lib/databases/formula-values.ts";
@@ -394,6 +395,24 @@ describe("formulaDisplayInfo", () => {
     const broken = formulaDisplayInfo(formulaField("f", "1 +"));
     expect(typeof broken.parseError).toBe("string");
     expect(broken.parseError?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("formulaPickableFields", () => {
+  const total = formulaField("f-total", "thisPage.Price * 2");
+
+  it("omits the column being edited so it cannot reference itself", () => {
+    expect(
+      formulaPickableFields([nameField, priceField, total], "f-total").map(
+        (field) => field.id
+      )
+    ).toEqual(["f-name", "f-price"]);
+  });
+
+  it("leaves the list unchanged when no column is being edited", () => {
+    const fields = [nameField, priceField, total];
+    expect(formulaPickableFields(fields, undefined)).toEqual(fields);
+    expect(formulaPickableFields(fields, null)).toEqual(fields);
   });
 });
 

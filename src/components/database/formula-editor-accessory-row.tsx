@@ -208,20 +208,23 @@ function PickerEmpty(): ReactNode {
 
 /**
  * Property picker drawer: mirrors the panel reference list's Properties
- * section (every field, formulas included — formulas may reference other
- * formulas). Tap inserts through the panel's `insertPropertyReference` path
- * (canonical `prop("<id>")` on the CM6 surface) and closes the drawer.
+ * section (every field except the column being edited — formulas may
+ * reference other formulas, not themselves). Tap inserts through the
+ * panel's `insertPropertyReference` path (canonical `prop("<id>")` on the
+ * CM6 surface) and closes the drawer.
  */
 function PropertyPickerDrawer({
   fields,
   onOpenChange,
   onPick,
   open,
+  selfFieldId,
 }: {
   fields: readonly DatabaseField[];
   onOpenChange: (open: boolean) => void;
   onPick: (field: DatabaseField) => void;
   open: boolean;
+  selfFieldId: string | undefined;
 }): ReactNode {
   const haptic = useHaptics();
   const [query, setQuery] = useState("");
@@ -232,8 +235,9 @@ function PropertyPickerDrawer({
     onOpenChange(next);
   };
   const normalized = query.trim().toLowerCase();
-  const matches = fields.filter((field) =>
-    field.name.toLowerCase().includes(normalized)
+  const matches = fields.filter(
+    (field) =>
+      field.id !== selfFieldId && field.name.toLowerCase().includes(normalized)
   );
   return (
     <PickerDrawer
@@ -353,6 +357,11 @@ export interface FormulaEditorAccessoryRowProps {
   onInsertFunction: (entry: FormulaFunctionEntry) => void;
   /** The panel's per-surface property insertion (canonical on CM6). */
   onInsertProperty: (field: DatabaseField) => void;
+  /**
+   * Field id of the formula column being edited. Omitted from the property
+   * picker so the column cannot insert a reference to itself.
+   */
+  selfFieldId?: string;
 }
 
 /** The keyboard accessory row + its two picker drawers (see module docs). */
@@ -361,6 +370,7 @@ export function FormulaEditorAccessoryRow({
   onInsertAtCaret,
   onInsertFunction,
   onInsertProperty,
+  selfFieldId,
 }: FormulaEditorAccessoryRowProps): ReactNode {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
@@ -444,6 +454,7 @@ export function FormulaEditorAccessoryRow({
         }}
         onPick={onInsertProperty}
         open={pickerMode === "property"}
+        selfFieldId={selfFieldId}
       />
       <FunctionPickerDrawer
         onOpenChange={(open) => {

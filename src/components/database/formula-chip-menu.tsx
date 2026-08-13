@@ -131,18 +131,22 @@ function ChipMenuOptions({
 }
 
 /**
- * The Change-property list: every schema field with its type/custom icon,
- * the currently referenced one check-marked. Picking a field reports it up
- * (the host splices the canonical reference over the chip's span).
+ * The Change-property list: every schema field with its type/custom icon
+ * except the column being edited (`selfFieldId` — a formula cannot pick
+ * itself), the currently referenced one check-marked. Picking a field
+ * reports it up (the host splices the canonical reference over the chip's
+ * span).
  */
 function ChipMenuPropertyList({
   currentFieldId,
   fields,
   onPick,
+  selfFieldId,
 }: {
   currentFieldId: string | undefined;
   fields: readonly DatabaseField[];
   onPick: (field: DatabaseField) => void;
+  selfFieldId: string | undefined;
 }): ReactNode {
   const haptic = useHaptics();
   return (
@@ -150,27 +154,29 @@ function ChipMenuPropertyList({
       <div className="px-2 pt-1 pb-1 font-medium text-muted-foreground text-xs">
         Change property to
       </div>
-      {fields.map((field, index) => {
-        const FieldIcon = resolveFieldIcon(field);
-        return (
-          <button
-            className={chipMenuRowClassName}
-            key={field.id}
-            onClick={() => {
-              haptic("selection");
-              onPick(field);
-            }}
-            ref={index === 0 ? focusOnMount : undefined}
-            type="button"
-          >
-            <FieldIcon className={chipMenuIconClassName} />
-            <span className="min-w-0 flex-1 truncate">{field.name}</span>
-            {field.id === currentFieldId ? (
-              <IconCheck className={chipMenuIconClassName} />
-            ) : null}
-          </button>
-        );
-      })}
+      {fields
+        .filter((field) => field.id !== selfFieldId)
+        .map((field, index) => {
+          const FieldIcon = resolveFieldIcon(field);
+          return (
+            <button
+              className={chipMenuRowClassName}
+              key={field.id}
+              onClick={() => {
+                haptic("selection");
+                onPick(field);
+              }}
+              ref={index === 0 ? focusOnMount : undefined}
+              type="button"
+            >
+              <FieldIcon className={chipMenuIconClassName} />
+              <span className="min-w-0 flex-1 truncate">{field.name}</span>
+              {field.id === currentFieldId ? (
+                <IconCheck className={chipMenuIconClassName} />
+              ) : null}
+            </button>
+          );
+        })}
     </div>
   );
 }
@@ -243,6 +249,11 @@ export interface FormulaChipMenuProps {
   onPickProperty: (field: DatabaseField) => void;
   /** Delete: remove the tap's whole canonical span. */
   onRemove: () => void;
+  /**
+   * Field id of the formula column being edited. Omitted from Change
+   * property so the column cannot swap a chip to itself.
+   */
+  selfFieldId?: string;
   /** The active chip tap; `null` renders the menu closed. */
   tap: FormulaChipTap | null;
 }
@@ -253,12 +264,19 @@ function chipMenuContent(
   props: FormulaChipMenuProps,
   onExpand: () => void
 ): ReactNode {
-  const { databases, fields, onPickDatabase, onPickProperty, tap } = props;
+  const {
+    databases,
+    fields,
+    onPickDatabase,
+    onPickProperty,
+    selfFieldId,
+    tap,
+  } = props;
   const database = tap?.kind === "database";
   if (mode === "options") {
     const changeable = database
       ? (databases?.length ?? 0) > 0 && onPickDatabase !== undefined
-      : fields.length > 0;
+      : fields.some((field) => field.id !== selfFieldId);
     return (
       <ChipMenuOptions
         changeLabel={database ? "Change database" : "Change property"}
@@ -281,6 +299,7 @@ function chipMenuContent(
       currentFieldId={tap?.refId}
       fields={fields}
       onPick={onPickProperty}
+      selfFieldId={selfFieldId}
     />
   );
 }
