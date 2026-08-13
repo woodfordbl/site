@@ -117,12 +117,17 @@ point confirms first:
 |-------------|--------------|
 | Sidebar row ⋯ / right-click (workspace **Databases** section and hosted rows) | [`DeleteDatabaseConfirmDialog`](../../src/components/pages/delete-database-confirm-dialog.tsx); navigates home when the deleted hub was active |
 | Database ⋯ settings menu → **Delete database** | Two-step menu item |
-| Canvas `database` block — gutter menu Delete, mobile actions drawer, Delete/Backspace on a selected block | [`DatabaseBlockDeleteDialog`](../../src/components/canvas/database-block-delete-dialog.tsx) |
+| Canvas `database` block — gutter menu Delete, mobile actions drawer, Delete/Backspace on a selected block **with no table rows selected** | [`DatabaseBlockDeleteDialog`](../../src/components/canvas/database-block-delete-dialog.tsx) |
 
 Canvas deletes are intercepted in
 [`page-canvas-editor.tsx`](../../src/components/canvas/page-canvas-editor.tsx),
 which wraps both `deleteRow` and `deleteSelection` — the same seam the nested
-`pageLink` "Delete page?" confirmation uses.
+`pageLink` "Delete page?" confirmation uses. Delete/Backspace on a selected
+`database` block first asks
+[`tryDeleteSelectedDatabaseTableRows`](../../src/lib/databases/database-table-row-selection.ts)
+(using [`collectNestedCanvasRowIds`](../../src/lib/databases/resolve-database-block-deletion.ts)
+so a selected `columns` container still finds the nested table); if that table
+has gutter-selected rows, those rows are deleted and the block stays.
 [`resolveDeletedDatabaseIds`](../../src/lib/databases/resolve-database-block-deletion.ts)
 walks the rows about to be removed **and everything nested under them** (a
 selected `columns` container can hold a linked view) and returns the distinct
@@ -218,14 +223,28 @@ URLs already render a not-found shell once the definition is gone.
   is geometrically clipped by horizontal scroll, a floating peek overlay
   (`SelectColumnPeekLayer` — popover surface) appears on lane hover or while any
   row is selected; header select-all is always visible in the peek. Shift+click
-  toggled visible row; selection is session state on the grid mount (cleared on
-  database/view change). Selected rows use `bg-muted/40`. Right-click opens
+  ranges the inclusive visible row and does not select the canvas database
+  block (`data-canvas-shift-select-ignore` on the select lane, including header
+  select-all and the peek overlay — `CanvasRowShell` skips those presses).
+  Selection is session state on the grid mount (cleared on
+  database/view change). Selected rows use `bg-muted/40`. **Delete / Backspace**
+  with one or more rows selected (focus in the table, or the canvas `database`
+  block selected as a side effect) deletes those **database rows** immediately —
+  no confirm dialog — via [`deleteDatabaseRowsUndoable`](../../src/lib/databases/database-row-edit-history.ts)
+  (`deleteDatabaseRows` / `deleteLiveMarketRows` under the hood; synced
+  `externalId` rows skipped). Mod+Z / Mod+Shift+Z restore or re-delete them
+  (session undo; canvas Ctrl+Z picks whichever domain recorded the more recent
+  edit: `database-rows` vs `database-view` vs `page-blocks`). Deleting the
+  canvas `database` **block** (gutter selected, no table rows selected) still
+  confirms and cascades as above. Escape clears table row selection (first Esc
+  when rows are selected; a second Esc can then clear canvas block selection).
+  Right-click opens
   [`database-row-menu.tsx`](../../src/components/database/database-row-menu.tsx)
   (solo-selects if the target was not already selected): Open, Change icon /
   Favorites (materialize the row page via
   [`ensureDatabaseRowPage`](../../src/lib/databases/materialize-row-page.ts) with
   `navigate: false`, then `PageIconPicker` / `toggleFavorite`), Duplicate /
-  Delete in edit mode (`duplicateDatabaseRows` / `deleteDatabaseRows` — synced
+  Delete in edit mode (`duplicateDatabaseRows` / `deleteDatabaseRowsUndoable` — synced
   `externalId` rows skipped). **Header right-click** opens the existing column
   dropdown (imperative `openMenuRef` on `DatabaseColumnMenu`; ignored while
   dragging).
@@ -270,11 +289,14 @@ URLs already render a not-found shell once the definition is gone.
   cells keep the borderless input.
 - [`database-column-menu.tsx`](../../src/components/database/database-column-menu.tsx) —
   Column property menu: rename, Edit property (per-type config incl. select-option
-  rename/add/delete and color via the shared block-color palette,
+  rows as `InputGroup` chrome — leading color-swatch submenu, name field, trailing
+  delete — plus add, with color from the shared block-color palette,
   [`database-option-color-menu.tsx`](../../src/components/database/database-option-color-menu.tsx)),
   Change type, Change/Remove icon (shared `GlyphIconPicker`, intent-preloaded), Sort
-  (multi-key append/toggle/flip with 1-based priority numbers), Calculate picker, Freeze
-  up to column, Hide, Wrap, Show page icon (primary column only — same `showPageIcons`
+  (multi-key append/toggle/flip with 1-based priority numbers), Calculate picker
+  (active aggregate label shown muted inline on the trigger, left of the submenu
+  chevron; omitted when the column has no calculation), Freeze up to column, Hide,
+  Wrap, Show page icon (primary column only — same `showPageIcons`
   view config as the ⋯ menu), Insert left/right, Duplicate/Delete (primary-field guarded).
   `DropdownMenuLabel` must sit inside `DropdownMenuGroup` (Base UI context — naked labels
   crash at render).
@@ -317,11 +339,14 @@ URLs already render a not-found shell once the definition is gone.
   ([`database-sync-status-chip.tsx`](../../src/components/database/database-sync-status-chip.tsx));
   no row-count label (counts live in the settings menu's stats footer / Source section),
   and the ⋯ [`database-settings-menu.tsx`](../../src/components/database/database-settings-menu.tsx):
-  rename, Properties (each row: a left grip that drag-reorders the schema via
+  rename, Properties (each non-primary row: a left grip that drag-reorders the schema via
   `reorderDatabaseFields` — pointer-based, works in the popover and the touch drawer, see
-  [`use-list-reorder.ts`](../../src/components/database/use-list-reorder.ts) — the field
-  name with a Title badge beside the primary field, and hide/show + delete
-  (`removeDatabaseField`) controls on non-primary rows), Views
+  [`use-list-reorder.ts`](../../src/components/database/use-list-reorder.ts) — plus
+  hide/show and delete (`removeDatabaseField`). The primary field stays first — it is
+  the row-page title, so it has no grip — and cannot be hidden or deleted; hovering its
+  name shows "Title properties cannot be hidden or removed". The row-page Properties ⋯
+  menu uses the same rules via
+  [`database-properties-list.tsx`](../../src/components/database/database-properties-list.tsx)), Views
   (inline rename with icon picker — optional `view.icon`, else type glyph; per-view
   Duplicate — `duplicateDatabaseView`, "<name> copy" activated on create — and Delete,
   disabled on the last view and refused at the op level by `removeDatabaseView`; plus the
@@ -520,18 +545,21 @@ database's live rows for whole-database `db("…")` references:
   plus a result-type badge from the static checker) and a live first-row preview, over
   a searchable Properties / Functions / Operators reference (docs sourced from the
   typed catalog, [`catalog.ts`](../../src/lib/formula/catalog.ts)) that inserts at the
-  caret, plus an explicit Save; broken expressions show a warning badge on the column
-  header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
+  caret, plus an explicit Save; the column being edited is omitted from every
+  property picker so a formula cannot reference itself (a hand-typed self-reference
+  still evaluates as a named cycle). Broken expressions show a warning badge on the
+  column header (`formulaDisplayInfo`). Save is blocked only by parse errors — checker
   diagnostics warn but save (cells degrade per row, never crash); error positions
   index the DISPLAY text the user sees, not the canonical draft. On fine pointers the
   input is a lazy-loaded CodeMirror 6 editor with tokenizer-driven syntax highlighting,
-  atomic schema-labeled property chips over the canonical `prop("<id>")` text, and a
+  atomic schema-labeled property chips (field-type icon + current name) over the
+  canonical `prop("<id>")` text, and a
   fused type-aware autocomplete (properties + functions + keywords in one ranked list)
   ([formula-language — Editor panel](./formula-language.md#editor-panel)); coarse
   pointers keep a plain textarea.
 - **Id-canonical references** — stored expressions reference fields by id
   (`prop("<fieldId>")`), so field renames never break formulas; the CM6 editor shows
-  each reference as a chip labeled with the field's current name, while the textarea
+  each reference as a chip with the field-type icon and the field's current name, while the textarea
   path humanizes to `thisPage.Name` for display and re-canonicalizes on change; a
   startup migration rewrites legacy name-form expressions
   ([formula-language — Property references](./formula-language.md#property-references-id-canonical)).
@@ -743,7 +771,8 @@ property row), type `#` for the formula builder under the caret (Save inserts an
 inline formula token whose Properties list includes the database's fields plus
 base page fields — Title / Created at / Updated at — via
 [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts);
-Escape leaves `#` so markdown headings still work), or type
+`thisRow` is a synonym of `thisPage` here and appears in autocomplete, unlike
+ordinary pages; Escape leaves `#` so markdown headings still work), or type
 `@` to mention a page inline. Live inline tokens on the template and on seeded
 row pages evaluate against the same layered `thisPage` scope (template preview
 uses `rowDefaults`; row pages use the open row's values). Mustache `{{ … }}`
@@ -769,7 +798,8 @@ template whose database has only the primary field (no band) keep the ordinary
 title-text alignment; narrow viewports are flush either way (the title indent is
 `md:` only). Row-page show/hide writes
 `database.rowPropertiesVisibleFieldIds` (DB-wide, independent of per-view
-`visibleFieldIds`). Database rename + hub subtree slug cascade live in
+`visibleFieldIds`; the Properties ⋯ list never offers hide/delete/reorder on the
+primary field — see Properties under the ⋯ settings menu above). Database rename + hub subtree slug cascade live in
 [`database-page-ops.ts`](../../src/db/queries/database-page-ops.ts) (re-exported
 from collection ops). Table primary cells and row pages share
 `resolveDatabaseRowIcon` (`row.icon` → template icon → `DEFAULT_PAGE_ICON`).

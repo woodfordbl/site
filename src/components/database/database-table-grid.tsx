@@ -15,6 +15,7 @@ import {
   useVirtualizer,
 } from "@tanstack/react-virtual";
 import {
+  type KeyboardEvent,
   memo,
   type ReactNode,
   useCallback,
@@ -58,6 +59,7 @@ import {
   type GridColumn,
   type GridItem,
   isCheckboxColumnHeaderCompact,
+  isDatabaseGridTypingTarget,
   isInlineEditableField,
   isPointerInSelectLaneZone,
   isSelectColumnCoveredByClip,
@@ -70,6 +72,7 @@ import {
   ROW_SELECT_COLUMN_ID,
   type RowSelectDisplay,
   resolveColumnWidthPx,
+  resolveDatabaseTableSelectionKey,
   resolveGridBleedMetrics,
   resolveRowSelectDisplay,
   rowSelectLeadingWidthPx,
@@ -99,7 +102,9 @@ import {
   blockSelectionLaneUnderlayClassName,
   blockSelectionSurfaceProps,
 } from "@/lib/canvas/block-selection-surface.ts";
+import { deleteDatabaseRowsUndoable } from "@/lib/databases/database-row-edit-history.ts";
 import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
+import { registerDatabaseTableRowSelection } from "@/lib/databases/database-table-row-selection.ts";
 import { createDatabaseField } from "@/lib/databases/field-defs.ts";
 import { applyFilter } from "@/lib/databases/row-filter.ts";
 import type { DatabaseRowGroup } from "@/lib/databases/row-group.ts";
@@ -340,6 +345,12 @@ function useSelectColumnPeekState(
 }
 
 interface DatabaseTableGridProps {
+  /**
+   * Canvas `database` block row id when this grid is embedded. Used so
+   * Delete/Backspace on a gutter-selected block prefers selected table rows
+   * over deleting the block. Absent on hub pages.
+   */
+  canvasRowId?: string;
   /** Visible fields in display order (`resolveColumnOrder`). */
   columns: readonly DatabaseField[];
   databaseId: string;
@@ -382,6 +393,7 @@ interface DatabaseTableGridProps {
 
 /** Virtualized grid for one database table view. */
 export function DatabaseTableGrid({
+  canvasRowId,
   columns,
   databaseId,
   fillHeight = false,
@@ -862,6 +874,61 @@ export function DatabaseTableGrid({
     lastToggledRowIdRef.current = null;
   }, []);
 
+  const deleteSelectedRows = useCallback((): boolean => {
+    if (mode !== "edit" || selectedRowIds.length === 0) {
+      return false;
+    }
+    const deleted = deleteDatabaseRowsUndoable(selectedRowIds);
+    if (deleted) {
+      clearSelection();
+    }
+    return deleted;
+  }, [clearSelection, mode, selectedRowIds]);
+
+  const selectedRowIdsRef = useRef(selectedRowIds);
+  selectedRowIdsRef.current = selectedRowIds;
+  const deleteSelectedRowsRef = useRef(deleteSelectedRows);
+  deleteSelectedRowsRef.current = deleteSelectedRows;
+
+  useEffect(
+    () =>
+      registerDatabaseTableRowSelection({
+        canvasRowId: canvasRowId ?? null,
+        deleteSelectedRows: () => deleteSelectedRowsRef.current(),
+        getSelectedRowIds: () => selectedRowIdsRef.current,
+      }),
+    [canvasRowId]
+  );
+
+  const handleGridKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      const action = resolveDatabaseTableSelectionKey(event, {
+        editing: editing !== null,
+        isTypingTarget: isDatabaseGridTypingTarget(event.target),
+        mode,
+        selectedCount: selectedRowIds.length,
+      });
+      if (action === null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      switch (action) {
+        case "clear-selection":
+          clearSelection();
+          break;
+        case "delete-rows":
+          deleteSelectedRows();
+          break;
+        default: {
+          const _exhaustive: never = action;
+          throw new Error(`Unhandled table selection key: ${_exhaustive}`);
+        }
+      }
+    },
+    [clearSelection, deleteSelectedRows, editing, mode, selectedRowIds.length]
+  );
+
   const groupByFieldId = view.groupBy?.fieldId;
   const canAddRow = mode === "edit" && (!isSyncedDatabase || isLiveMarkets);
   const handleAddRowToGroup = useCallback(
@@ -965,6 +1032,7 @@ export function DatabaseTableGrid({
               aria-colcount={gridColumns.length + 1}
               aria-rowcount={items.length + 1}
               className="relative"
+              onKeyDown={handleGridKeyDown}
               ref={gridRef}
               role="grid"
               style={
@@ -1179,6 +1247,11 @@ export function DatabaseTableGrid({
   );
 }
 
+/** Keep table row-select presses off the canvas block Shift+click path. */
+function isolateRowSelectPointer(event: React.PointerEvent<HTMLElement>): void {
+  event.stopPropagation();
+}
+
 function GridSelectionHeaderCell({
   allSelected,
   onCheckedChange,
@@ -1204,6 +1277,8 @@ function GridSelectionHeaderCell({
         selectColumnPinnedClass(selectColumnPinned),
         showPeek && "pointer-events-none"
       )}
+      data-canvas-shift-select-ignore=""
+      onPointerDown={isolateRowSelectPointer}
       ref={ref}
       role="columnheader"
       style={{ width: SELECTION_COLUMN_WIDTH_PX }}
@@ -1656,6 +1731,8 @@ const GridRow = memo(function GridRowInner({
         isSelected && "bg-muted/40",
         showPeek && "pointer-events-none"
       )}
+      data-canvas-shift-select-ignore=""
+      onPointerDown={isolateRowSelectPointer}
       role="gridcell"
       style={{ width: SELECTION_COLUMN_WIDTH_PX }}
     >

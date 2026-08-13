@@ -51,6 +51,11 @@ import { cn } from "@/lib/utils.ts";
 
 /** Props contract for the database surface rendered by `database` blocks. */
 export interface DatabaseTableViewProps {
+  /**
+   * Canvas `database` block row id when this view is embedded. Forwarded to
+   * the table grid so Delete prefers selected rows over the canvas block.
+   */
+  canvasRowId?: string;
   databaseId: string;
   /**
    * Full-page hosts (database hub pages): the table view flexes to the host's
@@ -295,6 +300,7 @@ function resolveInlineFilterBarState(
 }
 
 interface DatabaseViewBodyProps {
+  canvasRowId?: string;
   clockNow: Date;
   columns: DatabaseField[];
   database: NonNullable<ReturnType<typeof useDatabase>>;
@@ -311,6 +317,7 @@ interface DatabaseViewBodyProps {
 
 /** Per-type view body below the title row and optional filter chip bar. */
 function DatabaseViewBody({
+  canvasRowId,
   clockNow,
   columns,
   database,
@@ -359,6 +366,7 @@ function DatabaseViewBody({
   }
   return (
     <DatabaseTableGrid
+      canvasRowId={canvasRowId}
       columns={columns}
       databaseId={databaseId}
       fillHeight={fillHeight}
@@ -386,6 +394,7 @@ function DatabaseViewBody({
  * list/board/chart renderers — under the shared title row + view switcher.
  */
 export function DatabaseTableView({
+  canvasRowId,
   databaseId,
   fillHeight = false,
   hideTitle = false,
@@ -605,6 +614,7 @@ export function DatabaseTableView({
         />
       ) : null}
       <DatabaseViewBody
+        canvasRowId={canvasRowId}
         clockNow={clockNow}
         columns={columns}
         database={database}

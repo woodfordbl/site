@@ -1,5 +1,11 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +17,8 @@ import type {
   DatabaseView,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+
+const deleteDatabaseRowsUndoable = vi.hoisted(() => vi.fn(() => true));
 
 /**
  * Grid-level tests for per-group aggregates (P5.5): a grouped view with
@@ -86,6 +94,9 @@ vi.mock("@/db/queries/database-collection-ops.ts", () => ({
   updateDatabaseCell: vi.fn(),
   updateDatabaseView: vi.fn(),
 }));
+vi.mock("@/lib/databases/database-row-edit-history.ts", () => ({
+  deleteDatabaseRowsUndoable,
+}));
 vi.mock("@/lib/toast/app-toast.ts", () => ({
   appToast: { info: vi.fn() },
 }));
@@ -128,7 +139,10 @@ beforeAll(() => {
     }) as DOMRect;
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  deleteDatabaseRowsUndoable.mockClear();
+});
 
 const fields: DatabaseField[] = [
   { id: "f-title", name: "Name", type: "text" },
@@ -249,5 +263,130 @@ describe("DatabaseTableGrid per-group aggregates", () => {
     expect(screen.getAllByText("Sum")).toHaveLength(2);
     expect(screen.getByText("8")).toBeDefined();
     expect(screen.getByText("17")).toBeDefined();
+  });
+});
+
+describe("DatabaseTableGrid row-select column", () => {
+  it("marks select-all and row checkboxes so canvas Shift+click ignores them", () => {
+    renderGrid(
+      makeView({
+        groupBy: undefined,
+        config: { rowSelectDisplay: "always" },
+      }),
+      false
+    );
+    const selectAll = screen.getByRole("checkbox", { name: "Select all rows" });
+    expect(
+      selectAll.closest("[data-canvas-shift-select-ignore]")
+    ).not.toBeNull();
+    const rowCheckbox = screen.getAllByRole("checkbox", {
+      name: "Select row",
+    })[0];
+    expect(
+      rowCheckbox.closest("[data-canvas-shift-select-ignore]")
+    ).not.toBeNull();
+  });
+
+  it("stops select-column pointerdown from bubbling to canvas ancestors", () => {
+    const onPointerDown = vi.fn();
+    render(
+      <div onPointerDown={onPointerDown}>
+        <DatabaseTableGrid
+          columns={fields}
+          databaseId="db-1"
+          groups={null}
+          mode="view"
+          now={new Date("2026-07-13T12:00:00.000Z")}
+          pinnedFields={[]}
+          primaryFieldId="f-title"
+          rows={rows}
+          view={makeView({
+            groupBy: undefined,
+            config: { rowSelectDisplay: "always" },
+          })}
+        />
+      </div>
+    );
+    fireEvent.pointerDown(
+      screen.getByRole("checkbox", { name: "Select all rows" }),
+      { button: 0, shiftKey: true }
+    );
+    fireEvent.pointerDown(
+      screen.getAllByRole("checkbox", { name: "Select row" })[0],
+      { button: 0, shiftKey: true }
+    );
+    expect(onPointerDown).not.toHaveBeenCalled();
+  });
+});
+
+describe("DatabaseTableGrid selected-row delete", () => {
+  it("deletes selected rows on Delete without a confirm dialog", () => {
+    render(
+      <DatabaseTableGrid
+        columns={fields}
+        databaseId="db-1"
+        groups={null}
+        mode="edit"
+        now={new Date("2026-07-13T12:00:00.000Z")}
+        pinnedFields={[]}
+        primaryFieldId="f-title"
+        rows={rows}
+        view={makeView({
+          groupBy: undefined,
+          config: { rowSelectDisplay: "always" },
+        })}
+      />
+    );
+    const checkbox = screen.getAllByRole("checkbox", { name: "Select row" })[0];
+    fireEvent.click(checkbox);
+    fireEvent.keyDown(checkbox, { key: "Delete" });
+
+    expect(deleteDatabaseRowsUndoable).toHaveBeenCalledWith(["r1"]);
+  });
+
+  it("does not delete rows when none are selected", () => {
+    render(
+      <DatabaseTableGrid
+        columns={fields}
+        databaseId="db-1"
+        groups={null}
+        mode="edit"
+        now={new Date("2026-07-13T12:00:00.000Z")}
+        pinnedFields={[]}
+        primaryFieldId="f-title"
+        rows={rows}
+        view={makeView({
+          groupBy: undefined,
+          config: { rowSelectDisplay: "always" },
+        })}
+      />
+    );
+    fireEvent.keyDown(screen.getByRole("grid"), { key: "Delete" });
+
+    expect(deleteDatabaseRowsUndoable).not.toHaveBeenCalled();
+  });
+
+  it("clears row selection on Escape", () => {
+    render(
+      <DatabaseTableGrid
+        columns={fields}
+        databaseId="db-1"
+        groups={null}
+        mode="edit"
+        now={new Date("2026-07-13T12:00:00.000Z")}
+        pinnedFields={[]}
+        primaryFieldId="f-title"
+        rows={rows}
+        view={makeView({
+          groupBy: undefined,
+          config: { rowSelectDisplay: "always" },
+        })}
+      />
+    );
+    const checkbox = screen.getAllByRole("checkbox", { name: "Select row" })[0];
+    fireEvent.click(checkbox);
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    fireEvent.keyDown(checkbox, { key: "Escape" });
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
   });
 });

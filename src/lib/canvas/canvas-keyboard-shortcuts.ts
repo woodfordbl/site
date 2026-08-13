@@ -44,13 +44,21 @@ function isBlockFieldFocused(event?: KeyboardEvent): boolean {
 }
 
 /**
- * True when focus sits in an editable field that is NOT part of a canvas block
- * row (page title, dialogs, sidebar rename). Canvas undo/redo must skip these
- * and leave the keystroke to the browser's own default behavior.
+ * True when focus sits in a text-editing field that is NOT part of a canvas
+ * block row (page title, dialogs, sidebar rename). Canvas undo/redo must skip
+ * these and leave the keystroke to the browser's own default behavior.
+ * Checkboxes and radios are not native-undo targets, so session undo still
+ * runs when they are focused (table row selection, hub pages).
  */
 export function isNonCanvasEditableFocused(): boolean {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement)) {
+    return false;
+  }
+  if (
+    active instanceof HTMLInputElement &&
+    (active.type === "checkbox" || active.type === "radio")
+  ) {
     return false;
   }
   const editable =

@@ -2,9 +2,9 @@ import { IconDatabaseOff, IconHome } from "@tabler/icons-react";
 import { eq, useLiveQuery } from "@tanstack/react-db";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useCallback, useEffect, useRef } from "react";
-
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import { HubPageTitleSlot } from "@/components/database/hub-page-title-slot.tsx";
+import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
@@ -28,6 +28,18 @@ import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { isNonCanvasEditableFocused } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
+import {
+  getLastDatabaseRowEditRecordedAt,
+  tryRedoDatabaseRowEdit,
+  tryUndoDatabaseRowEdit,
+} from "@/lib/databases/database-row-edit-history.ts";
+import {
+  getLastDatabaseViewEditRecordedAt,
+  getLastSessionUndoKind,
+  tryRedoDatabaseViewEdit,
+  tryUndoDatabaseViewEdit,
+} from "@/lib/databases/database-view-edit-history.ts";
 import {
   ensureDatabaseHubContent,
   ensureDatabaseHubPage,
@@ -167,6 +179,50 @@ export function DatabaseHubPageWorkspace({
     },
     [database, pageId]
   );
+
+  // Hub pages have no canvas editor, so session undo for view options and
+  // row deletions is registered here. Text fields keep native undo.
+  useCommandHotkeys({
+    "undo-edit": (event) => {
+      if (isNonCanvasEditableFocused()) {
+        return;
+      }
+      const databaseRowsAt = getLastDatabaseRowEditRecordedAt();
+      const databaseViewAt = getLastDatabaseViewEditRecordedAt();
+      if (databaseRowsAt >= databaseViewAt && tryUndoDatabaseRowEdit()) {
+        event.preventDefault();
+        return;
+      }
+      if (tryUndoDatabaseViewEdit()) {
+        event.preventDefault();
+      }
+    },
+    "redo-edit": (event) => {
+      if (isNonCanvasEditableFocused()) {
+        return;
+      }
+      const undoKind = getLastSessionUndoKind();
+      switch (undoKind) {
+        case "database-rows":
+          if (tryRedoDatabaseRowEdit()) {
+            event.preventDefault();
+          }
+          break;
+        case "database-view":
+          if (tryRedoDatabaseViewEdit()) {
+            event.preventDefault();
+          }
+          break;
+        case "page-blocks":
+        case null:
+          break;
+        default: {
+          const _exhaustive: never = undoKind;
+          throw new Error(`Unhandled session undo kind: ${_exhaustive}`);
+        }
+      }
+    },
+  });
 
   if (!(page && source && database)) {
     return null;

@@ -10,6 +10,7 @@ import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
 import {
   ASSET_CLASS_EQUITY,
+  type LiveInstrument,
   MAX_LIVE_MARKET_INSTRUMENTS,
 } from "@/lib/connectors/live-markets.ts";
 import {
@@ -1532,6 +1533,101 @@ export function updateDatabaseSource(
     });
   });
 
+  commitDatabaseTransaction(tx);
+}
+
+function writeLiveMarketInstruments(
+  databaseId: string,
+  instruments: readonly LiveInstrument[],
+  timestamp: string
+): void {
+  localDatabasesCollection.update(databaseId, (draft) => {
+    if (draft.source?.kind !== "connector") {
+      return;
+    }
+    const prior = toPlain(draft.source) as ConnectorDatabaseSource;
+    draft.source = {
+      ...prior,
+      kind: "connector",
+      config: {
+        ...prior.config,
+        instruments: toPlain(instruments),
+      },
+    };
+    draft.updatedAt = timestamp;
+  });
+}
+
+/**
+ * Re-insert previously deleted rows (and optional live-market instruments).
+ * Session undo uses this; it does not record history.
+ * @see docs/architecture/databases.md
+ */
+export function restoreDatabaseRows(
+  rows: readonly LocalDatabaseRow[],
+  options?: {
+    liveMarket?: { databaseId: string; instruments: readonly LiveInstrument[] };
+  }
+): void {
+  const missing = rows.filter(
+    (row) => localDatabaseRowsCollection.get(row.id) === undefined
+  );
+  const liveMarket = options?.liveMarket;
+  if (missing.length === 0 && !liveMarket) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const row of missing) {
+      localDatabaseRowsCollection.insert(toPlain(row));
+    }
+    if (liveMarket) {
+      writeLiveMarketInstruments(
+        liveMarket.databaseId,
+        liveMarket.instruments,
+        timestamp
+      );
+    }
+  });
+  commitDatabaseTransaction(tx);
+}
+
+/**
+ * Replay a row deletion (session redo): delete by id, skipping missing keys,
+ * and optionally restore live-market instruments to the post-delete list.
+ * Does not record history and does not re-run live-market keep-one guards.
+ * @see docs/architecture/databases.md
+ */
+export function reapplyDatabaseRowDeletion(
+  rowIds: readonly string[],
+  options?: {
+    liveMarket?: { databaseId: string; instruments: readonly LiveInstrument[] };
+  }
+): void {
+  const existing = rowIds.filter(
+    (rowId) => localDatabaseRowsCollection.get(rowId) !== undefined
+  );
+  const liveMarket = options?.liveMarket;
+  if (existing.length === 0 && !liveMarket) {
+    return;
+  }
+
+  const timestamp = nowIso();
+  const tx = createDatabaseTransaction();
+  tx.mutate(() => {
+    for (const rowId of existing) {
+      localDatabaseRowsCollection.delete(rowId);
+    }
+    if (liveMarket) {
+      writeLiveMarketInstruments(
+        liveMarket.databaseId,
+        liveMarket.instruments,
+        timestamp
+      );
+    }
+  });
   commitDatabaseTransaction(tx);
 }
 

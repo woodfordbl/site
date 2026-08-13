@@ -22,6 +22,7 @@ function PeekCheckbox({
       className={className}
       onPointerDown={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         onPointerDown?.(event);
       }}
     />
@@ -72,6 +73,10 @@ export function SelectColumnPeekLayer({
     <>
       <div
         className="pointer-events-auto absolute top-0 left-0 z-40 flex items-center justify-center border-border border-r border-b bg-popover text-popover-foreground"
+        data-canvas-shift-select-ignore=""
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
         style={{
           width: SELECTION_COLUMN_WIDTH_PX,
           height: GRID_ROW_HEIGHT_PX,
@@ -115,8 +120,12 @@ export function SelectColumnPeekLayer({
                 "pointer-events-auto absolute flex items-center justify-center",
                 isSelected && "bg-muted/40"
               )}
+              data-canvas-shift-select-ignore=""
               data-reveal-group=""
               key={row.id}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
               style={{
                 top: rowTop,
                 height: virtualRow.size,
