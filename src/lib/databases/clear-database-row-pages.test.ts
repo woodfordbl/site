@@ -4,6 +4,7 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
 import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
 
 const mocks = vi.hoisted(() => ({
+  clearDatabaseRowPageLink: vi.fn(),
   clearDatabaseRowPageLinks: vi.fn(),
   rowState: [] as LocalDatabaseRow[],
 }));
@@ -17,11 +18,14 @@ vi.mock("@/db/collections/local-collections.ts", () => ({
 }));
 
 vi.mock("@/db/queries/database-collection-ops.ts", () => ({
+  clearDatabaseRowPageLink: mocks.clearDatabaseRowPageLink,
   clearDatabaseRowPageLinks: mocks.clearDatabaseRowPageLinks,
 }));
 
 import {
+  clearDatabaseRowPage,
   clearDatabaseRowPages,
+  isDatabaseRowPageMaterialized,
   listMaterializedDatabaseRowPageIds,
 } from "@/lib/databases/clear-database-row-pages.ts";
 
@@ -78,6 +82,79 @@ describe("listMaterializedDatabaseRowPageIds", () => {
     expect(listMaterializedDatabaseRowPageIds("db-1", [])).toEqual([
       "missing-page",
     ]);
+  });
+});
+
+describe("isDatabaseRowPageMaterialized", () => {
+  it("accepts either the row link or the page source marker", () => {
+    expect(isDatabaseRowPageMaterialized(row("r1", "db-1", "page-1"), [])).toBe(
+      true
+    );
+    expect(
+      isDatabaseRowPageMaterialized(row("r1", "db-1"), [
+        page("page-1", { databaseId: "db-1", rowId: "r1" }),
+      ])
+    ).toBe(true);
+    expect(isDatabaseRowPageMaterialized(row("r1", "db-1"), [])).toBe(false);
+  });
+});
+
+describe("clearDatabaseRowPage", () => {
+  it("deletes only the selected row page and clears only its link", () => {
+    const dispatchPage = vi.fn();
+    const target = row("r1", "db-1", "page-1");
+
+    expect(
+      clearDatabaseRowPage({
+        dispatchPage,
+        pages: [
+          page("page-1", { databaseId: "db-1", rowId: "r1" }),
+          page("page-2", { databaseId: "db-1", rowId: "r2" }),
+        ],
+        row: target,
+      })
+    ).toBe(true);
+
+    expect(dispatchPage).toHaveBeenCalledWith({
+      type: "page.delete",
+      pageId: "page-1",
+    });
+    expect(dispatchPage).toHaveBeenCalledTimes(1);
+    expect(mocks.clearDatabaseRowPageLink).toHaveBeenCalledWith("r1");
+    expect(mocks.clearDatabaseRowPageLinks).not.toHaveBeenCalled();
+  });
+
+  it("recovers a page id from its source marker when the row link is missing", () => {
+    const dispatchPage = vi.fn();
+
+    expect(
+      clearDatabaseRowPage({
+        dispatchPage,
+        pages: [page("page-1", { databaseId: "db-1", rowId: "r1" })],
+        row: row("r1", "db-1"),
+      })
+    ).toBe(true);
+
+    expect(dispatchPage).toHaveBeenCalledWith({
+      type: "page.delete",
+      pageId: "page-1",
+    });
+    expect(mocks.clearDatabaseRowPageLink).toHaveBeenCalledWith("r1");
+  });
+
+  it("does nothing when the row has no separate content", () => {
+    const dispatchPage = vi.fn();
+
+    expect(
+      clearDatabaseRowPage({
+        dispatchPage,
+        pages: [],
+        row: row("r1", "db-1"),
+      })
+    ).toBe(false);
+
+    expect(dispatchPage).not.toHaveBeenCalled();
+    expect(mocks.clearDatabaseRowPageLink).not.toHaveBeenCalled();
   });
 });
 

@@ -17,10 +17,10 @@ import {
  * evaluate against (`docs/proposals/inline-prose-tokens.md`).
  *
  * Every page carries a small set of base fields, so `{{ thisPage.UpdatedAt }}`
- * works in any prose. A database ROW page is a superset: the row's own fields
- * on top of these, with database fields winning a name collision. That layering
- * is P2 — this module owns the base half, and is deliberately free of any
- * database types.
+ * works in any prose. A database ROW / template page is a superset: the row's
+ * own fields on top of these, with database fields winning a name collision —
+ * that layering lives in `lib/databases/page-formula-fields.ts` so this module
+ * stays free of database types.
  *
  * `db("…")` reads work here exactly as they do in a formula column: they go
  * through the scope's relation resolver, not through `thisPage`.

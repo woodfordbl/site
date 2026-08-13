@@ -1,25 +1,34 @@
-import { IconArrowUpRight, IconFileAlert } from "@tabler/icons-react";
+import { IconFileAlert } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { createPortal } from "react-dom";
 
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageSummary } from "@/hooks/use-page-summary.ts";
+import { inlineTokenBorderOffsetClassName } from "@/lib/editor/inline-token-rule.ts";
 import { PAGE_LINK_ANCHOR_SELECTOR } from "@/lib/editor/rich-text-dom.ts";
-import { pageTitleUnderlineClassName } from "@/lib/pages/page-link-display.ts";
 import { resolvePageNavTarget } from "@/lib/pages/resolve-page-nav-target.ts";
 import { cn } from "@/lib/utils.ts";
 
-/** Compact inline page-link chrome (matches `pageLink` block: icon + title + arrow). */
+/** Compact inline page-link chrome (icon + title, one rule under both). */
 export const inlinePageLinkClassName = cn(
-  "inline-flex items-center gap-1 text-foreground hover:text-foreground/80",
-  // `align-middle` keeps the run centred on the surrounding line: an inline-flex
-  // box otherwise takes its baseline from its first item — the icon slot, which
-  // is empty until the chrome portal fills it — and rides above the text.
-  "cursor-pointer align-middle no-underline",
-  // The title inherits the block's font, so it must not pick up any sizing of
-  // its own — an inline page link reads at exactly the size of the text it sits in.
-  "text-[length:inherit] leading-[inherit]"
+  // `inline-block`, not `inline-flex`: a flex box takes its baseline from its
+  // first item — the icon slot, which is empty until the chrome portal fills it
+  // — so the run sat below the prose baseline and needed a nudge to fake it
+  // back up. An inline-block's baseline is its own text baseline, which lands
+  // on the prose baseline exactly, at every font size, with no correction.
+  // `whitespace-nowrap` keeps that true: a title wrapping inside the box would
+  // move the baseline to its last line.
+  "inline-block cursor-pointer whitespace-nowrap",
+  // The run reads as running text: the surrounding colour and size, with the
+  // rule as its only standing affordance — so hover moves the rule, not the text.
+  "text-[length:inherit] text-inherit leading-none no-underline",
+  // A border, not `underline`: text-decoration is not drawn across the atomic
+  // icon box, so only a border gives one continuous rule under icon *and* title.
+  // `leading-none` shrinks the anchor to its glyphs so the rule lands near the
+  // baseline instead of at the bottom of a full leading-relaxed line box.
+  "border-border border-b hover:border-muted-foreground",
+  inlineTokenBorderOffsetClassName
 );
 
 /**
@@ -29,12 +38,12 @@ export const inlinePageLinkClassName = cn(
  */
 export const inlinePageLinkIconClassName = cn(
   "inline-flex shrink-0 items-center justify-center",
+  // The anchor is no longer a flex row, so the icon carries its own gap and
+  // sits itself on the line: `-0.125em` drops it off the baseline until it is
+  // optically centred on the title's x-height.
+  "mr-1 align-[-0.125em]",
   "[&_[role=img]]:text-[0.95em] [&_[role=img]]:leading-none [&_svg]:size-[0.95em]"
 );
-
-/** Trailing arrow — a touch smaller than the page icon, as on `pageLink` rows. */
-export const inlinePageLinkArrowClassName =
-  "size-[0.8em] text-muted-foreground";
 
 interface InlinePageLinkProps {
   className?: string;
@@ -44,7 +53,7 @@ interface InlinePageLinkProps {
 }
 
 /**
- * Read-only inline page link: page icon + underlined title + upright arrow.
+ * Read-only inline page link: page icon + title under one shared underline.
  * Title resolves live from the page catalog (same as `pageLink` blocks).
  */
 export function InlinePageLink({
@@ -67,9 +76,7 @@ export function InlinePageLink({
         <span className={inlinePageLinkIconClassName}>
           <IconFileAlert />
         </span>
-        <span className={pageTitleUnderlineClassName}>
-          {label?.trim() || "Missing page"}
-        </span>
+        <span>{label?.trim() || "Missing page"}</span>
       </span>
     );
   }
@@ -82,14 +89,12 @@ export function InlinePageLink({
       <span className={inlinePageLinkIconClassName}>
         <PageIconDisplay icon={page.icon} />
       </span>
-      <span className={pageTitleUnderlineClassName}>{title}</span>
-      <IconArrowUpRight className={inlinePageLinkArrowClassName} />
+      <span>{title}</span>
     </Link>
   );
 }
 
 export interface InlinePageLinkChromeHost {
-  arrow: HTMLElement;
   icon: HTMLElement;
   /** Stable across rescans: the same page may be linked more than once. */
   key: string;
@@ -99,8 +104,8 @@ export interface InlinePageLinkChromeHost {
 /**
  * The `data-inline-page-link-chrome` hosts currently in the field DOM. The
  * caller must scan *after* rebuilding the field (the rebuild replaces every
- * child), otherwise the portals would target detached nodes and the icon and
- * arrow would render into nothing.
+ * child), otherwise the portals would target detached nodes and the icon
+ * would render into nothing.
  */
 export function collectInlinePageLinkChromeHosts(
   root: HTMLElement | null
@@ -116,17 +121,12 @@ export function collectInlinePageLinkChromeHosts(
     }
     const pageId = anchor.dataset.pageId?.trim();
     const icon = anchor.querySelector('[data-inline-page-link-chrome="icon"]');
-    const arrow = anchor.querySelector(
-      '[data-inline-page-link-chrome="arrow"]'
-    );
-    if (
-      !(pageId && icon instanceof HTMLElement && arrow instanceof HTMLElement)
-    ) {
+    if (!(pageId && icon instanceof HTMLElement)) {
       continue;
     }
     const occurrence = seen.get(pageId) ?? 0;
     seen.set(pageId, occurrence + 1);
-    hosts.push({ pageId, icon, arrow, key: `${pageId}#${occurrence}` });
+    hosts.push({ pageId, icon, key: `${pageId}#${occurrence}` });
   }
   return hosts;
 }
@@ -143,17 +143,16 @@ export function inlinePageLinkChromeHostsEqual(
       return (
         other !== undefined &&
         host.key === other.key &&
-        host.icon === other.icon &&
-        host.arrow === other.arrow
+        host.icon === other.icon
       );
     })
   );
 }
 
 /**
- * Fills the field's chrome hosts with the same icon/arrow as
- * {@link InlinePageLink}. Hosts are owned by the field, which rescans them
- * after every rebuild — see {@link collectInlinePageLinkChromeHosts}.
+ * Fills the field's chrome hosts with the same icon as {@link InlinePageLink}.
+ * Hosts are owned by the field, which rescans them after every rebuild — see
+ * {@link collectInlinePageLinkChromeHosts}.
  */
 export function InlinePageLinkChrome({
   hosts,
@@ -164,7 +163,6 @@ export function InlinePageLinkChrome({
     <>
       {hosts.map((host) => (
         <InlinePageLinkChromePortals
-          arrowHost={host.arrow}
           iconHost={host.icon}
           key={host.key}
           pageId={host.pageId}
@@ -175,30 +173,20 @@ export function InlinePageLinkChrome({
 }
 
 function InlinePageLinkChromePortals({
-  arrowHost,
   iconHost,
   pageId,
 }: {
-  arrowHost: HTMLElement;
   iconHost: HTMLElement;
   pageId: string;
 }) {
   const page = usePageSummary(pageId);
-  if (!(iconHost.isConnected && arrowHost.isConnected)) {
+  if (!iconHost.isConnected) {
     return null;
   }
-  return (
-    <>
-      {createPortal(
-        <span className={inlinePageLinkIconClassName}>
-          {page ? <PageIconDisplay icon={page.icon} /> : <IconFileAlert />}
-        </span>,
-        iconHost
-      )}
-      {createPortal(
-        <IconArrowUpRight className={inlinePageLinkArrowClassName} />,
-        arrowHost
-      )}
-    </>
+  return createPortal(
+    <span className={inlinePageLinkIconClassName}>
+      {page ? <PageIconDisplay icon={page.icon} /> : <IconFileAlert />}
+    </span>,
+    iconHost
   );
 }

@@ -65,6 +65,11 @@ type PageWorkspaceProps = {
    */
   bodySlot?: ReactNode;
   /**
+   * Replaces the header's page-tree breadcrumb — the row-template editor's page
+   * is not in the sidebar tree, so it supplies a hub-based trail instead.
+   */
+  breadcrumbSlot?: ReactNode;
+  /**
    * Wraps the canvas scroll region only — e.g. the row-template editor's
    * properties rail splits content + side panel while the page header stays
    * full width above the split.
@@ -173,6 +178,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
   const body = (
     <PageWorkspaceBody
       bodySlot={props.bodySlot}
+      breadcrumbSlot={props.breadcrumbSlot}
       contentWrapper={props.contentWrapper}
       initialBlocks={initialBlocks}
       page={page}
@@ -200,6 +206,7 @@ export function PageWorkspace(props: PageWorkspaceProps) {
 
 function PageWorkspaceBody({
   bodySlot,
+  breadcrumbSlot,
   contentWrapper,
   initialBlocks,
   page,
@@ -210,6 +217,7 @@ function PageWorkspaceBody({
   topLevelBlockAlign,
 }: {
   bodySlot?: ReactNode;
+  breadcrumbSlot?: ReactNode;
   contentWrapper?: (content: ReactNode) => ReactNode;
   initialBlocks: Page["blocks"];
   page: Page | LocalPage;
@@ -268,6 +276,7 @@ function PageWorkspaceBody({
 
   const header = (
     <PageHeader
+      breadcrumbSlot={breadcrumbSlot}
       onAfterReset={bumpCanvasNonce}
       pageId={page.id}
       seed={titleSeed}

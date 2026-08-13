@@ -31,8 +31,8 @@ export function InlineFormulaValues({
   marks,
   onValues,
 }: InlineFormulaValuesProps) {
-  const page = useInlineFormulaPage();
-  const values = useInlineFormulaValues(page, marks);
+  const model = useInlineFormulaPage();
+  const values = useInlineFormulaValues(model, marks);
 
   useEffect(() => {
     warmFormulaCodeEditor();

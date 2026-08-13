@@ -1,6 +1,6 @@
 import type { FormulaCheckContext } from "@/lib/formula/check.ts";
 import type { FormulaValueDisplayOptions } from "@/lib/formula/display.ts";
-import { formulaValueToDisplay } from "@/lib/formula/display.ts";
+import { formulaValueToInlineDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
 import { formulaStaticReferences } from "@/lib/formula/references.ts";
@@ -60,7 +60,8 @@ function tokenMarks(marks: readonly InlineMark[]): InlineMark[] {
  * `display` carries the value→string conventions the grid already uses, so a
  * token reads the way the same formula reads in a table cell: numbers grouped,
  * dates formatted, relations shown by their row's title rather than a
- * placeholder.
+ * placeholder. Blank results (null, empty text, empty lists) become the
+ * reserved `None` chip so the token stays visible in prose.
  */
 export function evaluateInlineTokens(
   marks: readonly InlineMark[],
@@ -83,7 +84,7 @@ export function evaluateInlineTokens(
       // A parse error is the token's value — visible, and scoped to itself.
       values.set(
         token.start,
-        formulaValueToDisplay(formulaError(parsed.error.message))
+        formulaValueToInlineDisplay(formulaError(parsed.error.message))
       );
       continue;
     }
@@ -100,7 +101,7 @@ export function evaluateInlineTokens(
     volatile = volatile || references.volatile;
     values.set(
       token.start,
-      formulaValueToDisplay(evaluateFormula(parsed.ast, scope), display)
+      formulaValueToInlineDisplay(evaluateFormula(parsed.ast, scope), display)
     );
   }
 

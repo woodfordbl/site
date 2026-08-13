@@ -2,6 +2,7 @@
 
 import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
 import { motion } from "motion/react";
+import type { ReactNode } from "react";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
@@ -20,7 +21,20 @@ import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
+/**
+ * Header bar shared by {@link PageHeader} and the row-template surfaces that
+ * build their own header. `min-h-10` pins the bar to the height of a breadcrumb
+ * crumb so it does not collapse on a surface whose breadcrumb renders nothing.
+ */
+export const pageHeaderShellClassName =
+  "flex min-h-10 shrink-0 items-center gap-1 border-sidebar-border border-b bg-background px-3 py-1";
+
 interface PageHeaderProps extends PageCanvasFooterActionsInput {
+  /**
+   * Replaces the page-tree breadcrumb for surfaces whose page is not in the
+   * sidebar tree (the row-template editor).
+   */
+  breadcrumbSlot?: ReactNode;
   pageId: string;
   seed?: PageMetadataSeed;
   serverPage?: Pick<
@@ -30,7 +44,7 @@ interface PageHeaderProps extends PageCanvasFooterActionsInput {
 }
 
 /** Desktop: expand button only when collapsed. Mobile: sheet trigger. */
-function PageHeaderSidebarToggle() {
+export function PageHeaderSidebarToggle() {
   const isNarrowViewport = useIsNarrowViewport();
   const { isCollapsed, isCollapsing, pinSidebar } = usePageSidebarChrome();
 
@@ -129,6 +143,7 @@ function PageHeaderBreadcrumb({
 }
 
 export function PageHeader({
+  breadcrumbSlot,
   onAfterReset,
   pageId,
   seed,
@@ -137,9 +152,11 @@ export function PageHeader({
   const { pages } = useMergedPageListItems();
 
   return (
-    <header className="flex shrink-0 items-center gap-1 border-sidebar-border border-b bg-background px-3 py-1">
+    <header className={pageHeaderShellClassName}>
       <PageHeaderSidebarToggle />
-      <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
+      {breadcrumbSlot ?? (
+        <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
+      )}
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <PageHeaderMenu
           onAfterReset={onAfterReset}

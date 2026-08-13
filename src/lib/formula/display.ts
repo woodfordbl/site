@@ -46,6 +46,14 @@ export interface FormulaValueDisplayOptions {
 }
 
 /**
+ * Label shown by inline prose formula tokens when the value is blank (null,
+ * empty text, or an empty list such as a multi-select with no tags). Grid
+ * formula cells stay empty; only the inline chip needs a visible stand-in so
+ * the token does not collapse into an underline with no text.
+ */
+export const EMPTY_INLINE_FORMULA_LABEL = "None";
+
+/**
  * Human display string for any formula value: numbers via `Intl` (en-US,
  * trimmed), booleans "Yes"/"No", blank → "", text as-is, dates per
  * {@link formulaDateToDisplay}, lists comma-joined, rows via `opts.rowLabel`
@@ -81,6 +89,19 @@ export function formulaValueToDisplay(
     return "ƒ";
   }
   return `⚠ ${value.message}`;
+}
+
+/**
+ * Display string for an inline prose formula token. Same rules as
+ * {@link formulaValueToDisplay}, except blank values become
+ * {@link EMPTY_INLINE_FORMULA_LABEL} so the chip stays visible and clickable.
+ */
+export function formulaValueToInlineDisplay(
+  value: FormulaValue,
+  opts?: FormulaValueDisplayOptions
+): string {
+  const display = formulaValueToDisplay(value, opts);
+  return display === "" ? EMPTY_INLINE_FORMULA_LABEL : display;
 }
 
 /**

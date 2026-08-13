@@ -1,14 +1,21 @@
 import type { ReactNode } from "react";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import { RowPropertiesUnderTitleBand } from "@/components/database/row-page/row-properties-rail.tsx";
-import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
+import { GlyphIconPicker } from "@/components/pages/glyph-icon-picker.tsx";
+import {
+  setDatabaseRowIcon,
+  updateDatabaseCell,
+} from "@/db/queries/database-collection-ops.ts";
 import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
 import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
+import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
 import {
   pageTitleEditorLayoutClassName,
+  pageTitleIconButtonClassName,
+  pageTitleIconPickerClassName,
   pageTitleIconSlotClassName,
 } from "@/lib/pages/page-title-layout.ts";
 import type {
@@ -17,42 +24,72 @@ import type {
 } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
-/** Shared read-only title used by template previews. */
+/** Editable row metadata shown above the shared template body in Live Preview. */
 export function RowPageTitleSection({
   database,
-  displayTitle,
   icon,
   propertiesExtra,
   row,
   showProperties = true,
 }: {
   database: LocalDatabase;
-  displayTitle: string;
   icon?: string;
   propertiesExtra?: ReactNode;
   row: LocalDatabaseRow;
   showProperties?: boolean;
 }): ReactNode {
+  const displayTitle = resolveDatabaseRowPageTitle(database, row);
+  const primaryField = database.fields.find(
+    (field) => field.id === database.primaryFieldId
+  );
+
+  const persistTitle = (value: string): void => {
+    updateDatabaseCell(row.id, database.primaryFieldId, value.trim() || null);
+  };
+
   return (
     <div>
       <div className={pageTitleEditorLayoutClassName}>
         <div className={pageTitleIconSlotClassName}>
-          <span className="inline-flex size-8 shrink-0 items-center justify-center text-muted-foreground sm:size-9">
-            <PageIconDisplay
-              className="text-[26px] [&_svg]:size-7"
-              icon={resolveDatabaseRowIcon(row, icon)}
-            />
-          </span>
+          <GlyphIconPicker
+            ariaLabel="Change row icon"
+            className={pageTitleIconPickerClassName}
+            icon={resolveDatabaseRowIcon(row, icon)}
+            onRemove={
+              row.icon
+                ? () => {
+                    setDatabaseRowIcon(row.id, undefined);
+                  }
+                : undefined
+            }
+            onSelect={(nextIcon) => {
+              setDatabaseRowIcon(row.id, nextIcon);
+            }}
+            triggerButtonSize="icon"
+            triggerClassName={pageTitleIconButtonClassName}
+          />
         </div>
-        <h1
+        <input
+          aria-label="Row name"
           className={cn(
-            "w-full min-w-0",
+            "w-full min-w-0 bg-transparent outline-none placeholder:text-muted-foreground/50",
             headingSurfaceClassName,
             headingTypographyClassNames[1]
           )}
-        >
-          {displayTitle}
-        </h1>
+          defaultValue={displayTitle === "Untitled" ? "" : displayTitle}
+          key={`${row.id}:${displayTitle}`}
+          onBlur={(event) => {
+            persistTitle(event.currentTarget.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              persistTitle(event.currentTarget.value);
+              event.currentTarget.blur();
+            }
+          }}
+          placeholder={primaryField?.name ?? "Name"}
+          type="text"
+        />
       </div>
       {showProperties ? (
         <RowPropertiesUnderTitleBand propertiesExtra={propertiesExtra}>

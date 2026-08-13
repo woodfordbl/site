@@ -9,6 +9,7 @@ import {
   RowPropertiesOptionsMenu,
   useRowPageWorkspaceChrome,
 } from "@/components/database/row-page/row-properties-rail.tsx";
+import { RowTemplateBreadcrumb } from "@/components/database/row-page/row-template-breadcrumb.tsx";
 import { RowTemplatePreviewBody } from "@/components/database/row-page/row-template-preview.tsx";
 import {
   hasRowTemplateDefaultFields,
@@ -23,6 +24,8 @@ import {
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
+import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { isDatabaseRowPageMaterialized } from "@/lib/databases/clear-database-row-pages.ts";
 import { databaseTemplatePageId } from "@/lib/databases/database-template-page.ts";
 import { createEmptyRowTemplate } from "@/lib/databases/row-template-store.ts";
 import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
@@ -36,6 +39,9 @@ import { isLocallyDeletedPage } from "@/lib/schemas/local-page.ts";
  * already-materialized pages re-seed from this template. Created on first
  * visit (a single empty text block). Client-only — local collections only.
  */
+
+/** Matches the `{host}/{db}/template` URL segment the editor is reached by. */
+const ROW_TEMPLATE_CRUMB_TITLE = "Template";
 
 /** First rows in manual order — the preview picker's sample. */
 function pickPreviewRows(rows: LocalDatabaseRow[]): LocalDatabaseRow[] {
@@ -72,6 +78,7 @@ export function DatabaseTemplateEditorClient({
     [databaseId]
   );
   const previewRows = useMemo(() => pickPreviewRows(rows), [rows]);
+  const { pages } = useMergedPageListItems();
   const chrome = useRowPageWorkspaceChrome(database, {
     hasProperties: database ? hasRowTemplateDefaultFields(database) : false,
     propertiesPanel: database ? (
@@ -80,10 +87,22 @@ export function DatabaseTemplateEditorClient({
   });
 
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
-  // A deleted/out-of-sample row silently falls back to editing.
-  const previewRow = previewRowId
+  // A deleted/out-of-sample or materialized row silently falls back to
+  // template editing. Materialized rows own a separate body and must be
+  // cleared from the sidebar before they can become a mixed preview again.
+  const previewCandidate = previewRowId
     ? previewRows.find((row) => row.id === previewRowId)
     : undefined;
+  const previewRow =
+    previewCandidate && !isDatabaseRowPageMaterialized(previewCandidate, pages)
+      ? previewCandidate
+      : undefined;
+
+  useEffect(() => {
+    if (previewRowId !== null && previewRow === undefined) {
+      setPreviewRowId(null);
+    }
+  }, [previewRow, previewRowId]);
 
   const templateRecord = useLocalPageById(databaseTemplatePageId(databaseId));
   const templatePage =
@@ -121,6 +140,13 @@ export function DatabaseTemplateEditorClient({
 
   const workspace = (
     <PageWorkspace
+      breadcrumbSlot={
+        <RowTemplateBreadcrumb
+          databaseId={database.id}
+          icon={templatePage.icon}
+          title={ROW_TEMPLATE_CRUMB_TITLE}
+        />
+      }
       contentWrapper={chrome.contentWrapper}
       kind="user"
       page={templatePage}
@@ -149,7 +175,11 @@ export function DatabaseTemplateEditorClient({
     <SiteShell>
       <PageSidebarChromeProvider sidebar={sidebar}>
         {previewRow ? (
-          <RowTemplatePreviewBody database={database} row={previewRow} />
+          <RowTemplatePreviewBody
+            database={database}
+            row={previewRow}
+            templatePage={templatePage}
+          />
         ) : (
           workspace
         )}

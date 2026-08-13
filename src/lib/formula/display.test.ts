@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { FormulaNode } from "@/lib/formula/ast.ts";
 import {
+  EMPTY_INLINE_FORMULA_LABEL,
   formulaDateToDisplay,
   formulaValueToDisplay,
+  formulaValueToInlineDisplay,
   formulaValueToText,
 } from "@/lib/formula/display.ts";
 import {
@@ -68,6 +70,19 @@ describe("formulaValueToDisplay", () => {
         { rowLabel }
       )
     ).toBe("Row r1, Row r2");
+  });
+});
+
+describe("formulaValueToInlineDisplay", () => {
+  it("keeps non-empty displays unchanged", () => {
+    expect(formulaValueToInlineDisplay("Tags")).toBe("Tags");
+    expect(formulaValueToInlineDisplay(["This", "Other"])).toBe("This, Other");
+  });
+
+  it("substitutes None for blank null, empty text, and empty lists", () => {
+    expect(formulaValueToInlineDisplay(null)).toBe(EMPTY_INLINE_FORMULA_LABEL);
+    expect(formulaValueToInlineDisplay("")).toBe(EMPTY_INLINE_FORMULA_LABEL);
+    expect(formulaValueToInlineDisplay([])).toBe(EMPTY_INLINE_FORMULA_LABEL);
   });
 });
 

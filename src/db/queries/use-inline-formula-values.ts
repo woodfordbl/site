@@ -6,14 +6,14 @@ import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { formulaCheckContext } from "@/lib/databases/formula-values.ts";
 import {
+  createInlinePageFormulaScope,
+  type InlineFormulaPageModel,
+  inlinePageFormulaCheckProperties,
+} from "@/lib/databases/page-formula-fields.ts";
+import {
   evaluateInlineTokens,
   type InlineTokenEvaluation,
 } from "@/lib/formula/inline-token-eval.ts";
-import {
-  createPageFormulaScope,
-  type PageFormulaSource,
-  pageFormulaCheckProperties,
-} from "@/lib/formula/page-scope.ts";
 import { formulaRowLabelOf } from "@/lib/formula/row-scope.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 
@@ -82,7 +82,7 @@ function useVolatileClock(ticking: boolean): number {
 }
 
 export function useInlineFormulaValues(
-  page: PageFormulaSource | null,
+  model: InlineFormulaPageModel | null,
   marks: readonly InlineMark[]
 ): ReadonlyMap<number, string> {
   const databases = useAllDatabases();
@@ -108,35 +108,52 @@ export function useInlineFormulaValues(
   );
   const hasTokens = tokens.length > 0;
 
+  const relatedDatabases = useMemo(
+    () =>
+      databases.map((database) => ({
+        id: database.id,
+        name: database.name,
+        fields: database.fields,
+      })),
+    [databases]
+  );
+
   const context = useMemo(
     () =>
       formulaCheckContext(
-        // Base page fields stand in for a database's columns; `db("…")` reads
-        // the workspace list, exactly as a column formula does.
-        [],
-        databases.map((database) => ({
-          id: database.id,
-          name: database.name,
-          fields: database.fields,
-        })),
+        // Overlay columns stand in for a database's own schema on row/template
+        // pages; ordinary pages pass []. `db("…")` still reads the workspace.
+        model?.databaseFields ?? [],
+        relatedDatabases,
         userFunctions
       ),
-    [databases, userFunctions]
+    [model?.databaseFields, relatedDatabases, userFunctions]
   );
 
-  /** Page fields merged into the check context so `thisPage.X` types. */
+  /** Page + overlay fields merged so `thisPage.X` types against both. */
   const pageContext = useMemo(
-    () => ({ ...context, properties: pageFormulaCheckProperties() }),
-    [context]
+    () => ({
+      ...context,
+      properties: inlinePageFormulaCheckProperties(
+        model?.databaseFields,
+        relatedDatabases,
+        userFunctions
+      ),
+    }),
+    [context, model?.databaseFields, relatedDatabases, userFunctions]
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision is the engine's "re-read the collections" signal, not an input the body reads
   const evaluation = useMemo<InlineTokenEvaluation | null>(() => {
-    if (!hasTokens || page === null) {
+    if (!hasTokens || model === null) {
       return null;
     }
     const relations = localFormulaRelationResolver({ now: () => new Date() });
-    const scope = createPageFormulaScope(page, {
+    const overlay =
+      model.databaseFields.length > 0
+        ? { fields: model.databaseFields, values: model.cellValues }
+        : null;
+    const scope = createInlinePageFormulaScope(model.page, overlay, {
       now: () => new Date(),
       relations,
       userFunctions,
@@ -146,7 +163,7 @@ export function useInlineFormulaValues(
       rowLabel: formulaRowLabelOf(relations),
     });
     // `revision` and the clock tick are inputs: both mean "re-read the world".
-  }, [hasTokens, page, tokens, pageContext, userFunctions, revision]);
+  }, [hasTokens, model, tokens, pageContext, userFunctions, revision]);
 
   const tick = useVolatileClock(evaluation?.volatile === true);
   // Re-evaluate on the tick without making it a second memo.

@@ -1129,6 +1129,30 @@ describe("database collection ops", () => {
     expect(mocks.commit).toHaveBeenCalledTimes(1);
   });
 
+  it("clearDatabaseRowPageLink nulls only the selected linked page", async () => {
+    const linked = { ...makeRow("row-1"), pageId: "page-1" };
+    const other = { ...makeRow("row-2"), pageId: "page-2" };
+    mocks.rowGet.mockReturnValue(linked);
+    const drafts = captureRowDrafts([linked, other]);
+
+    ops.clearDatabaseRowPageLink("row-1");
+    await flushAsync();
+
+    expect(drafts.get("row-1")?.pageId).toBeNull();
+    expect(drafts.has("row-2")).toBe(false);
+    expect(mocks.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("clearDatabaseRowPageLink is a no-op for an unlinked row", async () => {
+    mocks.rowGet.mockReturnValue(makeRow("row-1"));
+
+    ops.clearDatabaseRowPageLink("row-1");
+    await flushAsync();
+
+    expect(mocks.rowUpdate).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("clearDatabaseRowPageLinks nulls every linked pageId for the database", async () => {
     const linked = { ...makeRow("row-1"), pageId: "page-1" };
     const otherDb = {
