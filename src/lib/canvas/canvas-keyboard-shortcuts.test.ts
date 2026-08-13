@@ -2,7 +2,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { handleCanvasSelectionArrowKeyDown } from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
+import {
+  handleCanvasSelectionArrowKeyDown,
+  isNonCanvasEditableFocused,
+} from "@/lib/canvas/canvas-keyboard-shortcuts.ts";
 
 function createKeyboardEvent(
   key: string,
@@ -82,5 +85,17 @@ describe("handleCanvasSelectionArrowKeyDown", () => {
 
     expect(handled).toBe(false);
     expect(moveRowUp).not.toHaveBeenCalled();
+  });
+});
+
+describe("isNonCanvasEditableFocused", () => {
+  it("does not treat a checkbox as a native-undo field", () => {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    document.body.append(checkbox);
+    checkbox.focus();
+
+    expect(isNonCanvasEditableFocused()).toBe(false);
+    checkbox.remove();
   });
 });

@@ -59,6 +59,18 @@ function isNestedRowShellTarget(
   );
 }
 
+/**
+ * Nested widgets that own Shift+click (the database table row-select column).
+ * The shell listens in capture on `[data-canvas-row-content]`, so those
+ * widgets mark themselves and this check skips them before `stopPropagation`.
+ */
+function isShiftSelectIgnoredTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest("[data-canvas-shift-select-ignore]") !== null
+  );
+}
+
 interface CanvasRowShellProps {
   children: ReactNode;
   className?: string;
@@ -167,6 +179,10 @@ export function CanvasRowShell({
 
     const layout = rowLayoutRef.current;
     if (layout && isNestedRowShellTarget(layout, event.target)) {
+      return;
+    }
+
+    if (isShiftSelectIgnoredTarget(event.target)) {
       return;
     }
 

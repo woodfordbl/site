@@ -30,8 +30,6 @@ import {
   localDatabaseRowsCollection,
 } from "@/db/collections/local-collections.ts";
 import {
-  deleteDatabaseRows,
-  deleteLiveMarketRows,
   duplicateDatabaseRows,
   setDatabaseRowIcon,
 } from "@/db/queries/database-collection-ops.ts";
@@ -40,6 +38,7 @@ import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { databaseRowNavTarget } from "@/lib/databases/database-page-paths.ts";
+import { deleteDatabaseRowsUndoable } from "@/lib/databases/database-row-edit-history.ts";
 import { isLiveMarketsDatabase } from "@/lib/databases/live-markets-instruments.ts";
 import { ensureDatabaseRowPage } from "@/lib/databases/materialize-row-page.ts";
 import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
@@ -193,13 +192,9 @@ export function DatabaseRowMenu({
     if (mode !== "edit" || !canDeleteRows) {
       return;
     }
-    if (isLiveMarkets) {
-      deleteLiveMarketRows([...actionRowIds]);
-    } else {
-      deleteDatabaseRows([...actionRowIds]);
-    }
+    deleteDatabaseRowsUndoable([...actionRowIds]);
     onSelectionCleared?.();
-  }, [actionRowIds, canDeleteRows, isLiveMarkets, mode, onSelectionCleared]);
+  }, [actionRowIds, canDeleteRows, mode, onSelectionCleared]);
 
   // Keep favorite label reactive when materialize just linked a pageId.
   const favoriteLabel = isFavorite

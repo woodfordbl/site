@@ -18,6 +18,7 @@ import { useDatabase } from "@/db/queries/use-database.ts";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
+import { tryDeleteSelectedDatabaseTableRows } from "@/lib/databases/database-table-row-selection.ts";
 
 type DatabaseEditProps = BlockEditProps<"database">;
 
@@ -92,6 +93,18 @@ export function DatabaseEdit({
   };
 
   const handleWrapperKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (
+      (event.key === "Backspace" || event.key === "Delete") &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      row?.rowId &&
+      tryDeleteSelectedDatabaseTableRows([row.rowId])
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     // Keys from the grid's interactive children (cell inputs, header
     // controls) must never reach the structural handler — a Backspace typed
     // in a cell would otherwise delete the whole block.
@@ -148,6 +161,7 @@ export function DatabaseEdit({
     >
       {tableReady ? (
         <DatabaseTableView
+          canvasRowId={row?.rowId}
           databaseId={props.databaseId}
           hideTitle={props.hideTitle}
           mode="edit"

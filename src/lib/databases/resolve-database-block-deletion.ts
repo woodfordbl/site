@@ -44,3 +44,32 @@ export function resolveDeletedDatabaseIds(
 
   return databaseIds;
 }
+
+/**
+ * Canvas row ids covered by a selection, including everything nested under
+ * selected containers (a `columns` shell can hold a linked database view).
+ */
+export function collectNestedCanvasRowIds(
+  rows: CanvasRow[],
+  rowIds: readonly string[]
+): string[] {
+  const nestedIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rowId of rowIds) {
+    const row = findRowById(rows, rowId);
+    if (!row) {
+      continue;
+    }
+
+    for (const nested of flattenRows([row])) {
+      if (seen.has(nested.rowId)) {
+        continue;
+      }
+      seen.add(nested.rowId);
+      nestedIds.push(nested.rowId);
+    }
+  }
+
+  return nestedIds;
+}

@@ -198,6 +198,69 @@ export function nextSelectedRowIds(
   return current.filter((id) => id !== rowId);
 }
 
+/**
+ * True when Delete/Backspace belongs to a cell editor (or other text field)
+ * rather than selected-row deletion.
+ */
+export function isDatabaseGridTypingTarget(
+  target: EventTarget | null
+): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target instanceof HTMLTextAreaElement || target.isContentEditable) {
+    return true;
+  }
+  if (target instanceof HTMLInputElement) {
+    return (
+      target.type !== "checkbox" &&
+      target.type !== "radio" &&
+      target.type !== "button"
+    );
+  }
+  return false;
+}
+
+export type DatabaseTableSelectionKeyAction = "clear-selection" | "delete-rows";
+
+/**
+ * Keyboard action for table row selection: Escape clears; Delete/Backspace
+ * deletes selected rows in edit mode when not typing in a cell.
+ */
+export function resolveDatabaseTableSelectionKey(
+  event: {
+    altKey: boolean;
+    ctrlKey: boolean;
+    key: string;
+    metaKey: boolean;
+  },
+  options: {
+    editing: boolean;
+    isTypingTarget: boolean;
+    mode: "view" | "edit";
+    selectedCount: number;
+  }
+): DatabaseTableSelectionKeyAction | null {
+  if (event.metaKey || event.ctrlKey || event.altKey) {
+    return null;
+  }
+  if (options.selectedCount === 0) {
+    return null;
+  }
+  if (event.key === "Escape") {
+    return "clear-selection";
+  }
+  if (
+    (event.key === "Backspace" || event.key === "Delete") &&
+    options.mode === "edit" &&
+    !options.editing &&
+    !options.isTypingTarget
+  ) {
+    return "delete-rows";
+  }
+  return null;
+}
+
 /** Narrowest width a specific field's column may render/resize to. */
 export function minColumnWidthPx(field: Pick<DatabaseField, "type">): number {
   return field.type === "checkbox"

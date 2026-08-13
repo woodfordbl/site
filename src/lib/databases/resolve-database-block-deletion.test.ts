@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
-import { resolveDeletedDatabaseIds } from "@/lib/databases/resolve-database-block-deletion.ts";
+import {
+  collectNestedCanvasRowIds,
+  resolveDeletedDatabaseIds,
+} from "@/lib/databases/resolve-database-block-deletion.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 function text(id: string, parentId?: string): Block {
@@ -74,5 +77,25 @@ describe("resolveDeletedDatabaseIds", () => {
     const rows = buildBlockTree([databaseBlock("b1", "db-1")]);
 
     expect(resolveDeletedDatabaseIds(rows, ["missing"])).toEqual([]);
+  });
+});
+
+describe("collectNestedCanvasRowIds", () => {
+  it("includes nested ids under a selected container", () => {
+    const rows = buildBlockTree([
+      { id: "cols", type: "columns", props: {} },
+      { id: "col-1", type: "column", props: {}, parentId: "cols" },
+      databaseBlock("b1", "db-1", "col-1"),
+      { id: "col-2", type: "column", props: {}, parentId: "cols" },
+      text("t1", "col-2"),
+    ]);
+
+    expect(collectNestedCanvasRowIds(rows, ["cols"])).toEqual([
+      "cols",
+      "col-1",
+      "b1",
+      "col-2",
+      "t1",
+    ]);
   });
 });

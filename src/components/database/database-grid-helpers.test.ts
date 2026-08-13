@@ -24,6 +24,7 @@ import {
   planColumnReorder,
   resolveColumnDropSpot,
   resolveColumnWidthPx,
+  resolveDatabaseTableSelectionKey,
   resolveGridBleedMetrics,
   resolveRowSelectDisplay,
   rowSelectLeadingWidthPx,
@@ -585,6 +586,70 @@ describe("nextSelectedRowIds", () => {
         visibleRowIds: visible,
       })
     ).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("resolveDatabaseTableSelectionKey", () => {
+  const baseEvent = {
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+  };
+
+  it("deletes selected rows on Delete in edit mode", () => {
+    expect(
+      resolveDatabaseTableSelectionKey(
+        { ...baseEvent, key: "Delete" },
+        {
+          editing: false,
+          isTypingTarget: false,
+          mode: "edit",
+          selectedCount: 2,
+        }
+      )
+    ).toBe("delete-rows");
+  });
+
+  it("clears selection on Escape", () => {
+    expect(
+      resolveDatabaseTableSelectionKey(
+        { ...baseEvent, key: "Escape" },
+        {
+          editing: false,
+          isTypingTarget: false,
+          mode: "edit",
+          selectedCount: 1,
+        }
+      )
+    ).toBe("clear-selection");
+  });
+
+  it("does not steal Delete while a cell editor is focused", () => {
+    expect(
+      resolveDatabaseTableSelectionKey(
+        { ...baseEvent, key: "Backspace" },
+        {
+          editing: true,
+          isTypingTarget: true,
+          mode: "edit",
+          selectedCount: 1,
+        }
+      )
+    ).toBeNull();
+  });
+
+  it("does not delete in view mode", () => {
+    expect(
+      resolveDatabaseTableSelectionKey(
+        { ...baseEvent, key: "Delete" },
+        {
+          editing: false,
+          isTypingTarget: false,
+          mode: "view",
+          selectedCount: 1,
+        }
+      )
+    ).toBeNull();
   });
 });
 

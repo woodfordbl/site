@@ -76,6 +76,12 @@ import {
 } from "@/lib/canvas/resolve-drop-target.ts";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import {
+  getLastDatabaseRowEditRecordedAt,
+  tryRedoDatabaseRowEdit,
+  tryUndoDatabaseRowEdit,
+} from "@/lib/databases/database-row-edit-history.ts";
+import { tryDeleteSelectedDatabaseTableRows } from "@/lib/databases/database-table-row-selection.ts";
+import {
   getLastDatabaseViewEditRecordedAt,
   getLastSessionUndoKind,
   markSessionUndoKind,
@@ -83,7 +89,10 @@ import {
   tryUndoDatabaseViewEdit,
 } from "@/lib/databases/database-view-edit-history.ts";
 import { deleteDatabasesEverywhere } from "@/lib/databases/delete-database-everywhere.ts";
-import { resolveDeletedDatabaseIds } from "@/lib/databases/resolve-database-block-deletion.ts";
+import {
+  collectNestedCanvasRowIds,
+  resolveDeletedDatabaseIds,
+} from "@/lib/databases/resolve-database-block-deletion.ts";
 import {
   type CanvasRowDragPreviewSource,
   resolveCanvasRowDragPreviewSource,
@@ -402,7 +411,16 @@ function PageCanvasEditorBody({
         return;
       }
       const databaseEditAt = getLastDatabaseViewEditRecordedAt();
+      const databaseRowsAt = getLastDatabaseRowEditRecordedAt();
       const pageEditAt = getPageLastEditRecordedAt(currentPageId);
+      if (
+        databaseRowsAt >= pageEditAt &&
+        databaseRowsAt >= databaseEditAt &&
+        tryUndoDatabaseRowEdit()
+      ) {
+        event.preventDefault();
+        return;
+      }
       if (databaseEditAt >= pageEditAt && tryUndoDatabaseViewEdit()) {
         event.preventDefault();
         return;
@@ -416,12 +434,27 @@ function PageCanvasEditorBody({
       if (isNonCanvasEditableFocused()) {
         return;
       }
-      if (
-        getLastSessionUndoKind() === "database-view" &&
-        tryRedoDatabaseViewEdit()
-      ) {
-        event.preventDefault();
-        return;
+      const undoKind = getLastSessionUndoKind();
+      switch (undoKind) {
+        case "database-rows":
+          if (tryRedoDatabaseRowEdit()) {
+            event.preventDefault();
+            return;
+          }
+          break;
+        case "database-view":
+          if (tryRedoDatabaseViewEdit()) {
+            event.preventDefault();
+            return;
+          }
+          break;
+        case "page-blocks":
+        case null:
+          break;
+        default: {
+          const _exhaustive: never = undoKind;
+          throw new Error(`Unhandled session undo kind: ${_exhaustive}`);
+        }
       }
       event.preventDefault();
       editor.redoEdit();
@@ -436,6 +469,13 @@ function PageCanvasEditorBody({
     },
     "duplicate-block": duplicateFocusedOrSelectedBlock,
     "delete-block": () => {
+      const nestedIds = collectNestedCanvasRowIds(
+        editor.getRows(),
+        selectedRowIdsRef.current
+      );
+      if (tryDeleteSelectedDatabaseTableRows(nestedIds)) {
+        return;
+      }
       if (hasSelection) {
         deleteSelection();
       }

@@ -934,6 +934,39 @@ describe("database collection ops", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
+  it("restoreDatabaseRows inserts missing rows", async () => {
+    const restored = makeRow("row-local");
+    mocks.rowGet.mockReturnValue(undefined);
+
+    ops.restoreDatabaseRows([restored]);
+    await flushAsync();
+
+    expect(mocks.rowInsert).toHaveBeenCalledWith(restored);
+  });
+
+  it("restoreDatabaseRows skips ids that already exist", async () => {
+    const restored = makeRow("row-local");
+    mocks.rowGet.mockReturnValue(restored);
+
+    ops.restoreDatabaseRows([restored]);
+    await flushAsync();
+
+    expect(mocks.rowInsert).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("reapplyDatabaseRowDeletion deletes existing ids", async () => {
+    mocks.rowGet.mockImplementation((id: string) =>
+      id === "row-local" ? makeRow("row-local") : undefined
+    );
+
+    ops.reapplyDatabaseRowDeletion(["row-local", "row-gone"]);
+    await flushAsync();
+
+    expect(mocks.rowDelete).toHaveBeenCalledTimes(1);
+    expect(mocks.rowDelete).toHaveBeenCalledWith("row-local");
+  });
+
   it("duplicateDatabaseRows clones values after the source and strips pageId", async () => {
     const source = {
       ...makeRow("row-a", {

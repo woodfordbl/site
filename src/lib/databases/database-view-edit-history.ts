@@ -4,8 +4,9 @@ import type { DatabaseView } from "@/lib/schemas/database.ts";
 
 /**
  * Session-scoped undo/redo for saved-view option edits (filters, hidden
- * groups, etc.). Complements canvas block history: Ctrl+Z picks whichever
- * domain recorded the more recent edit.
+ * groups, etc.). Complements canvas block history and database row-deletion
+ * history: Ctrl+Z picks whichever domain recorded the more recent edit
+ * (`database-rows` vs `database-view` vs `page-blocks`).
  */
 
 /** Hard cap per database view; oldest entries drop first. */
@@ -26,7 +27,7 @@ const histories = new Map<string, DatabaseViewEditHistory>();
 let lastEditedKey: string | null = null;
 let lastEditedAt = 0;
 
-export type SessionUndoKind = "database-view" | "page-blocks";
+export type SessionUndoKind = "database-rows" | "database-view" | "page-blocks";
 
 let lastUndoKind: SessionUndoKind | null = null;
 
