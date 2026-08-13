@@ -58,6 +58,7 @@ function TooltipContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
+  anchor,
   showArrow = false,
   command,
   sequence,
@@ -66,7 +67,7 @@ function TooltipContent({
 }: TooltipPrimitive.Popup.Props &
   Pick<
     TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
   > & {
     showArrow?: boolean;
     /**
@@ -86,6 +87,7 @@ function TooltipContent({
       <TooltipPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
+        anchor={anchor}
         className="isolate z-50"
         side={side}
         sideOffset={sideOffset}

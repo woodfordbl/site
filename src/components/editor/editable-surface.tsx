@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { EditableInlineLinkPreview } from "@/components/editor/link-preview.tsx";
+import { EditablePageLinkPreview } from "@/components/editor/page-link-preview.tsx";
 import { RichTextArea } from "@/components/editor/rich-text-area.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
@@ -476,6 +477,7 @@ export function EditableSurface({
           value={value}
         />
         <EditableInlineLinkPreview fieldRef={richRef} />
+        <EditablePageLinkPreview fieldRef={richRef} />
       </>
     );
   }

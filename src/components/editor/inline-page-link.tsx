@@ -1,8 +1,14 @@
 import { IconFileAlert } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 
+import {
+  PageLinkPreviewPopover,
+  usePageLinkPreviewController,
+} from "@/components/editor/page-link-preview.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageSummary } from "@/hooks/use-page-summary.ts";
 import { inlineTokenBorderOffsetClassName } from "@/lib/editor/inline-token-rule.ts";
@@ -32,7 +38,7 @@ export const inlinePageLinkClassName = cn(
 );
 
 /**
- * Icon/arrow are sized in `em` so they track the surrounding text instead of
+ * The icon is sized in `em` so it tracks the surrounding text instead of
  * staying at a fixed px — the same run has to look right in body copy and in a
  * heading. Mirrors `iconSlotClassName`'s structure without its fixed steps.
  */
@@ -53,7 +59,8 @@ interface InlinePageLinkProps {
 }
 
 /**
- * Read-only inline page link: page icon + title under one shared underline.
+ * Read-only inline page link: page icon + title under one shared underline,
+ * with a hover card previewing the linked page (see `page-link-preview.tsx`).
  * Title resolves live from the page catalog (same as `pageLink` blocks).
  */
 export function InlinePageLink({
@@ -63,6 +70,20 @@ export function InlinePageLink({
 }: InlinePageLinkProps) {
   const page = usePageSummary(pageId);
   const { pages } = useMergedPageListItems();
+  const hoverEnabled = !useIsCoarsePrimaryPointer();
+  const { cancelClose, closeNow, scheduleClose, scheduleOpen, target } =
+    usePageLinkPreviewController(hoverEnabled);
+
+  const handlePointerEnter = (event: ReactPointerEvent<HTMLAnchorElement>) => {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+    scheduleOpen({
+      anchor: event.currentTarget,
+      pageId,
+      ...(label?.trim() ? { label: label.trim() } : {}),
+    });
+  };
 
   if (!page) {
     return (
@@ -85,12 +106,25 @@ export function InlinePageLink({
   const title = page.title.trim() || label?.trim() || "Untitled";
 
   return (
-    <Link className={cn(inlinePageLinkClassName, className)} {...navTarget}>
-      <span className={inlinePageLinkIconClassName}>
-        <PageIconDisplay icon={page.icon} />
-      </span>
-      <span>{title}</span>
-    </Link>
+    <>
+      <Link
+        className={cn(inlinePageLinkClassName, className)}
+        onPointerDown={closeNow}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={scheduleClose}
+        {...navTarget}
+      >
+        <span className={inlinePageLinkIconClassName}>
+          <PageIconDisplay icon={page.icon} />
+        </span>
+        <span>{title}</span>
+      </Link>
+      <PageLinkPreviewPopover
+        onCloseDelay={scheduleClose}
+        onOpenStay={cancelClose}
+        target={target}
+      />
+    </>
   );
 }
 

@@ -88,7 +88,7 @@ Shipped page content is **bundled at build time** via [`page-store.server.ts`](.
 | Target | Result |
 |--------|--------|
 | Empty text/heading/quote/checklist item | In-place `slash.convert` → `pageLink` block (`variant: linked`) |
-| Any block whose primary text has content — text, heading, toggle heading title, quote, checklist item, list text | Inline `link` mark with `pageId` — icon + live title under one shared rule, in the prose colour ([`InlinePageLink`](../../src/components/editor/inline-page-link.tsx)); stored label is the page title at paste time |
+| Any block whose primary text has content — text, heading, toggle heading title, quote, checklist item, list text | Inline `link` mark with `pageId` — icon + live title under one shared rule, in the prose colour ([`InlinePageLink`](../../src/components/editor/inline-page-link.tsx)); stored label is the page title at paste time. Hovering the run opens [`PageLinkPreviewCard`](../../src/components/editor/page-link-preview.tsx) (cover, title, row properties, first body lines — see [canvas-editor](./canvas-editor.md#inline-link-previews)); the reduction lives in [`page-link-preview-model.ts`](../../src/lib/pages/page-link-preview-model.ts) |
 | Same as above with **no live caret/selection** (row selected from the gutter) | Still inline — [`planInlinePageLinkInsertion`](../../src/lib/canvas/paste-page-link.ts) appends the link at the end of the text and places the caret after it; never a new row |
 | Blocks with no link-capable text (media, embed, divider, database, containers) | Insert a `pageLink` block after the row |
 | Code / table cells | Skip — plain or external inline-link paste |
