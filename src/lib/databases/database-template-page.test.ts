@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  databaseIdFromTemplatePageId,
   databaseTemplatePageId,
   isDatabaseTemplatePageId,
 } from "./database-template-page.ts";
@@ -16,5 +17,10 @@ describe("database template page ids", () => {
     expect(isDatabaseTemplatePageId("site-template")).toBe(false);
     expect(isDatabaseTemplatePageId(null)).toBe(false);
     expect(isDatabaseTemplatePageId(undefined)).toBe(false);
+  });
+
+  it("parses the database id out of a template page id", () => {
+    expect(databaseIdFromTemplatePageId("db-template:db-1")).toBe("db-1");
+    expect(databaseIdFromTemplatePageId("db-1")).toBeNull();
   });
 });

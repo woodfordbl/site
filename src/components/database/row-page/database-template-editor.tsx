@@ -15,7 +15,6 @@ import {
   RowTemplateDefaultsList,
   RowTemplateTitleSection,
 } from "@/components/database/row-page/row-template-title-section.tsx";
-import { RowTemplateTokenAutocomplete } from "@/components/database/row-page/row-template-token-autocomplete.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageWorkspace } from "@/components/pages/page-workspace.tsx";
@@ -31,13 +30,11 @@ import { isLocallyDeletedPage } from "@/lib/schemas/local-page.ts";
 
 /**
  * Row-template editor: the database's sentinel template page edited through
- * the normal `PageWorkspace` pipeline, exactly like the site template's
- * `/template` route, with a pinned header (locked primary-field title +
- * properties reference) and a sidebar **Preview as row** picker that swaps
- * the editor for the chosen row's live-rendered page. The template is created
- * on first visit (a single empty text block), so the route is always
- * enterable; every row page renders from whatever is authored here
- * (`useRowTemplate`). Client-only — everything lives in local collections.
+ * the normal `PageWorkspace` pipeline like a real row page (icon + defaults
+ * properties band + canvas), with a sidebar **Live preview** picker that swaps
+ * the editor for the chosen row's evaluated page and **Clear row pages** so
+ * already-materialized pages re-seed from this template. Created on first
+ * visit (a single empty text block). Client-only — local collections only.
  */
 
 /** First rows in manual order — the preview picker's sample. */
@@ -157,7 +154,6 @@ export function DatabaseTemplateEditorClient({
           workspace
         )}
       </PageSidebarChromeProvider>
-      {previewRow ? null : <RowTemplateTokenAutocomplete database={database} />}
     </SiteShell>
   );
 }

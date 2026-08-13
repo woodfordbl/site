@@ -24,6 +24,19 @@ export function isDatabaseTemplatePageId(
   );
 }
 
+/**
+ * Database id encoded in a template page id, or `null` when `id` is not a
+ * reserved row-template page.
+ */
+export function databaseIdFromTemplatePageId(
+  id: string | null | undefined
+): string | null {
+  if (!isDatabaseTemplatePageId(id) || typeof id !== "string") {
+    return null;
+  }
+  return id.slice(DATABASE_TEMPLATE_PAGE_ID_PREFIX.length) || null;
+}
+
 /** Internal slug for a template record; never resolved as a navigable route. */
 export function databaseTemplatePageSlug(databaseId: string): string {
   return `/__db-template__/${databaseId}`;
