@@ -89,8 +89,9 @@ equivalent shapes, guarded by the frozen
   identifier (bare name reference, lambda parameter). A trailing `;` after the
   final expression is tolerated; a `;` anywhere else is a parse error with a hint,
   as is a lone `=` (both are tokens only so these statements can lex). Statement
-  names reject the reserved words plus the reference roots
-  (`prop`/`db`/`thisPage`/`thisRow`, which could never be read back). Each
+  names reject the reserved words plus the reference roots in scope
+  (`prop`/`db`/`thisPage`, and `thisRow` on database-row hosts). On ordinary
+  pages `thisRow` is a bare name, so `let thisRow = …` is legal there. Each
   statement spends one level of the parse-depth budget, preserving the
   "parse depth bounds AST depth" contract.
 - **Lambdas** — `x => expr`, `(a, b) => expr`; body extends maximally right. Named
@@ -107,8 +108,15 @@ equivalent shapes, guarded by the frozen
 
 The stored form of a property reference is **`prop("<fieldId>")`** — field ids are
 stable, so renaming a field never touches (or breaks) any stored formula. The display
-forms `thisPage.Name` / `thisRow["Name"]` remain accepted input; the AST records
-which spelling was used (`via: "prop" | "scope"`).
+forms `thisPage.Name` / `thisRow["Name"]` remain accepted input on
+**database-row hosts** (formula columns, filters, row pages, row templates);
+the AST records which spelling was used (`via: "prop" | "scope"`). `thisPage`
+is a scope root on every page. `thisRow` is a synonym of `thisPage` **only**
+when the host has a database row — see
+[`pageHasFormulaRowContext`](../../src/lib/databases/page-formula-fields.ts).
+On ordinary pages `thisRow` parses as a bare identifier; the checker reports
+`Unknown name "thisRow"` like any other unbound name, and autocomplete does
+not offer it.
 
 - [`ref-rewrite.ts`](../../src/lib/formula/ref-rewrite.ts) converts between the two by
   splicing property-node spans right-to-left, so spacing/casing/comments are never
@@ -514,7 +522,11 @@ their computed values). Save/Done require a **valid** formula — blocked by par
 errors and by checker diagnostics, so broken drafts never persist — while
 blank/whitespace drafts stay saveable (clearing a formula is legitimate). The
 searchable Properties / Functions / Operators reference inserts at the caret, docs
-sourced from the catalog.
+sourced from the catalog. Formula columns may reference other formula columns; the
+column being edited (`selfFieldId`, passed from the column menu) is omitted from
+the Properties list, fused autocomplete, chip Change-property menu, and the mobile
+property picker so it cannot select itself. A hand-typed self-reference still
+evaluates as a named cycle error.
 
 On fine pointers — and on coarse ones in the sheet layout — the expression input is
 [`formula-code-editor.tsx`](../../src/components/database/formula-code-editor.tsx),
@@ -567,10 +579,18 @@ unparseable-mid-keystroke drafts still highlight.
 **Fused autocomplete** (proposal §6.2): one completion source merges properties
 (labeled/filtered by field name, applied as the canonical `prop("<id>")` text — one
 atomic chip — with the field-type icon and value type as detail; a typed
-`thisPage.`-prefix narrows to properties and is replaced whole), catalog functions
+`thisPage.`-prefix narrows to properties and is replaced whole; `thisRow.`
+does the same only on database-row hosts, and ordinary pages omit `thisRow`
+from the completion list; the formula column being edited (`selfFieldId`) is
+omitted from property options so it cannot pick itself — a hand-typed
+self-reference still chips and evaluates as a named cycle), catalog functions
 (signature as detail, description as the info card, caret placed inside the inserted
 parens — after them for zero-argument functions), and the word operators/keywords
-(`and`/`or`/`not`/`true`/`false`). When databases are wired, a `db` entry
+(`and`/`or`/`not`/`true`/`false`). Completion rows show a leading icon only
+when they have one: field-type for properties, ƒ for functions, the database
+glyph for database names, and the default page glyph (Tabler `IconFile`, same
+as `DEFAULT_PAGE_ICON`) for `thisPage`/`thisRow`. `db` and keywords left-align
+with no empty icon slot. When databases are wired, a `db` entry
 completes like a scope root — accepting inserts the opener `db("` and reopens
 the popup — and **database-name completions** fill the `db("` argument
 position: labeled/filtered by name (a spaces-tolerant `validFor`, not the
@@ -598,8 +618,9 @@ plus its canonical span resolved from the current doc at tap time — never stal
 build-time offsets — and a `kind` (`"property" | "database"`) with the
 referenced id (`refId`). The panel opens
 [`formula-chip-menu.tsx`](../../src/components/database/formula-chip-menu.tsx)
-anchored at the chip: **Change property** (a property list with field-type icons)
-splices `canonicalPropertyReference(id)` over the span via the editor handle's
+anchored at the chip: **Change property** (a property list with field-type icons,
+omitting the column being edited) splices `canonicalPropertyReference(id)` over
+the span via the editor handle's
 `replaceRange`, and **Delete** removes the whole span. Database chips get the
 same menu with **Change database** instead — the workspace databases behind
 the database glyph, the current one check-marked, a pick splicing
@@ -653,6 +674,8 @@ reclaims the keyboard after an insert; each has its own search), followed by the
 operator keys `( ) , " + - * / . ==`. All insertions go through the panel's caret
 splice / `insertPropertyReference` paths (canonical `prop("<id>")` chips on CM6),
 taps fire selection haptics, and the row hides while a picker drawer is open. The
+property picker omits the column being edited (`selfFieldId`), matching the
+desktop Properties list. The
 Rollup button stays reachable below the editor and swaps in the wizard as in the
 other layouts.
 
@@ -694,7 +717,9 @@ lives in [`formula-function-ops.ts`](../../src/db/queries/formula-function-ops.t
 via the pure validators in
 [`user-functions.ts`](../../src/lib/formula/user-functions.ts): identifier-safe
 per the REAL tokenizer (the rollup-template discipline), not a reserved word or
-a reference root (`prop`/`db`/`thisPage`/`thisRow`) or an evaluator special
+a reference root (`prop`/`db`/`thisPage`/`thisRow` — `thisRow` stays reserved
+even on ordinary pages, because a function of that name would be uncallable
+from a row formula) or an evaluator special
 form (`let`/`lets`), not a catalog name OR alias, and unique among definitions
 case-insensitively. Parameters follow the lambda-parameter rules plus the
 reference-root exclusion. The schema itself stays structural — stored rows
@@ -797,12 +822,17 @@ errors inline as "⚠ message". Never throws.
 **Inline formula tokens** (the `formula` rich-text mark) share the same `thisPage`
 vocabulary. Ordinary pages expose the base fields from
 [`page-scope.ts`](../../src/lib/formula/page-scope.ts) (Title / Created at /
-Updated at). Database row and template pages layer the database's columns on top
-via [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts)
+Updated at) and do **not** treat `thisRow` as a scope root — typing it is
+`Unknown name "thisRow"`, and it is omitted from autocomplete. Database row
+and template pages layer the database's columns on top via
+[`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts)
 (`createInlinePageFormulaScope` / `inlinePageFormulaCheckProperties` /
-`pageFormulaFields`) — name collisions favor the column; base ids stay reachable
-as `prop("page:…")`. [`InlineFormulaPageProvider`](../../src/components/editor/inline-formula-page.tsx)
+`pageFormulaFields` / `pageHasFormulaRowContext`) — name collisions favor the
+column; base ids stay reachable as `prop("page:…")`; `thisRow` is a synonym
+of `thisPage`. [`InlineFormulaPageProvider`](../../src/components/editor/inline-formula-page.tsx)
 resolves the overlay from `databaseRowSource` or a `db-template:…` page id.
+Hovering an editable token shows [`InlineFormulaTokenTooltip`](../../src/components/canvas/inline-formula-tooltip.tsx)
+— **Edit formula** over the expression — instead of a native `title`.
 
 ## Contracts
 

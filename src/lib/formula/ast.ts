@@ -40,12 +40,13 @@ export interface FormulaLiteralNode {
 }
 
 /**
- * Property reference — `thisPage.Name`, `thisRow.Name`, the bracket form
- * `thisPage["Property With Spaces"]`, or the canonical id form
- * `prop("<fieldId>")`. `thisPage` and `thisRow` are synonyms for the same
- * scope, so the AST keeps only the raw reference string (`name`). `via`
- * records how the reference was written so source rewriters can translate
- * between the two spellings.
+ * Property reference — `thisPage.Name`, `thisRow.Name` (row hosts only), the
+ * bracket form `thisPage["Property With Spaces"]`, or the canonical id form
+ * `prop("<fieldId>")`. On database-row hosts `thisPage` and `thisRow` are
+ * synonyms for the same scope; on ordinary pages `thisRow` is a bare name,
+ * not a property node. The AST keeps only the raw reference string (`name`).
+ * `via` records how the reference was written so source rewriters can
+ * translate between the two spellings.
  */
 export interface FormulaPropertyNode {
   end: number;

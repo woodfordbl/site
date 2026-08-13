@@ -148,8 +148,32 @@ describe("parse property references", () => {
     });
   });
 
-  it("treats thisRow as a synonym for thisPage", () => {
+  it("treats thisRow as a synonym for thisPage on row hosts", () => {
     expect(sexpr(astOf("thisRow.Score"))).toBe(sexpr(astOf("thisPage.Score")));
+  });
+
+  it("parses thisRow as a bare name when it is not in scope", () => {
+    const result = parseFormula("thisRow", { thisRowInScope: false });
+    if (!result.ok) {
+      throw new Error(`expected ok: ${result.error.message}`);
+    }
+    expect(sexpr(result.ast)).toBe("name:thisRow");
+  });
+
+  it("parses thisRow.X as member access when thisRow is not in scope", () => {
+    const result = parseFormula("thisRow.Title", { thisRowInScope: false });
+    if (!result.ok) {
+      throw new Error(`expected ok: ${result.error.message}`);
+    }
+    expect(sexpr(result.ast)).toBe("(member name:thisRow Title)");
+  });
+
+  it("still parses thisPage as a scope root when thisRow is not in scope", () => {
+    const result = parseFormula("thisPage.Title", { thisRowInScope: false });
+    if (!result.ok) {
+      throw new Error(`expected ok: ${result.error.message}`);
+    }
+    expect(sexpr(result.ast)).toBe("prop:Title");
   });
 
   it("matches scope roots case-insensitively", () => {
@@ -982,6 +1006,16 @@ describe("parse let statements", () => {
     expect(errorOf("let db = 1; 2").message).toContain("reserved");
     expect(errorOf("let thisPage = 1; 2").message).toContain("reserved");
     expect(errorOf("let thisRow = 1; 2").message).toContain("reserved");
+  });
+
+  it("allows let thisRow when thisRow is not a scope root", () => {
+    const result = parseFormula("let thisRow = 1; thisRow", {
+      thisRowInScope: false,
+    });
+    if (!result.ok) {
+      throw new Error(`expected ok: ${result.error.message}`);
+    }
+    expect(sexpr(result.ast)).toBe("(let name:thisRow 1 name:thisRow)");
   });
 
   it("reports a stray semicolon with the statement-position hint", () => {

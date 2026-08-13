@@ -1010,6 +1010,25 @@ describe("bare names", () => {
       start: 0,
     });
   });
+
+  it("reports thisRow as an unknown name when it is not a scope root", () => {
+    const parsed = parseFormula("thisRow", { thisRowInScope: false });
+    if (!parsed.ok) {
+      throw new Error(`parse failed: ${parsed.error.message}`);
+    }
+    const result = checkFormula(parsed.ast, {
+      properties: [],
+      thisRowInScope: false,
+    });
+    expect(result.diagnostics).toEqual([
+      {
+        end: "thisRow".length,
+        message: 'Unknown name "thisRow"',
+        severity: "error",
+        start: 0,
+      },
+    ]);
+  });
 });
 
 describe("references and unresolved names", () => {

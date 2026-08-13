@@ -9,6 +9,7 @@ import {
   createInlinePageFormulaScope,
   type InlineFormulaPageModel,
   inlinePageFormulaCheckProperties,
+  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   evaluateInlineTokens,
@@ -139,8 +140,9 @@ export function useInlineFormulaValues(
         relatedDatabases,
         userFunctions
       ),
+      thisRowInScope: pageHasFormulaRowContext(model),
     }),
-    [context, model?.databaseFields, relatedDatabases, userFunctions]
+    [context, model, relatedDatabases, userFunctions]
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision is the engine's "re-read the collections" signal, not an input the body reads

@@ -454,6 +454,23 @@ export function formulaDisplayInfo(field: DatabaseField): {
 }
 
 /**
+ * Fields a formula property picker may offer. Omits `selfFieldId` — the
+ * column whose expression is being edited — so a formula cannot insert a
+ * reference to itself. Other formula columns stay pickable; a hand-typed
+ * self-reference still parses and evaluates as a named cycle error.
+ * `selfFieldId` omitted (inline tokens, filters) leaves the list unchanged.
+ */
+export function formulaPickableFields<T extends { id: string }>(
+  fields: readonly T[],
+  selfFieldId: string | null | undefined
+): T[] {
+  if (selfFieldId == null) {
+    return [...fields];
+  }
+  return fields.filter((field) => field.id !== selfFieldId);
+}
+
+/**
  * Whether any formula field's expression depends on the clock
  * (`now()`/`today()`) — callers re-evaluate the overlay on an interval when
  * true. Blank/unparseable expressions are never volatile. `userFunctions`

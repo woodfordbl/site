@@ -513,6 +513,7 @@ function FormulaExpressionEditor({
       previewRows={previewRows}
       relatedDatabases={relatedDatabases}
       relations={relations}
+      selfFieldId={field.id}
       userFunctions={userFunctions}
     />
   );

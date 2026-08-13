@@ -39,6 +39,7 @@ import {
   formulaMinArgs,
   formulaParamAt,
 } from "@/lib/formula/catalog.ts";
+import type { ParseFormulaOptions } from "@/lib/formula/parse.ts";
 import {
   BLANK_TYPE,
   BOOLEAN_TYPE,
@@ -110,8 +111,11 @@ export interface FormulaCheckDatabase {
   readonly properties: readonly FormulaCheckProperty[];
 }
 
-/** Schema context a formula checks against. */
-export interface FormulaCheckContext {
+/** Schema context a formula checks against. `thisRowInScope` (from
+ * {@link ParseFormulaOptions}) defaults true — database-row hosts. Ordinary
+ * pages set it false so `thisRow` is a bare name, not a scope root.
+ */
+export interface FormulaCheckContext extends ParseFormulaOptions {
   /**
    * Databases relation members resolve against, keyed by database id.
    * Optional — without it, member access on typed rows checks

@@ -50,6 +50,20 @@ describe("highlightFormula", () => {
     ]);
   });
 
+  it("classifies thisRow as a name when it is not a scope root", () => {
+    expect(
+      highlightFormula("thisRow", { thisRowInScope: false }).map(
+        (span) => `${span.kind}:${"thisRow".slice(span.start, span.end)}`
+      )
+    ).toEqual(["name:thisRow"]);
+    const source = "thisRow.Title";
+    expect(
+      highlightFormula(source, { thisRowInScope: false }).map(
+        (span) => `${span.kind}:${source.slice(span.start, span.end)}`
+      )
+    ).toEqual(["name:thisRow", "operator:.", "property:Title"]);
+  });
+
   it("spans a whole prop() reference including the quoted id", () => {
     expect(spansOf('prop("f-price") ^ 2')).toEqual([
       'property:prop("f-price")',

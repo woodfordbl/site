@@ -16,6 +16,7 @@ import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.
 import {
   pageFormulaFields,
   pageFormulaPreviewRow,
+  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   INLINE_FORMULA_EDIT_EVENT,
@@ -324,6 +325,7 @@ export function InlineFormulaPopover() {
         previewRows={previewRows}
         relatedDatabases={relatedDatabases}
         relations={relations}
+        thisRowInScope={pageHasFormulaRowContext(model)}
         userFunctions={userFunctions}
       />
     </div>

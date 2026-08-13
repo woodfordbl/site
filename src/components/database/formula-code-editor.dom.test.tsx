@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { startCompletion } from "@codemirror/autocomplete";
 import { EditorView } from "@codemirror/view";
 import {
   act,
@@ -9,7 +10,7 @@ import {
 } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { DATABASE_FIELD_TYPE_ICON_NODES } from "@/components/database/database-field-icons.ts";
 import {
   FormulaCodeEditor,
   type FormulaCodeEditorHandle,
@@ -261,6 +262,7 @@ describe("FormulaCodeEditor", () => {
       expect(chip().textContent).toBe("Price");
       expect(chip().getAttribute("aria-label")).toBe("Property Price");
       expect(chip().querySelector("svg")).not.toBeNull();
+      expect(chip().dataset.fieldType).toBe("number");
       expect(cmContent().textContent).not.toContain("f-price");
 
       // A rename while the editor is open relabels the chip in place.
@@ -274,6 +276,37 @@ describe("FormulaCodeEditor", () => {
         />
       );
       expect(chip().textContent).toBe("Cost");
+    });
+
+    it("renders each property chip with its column type icon", () => {
+      const fields: DatabaseField[] = [
+        { id: "f-name", name: "Name", type: "text" },
+        { id: "f-tags", name: "Tags", type: "multiSelect" },
+        { id: "f-calc", name: "Formula", type: "formula", expression: "" },
+      ];
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={formulaCheckContext(fields)}
+          fields={fields}
+          onChange={vi.fn()}
+          value={'prop("f-name") + prop("f-tags") + prop("f-calc")'}
+        />
+      );
+
+      const chips = [...document.querySelectorAll(".cm-formula-chip")];
+      expect(chips).toHaveLength(3);
+      for (const [index, field] of fields.entries()) {
+        const chip = chips[index];
+        expect(chip?.getAttribute("data-field-type")).toBe(field.type);
+        const paths = [...(chip?.querySelectorAll("svg path") ?? [])].map(
+          (path) => path.getAttribute("d")
+        );
+        const expected = DATABASE_FIELD_TYPE_ICON_NODES[field.type].map(
+          ([, attrs]) => (attrs.d === undefined ? null : String(attrs.d))
+        );
+        expect(paths).toEqual(expected);
+      }
     });
 
     it("renders a chip on the second line of a let-statement formula", () => {
@@ -779,6 +812,28 @@ describe("FormulaCodeEditor", () => {
       ).not.toBeNull();
     });
 
+    it("omits the column being edited from property completions", async () => {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={CHECK_CONTEXT}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          selfFieldId="f-price"
+          value=""
+        />
+      );
+      act(() => {
+        startCompletion(editorView());
+      });
+
+      const open = await waitForPopup();
+      const labels = optionLabels(open);
+      expect(labels).not.toContain("Price");
+      expect(labels).toContain("Unit Count");
+      expect(labels).toContain("Note");
+    });
+
     it("opens on the second line of a multi-statement draft", async () => {
       renderEditor();
       typeText("let t = 1;\npri");
@@ -807,6 +862,23 @@ describe("FormulaCodeEditor", () => {
       );
     });
 
+    it("shows the default page icon for thisPage and thisRow completions", async () => {
+      renderEditor();
+      typeText("thi");
+
+      const open = await waitForPopup();
+      const rowByLabel = (label: string): Element | undefined =>
+        [...open.querySelectorAll("li")].find(
+          (li) => li.querySelector(".cm-completionLabel")?.textContent === label
+        );
+      expect(
+        rowByLabel("thisPage")?.querySelector(".cm-formula-completion-icon svg")
+      ).not.toBeNull();
+      expect(
+        rowByLabel("thisRow")?.querySelector(".cm-formula-completion-icon svg")
+      ).not.toBeNull();
+    });
+
     it("completes scope roots and chains into the property list", async () => {
       const onChange = renderEditor();
       typeText("thi");
@@ -828,6 +900,23 @@ describe("FormulaCodeEditor", () => {
       expect(onChange).toHaveBeenLastCalledWith('prop("f-price")');
     });
 
+    it("omits thisRow from completions when it is not in scope", async () => {
+      render(
+        <FormulaCodeEditor
+          ariaLabel="Formula expression"
+          checkContext={{ ...CHECK_CONTEXT, thisRowInScope: false }}
+          fields={FIELDS}
+          onChange={vi.fn()}
+          value=""
+        />
+      );
+      typeText("thi");
+
+      const open = await waitForPopup();
+      expect(optionLabels(open)).toContain("thisPage");
+      expect(optionLabels(open)).not.toContain("thisRow");
+    });
+
     it("replaces a typed scope-root prefix along with the partial name", async () => {
       const onChange = renderEditor();
       typeText("thisPage.pri");
@@ -841,7 +930,13 @@ describe("FormulaCodeEditor", () => {
     it("inserts functions as argument snippets (caret after the parens for zero-arg)", async () => {
       const onChange = renderEditor();
       typeText("roun");
-      await waitForPopup();
+      const open = await waitForPopup();
+      const roundRow = [...open.querySelectorAll("li")].find(
+        (li) => li.querySelector(".cm-completionLabel")?.textContent === "round"
+      );
+      expect(
+        roundRow?.querySelector(".cm-formula-completion-icon")?.textContent
+      ).toBe("ƒ");
       await settleInteractionDelay();
       fireEvent.keyDown(cmContent(), { key: "Enter" });
       // Parameterized functions land the placeholder snippet form with the
@@ -933,6 +1028,10 @@ describe("FormulaCodeEditor", () => {
 
       const open = await waitForPopup();
       expect(optionLabels(open)).toContain("db");
+      const dbRow = [...open.querySelectorAll("li")].find(
+        (li) => li.querySelector(".cm-completionLabel")?.textContent === "db"
+      );
+      expect(dbRow?.querySelector(".cm-formula-completion-icon")).toBeNull();
       await settleInteractionDelay();
 
       // Accepting inserts the opener and reopens the popup, now filled with
@@ -943,6 +1042,12 @@ describe("FormulaCodeEditor", () => {
       expect(onChange).toHaveBeenLastCalledWith('db("');
       const names = await waitForPopup();
       expect(optionLabels(names).sort()).toEqual(["Projects", "Tasks"]);
+      const tasksRow = [...names.querySelectorAll("li")].find(
+        (li) => li.querySelector(".cm-completionLabel")?.textContent === "Tasks"
+      );
+      expect(
+        tasksRow?.querySelector(".cm-formula-completion-icon svg")
+      ).not.toBeNull();
     });
 
     it("applies a database-name completion as one canonical db chip", async () => {
@@ -989,8 +1094,13 @@ describe("FormulaCodeEditor", () => {
         (row) => row.querySelector(".cm-completionLabel")?.textContent === "and"
       );
       expect(andRows).toHaveLength(1);
-      // The surviving row is the keyword form — no signature detail.
+      // The surviving row is the keyword form — no signature detail, and
+      // no reserved empty icon slot (unlike thisPage/thisRow, which carry
+      // the default page glyph).
       expect(andRows[0]?.querySelector(".cm-completionDetail")).toBeNull();
+      expect(
+        andRows[0]?.querySelector(".cm-formula-completion-icon")
+      ).toBeNull();
     });
 
     it("offers user-defined functions with their signature detail", async () => {
