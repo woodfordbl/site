@@ -1,5 +1,11 @@
 /** @vitest-environment jsdom */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { DatabaseColumnMenu } from "@/components/database/database-column-menu.tsx";
@@ -55,9 +61,17 @@ const SYNCED_TEXT_FIELD: DatabaseField = {
   sourceKey: "symbol",
 };
 
+const SELECT_FIELD: DatabaseField = {
+  id: "f-select",
+  name: "Status",
+  type: "select",
+  options: [{ color: "blue", id: "opt-todo", name: "To do" }],
+};
+
 async function renderColumnMenu(
   field: DatabaseField,
-  actions: "all" | "schema" = "all"
+  actions: "all" | "schema" = "all",
+  view: DatabaseView = VIEW
 ) {
   const openMenuRef = {
     current: null as (() => void) | null,
@@ -74,7 +88,7 @@ async function renderColumnMenu(
         field={field}
         isPrimary={field.id === "f-text"}
         openMenuRef={openMenuRef}
-        view={VIEW}
+        view={view}
       >
         <span>Column</span>
       </DatabaseColumnMenu>
@@ -148,5 +162,44 @@ describe("DatabaseColumnMenu separators", () => {
     expect(screen.queryByText("Sort ascending")).toBeNull();
     expect(screen.getByText("Duplicate property")).toBeTruthy();
     assertNoOrphanMenuSeparators(menu);
+  });
+});
+
+describe("DatabaseColumnMenu Calculate trigger", () => {
+  it("leaves the Calculate row unlabeled when no aggregate is set", async () => {
+    await renderColumnMenu(TEXT_FIELD);
+    const trigger = screen.getByRole("menuitem", { name: "Calculate" });
+    expect(trigger.getAttribute("data-slot")).toBe("dropdown-menu-sub-trigger");
+    expect(trigger.textContent?.trim()).toBe("Calculate");
+  });
+
+  it("shows the active aggregate label inline on the Calculate trigger", async () => {
+    await renderColumnMenu(TEXT_FIELD, "all", {
+      ...VIEW,
+      config: { calculations: { "f-text": "countAll" } },
+    });
+    const trigger = screen.getByText("Calculate").closest("[data-slot]");
+    expect(trigger?.getAttribute("data-slot")).toBe(
+      "dropdown-menu-sub-trigger"
+    );
+    expect(trigger?.textContent).toContain("Count all");
+  });
+});
+
+describe("SelectOptionsEditor rows", () => {
+  it("groups color, name, and delete in one InputGroup", async () => {
+    await renderColumnMenu(SELECT_FIELD);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit property" }));
+
+    const nameInput = await screen.findByLabelText("Rename option To do");
+    const colorTrigger = screen.getByLabelText("Change color for option To do");
+    const deleteButton = screen.getByLabelText("Delete option To do");
+    const group = nameInput.closest("[data-slot='input-group']");
+
+    expect(group).not.toBeNull();
+    expect(colorTrigger.closest("[data-slot='input-group']")).toBe(group);
+    expect(deleteButton.closest("[data-slot='input-group']")).toBe(group);
+    expect(colorTrigger.closest("[data-align='inline-start']")).not.toBeNull();
+    expect(deleteButton.closest("[data-align='inline-end']")).not.toBeNull();
   });
 });

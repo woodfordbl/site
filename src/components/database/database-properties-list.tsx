@@ -13,6 +13,11 @@ import {
 } from "@/components/database/use-list-reorder.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
+import {
   removeDatabaseField,
   reorderDatabaseFields,
 } from "@/db/queries/database-collection-ops.ts";
@@ -20,11 +25,95 @@ import type { DatabaseField, LocalDatabase } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
- * Shared Properties list used by the database ⋯ settings Properties submenu
- * and the row-page Properties ⋯ menu: schema reorder (grip), hide/show, and
- * delete. Visibility is injected by the host so table views keep writing
- * `view.visibleFieldIds` while row pages write `rowPropertiesVisibleFieldIds`.
+ * Reorderable Properties list used by the row-page Properties ⋯ menu (the
+ * database ⋯ settings Properties submenu shares the grip, lock tooltip, and
+ * primary-pin helpers). Visibility is injected by the host so table views
+ * keep writing `view.visibleFieldIds` while row pages write
+ * `rowPropertiesVisibleFieldIds`.
  */
+
+/** Hover copy on the primary field — it cannot be hidden, deleted, or reordered. */
+export const TITLE_PROPERTY_LOCKED_HINT =
+  "Title properties cannot be hidden or removed";
+
+/**
+ * Commits a Properties-list reorder while pinning the primary field at index
+ * 0. The title is the row-page heading, so it always stays on top; dragging
+ * it is not offered in the UI. Returns `null` when the move is a no-op or
+ * would drag the primary field.
+ */
+export function fieldIdsAfterReorderPinningPrimary(
+  fieldIds: readonly string[],
+  primaryFieldId: string,
+  from: number,
+  to: number
+): string[] | null {
+  if (from === to || fieldIds[from] === primaryFieldId) {
+    return null;
+  }
+  const ids = [...fieldIds];
+  const [moved] = ids.splice(from, 1);
+  if (moved === undefined) {
+    return null;
+  }
+  ids.splice(to, 0, moved);
+  return [primaryFieldId, ...ids.filter((id) => id !== primaryFieldId)];
+}
+
+/**
+ * Left-column grip for a Properties row, or a same-size spacer when the
+ * field is primary (title stays first; it has nothing to reorder against).
+ */
+export function DatabasePropertyReorderHandle({
+  fieldName,
+  handleProps,
+}: {
+  fieldName: string;
+  handleProps: ListReorderHandleProps | null;
+}): ReactNode {
+  if (!handleProps) {
+    return <span aria-hidden className="size-7 shrink-0" />;
+  }
+  return (
+    <button
+      aria-label={`Reorder ${fieldName}`}
+      className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground active:cursor-grabbing"
+      data-vaul-no-drag=""
+      type="button"
+      {...handleProps}
+    >
+      <IconGripVertical className="size-4 stroke-[1.5px]" />
+    </button>
+  );
+}
+
+/** Tooltip around the primary field's name + Title badge. */
+export function TitlePropertyLockTooltip({
+  children,
+}: {
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="inline-flex min-w-0 flex-1 items-center gap-1.5">
+            {children}
+          </span>
+        }
+      />
+      <TooltipContent>{TITLE_PROPERTY_LOCKED_HINT}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function TitlePropertyBadge(): ReactNode {
+  return (
+    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+      Title
+    </span>
+  );
+}
 
 interface DatabasePropertyRowProps {
   /** Drop-line below the last row while a row is dragged past the end. */
@@ -38,16 +127,17 @@ interface DatabasePropertyRowProps {
   isVisible: boolean;
   onDelete: () => void;
   onToggleVisible: () => void;
-  /** Pointer handlers for the left grip; drives {@link useListReorder}. */
-  reorderHandleProps: ListReorderHandleProps;
+  /** Pointer handlers for the left grip; omitted on the primary field. */
+  reorderHandleProps: ListReorderHandleProps | null;
 }
 
 /**
  * One field row in the Properties list: a left grip that drag-reorders the
- * schema, the field icon + name, a "Title" badge beside the primary field's
- * name, and — for non-primary fields — hide/show and delete controls on the
- * right. The primary field can never be hidden or deleted. Tapping the name
- * opens nothing here — field editing lives in the column menu.
+ * schema (spacer on the primary field — title stays first on the page), the
+ * field icon + name, a "Title" badge beside the primary field's name, and —
+ * for non-primary fields — hide/show and delete controls on the right. The
+ * primary field can never be hidden, deleted, or reordered; hovering its
+ * name explains why.
  */
 function DatabasePropertyRow({
   dropBefore,
@@ -61,6 +151,12 @@ function DatabasePropertyRow({
   onToggleVisible,
 }: DatabasePropertyRowProps) {
   const FieldIcon = resolveFieldIcon(field);
+  const name = (
+    <>
+      <span className="min-w-0 truncate">{field.name}</span>
+      {isPrimary ? <TitlePropertyBadge /> : null}
+    </>
+  );
 
   return (
     <div
@@ -73,23 +169,17 @@ function DatabasePropertyRow({
     >
       {dropBefore ? <PropertyDropLine position="top" /> : null}
       {dropAfter ? <PropertyDropLine position="bottom" /> : null}
-      <button
-        aria-label={`Reorder ${field.name}`}
-        className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground active:cursor-grabbing"
-        data-vaul-no-drag=""
-        type="button"
-        {...reorderHandleProps}
-      >
-        <IconGripVertical className="size-4 stroke-[1.5px]" />
-      </button>
+      <DatabasePropertyReorderHandle
+        fieldName={field.name}
+        handleProps={reorderHandleProps}
+      />
       <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="min-w-0 truncate">{field.name}</span>
         {isPrimary ? (
-          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-            Title
-          </span>
-        ) : null}
+          <TitlePropertyLockTooltip>{name}</TitlePropertyLockTooltip>
+        ) : (
+          name
+        )}
       </div>
       {isPrimary ? null : (
         <>
@@ -138,7 +228,8 @@ export interface DatabasePropertiesListProps {
 
 /**
  * Reorderable Properties list for a database: one row per schema field with
- * grip / eye / trash. Visibility callbacks are host-owned.
+ * grip / eye / trash on non-primary fields. The primary (title) field stays
+ * first, has no grip or hide/delete, and explains the lock on hover.
  */
 export function DatabasePropertiesList({
   database,
@@ -146,10 +237,16 @@ export function DatabasePropertiesList({
   onToggleVisible,
 }: DatabasePropertiesListProps): ReactNode {
   const reorderFields = (from: number, to: number) => {
-    const ids = database.fields.map((field) => field.id);
-    const [moved] = ids.splice(from, 1);
-    ids.splice(to, 0, moved);
-    reorderDatabaseFields(database.id, ids);
+    const next = fieldIdsAfterReorderPinningPrimary(
+      database.fields.map((field) => field.id),
+      database.primaryFieldId,
+      from,
+      to
+    );
+    if (!next) {
+      return;
+    }
+    reorderDatabaseFields(database.id, next);
   };
 
   const { containerRef, getHandleProps, state } = useListReorder(reorderFields);
@@ -159,26 +256,31 @@ export function DatabasePropertiesList({
 
   return (
     <div ref={containerRef}>
-      {database.fields.map((field, index) => (
-        <DatabasePropertyRow
-          dropAfter={
-            isReordering && index === lastIndex && state.overIndex === index + 1
-          }
-          dropBefore={isReordering && state.overIndex === index}
-          field={field}
-          isDragging={state.fromIndex === index}
-          isPrimary={field.id === database.primaryFieldId}
-          isVisible={isVisible(field.id)}
-          key={field.id}
-          onDelete={() => {
-            removeDatabaseField(database.id, field.id);
-          }}
-          onToggleVisible={() => {
-            onToggleVisible(field.id);
-          }}
-          reorderHandleProps={getHandleProps(index)}
-        />
-      ))}
+      {database.fields.map((field, index) => {
+        const isPrimary = field.id === database.primaryFieldId;
+        return (
+          <DatabasePropertyRow
+            dropAfter={
+              isReordering &&
+              index === lastIndex &&
+              state.overIndex === index + 1
+            }
+            dropBefore={isReordering && !isPrimary && state.overIndex === index}
+            field={field}
+            isDragging={state.fromIndex === index}
+            isPrimary={isPrimary}
+            isVisible={isVisible(field.id)}
+            key={field.id}
+            onDelete={() => {
+              removeDatabaseField(database.id, field.id);
+            }}
+            onToggleVisible={() => {
+              onToggleVisible(field.id);
+            }}
+            reorderHandleProps={isPrimary ? null : getHandleProps(index)}
+          />
+        );
+      })}
     </div>
   );
 }
