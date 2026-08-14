@@ -57,8 +57,8 @@ importers:
         specifier: ^0.6.10
         version: 0.6.10(typescript@6.0.3)
       '@tanstack/electric-db-collection':
-        specifier: ^0.3.18
-        version: 0.3.18(typescript@6.0.3)
+        specifier: ^0.3.8
+        version: 0.3.8(typescript@6.0.3)
       '@tanstack/query-db-collection':
         specifier: ^1.0.42
         version: 1.0.42(@tanstack/query-core@5.101.1)(typescript@6.0.3)
@@ -249,6 +249,9 @@ importers:
       opentype.js:
         specifier: ^2.0.0
         version: 2.0.0
+      playwright:
+        specifier: ^1.62.1
+        version: 1.62.1
       sharp:
         specifier: ^0.35.2
         version: 0.35.2
@@ -2188,11 +2191,6 @@ packages:
     peerDependencies:
       typescript: '>=4.7'
 
-  '@tanstack/db@0.7.2':
-    resolution: {integrity: sha512-gQjUIMKRK1ktg+dXFsTNK2pGgasGOz/qV877nG6vOfC5qggu6yDZzFn9PVhKp5t8um/4kFc4cfPlJP2WM6RmjA==}
-    peerDependencies:
-      typescript: '>=4.7'
-
   '@tanstack/devtools-client@0.0.8':
     resolution: {integrity: sha512-cG3iZkGWCwN330bLBKa8+9r4Of2AXNoz2zUqcsy/4XsD3105ghVBx78cGyvJj9fSclNomPxoqAnDGXXhg1WLvA==}
     engines: {node: '>=18'}
@@ -2231,8 +2229,8 @@ packages:
     peerDependencies:
       solid-js: '>=1.9.7'
 
-  '@tanstack/electric-db-collection@0.3.18':
-    resolution: {integrity: sha512-OOpnZfstTNUoyCov8TJ5RaqX1/3+JWrmEc24jHE4FZPSFhMR8q41mKyZz2S00KnL2VtXSQIz7ZkMZ5AQAsXoLw==}
+  '@tanstack/electric-db-collection@0.3.8':
+    resolution: {integrity: sha512-CgtGg+EszKZizMvyCNfyaZeJgCNph5X4tn/SCAOnxkVnFCa6c5XMmWnclDWTixVpTC+4k8+v3OXt1Wzp5gtppg==}
 
   '@tanstack/form-core@1.33.0':
     resolution: {integrity: sha512-AV4Pw9Dk4orFsuPBcDssfWMJFs+yMYBae7zZ4oTqrCf4ftNGQKxvrQRZeqKHG6A4TkiLeSvf2kzIjcVkrW7E6w==}
@@ -3595,6 +3593,11 @@ packages:
     resolution: {integrity: sha512-eKpRKAovdpZtR1WopLHxlBWvAgPny3c4gX1G5Jhwmmw4XJj0ifSD5qB5TOo8hmA0wlRKDAOAhEE1yVPgs6Fgcg==}
     engines: {node: '>=14.14'}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -4424,6 +4427,16 @@ packages:
   pkg-up@3.1.0:
     resolution: {integrity: sha512-nDywThFk1i4BQK4twPQ6TA4RT8bDY96yeuCVBWL3ePARCiEKDRSrNGbFIgUJpLp+XeIR65v8ra7WuJOFUBtkMA==}
     engines: {node: '>=8'}
+
+  playwright-core@1.62.1:
+    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.62.1:
+    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   postcss-selector-parser@7.1.4:
     resolution: {integrity: sha512-HeP7D2wyhkR+XaK6v4W8oRF62Dsz4flyuczALJp61GckGm42u1saSSJ/0auvcBqxs3jMRFEcPK34At/0JBKdOg==}
@@ -6955,13 +6968,6 @@ snapshots:
       '@tanstack/pacer-lite': 0.2.2
       typescript: 6.0.3
 
-  '@tanstack/db@0.7.2(typescript@6.0.3)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': 0.1.18(typescript@6.0.3)
-      '@tanstack/pacer-lite': 0.2.2
-      typescript: 6.0.3
-
   '@tanstack/devtools-client@0.0.8':
     dependencies:
       '@tanstack/devtools-event-client': 0.5.0
@@ -7018,11 +7024,11 @@ snapshots:
       - csstype
       - utf-8-validate
 
-  '@tanstack/electric-db-collection@0.3.18(typescript@6.0.3)':
+  '@tanstack/electric-db-collection@0.3.8(typescript@6.0.3)':
     dependencies:
       '@electric-sql/client': 1.5.26
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db': 0.7.2(typescript@6.0.3)
+      '@tanstack/db': 0.6.10(typescript@6.0.3)
       '@tanstack/store': 0.9.3
       debug: 4.4.3
     transitivePeerDependencies:
@@ -8326,6 +8332,9 @@ snapshots:
       jsonfile: 6.2.1
       universalify: 2.0.1
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -9111,6 +9120,14 @@ snapshots:
   pkg-up@3.1.0:
     dependencies:
       find-up: 3.0.0
+
+  playwright-core@1.62.1: {}
+
+  playwright@1.62.1:
+    dependencies:
+      playwright-core: 1.62.1
+    optionalDependencies:
+      fsevents: 2.3.2
 
   postcss-selector-parser@7.1.4:
     dependencies:

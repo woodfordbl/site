@@ -1,4 +1,5 @@
 import { BTreeIndex } from "@tanstack/db";
+import { electricCollectionOptions } from "@tanstack/electric-db-collection";
 import {
   createCollection,
   localStorageCollectionOptions,
@@ -33,6 +34,35 @@ import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
 import { localFormulaFunctionSchema } from "@/lib/schemas/local-formula-function.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
+import { registerSyncedReader } from "./read-local-storage-sync.ts";
+import { isSyncedMode, syncContext } from "./sync-mode.ts";
+import { syncedWriteHandlers } from "./synced-mutations.ts";
+
+/**
+ * Electric-backed variant of a content collection (signed-in mode). Same id,
+ * same schema, same key — every import site is oblivious to the swap. Reads
+ * stream from the workspace-scoped shape (auth-proxied; see
+ * routes/api/sync/shape.get.ts); writes post to /api/sync/mutate and hold
+ * optimistic state until the txid returns on the stream.
+ */
+function electricContentOptions<
+  Schema extends
+    | typeof localPageSchema
+    | typeof localBlockSchema
+    | typeof localDatabaseSchema
+    | typeof localDatabaseRowSchema,
+>(id: string, table: string, schema: Schema) {
+  return electricCollectionOptions({
+    id,
+    schema,
+    getKey: (item: { id: string }) => item.id,
+    shapeOptions: {
+      url: `${window.location.origin}/api/sync/shape`,
+      params: { table, ws: syncContext.workspaceId ?? "" },
+    },
+    ...syncedWriteHandlers(),
+  });
+}
 
 function getHotData(): Record<string, unknown> {
   if (!import.meta.hot) {
@@ -56,48 +86,69 @@ function getOrCreateHotCollection<T>(key: string, create: () => T): T {
   return collection;
 }
 
+function createLocalPagesCollection() {
+  return createCollection(
+    localStorageCollectionOptions({
+      id: "local-pages",
+      storageKey: "site-local-pages",
+      getKey: (item) => item.id,
+      schema: localPageSchema,
+    })
+  );
+}
+type PagesCollection = ReturnType<typeof createLocalPagesCollection>;
+
 export const localPagesCollection = getOrCreateHotCollection(
   "localPagesCollection",
-  () =>
-    createCollection(
-      localStorageCollectionOptions({
-        id: "local-pages",
-        storageKey: "site-local-pages",
-        getKey: (item) => item.id,
-        schema: localPageSchema,
-      })
-    )
+  (): PagesCollection =>
+    isSyncedMode()
+      ? // Same row type and key; the localStorage-only utils surface
+        // (acceptMutations) is unused in synced mode — the ops layer's
+        // transactions push through /api/sync/mutate instead (see
+        // synced-mutations.ts), so the assertion is safe at every call site.
+        (createCollection(
+          electricContentOptions("local-pages", "pages", localPageSchema)
+        ) as unknown as PagesCollection)
+      : createLocalPagesCollection()
 );
+
+function createLocalBlocksCollection() {
+  // Assigned after creation so the storage-event bridge can re-trigger sync
+  // without a self-referencing annotation that would erase the collection's
+  // inferred row types.
+  let triggerManualSync: (() => void) | undefined;
+
+  const collection = createCollection(
+    localStorageCollectionOptions({
+      id: "local-blocks",
+      storageKey: BLOCK_COLLECTION_STORAGE_KEY,
+      storage: pageShardedBlockStorage,
+      storageEventApi: createBlockShardStorageEventApi(
+        pageShardedBlockStorage,
+        () => triggerManualSync?.()
+      ),
+      getKey: (item) => item.id,
+      schema: localBlockSchema,
+    })
+  );
+
+  triggerManualSync = () => {
+    const sync = collection.config.sync as { manualTrigger?: () => void };
+    sync.manualTrigger?.();
+  };
+
+  return collection;
+}
+type BlocksCollection = ReturnType<typeof createLocalBlocksCollection>;
 
 export const localBlocksCollection = getOrCreateHotCollection(
   "localBlocksCollection",
-  () => {
-    // Assigned after creation so the storage-event bridge can re-trigger sync
-    // without a self-referencing annotation that would erase the collection's
-    // inferred row types.
-    let triggerManualSync: (() => void) | undefined;
-
-    const collection = createCollection(
-      localStorageCollectionOptions({
-        id: "local-blocks",
-        storageKey: BLOCK_COLLECTION_STORAGE_KEY,
-        storage: pageShardedBlockStorage,
-        storageEventApi: createBlockShardStorageEventApi(
-          pageShardedBlockStorage,
-          () => triggerManualSync?.()
-        ),
-        getKey: (item) => item.id,
-        schema: localBlockSchema,
-      })
-    );
-
-    triggerManualSync = () => {
-      const sync = collection.config.sync as { manualTrigger?: () => void };
-      sync.manualTrigger?.();
-    };
-
-    return collection;
-  }
+  (): BlocksCollection =>
+    isSyncedMode()
+      ? (createCollection(
+          electricContentOptions("local-blocks", "blocks", localBlockSchema)
+        ) as unknown as BlocksCollection)
+      : createLocalBlocksCollection()
 );
 
 /**
@@ -159,17 +210,30 @@ export const localFormulaFunctionsCollection = getOrCreateHotCollection(
  * Notion-style database definitions (fields, views, source config). Small,
  * page-metadata-sized rows — plain single-key localStorage persistence.
  */
+function createLocalDatabasesCollection() {
+  return createCollection(
+    localStorageCollectionOptions({
+      id: "local-databases",
+      storageKey: "site-local-databases",
+      getKey: (item) => item.id,
+      schema: localDatabaseSchema,
+    })
+  );
+}
+type DatabasesCollection = ReturnType<typeof createLocalDatabasesCollection>;
+
 export const localDatabasesCollection = getOrCreateHotCollection(
   "localDatabasesCollection",
-  () =>
-    createCollection(
-      localStorageCollectionOptions({
-        id: "local-databases",
-        storageKey: "site-local-databases",
-        getKey: (item) => item.id,
-        schema: localDatabaseSchema,
-      })
-    )
+  (): DatabasesCollection =>
+    isSyncedMode()
+      ? (createCollection(
+          electricContentOptions(
+            "local-databases",
+            "databases",
+            localDatabaseSchema
+          )
+        ) as unknown as DatabasesCollection)
+      : createLocalDatabasesCollection()
 );
 
 /**
@@ -177,39 +241,57 @@ export const localDatabasesCollection = getOrCreateHotCollection(
  * (`site-local-db-rows:<databaseId>`) so cell edits rewrite only that
  * database's shard — same pattern as `localBlocksCollection`.
  */
+function createLocalDatabaseRowsCollection() {
+  // Assigned after creation so the storage-event bridge can re-trigger sync
+  // without a self-referencing annotation that would erase the collection's
+  // inferred row types.
+  let triggerManualSync: (() => void) | undefined;
+
+  const collection = createCollection(
+    localStorageCollectionOptions({
+      id: "local-database-rows",
+      storageKey: DATABASE_ROW_COLLECTION_STORAGE_KEY,
+      storage: databaseShardedRowStorage,
+      storageEventApi: createDatabaseRowShardStorageEventApi(
+        databaseShardedRowStorage,
+        () => triggerManualSync?.()
+      ),
+      getKey: (item) => item.id,
+      schema: localDatabaseRowSchema,
+    })
+  );
+
+  triggerManualSync = () => {
+    const sync = collection.config.sync as { manualTrigger?: () => void };
+    sync.manualTrigger?.();
+  };
+
+  // Rows are almost always queried per database; the index turns those
+  // `eq(row.databaseId, id)` live queries into constant-time lookups.
+  // BTree over Basic: cell edits make this a write-heavy collection.
+  collection.createIndex((row) => row.databaseId, { indexType: BTreeIndex });
+
+  return collection;
+}
+type DatabaseRowsCollection = ReturnType<
+  typeof createLocalDatabaseRowsCollection
+>;
+
 export const localDatabaseRowsCollection = getOrCreateHotCollection(
   "localDatabaseRowsCollection",
-  () => {
-    // Assigned after creation so the storage-event bridge can re-trigger sync
-    // without a self-referencing annotation that would erase the collection's
-    // inferred row types.
-    let triggerManualSync: (() => void) | undefined;
-
-    const collection = createCollection(
-      localStorageCollectionOptions({
-        id: "local-database-rows",
-        storageKey: DATABASE_ROW_COLLECTION_STORAGE_KEY,
-        storage: databaseShardedRowStorage,
-        storageEventApi: createDatabaseRowShardStorageEventApi(
-          databaseShardedRowStorage,
-          () => triggerManualSync?.()
-        ),
-        getKey: (item) => item.id,
-        schema: localDatabaseRowSchema,
-      })
-    );
-
-    triggerManualSync = () => {
-      const sync = collection.config.sync as { manualTrigger?: () => void };
-      sync.manualTrigger?.();
-    };
-
-    // Rows are almost always queried per database; the index turns those
-    // `eq(row.databaseId, id)` live queries into constant-time lookups.
-    // BTree over Basic: cell edits make this a write-heavy collection.
-    collection.createIndex((row) => row.databaseId, { indexType: BTreeIndex });
-
-    return collection;
+  (): DatabaseRowsCollection => {
+    if (isSyncedMode()) {
+      const synced = createCollection(
+        electricContentOptions(
+          "local-database-rows",
+          "database_rows",
+          localDatabaseRowSchema
+        )
+      ) as unknown as DatabaseRowsCollection;
+      synced.createIndex((row) => row.databaseId, { indexType: BTreeIndex });
+      return synced;
+    }
+    return createLocalDatabaseRowsCollection();
   }
 );
 
@@ -235,13 +317,18 @@ function startLocalCollectionsSync(): void {
     return;
   }
 
-  backfillPageCreatedAt();
-  backfillBlockCreatedAt();
-  migrateLocalStorageToV2();
-  // After shards exist (post-V2), fold legacy leaf callouts into the container
-  // model so their text survives the schema strip on read.
-  migrateCalloutsToContainers();
-  reconcileDirtyPagesCookie();
+  if (!isSyncedMode()) {
+    // localStorage migrations and the SSR dirty-cookie only exist in
+    // anonymous local mode; synced collections boot straight from the shape
+    // stream.
+    backfillPageCreatedAt();
+    backfillBlockCreatedAt();
+    migrateLocalStorageToV2();
+    // After shards exist (post-V2), fold legacy leaf callouts into the
+    // container model so their text survives the schema strip on read.
+    migrateCalloutsToContainers();
+    reconcileDirtyPagesCookie();
+  }
   localPagesCollection.startSyncImmediate();
   localBlocksCollection.startSyncImmediate();
   localKeybindingsCollection.startSyncImmediate();
@@ -249,28 +336,43 @@ function startLocalCollectionsSync(): void {
   localFormulaFunctionsCollection.startSyncImmediate();
   localDatabasesCollection.startSyncImmediate();
   localDatabaseRowsCollection.startSyncImmediate();
-  // Canonicalize stored formula references (name → field id) now that the
-  // databases collection is live. The writer is injected to keep the module
-  // graph acyclic; direct collection updates persist like any other
-  // localStorage-collection write.
-  migrateFormulaExpressionsToIdRefs(
-    localDatabasesCollection.toArray,
-    (databaseId, fieldId, expression) => {
-      localDatabasesCollection.update(databaseId, (draft) => {
-        draft.fields = draft.fields.map((field) =>
-          field.id === fieldId
-            ? // The migration only ever targets formula fields, so the merged
-              // object stays a valid union member.
-              ({ ...field, expression } as DatabaseField)
-            : field
-        );
-        draft.updatedAt = new Date().toISOString();
-      });
-    }
-  );
+  if (!isSyncedMode()) {
+    // Canonicalize stored formula references (name → field id) now that the
+    // databases collection is live. The writer is injected to keep the module
+    // graph acyclic; direct collection updates persist like any other
+    // localStorage-collection write. (Local-mode-only: synced workspaces were
+    // born on the v2 formula language.)
+    migrateFormulaExpressionsToIdRefs(
+      localDatabasesCollection.toArray,
+      (databaseId, fieldId, expression) => {
+        localDatabasesCollection.update(databaseId, (draft) => {
+          draft.fields = draft.fields.map((field) =>
+            field.id === fieldId
+              ? // The migration only ever targets formula fields, so the
+                // merged object stays a valid union member.
+                ({ ...field, expression } as DatabaseField)
+              : field
+          );
+          draft.updatedAt = new Date().toISOString();
+        });
+      }
+    );
+  }
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;
+  // Synced mode: the raw-localStorage fast reads (persist-page-metadata's
+  // seeded-check and friends) resolve against the live collection instead.
+  registerSyncedReader("site-local-pages", () => localPagesCollection.toArray);
+  if (import.meta.env.DEV) {
+    // Dev-only introspection handle (used by scripts/demo probes).
+    (window as unknown as Record<string, unknown>).__collections = {
+      pages: localPagesCollection,
+      blocks: localBlocksCollection,
+      databases: localDatabasesCollection,
+      rows: localDatabaseRowsCollection,
+    };
+  }
 }
 
 startLocalCollectionsSync();

@@ -238,7 +238,10 @@ export function usePageCanvas(
 
   const ensurePageMeta = useCallback(
     (blockOrder?: string[]) => {
-      if (localPage) {
+      // `localPage` can be stale under StrictMode double-mounted effects (two
+      // mounts both capture null and both insert — crashing a fresh profile's
+      // first visit), so also consult the collection's live state.
+      if (localPage || localPagesCollection.has(pageId)) {
         return;
       }
 

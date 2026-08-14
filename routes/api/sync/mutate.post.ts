@@ -38,8 +38,10 @@ interface Mutation {
   table: SyncedTable;
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Ids are uuids for user-created rows but slugs for shipped content seeded
+// into a workspace (the home page's id is literally "home"), so validate
+// shape, not uuid-ness.
+const ID_RE = /^[\w.:-]{1,128}$/;
 const MAX_MUTATIONS = 200;
 
 function parentIdOf(mutation: Mutation): string | null {
@@ -53,17 +55,80 @@ function assertValid(mutation: Mutation): void {
   if (!(mutation.table in SYNCED_TABLES)) {
     throw HTTPError.status(400, `Unknown table ${String(mutation.table)}`);
   }
-  if (!UUID_RE.test(mutation.id)) {
-    throw HTTPError.status(400, "Row ids must be UUIDs");
+  if (!ID_RE.test(mutation.id)) {
+    throw HTTPError.status(400, "Malformed row id");
   }
   if (mutation.op !== "delete" && typeof mutation.doc !== "object") {
     throw HTTPError.status(400, "Insert/update mutations need a doc");
   }
   if (mutation.op === "insert" && SYNCED_TABLES[mutation.table].fk) {
     const parent = parentIdOf(mutation);
-    if (!(parent && UUID_RE.test(parent))) {
+    if (!(parent && ID_RE.test(parent))) {
       throw HTTPError.status(400, `${mutation.table} inserts need a parent id`);
     }
+  }
+}
+
+/**
+ * Every mutation in an acknowledged transaction must surface its txid on the
+ * shape stream — TanStack DB holds the optimistic overlay until then. A
+ * mutation matching zero rows fires no trigger, so record a synthetic delete
+ * (a no-op client-side for rows that never synced).
+ */
+async function logMiss(
+  client: import("pg").PoolClient,
+  table: string,
+  workspaceId: string,
+  id: string
+): Promise<void> {
+  await client.query(
+    `insert into shape_log (tbl, workspace_id, row_id, op, txid, doc)
+     values ($1, $2, $3, 'delete', (pg_current_xact_id()::xid::text)::bigint, null)`,
+    [table, workspaceId, id]
+  );
+  await client.query("select pg_notify('shape_log', $1)", [workspaceId]);
+}
+
+async function applyMutation(
+  client: import("pg").PoolClient,
+  workspaceId: string,
+  mutation: Mutation
+): Promise<void> {
+  const { table, op, id } = mutation;
+  const fk = SYNCED_TABLES[table].fk;
+  if (op === "insert") {
+    const doc = JSON.stringify(mutation.doc);
+    const columns = fk
+      ? `id, workspace_id, ${fk}, doc`
+      : "id, workspace_id, doc";
+    const placeholders = fk ? "$1, $2, $3, $4" : "$1, $2, $3";
+    const values = fk
+      ? [id, workspaceId, parentIdOf(mutation), doc]
+      : [id, workspaceId, doc];
+    await client.query(
+      `insert into ${table} (${columns}) values (${placeholders})
+       on conflict (id) do update set doc = excluded.doc
+         where ${table}.workspace_id = $2`,
+      values
+    );
+    return;
+  }
+  const result =
+    op === "update"
+      ? await client.query(
+          `update ${table} set doc = doc || $3::jsonb
+             where id = $1 and workspace_id = $2`,
+          [id, workspaceId, JSON.stringify(mutation.doc)]
+        )
+      : await client.query(
+          `delete from ${table} where id = $1 and workspace_id = $2`,
+          [id, workspaceId]
+        );
+  if (result.rowCount === 0) {
+    // The row doesn't exist server-side (e.g. an edit raced a deletion). Log
+    // a synthetic delete so this txid still reaches every waiting client and
+    // their optimistic state converges to server truth.
+    await logMiss(client, table, workspaceId, id);
   }
 }
 
@@ -94,39 +159,7 @@ export default defineHandler(async (event) => {
   try {
     await client.query("begin");
     for (const mutation of mutations) {
-      const { table, op, id } = mutation;
-      const fk = SYNCED_TABLES[table].fk;
-      if (op === "insert") {
-        const doc = JSON.stringify(mutation.doc);
-        if (fk) {
-          await client.query(
-            `insert into ${table} (id, workspace_id, ${fk}, doc)
-             values ($1, $2, $3, $4)
-             on conflict (id) do update set doc = excluded.doc
-               where ${table}.workspace_id = $2`,
-            [id, workspaceId, parentIdOf(mutation), doc]
-          );
-        } else {
-          await client.query(
-            `insert into ${table} (id, workspace_id, doc)
-             values ($1, $2, $3)
-             on conflict (id) do update set doc = excluded.doc
-               where ${table}.workspace_id = $2`,
-            [id, workspaceId, doc]
-          );
-        }
-      } else if (op === "update") {
-        await client.query(
-          `update ${table} set doc = doc || $3::jsonb
-             where id = $1 and workspace_id = $2`,
-          [id, workspaceId, JSON.stringify(mutation.doc)]
-        );
-      } else {
-        await client.query(
-          `delete from ${table} where id = $1 and workspace_id = $2`,
-          [id, workspaceId]
-        );
-      }
+      await applyMutation(client, workspaceId, mutation);
     }
     const txidResult = await client.query(
       "select pg_current_xact_id()::xid::text as txid"

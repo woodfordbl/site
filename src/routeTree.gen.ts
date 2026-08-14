@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplateRouteImport } from './routes/template'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DevRouteImport } from './routes/dev'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
@@ -36,6 +37,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const DevRoute = DevRouteImport.update({
   id: '/dev',
   path: '/dev',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SplatRoute = SplatRouteImport.update({
@@ -92,6 +98,7 @@ const DbDatabaseIdRowIdRoute = DbDatabaseIdRowIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/account': typeof AccountRoute
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
   '/template': typeof TemplateRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/account': typeof AccountRoute
   '/dev': typeof DevRoute
   '/template': typeof TemplateRoute
   '/db/$databaseId': typeof DbDatabaseIdRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/account': typeof AccountRoute
   '/dev': typeof DevRoute
   '/settings': typeof SettingsRouteWithChildren
   '/template': typeof TemplateRoute
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$'
+    | '/account'
     | '/dev'
     | '/settings'
     | '/template'
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$'
+    | '/account'
     | '/dev'
     | '/template'
     | '/db/$databaseId'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$'
+    | '/account'
     | '/dev'
     | '/settings'
     | '/template'
@@ -184,6 +196,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
+  AccountRoute: typeof AccountRoute
   DevRoute: typeof DevRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   TemplateRoute: typeof TemplateRoute
@@ -216,6 +229,13 @@ declare module '@tanstack/react-router' {
       path: '/dev'
       fullPath: '/dev'
       preLoaderRoute: typeof DevRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$': {
@@ -308,6 +328,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
+  AccountRoute: AccountRoute,
   DevRoute: DevRoute,
   SettingsRoute: SettingsRouteWithChildren,
   TemplateRoute: TemplateRoute,

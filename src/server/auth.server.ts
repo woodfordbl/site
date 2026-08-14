@@ -65,6 +65,11 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
+        // Local dev has no email transport, and the organization plugin's
+        // invitation listing hard-requires a verified email — auto-verify at
+        // signup. Production wires a real sender and drops this.
+        before: (user) =>
+          Promise.resolve({ data: { ...user, emailVerified: true } }),
         after: async (user) => {
           await createPersonalWorkspace(user.id, user.name);
         },
@@ -83,6 +88,7 @@ export const auth = betterAuth({
   },
   plugins: [
     organization({
+      requireEmailVerificationOnInvitation: false,
       // No email transport in local dev: invitees see pending invitations in
       // the workspace switcher (listUserInvitations) and accept in-app.
       sendInvitationEmail: (data) => {

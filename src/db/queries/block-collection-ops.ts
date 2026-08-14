@@ -4,6 +4,9 @@ import {
   localBlocksCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
+import { isSyncedMode } from "@/db/collections/sync-mode.ts";
+import type { TransactionLike } from "@/db/collections/synced-mutations.ts";
+import { pushTransactionMutations } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
@@ -37,7 +40,11 @@ function commitAndMarkDirty(
   commit()
     .then(() => {
       if (pageId) {
-        markPageDirty(pageId);
+        // The dirty cookie is the anonymous-mode SSR hint; synced pages render
+        // from the server database, so only the snapshot timeline applies.
+        if (!isSyncedMode()) {
+          markPageDirty(pageId);
+        }
         schedulePageSnapshotCapture(pageId);
       }
     })
@@ -71,6 +78,14 @@ function createPageBlockTransactionInner(): PageBlockTransaction["inner"] {
     // auto-commit would close the transaction on the first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      // Synced mode: one POST /api/sync/mutate transaction, optimistic state
+      // held until the txid returns on the shape streams.
+      if (isSyncedMode()) {
+        await pushTransactionMutations(
+          transaction as unknown as TransactionLike
+        );
+        return;
+      }
       localPagesCollection.utils.acceptMutations(transaction);
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
@@ -358,6 +373,12 @@ export function deletePageBlocks(blockIds: string[]): void {
     // Committed explicitly below; default auto-commit closes on first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (isSyncedMode()) {
+        await pushTransactionMutations(
+          transaction as unknown as TransactionLike
+        );
+        return;
+      }
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },
@@ -383,6 +404,12 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
     // Committed explicitly below; default auto-commit closes on first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (isSyncedMode()) {
+        await pushTransactionMutations(
+          transaction as unknown as TransactionLike
+        );
+        return;
+      }
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },
@@ -390,6 +417,13 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
 
   tx.mutate(() => {
     for (const block of blocks) {
+      // Idempotent: StrictMode double-mounted effects can trigger the lazy
+      // seed twice before the first pass's rows are visible to the second's
+      // captured state — a duplicate insert would crash a fresh profile's
+      // first visit.
+      if (localBlocksCollection.has(block.id)) {
+        continue;
+      }
       localBlocksCollection.insert(toLocalBlock(block, pageId, timestamp));
     }
   });
