@@ -17,7 +17,17 @@ const LIVE_POLL_TIMEOUT_MS = 15_000;
 function sql(query) {
   return execFileSync(
     "docker",
-    ["exec", "site-sync-postgres-1", "psql", "-U", "postgres", "-d", "site", "-tAc", query],
+    [
+      "exec",
+      "site-sync-postgres-1",
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "site",
+      "-tAc",
+      query,
+    ],
     { encoding: "utf8" }
   ).trim();
 }
@@ -53,11 +63,15 @@ function fail(message) {
 
 // 1. Initial sync: the seeded rows must come back as inserts.
 const initial = await fetchShape({ offset: "-1" });
-const inserts = initial.messages.filter((m) => m.headers?.operation === "insert");
+const inserts = initial.messages.filter(
+  (m) => m.headers?.operation === "insert"
+);
 if (inserts.length < 2) {
   fail(`expected seeded rows in initial sync, got ${inserts.length} inserts`);
 }
-console.log(`✓ initial sync: ${inserts.length} rows (handle ${initial.handle})`);
+console.log(
+  `✓ initial sync: ${inserts.length} rows (handle ${initial.handle})`
+);
 
 // 2. Write through Postgres, inside a transaction that reports its txid the
 //    same way the future mutate endpoint will (pg_current_xact_id()::xid).
@@ -89,7 +103,9 @@ while (Date.now() < deadline && !found) {
   );
 }
 if (!found) {
-  fail(`live update with txid ${txid} did not arrive within ${LIVE_POLL_TIMEOUT_MS}ms`);
+  fail(
+    `live update with txid ${txid} did not arrive within ${LIVE_POLL_TIMEOUT_MS}ms`
+  );
 }
 console.log(`✓ live update arrived with matching txid ${txid}`);
 console.log("\nAll good: postgres → replication → electric → http is working.");
