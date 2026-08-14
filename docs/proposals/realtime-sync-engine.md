@@ -355,17 +355,55 @@ The strategy is **swap the storage engine under the existing ops layer, per mode
 - **Conflicts**: block-granular LWW via server `updated_at`. The existing three-way
   merge (`merge-page-blocks.ts`) stays for its current job (shipped-baseline vs local);
   concurrent live editing conflicts at block granularity resolve by last write, which is
-  the right MVP semantics. Character-level merge inside a block (two users in the same
-  paragraph) is explicitly out of scope for v1 — the offset-based inline-marks
-  representation is hostile to it; if/when it matters, adopt Yjs *per text block*
-  (`@electric-sql/y-electric` exists for exactly this hybrid) rather than CRDTifying the
-  whole model.
+  the right MVP semantics. See §6.1 for why no further differential-sync machinery is
+  needed, and how same-block collisions are handled and eventually eliminated.
 - **Offline**: TanStack DB 0.6 persistence (SQLite/IndexedDB-backed collections) gives
   synced collections a local cache across reloads; optimistic mutations queue while
   offline. Electric handles reconnect/catch-up via offsets. The existing
   snapshot/timeline machinery keeps working as a safety net.
 - Presence (cursors, avatars) is not Electric's job; add later via a tiny WebSocket
   room (the Finnhub crossws handler is a template) or a service like PartyKit.
+
+### 6.1 Multi-user editing: how far the design goes without differential sync
+
+The stack is already differential at every layer that matters: Electric's shape log is a
+row-level delta stream after the initial snapshot, TanStack DB applies those deltas
+incrementally, and writes are granular per-block ops. Because a block ≈ a paragraph and
+ordering is per-block (fractional index), **two users editing different blocks of the
+same page never conflict at all** — their writes are disjoint rows that compose with
+zero merge logic. This is the same granularity Figma (property-level LWW), Linear
+(property-level LWW), and Notion (block-level) operate at; none of them do
+document-level differential sync, and neither do we.
+
+The only real collision is two cursors in the *same block*. Escalation ladder:
+
+1. **v1 — make LWW rarely hurt.**
+   - *Presence*: show who is editing which block (avatars/cursor chips). Social
+     steering is most of why Notion's block-LWW feels fine in practice.
+   - *Per-key props patching*: the `mutate` endpoint takes per-key prop patches, not
+     whole rows, and applies them with a JSONB merge
+     (`props = props || $patch`, `null` values deleting keys). Field-level LWW: one
+     user toggling `checked` on a checklist item no longer clobbers another user
+     renaming its `text`; changing a code block's `language` doesn't clobber a
+     concurrent edit to its code. One line of SQL, a real reduction in collision
+     surface. Deletes/inserts and non-props columns (ordering, parentId, colors) stay
+     whole-value LWW.
+2. **Skip the middle rung.** Server-side text diffing (diff-match-patch against a base
+   revision) is the classic "differential sync" answer and we deliberately reject it:
+   it fights the offset-based inline marks (every merged diff must re-map ranges),
+   needs per-block base-version bookkeeping, and still degrades under real
+   concurrency — most of a CRDT's complexity with fewer of its guarantees.
+3. **When shared same-paragraph editing becomes real — per-block Yjs, text blocks
+   only.** Replace the plain string with a Yjs text for collab-enabled blocks:
+   character-level merge, cursor preservation, offline-safe. `@electric-sql/y-electric`
+   rides Yjs updates over Electric itself (an append-only `block_text_updates` table
+   with periodic compaction) so no second transport appears. Marks become Yjs text
+   attributes; the `U+FFFC` formula sentinel maps to a Yjs embed; a plain-text
+   projection is written back to `props.text` so search, SSR, formulas, and the file
+   mirror keep reading what they read today. Everything that isn't collaborative prose
+   (checkboxes, block props, ordering, database cells) stays plain LWW rows. The
+   upgrade is additive — a nullable collab-doc reference per text block, backfilled
+   lazily on first concurrent edit — so nothing in v1 has to be undone.
 
 ## 7. The split: blog vs. workspace, one codebase, two domains
 
