@@ -1,5 +1,8 @@
 import { defineHandler, HTTPError, readBody } from "nitro/h3";
-import { getSession, isWorkspaceMember } from "../../../src/server/auth.server.ts";
+import {
+  getSession,
+  isWorkspaceMember,
+} from "../../../src/server/auth.server.ts";
 import { getPool } from "../../../src/server/db.server.ts";
 
 /**
@@ -28,11 +31,11 @@ const SYNCED_TABLES = {
 type SyncedTable = keyof typeof SYNCED_TABLES;
 
 interface Mutation {
-  table: SyncedTable;
-  op: "insert" | "update" | "delete";
-  id: string;
   /** Full document for inserts; shallow key diff for updates. */
   doc?: Record<string, unknown>;
+  id: string;
+  op: "insert" | "update" | "delete";
+  table: SyncedTable;
 }
 
 const UUID_RE =

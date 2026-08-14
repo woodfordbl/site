@@ -47,9 +47,9 @@ interface ShapeMessage {
 }
 
 export interface ShapeResponse {
-  status: number;
-  headers: Record<string, string>;
   body: string;
+  headers: Record<string, string>;
+  status: number;
 }
 
 const UP_TO_DATE: ShapeMessage = { headers: { control: "up-to-date" } };
@@ -109,11 +109,11 @@ async function snapshot(
 }
 
 interface LogEntry {
-  id: string;
-  row_id: string;
-  op: "insert" | "update" | "delete";
-  txid: string;
   doc: Record<string, unknown> | null;
+  id: string;
+  op: "insert" | "update" | "delete";
+  row_id: string;
+  txid: string;
 }
 
 async function readLogAfter(
@@ -154,7 +154,10 @@ function changesResponse(
 
 // ── Live-poll wakeups via LISTEN/NOTIFY ──────────────────────────────────────
 
-type Waiter = { workspaceId: string; wake: () => void };
+interface Waiter {
+  wake: () => void;
+  workspaceId: string;
+}
 const waiters = new Set<Waiter>();
 let listenerStarted = false;
 
