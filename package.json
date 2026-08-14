@@ -95,7 +95,11 @@
     "typecheck:tsc": "node scripts/sync-tabler-icons-public.mjs && tsc --noEmit",
     "check": "node scripts/sync-tabler-icons-public.mjs && ultracite check",
     "fix": "ultracite fix",
-    "sync": "node scripts/sync-emojibase-public.mjs && node scripts/sync-tabler-icons-public.mjs"
+    "sync": "node scripts/sync-emojibase-public.mjs && node scripts/sync-tabler-icons-public.mjs",
+    "electric:up": "docker compose -f dev/electric/docker-compose.yaml up -d --wait",
+    "electric:down": "docker compose -f dev/electric/docker-compose.yaml down",
+    "electric:nuke": "docker compose -f dev/electric/docker-compose.yaml down -v",
+    "electric:smoke": "node scripts/electric-smoke.mjs"
   },
   "type": "module",
   "private": true,

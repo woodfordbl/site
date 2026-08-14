@@ -1,0 +1,58 @@
+# Local sync stack: Postgres (logical replication) + ElectricSQL sync service.
+#
+# Usage:   pnpm electric:up      (docker compose -f dev/electric/docker-compose.yaml up -d)
+#          pnpm electric:down    (stop, keep data)
+#          pnpm electric:nuke    (stop + delete volumes)
+#
+# Ports are offset from the defaults so the stack never collides with other
+# local Postgres installs: Postgres on 54321, Electric's HTTP API on 3010.
+#
+# This mirrors the production topology from docs/proposals/realtime-sync-engine.md
+# exactly — the app talks to Electric the same way whether Electric is this
+# container or a hosted one pointed at Neon; only DATABASE_URL/ELECTRIC_URL
+# env vars change at deploy time.
+
+name: site-sync
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: site
+    # Logical replication is the one hard requirement Electric has on Postgres.
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+    ports:
+      - "54321:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d site"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  electric:
+    image: electricsql/electric:latest
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/site?sslmode=disable
+      # Same auth model as production: the secret stays server-side (the shape
+      # proxy adds it); browsers never talk to this port directly.
+      ELECTRIC_SECRET: local-dev-secret
+      ELECTRIC_STORAGE_DIR: /app/persistent
+    ports:
+      - "3010:3000"
+    volumes:
+      - electric-data:/app/persistent
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pg-data:
+  electric-data:
