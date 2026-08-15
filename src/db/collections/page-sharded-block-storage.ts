@@ -1,3 +1,16 @@
+/**
+ * @fileoverview Per-page shard adapter for `localBlocksCollection`.
+ *
+ * TanStack DB stringifies the whole collection on every write; this adapter
+ * diffs the serialized shard per page and rewrites only shards that changed,
+ * so typing on one page touches only that page's localStorage key. Deleting a
+ * page's last block removes its shard key entirely.
+ *
+ * Schema-evolution safety: blocks that fail `localBlockSchema` parse are
+ * dropped at read time and would be destroyed by the next shard overwrite —
+ * `quarantineUnparseableDroppedItems` below copies them to a quarantine key
+ * first so a schema fix can recover them.
+ */
 import { getBrowserStorage } from "@/db/collections/browser-storage.ts";
 import { localBlockSchema } from "@/lib/schemas/local-block.ts";
 

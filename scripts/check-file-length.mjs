@@ -38,16 +38,22 @@ for (const file of tracked) {
   }
   const allowed = baseline[file];
   if (allowed === undefined) {
-    failures.push(`${file}: ${lines} lines (max ${MAX_LINES}, not grandfathered)`);
+    failures.push(
+      `${file}: ${lines} lines (max ${MAX_LINES}, not grandfathered)`
+    );
   } else if (lines > allowed) {
-    failures.push(`${file}: ${lines} lines (grandfathered at ${allowed} — may only shrink)`);
+    failures.push(
+      `${file}: ${lines} lines (grandfathered at ${allowed} — may only shrink)`
+    );
   }
   next[file] = Math.min(lines, allowed ?? lines);
 }
 
 if (update || Object.keys(baseline).length === 0) {
   writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
-  console.log(`baseline written: ${Object.keys(next).length} grandfathered files`);
+  console.log(
+    `baseline written: ${Object.keys(next).length} grandfathered files`
+  );
   process.exit(0);
 }
 

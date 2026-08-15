@@ -90,9 +90,20 @@ import {
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 
 /**
- * Canvas command reducer: maps {@link CanvasCommand} to {@link CanvasEffect}[] without React or I/O.
- * @see docs/architecture/canvas-editor.md
- * @see docs/reference/canvas-commands.md
+ * @fileoverview Canvas command bus. Every block edit flows one way:
+ * UI → {@link CanvasCommand} → `canvasReducer` → {@link CanvasEffect}[] →
+ * applied to TanStack DB (`apply-effects.ts`, driven from
+ * `src/db/queries/use-page-canvas.ts`). The layer contract: edit surfaces
+ * (`editable-surface.tsx`) only emit commands and never decide cross-row
+ * policy; this reducer owns all row/list/indent policy and is pure — no
+ * React, no storage, no I/O. This custom command-bus editor is deliberate
+ * (no ProseMirror/BlockNote adapter); the DB collections stay authoritative.
+ *
+ * Block-identity invariant: converting or repositioning an existing row
+ * (bullet → text, lift-out, Turn into) keeps the same block id — emit
+ * `persist` (fields/`parentId`) and `move` (order), never `delete` +
+ * `insert` with the same id. Delete + insert is reserved for genuinely new
+ * rows (gutter insert, split remainder, new container shells).
  */
 
 export interface CanvasReducerState {

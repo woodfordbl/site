@@ -1,3 +1,28 @@
+/**
+ * @fileoverview Semantic haptic feedback. Call sites ask for a *moment*, never
+ * a waveform; the provider maps it to a `web-haptics` preset, fires on coarse
+ * pointers only, and is mounted once at the root (`__root.tsx`).
+ *
+ * Policy — the surface stays deliberately small. A haptic confirms a
+ * meaningful, discrete, user-initiated change and always pairs with a visible
+ * one; if you can't point to the state change it confirms, it doesn't get a
+ * haptic. Qualifying: physical manipulation (long-press arm, drag pick-up,
+ * drop — start/end only, never per move), committed form-control toggles,
+ * discrete touch-drawer selections, per-notch stepper scrubs (one tick per
+ * count change, not per pointer frame), mobile-toolbar command taps, and the
+ * mobile sidebar's swipe/hamburger commit. Never for: scroll, hover, focus,
+ * per-frame motion, navigation, tap-opened disclosure, ordinary action
+ * buttons, or auto-repeat. `disabled` is the one unpaired exception: the
+ * visible signal is the *absence* of the change (a boundary no-op), so the
+ * buzz stands in for it — don't reuse it as a generic error tone.
+ *
+ * Mechanics every call site follows: one haptic per user action; fire on the
+ * committing event (not `pointerdown` for a tap that could become a scroll);
+ * fire before delegating so feedback lands regardless of handler latency. iOS
+ * Safari only produces feedback inside an active user gesture — fire
+ * synchronously from the handler (or mid-drag from `pointermove`), never from
+ * a post-commit effect or the `pointerup` ending a captured drag.
+ */
 "use client";
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";
