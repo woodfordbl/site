@@ -65,7 +65,6 @@ function computeMigrationSlug(page: LocalPage, pages: PageSummary[]): string {
 }
 
 /** One-time slug repairs for user pages that shadow shipped paths or duplicate another user slug. */
-/** Renames user pages that shadow shipped slugs or duplicate another user slug. @see docs/architecture/pages.md#route-migration */
 export function planUserPageSlugMigrations(
   serverPages: PageSummary[],
   localPages: LocalPage[]

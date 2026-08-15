@@ -21,8 +21,6 @@ const TRAILING_SLASH_RE = /\/$/;
  * navigable list (the `site-template` snapshot, database row templates, the dev
  * canvas fixture) have no shareable link, and callers must fall back rather than
  * copy the bare origin.
- *
- * @see docs/architecture/pages.md#navigation
  */
 export function buildPageLinkUrl(
   pageId: string,

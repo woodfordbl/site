@@ -12,7 +12,6 @@ export const pageTitleUnderlineClassName =
  * This makes moves auto-correct — a moved page's old-parent link grows the arrow and
  * its new-parent link drops it, with no block writes. Stored `props.variant` is used
  * only as an SSR/unknown fallback when the target or canvas id is not yet resolved.
- * @see docs/architecture/pages.md#page-links
  */
 export function pageLinkShowsExternalIcon(
   props: PageLinkProps,

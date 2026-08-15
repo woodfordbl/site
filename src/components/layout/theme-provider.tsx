@@ -1,3 +1,13 @@
+/**
+ * @fileoverview Client half of the site-appearance pipeline. SSR seeds
+ * `html.dark`, `data-page-text-scale`, `data-tooltip-style`, … in the root
+ * route from the `site-appearance` cookie (`load-site-appearance.ts` →
+ * `read-site-appearance.server.ts`) so first paint matches the stored
+ * preference with no flash; after hydration this provider owns those
+ * attributes on `document.documentElement` and persists changes back to the
+ * cookie. Consumers (tooltip surface, block `font-size` scaling) read the
+ * html attributes/variables via CSS — no per-call-site forks.
+ */
 "use client";
 
 import {

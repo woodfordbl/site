@@ -30,11 +30,10 @@ import { liveMarketsAutoGroupPatch } from "@/lib/databases/live-markets-auto-gro
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
 
 /**
- * Client-side sync scheduler for connector databases — the "backend" of
- * docs/proposals/notion-style-databases.md §4.3, framework-free by design.
+ * Client-side sync scheduler for connector databases — framework-free by
+ * design.
  *
- * Division of labor (deliberate deviation from the proposal's
- * queryCollectionOptions sketch): fetched snapshots are diffed straight into
+ * Division of labor: fetched snapshots are diffed straight into
  * `localDatabaseRowsCollection` by `applySyncSnapshot`, so synced rows ride
  * the existing localStorage shards and their cross-tab `storage`-event
  * propagation. Exactly one tab (the Web Locks leader) polls; follower tabs

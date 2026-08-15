@@ -100,7 +100,6 @@ function applyDescendantSlugUpdate(
  * Callers that need the address bar to follow a slug change (active tab on the
  * moved page or a descendant) should navigate via TanStack Router after this
  * write — see `resolve-slug-prefix-redirect.ts`.
- * @see docs/reference/page-commands.md#page-reposition
  */
 export function persistPageReposition(options: {
   plan: PageRepositionPlan;

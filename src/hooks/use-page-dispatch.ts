@@ -147,7 +147,6 @@ function resolveCreatePage(
  * `page.create` purges same-scope slug tombstones before insert, then adds `navigate`
  * with `userPage: true` unless `navigate: false`. Optional `insertAfterPageId` sets
  * `sidebarOrder` immediately after that sibling (duplicate page).
- * @see docs/reference/page-commands.md
  * Invalid `page.reposition` plans return `{ effects: [] }`.
  */
 export function pageReducer(
@@ -401,7 +400,6 @@ function navigateAfterReposition(
 
 /**
  * Applies `PageCommand` effects to collections and the router (`navigate` uses `userPage` for new user pages).
- * @see docs/reference/page-commands.md
  */
 export function usePageDispatch(pages: PageSummary[] = []) {
   const navigate = useNavigate();

@@ -296,8 +296,6 @@ function resolveRowDropTarget(
  * Resolves sidebar page DnD from pointer Y (nest vs sibling bands).
  * When `draggingDatabaseId` is set, only nest-under-page targets are
  * returned (hosted-database rehost) — sibling reorder does not apply.
- * @see docs/architecture/pages.md#sidebar-drag-and-drop
- * @see docs/architecture/drag-and-drop.md
  */
 export function resolvePageListDropTargetFromPointer(options: {
   blocks?: readonly HostScanBlock[];
@@ -455,7 +453,6 @@ function resolveDatabaseNestDropTarget(options: {
 
 /**
  * Converts a resolved drop target into a `page.reposition` command payload.
- * @see docs/reference/page-commands.md#page-reposition
  */
 export function dropTargetToRepositionCommand(
   target: PageListDropTarget,

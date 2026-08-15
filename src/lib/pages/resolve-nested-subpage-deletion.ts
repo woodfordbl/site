@@ -12,8 +12,6 @@ import type { PageSummary } from "@/lib/content/list-pages.ts";
  * page-link external-icon (a link is a subpage only inside its parent canvas),
  * so deleting it removes the page (and its descendants) with a confirmation,
  * while plain links to pages elsewhere keep the normal block delete.
- *
- * @see docs/architecture/pages.md#page-links
  */
 export function resolveNestedSubpageDeletion(
   rows: CanvasRow[],

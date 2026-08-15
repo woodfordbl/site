@@ -36,7 +36,6 @@ function querySlugForPage(page: Pick<Page, "slug">): string {
  * `useQuery`, so `setQueryData` alone updates `serverPage` props — do **not**
  * await `router.invalidate()` before clearing local overlays (Start
  * SSR-revalidation can hang on client-only trees).
- * @see docs/architecture/author-dev-mode.md
  */
 export function publishSavedPageToClient(
   page: Page,

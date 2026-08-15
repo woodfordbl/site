@@ -13,7 +13,6 @@ import {
  * The template snapshot ({@link isTemplatePageId}) and the dev canvas fixture
  * ({@link isCanvasFixturePageId}) are dropped here so they never enter the
  * navigable list, the sidebar tree, or page dispatch.
- * @see docs/architecture/pages.md#navigation
  */
 export function mergePageList(
   serverPages: PageSummary[],

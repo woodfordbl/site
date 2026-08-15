@@ -91,7 +91,6 @@ function findVisibleAncestorAtDepth(
  * Adjusts Y-resolved drop targets when the pointer is dragged horizontally
  * (shallower depth unnests to root or an ancestor scope). Used at drop-resolve
  * time only — sidebar row padding does not preview indent during drag.
- * @see docs/architecture/pages.md#sidebar-drag-and-drop
  */
 export function applyPreviewDepthToDropTarget(
   target: PageListDropTarget,

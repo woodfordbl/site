@@ -1,3 +1,14 @@
+/**
+ * @fileoverview Single registration point for block types: `BLOCK_SPECS` maps
+ * every `BlockType` to its components and slash metadata. Only this module
+ * imports block components (containers via `container-loaders.ts` to avoid
+ * registry ↔ renderer import cycles); everything else looks specs up here.
+ * Slash-menu rows are built centrally by `specToSlashMenuItems`: multi-variant
+ * blocks declare `slashItems`, other specs derive one entry from `label` +
+ * `slashAliases`, gated by `behavior.capabilities.slashMenu`. Data-level
+ * definitions (default props, emptiness, the add-a-block-type checklist) live
+ * in `src/lib/blocks/block-defs.ts`, not here.
+ */
 import {
   IconBlockquote,
   IconCaretRightFilled,

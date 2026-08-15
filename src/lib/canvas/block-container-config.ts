@@ -5,6 +5,16 @@ import {
 import type { ContainerDefinition } from "@/lib/canvas/block-spec.types.ts";
 import type { BlockType } from "@/lib/schemas/block.ts";
 
+/**
+ * Container policy for every container block type — a complete record with no
+ * registry fallbacks. `BLOCK_SPECS[type].container` references these same
+ * entries; reducer planners read them through `block-interactions.ts`.
+ * Children are validated against `allowedChildTypes` on read
+ * (`coerceContainerChildBlocks` in `normalize-block.ts`). When a child leaves
+ * its container (lift-out, disallowed conversion) the existing block is
+ * mutated in place — `persist` + `move`, same id — per the invariant in
+ * `reducer.ts`.
+ */
 export const BLOCK_CONTAINER_CONFIG: Record<
   ContainerBlockType,
   ContainerDefinition

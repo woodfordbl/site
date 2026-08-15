@@ -70,7 +70,6 @@ function applyPageSettingsDraft(
 
 /**
  * Persists display settings (`font`, `textScale`, `fullWidth`) to `localPagesCollection` (lazy-seeds when needed).
- * @see docs/architecture/pages.md#page-settings
  */
 export function persistPageSettings(options: {
   pageId: string;

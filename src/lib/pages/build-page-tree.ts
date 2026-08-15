@@ -145,7 +145,6 @@ export function replacePageSlugPrefix(
 
 /**
  * Replaces the last slug segment from a title, deduped among siblings; home stays `/`.
- * @see docs/architecture/pages.md#title-editing
  */
 export function buildSlugFromTitle(
   page: PageSummary,

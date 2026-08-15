@@ -60,8 +60,6 @@ function activeSlugFromPathname(pathname: string): string | null {
  * TanStack Router target for the rewritten path. Uses router navigation (not
  * `history.replaceState`) so splat params rematch and the workspace does not
  * 404 on the stale URL.
- *
- * @see docs/architecture/pages.md#navigation
  */
 export function resolveSlugPrefixRedirect(options: {
   nextPrefix: string;

@@ -89,7 +89,6 @@ async function cleanShippedHost(
  * never-edited shipped host pages are seeded locally and cleaned (local-first).
  * Host pages that are themselves being deleted are skipped — their shards are
  * removed wholesale by the delete flow.
- * @see docs/architecture/pages.md#page-links
  */
 export async function deletePageLinkReferences(
   deletedPageIds: Set<string>,

@@ -5,7 +5,6 @@ import type { Page } from "@/lib/schemas/page.ts";
  * lazy-seed time for shipped pages. Keep whatever the shipped file already
  * recorded so re-saving an existing page never resets its creation date.
  * Matched by id rather than path so a slug rename still finds the prior file.
- * @see docs/architecture/author-dev-mode.md
  */
 export function preserveShippedCreatedAt(
   data: Page,

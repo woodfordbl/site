@@ -24,7 +24,6 @@ export type DecodedPageIcon =
 
 /**
  * Encodes a Tabler icon name for `localPagesCollection` / shipped JSON (`tabler:IconName`).
- * @see docs/architecture/pages.md#page-icons
  */
 export function formatTablerPageIcon(name: string): string {
   return `${TABLER_PAGE_ICON_PREFIX}${name}`;
@@ -33,7 +32,6 @@ export function formatTablerPageIcon(name: string): string {
 /**
  * Decodes stored page icon strings for `PageIconDisplay`. Tabler names resolve via SSR glyphs
  * or a by-name server fetch; unresolved names fall back to {@link DEFAULT_PAGE_ICON}.
- * @see docs/architecture/pages.md#page-icons
  */
 export function decodePageIcon(raw?: string): DecodedPageIcon {
   if (raw == null || raw.length === 0) {

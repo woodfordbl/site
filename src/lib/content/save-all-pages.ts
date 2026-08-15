@@ -130,7 +130,6 @@ async function saveLocalDatabaseToSource(database: LocalDatabase): Promise<{
  * Local page overlays are cleared only after `beforeClearLocal` resolves, so
  * callers can publish the returned documents into React Query / router caches
  * first and avoid a flash of pre-save shipped blocks.
- * @see docs/architecture/author-dev-mode.md
  */
 export async function saveAllLocalPages(
   options: SaveAllLocalPagesOptions = {}

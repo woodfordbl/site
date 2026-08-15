@@ -5,7 +5,6 @@ import type { Page } from "@/lib/schemas/page.ts";
  * author-save write path. Kept out of a `*.server.*` filename so `savePage`'s
  * RPC module (imported from the client footer) can call `primeShippedPage`
  * without tripping TanStack Start import-protection.
- * @see docs/architecture/author-dev-mode.md
  */
 let cachedPagesByPath: Map<string, Page> | null = null;
 

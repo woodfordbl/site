@@ -23,7 +23,6 @@ import { pageSchema } from "@/lib/schemas/page.ts";
  * (not `page-store.server.ts`) so this RPC module stays legal to import from
  * the client footer without TanStack Start import-protection denying
  * `*.server.*` edges.
- * @see docs/architecture/author-dev-mode.md
  */
 export const savePage = createServerFn({ method: "POST" })
   .validator((data: unknown) => pageSchema.parse(data))

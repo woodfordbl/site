@@ -544,8 +544,7 @@ interface EngineFunctionChange {
  * bodies), then mark EVERY formula column fully dirty — a definition edit
  * can change any caller's value, and the equality cutoff stops the cascade
  * for columns whose values didn't actually move. A finer name→columns index
- * is a future optimization documented in
- * `docs/architecture/formula-language.md`.
+ * is a deliberate future optimization.
  */
 function handleFunctionChanges(changes: readonly EngineFunctionChange[]): void {
   const engine = state;

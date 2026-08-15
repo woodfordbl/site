@@ -11,7 +11,6 @@ import {
 /**
  * Resolves a live user page by metadata slug, ignoring delete tombstones and
  * duplicate slug rows (e.g. a soft-deleted shipped overlay left in storage).
- * @see docs/architecture/pages.md#navigation
  */
 export function resolveActiveUserPageBySlug(
   pages: LocalPage[],
@@ -33,7 +32,6 @@ export function resolveActiveUserPageBySlug(
 
 /**
  * Removes soft-deleted rows occupying a slug before `page.create` insert.
- * @see docs/reference/page-commands.md
  */
 export function purgeSlugTombstonesForUserPageCreate(
   slug: string,

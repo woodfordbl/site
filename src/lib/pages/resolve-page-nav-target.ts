@@ -7,7 +7,6 @@ import {
 
 /**
  * Resolves sidebar and `pageLink` navigation: `routeBy: "id"` → `/p/$`, else metadata slug on `/` or `/$`.
- * @see docs/architecture/pages.md#navigation
  */
 export function resolvePageNavTarget(
   pageId: string,
@@ -26,7 +25,7 @@ export function resolvePageNavTarget(
   return pageNavTarget("/");
 }
 
-/** After `page.delete`, navigates to the parent page target or home. @see docs/architecture/pages.md#navigation */
+/** After `page.delete`, navigates to the parent page target or home. */
 export function resolveDeleteRedirectTarget(
   deletedPageId: string,
   pages: PageSummary[]

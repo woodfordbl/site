@@ -5,7 +5,6 @@ import {
 
 /**
  * Cookie name for sidebar parent-row expand state (`site-page-list-expanded`).
- * @see docs/reference/page-commands.md#page-list
  */
 export const PAGE_LIST_EXPANDED_COOKIE_NAME = "site-page-list-expanded";
 
@@ -32,7 +31,6 @@ export function serializePageListExpandedIds(ids: Iterable<string>): string {
 
 /**
  * Reads expanded page ids from `document.cookie` (empty set when absent or on SSR).
- * @see docs/architecture/pages.md#nesting
  */
 export function readPageListExpandedIdsFromDocument(): Set<string> {
   return parsePageListExpandedIds(
@@ -42,7 +40,6 @@ export function readPageListExpandedIdsFromDocument(): Set<string> {
 
 /**
  * Persists expanded page ids to `document.cookie`; clears the cookie when empty.
- * @see docs/architecture/pages.md#nesting
  */
 export function writePageListExpandedIdsToDocument(ids: Set<string>): void {
   if (ids.size === 0) {

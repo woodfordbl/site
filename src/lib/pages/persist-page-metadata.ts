@@ -148,7 +148,6 @@ function insertSeededPageMetadata(options: {
 /**
  * Persists title, slug, and optional icon to `localPagesCollection` (lazy-seeds when needed).
  * Cascades descendant slug prefixes; `syncPageUrl` uses `{ userPage: true }` when `routeBy === "id"`.
- * @see docs/architecture/pages.md#title-editing
  */
 export function persistPageMetadata(options: {
   pageId: string;

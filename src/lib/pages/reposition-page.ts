@@ -14,8 +14,7 @@ import {
 } from "@/lib/pages/page-sidebar-order.ts";
 import { parsePagePath, slugifyPageSegment } from "@/lib/pages/slugify.ts";
 
-/** Planned metadata writes for a sidebar `page.reposition` drop. */
-/** Planned sidebar reparent/reorder write (slug, order, optional nest `pageLink`). @see docs/reference/page-commands.md#page-reposition */
+/** Planned sidebar reparent/reorder write (slug, order, optional nest `pageLink`). */
 export interface PageRepositionPlan {
   appendPageLinkOnParent: boolean;
   descendantSlugUpdates: { pageId: string; slug: string }[];
@@ -60,7 +59,7 @@ function resolveSlugForReposition(
   return buildSlugFromTitle(withParent, pages, page.title, slugifyPageSegment);
 }
 
-/** Validates sidebar reparent/reorder (cycle, depth, home). @see docs/architecture/pages.md#sidebar-drag-and-drop */
+/** Validates sidebar reparent/reorder (cycle, depth, home). */
 export function assertCanReposition(options: {
   pageId: string;
   parentId: string | null;

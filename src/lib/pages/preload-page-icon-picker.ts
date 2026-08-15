@@ -59,7 +59,6 @@ export function warmPageIconPickerChunks(): void {
 /**
  * Picker intent entry point: panel chunks + both catalog assets.
  * Called on pointer enter and popover open — not on every route.
- * @see docs/architecture/pages.md#page-icons
  */
 export function ensurePageIconPickerReady(queryClient: QueryClient): void {
   warmPageIconPickerChunks();

@@ -8,8 +8,6 @@ const TRAILING_SLASH_RE = /\/$/;
  * treating a pasted URL as an in-app page link: compare against
  * `window.location.origin` so localhost (any port), Vercel preview hosts, and
  * production all work without a hardcoded domain list.
- *
- * @see docs/architecture/pages.md#page-links
  */
 export function isSameOriginUrl(candidate: string, origin: string): boolean {
   try {
@@ -36,8 +34,6 @@ function normalizePathname(pathname: string): string {
  * Matching rebuilds each page's share URL and compares pathnames — the same
  * route rules as copy-link, including database hub/row pages that already live
  * in the page catalog.
- *
- * @see docs/architecture/pages.md#page-links
  */
 export function resolvePageIdFromUrl(
   rawUrl: string,

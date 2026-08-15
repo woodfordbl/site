@@ -11,7 +11,6 @@ import {
 
 /**
  * Allocates a metadata slug for a user-created page (parent path + deduped segment).
- * @see docs/architecture/pages.md#slug-rules
  */
 export function allocateUserPageSlug(options: {
   title: string;

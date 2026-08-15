@@ -7,7 +7,6 @@ import {
 
 /**
  * Resolves any live local page row by metadata slug (user or lazy-seeded shipped).
- * @see docs/architecture/pages.md#navigation
  */
 export function resolveActiveLocalPageBySlug(
   pages: LocalPage[],
@@ -24,7 +23,6 @@ export function resolveActiveLocalPageBySlug(
 
 /**
  * Lazy-seeded shipped overlay on `/$` when metadata slug no longer matches server JSON.
- * @see docs/architecture/pages.md#slug-rules
  */
 export function resolveActiveShippedOverlayBySlug(
   pages: LocalPage[],

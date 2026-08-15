@@ -7,7 +7,6 @@ import {
 /**
  * Persists page `icon` metadata via `persistPageMetadata` (lazy-seeds shipped pages like title edits).
  * Called from `PageIconPicker` (canvas title or sidebar row overflow) — not dispatched as a `page.*` command.
- * @see docs/architecture/pages.md#page-icons
  */
 export function persistPageIcon(options: {
   pageId: string;
