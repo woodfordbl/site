@@ -50,53 +50,6 @@ export function resolveScopeStartPlacement(
   return { parentId, atScopeStart: true };
 }
 
-> {
-  if (blocks.length === 0) {
-    return [];
-  }
-
-  const firstPlan = resolveRowPlacementPlan(rows, targetRowId, edge);
-  if (!firstPlan) {
-    return [];
-  }
-
-  const context = findRowContext(rows, targetRowId);
-  if (!context) {
-    return [];
-  }
-
-  const parentId = context.parent?.effectiveBlock.id ?? null;
-
-  const prepared = blocks.map((block) =>
-    parentId === null ? { ...block, parentId: null } : { ...block, parentId }
-  );
-
-  const firstBlock = prepared[0];
-  if (!firstBlock) {
-    return [];
-  }
-
-  const result: Array<{ block: Block; position: RowPlacement }> = [
-    { block: firstBlock, position: firstPlan },
-  ];
-
-  let anchorRowId = firstBlock.id;
-  for (let index = 1; index < prepared.length; index++) {
-    const block = prepared[index];
-    if (!block) {
-      continue;
-    }
-
-    result.push({
-      block,
-      position: { parentId, anchorRowId, edge: "after" },
-    });
-    anchorRowId = block.id;
-  }
-
-  return result;
-}
-
 export function resolveRowMovePlan(
   rows: CanvasRow[],
   sourceRowId: string,
