@@ -25,12 +25,6 @@ export function parseSiteAppearanceCookie(
   }
 }
 
-export function serializeSiteAppearanceCookie(
-  appearance: SiteAppearance
-): string {
-  return JSON.stringify(appearance);
-}
-
 export function readSiteAppearanceFromDocument(): SiteAppearance {
   return (
     parseSiteAppearanceCookie(
@@ -44,6 +38,6 @@ export function writeSiteAppearanceToDocument(
 ): boolean {
   return writeDocumentCookie(
     SITE_APPEARANCE_COOKIE_NAME,
-    serializeSiteAppearanceCookie(appearance)
+    JSON.stringify(appearance)
   );
 }

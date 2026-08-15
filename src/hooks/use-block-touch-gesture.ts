@@ -2,8 +2,8 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { usePointerRowDrag } from "@/components/dnd/use-dnd.ts";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 
 /** Hold this long (no significant move) before the block "arms" for drawer/drag. */
 const LONG_PRESS_MS = 450;

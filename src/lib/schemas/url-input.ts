@@ -23,11 +23,6 @@ export function isValidUrlInput(raw: string): boolean {
   return z.url().safeParse(normalized).success;
 }
 
-/** Validates trimmed URL input; empty strings fail. Scheme is optional. */
-export const urlInputSchema = z.string().refine(isValidUrlInput, {
-  message: "Enter a valid URL",
-});
-
 export const URL_INPUT_ERROR_MESSAGE = "Enter a valid URL";
 
 export const sourceLinkUrlSchema = z
@@ -40,8 +35,6 @@ export const sourceLinkUrlSchema = z
 export const sourceLinkFormSchema = z.object({
   url: sourceLinkUrlSchema,
 });
-
-export type SourceLinkFormValues = z.infer<typeof sourceLinkFormSchema>;
 
 /** Returns normalized URL when input is valid, otherwise null. */
 export function parseValidatedUrlInput(raw: string): string | null {

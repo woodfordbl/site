@@ -27,7 +27,7 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import {
   FORMULA_FUNCTION_CATALOG,

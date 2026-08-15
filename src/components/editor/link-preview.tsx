@@ -14,7 +14,7 @@ import {
 
 import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { useDelegatedLinkHover } from "@/hooks/use-delegated-link-hover.ts";
 import {
   usePrefetchUrlPreview,

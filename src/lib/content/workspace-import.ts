@@ -2,8 +2,8 @@ import { putAsset } from "@/db/assets/asset-store.ts";
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { replacePageBlocks } from "@/db/queries/block-collection-ops.ts";
+import { strFromU8 } from "fflate";
 import {
-  decodeTextEntry,
   unzipWorkspace,
   WORKSPACE_ARCHIVE_APP,
   WORKSPACE_ARCHIVE_VERSION,
@@ -69,7 +69,7 @@ function parseManifest(
 
   let json: unknown;
   try {
-    json = JSON.parse(decodeTextEntry(raw));
+    json = JSON.parse(strFromU8(raw));
   } catch {
     throw new WorkspaceImportError(["manifest.json is not valid JSON."]);
   }
@@ -114,7 +114,7 @@ function parsePages(files: Record<string, Uint8Array>): {
   for (const key of keys) {
     let json: unknown;
     try {
-      json = JSON.parse(decodeTextEntry(files[key]));
+      json = JSON.parse(strFromU8(files[key]));
     } catch {
       errors.push(describePageIssue(key, "not valid JSON"));
       continue;

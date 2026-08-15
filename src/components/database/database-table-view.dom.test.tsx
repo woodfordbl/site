@@ -17,7 +17,10 @@ import type {
  * filter → sort pipeline in `DatabaseTableView`, not their rendering.
  */
 
-vi.mock("@/hooks/device-layout.ts", () => ({
+vi.mock(
+  "@/components/layout/device-layout-provider.tsx",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
   useIsCoarsePrimaryPointer: () => false,
 }));
 

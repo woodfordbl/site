@@ -21,9 +21,6 @@ import {
 } from "@/components/ui/item.tsx";
 import { cn } from "@/lib/utils.ts";
 
-export const settingsItemRowClassName =
-  "rounded-none border-0 border-border border-b last:border-b-0";
-
 interface SettingsItemCardProps {
   children: ReactNode;
   className?: string;
@@ -54,7 +51,10 @@ export function SettingsItemRow({
 }: SettingsItemRowProps) {
   return (
     <Item
-      className={cn(settingsItemRowClassName, className)}
+      className={cn(
+        "rounded-none border-0 border-border border-b last:border-b-0",
+        className
+      )}
       variant={variant}
       {...props}
     />
@@ -94,7 +94,7 @@ export function SettingsItemField({
   return (
     <div className="flex flex-col">
       {row}
-      {/* Horizontal padding MUST match `settingsItemRowClassName`'s, or the
+      {/* Horizontal padding MUST match `SettingsItemRow`'s, or the
           body sits a few px off the title and description above it. The top
           padding adds to the row's own, separating the body from the
           description rather than letting them run together. */}

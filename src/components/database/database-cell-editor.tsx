@@ -853,10 +853,6 @@ interface RelationRowComboboxProps {
   selectedIds: readonly string[];
 }
 
-/** Row class shared with the option combobox's list rows (same affordances). */
-const RELATION_ROW_CLASS =
-  "flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted";
-
 /**
  * Search-first target-row list for the relation editor: type-ahead title
  * filtering, check marks on linked rows, toggling keeps the popover open
@@ -918,7 +914,8 @@ function RelationRowCombobox({
       >
         {filtered.map((entry) => (
           <button
-            className={RELATION_ROW_CLASS}
+            // Row affordances match the option combobox's list rows.
+            className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
             key={entry.id}
             onClick={() => onToggle(entry.id)}
             type="button"

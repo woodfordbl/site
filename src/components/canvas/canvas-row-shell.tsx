@@ -11,7 +11,7 @@ import {
   useCanvasSelection,
 } from "@/components/canvas/canvas-editor-context.tsx";
 import { useDropTarget } from "@/components/dnd/use-dnd.ts";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { useBlockTouchGesture } from "@/hooks/use-block-touch-gesture.ts";
 import { useTimeout } from "@/hooks/use-timeout.ts";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";

@@ -18,15 +18,13 @@ import {
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import type { PageCommand } from "@/lib/canvas/commands.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
-import {
-  buildDatabaseHubSlug,
-  resolveDatabaseSlug,
-} from "@/lib/databases/database-page-paths.ts";
+import { resolveDatabaseSlug } from "@/lib/databases/database-page-paths.ts";
 import { resolveDatabaseHostParentId } from "@/lib/databases/resolve-database-host-page.ts";
 import {
   dedupePageSegment,
   siblingPages,
 } from "@/lib/pages/build-page-tree.ts";
+import { buildChildSlug } from "@/lib/pages/slugify.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import type { DatabaseProps } from "@/lib/schemas/block-props.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";
@@ -237,7 +235,7 @@ export async function ensureDatabaseHubPage(options: {
     resolveDatabaseSlug(options.database),
     siblings
   );
-  const slug = buildDatabaseHubSlug(parent?.slug ?? "/", segment);
+  const slug = buildChildSlug(parent?.slug ?? "/", segment);
 
   try {
     options.dispatch({

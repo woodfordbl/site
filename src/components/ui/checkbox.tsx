@@ -1,6 +1,6 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { IconCheck } from "@tabler/icons-react";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 function Checkbox({

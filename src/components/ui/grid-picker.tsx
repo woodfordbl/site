@@ -31,7 +31,7 @@ import {
 import { useMenuPresentation } from "@/components/ui/menu-presentation.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { TooltipContent, TooltipProvider } from "@/components/ui/tooltip.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 type RowVirtualizer = ReturnType<

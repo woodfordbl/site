@@ -56,10 +56,6 @@ import { syncPageUrl } from "@/lib/pages/sync-url.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
 
-function createId(): string {
-  return crypto.randomUUID();
-}
-
 /**
  * User pages hard-delete (row + snapshots removed); shipped pages hide behind
  * a `deletedAt` tombstone (snapshots kept), inserting a tombstone row when the
@@ -160,7 +156,7 @@ export function pageReducer(
 ): { effects: PageEffect[] } {
   switch (command.type) {
     case "page.create": {
-      const id = command.pageId ?? createId();
+      const id = command.pageId ?? crypto.randomUUID();
       const { parentId, slug, title } = resolveCreatePage(command, pages, id);
       const sidebarOrder = command.insertAfterPageId
         ? computeSidebarOrderForInsertAfter({
@@ -266,13 +262,6 @@ function readLiveLocalPages(): LocalPage[] {
   }
 
   return localPagesCollection.toArray;
-}
-
-function mergeDispatchPages(
-  serverPages: PageSummary[],
-  localPages: LocalPage[]
-): PageSummary[] {
-  return mergePageList(serverPages, localPages);
 }
 
 function applyPagePersistEffect(
@@ -414,7 +403,7 @@ export function usePageDispatch(pages: PageSummary[] = []) {
 
   const mergedPages = useMemo(() => {
     if (serverPages.length > 0) {
-      return mergeDispatchPages(serverPages, localPages);
+      return mergePageList(serverPages, localPages);
     }
 
     return pages;
@@ -485,7 +474,7 @@ export function usePageDispatch(pages: PageSummary[] = []) {
         queryClient
           .ensureQueryData(pageListQueryOptions)
           .then((freshServerPages) => {
-            const dispatchPages = mergeDispatchPages(
+            const dispatchPages = mergePageList(
               freshServerPages,
               readLiveLocalPages()
             );

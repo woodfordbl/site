@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent } from "@/components/ui/tooltip.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { FORMULA_TOKEN_SELECTOR } from "@/lib/editor/rich-text-dom.ts";
 
 /**

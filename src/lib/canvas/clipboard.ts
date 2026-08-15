@@ -5,10 +5,6 @@ export interface CanvasClipboardPayload {
   blocks: Block[];
 }
 
-function createId(): string {
-  return crypto.randomUUID();
-}
-
 /**
  * Clone blocks for paste with fresh ids. `parentId` references within the
  * cloned set are remapped to the new ids so container subtrees stay intact;
@@ -16,11 +12,11 @@ function createId(): string {
  * subtree roots at the paste destination.
  */
 export function cloneBlocksForPaste(blocks: Block[]): Block[] {
-  const idMap = new Map(blocks.map((block) => [block.id, createId()]));
+  const idMap = new Map(blocks.map((block) => [block.id, crypto.randomUUID()]));
 
   return blocks.map((block) => ({
     ...structuredClone(block),
-    id: idMap.get(block.id) ?? createId(),
+    id: idMap.get(block.id) ?? crypto.randomUUID(),
     parentId: block.parentId ? (idMap.get(block.parentId) ?? null) : null,
   }));
 }

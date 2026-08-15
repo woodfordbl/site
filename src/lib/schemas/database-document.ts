@@ -33,10 +33,6 @@ export const shippedDatabaseDefinitionSchema = localDatabaseSchema.omit({
   updatedAt: true,
 });
 
-export type ShippedDatabaseDefinition = z.infer<
-  typeof shippedDatabaseDefinitionSchema
->;
-
 export const databaseDocumentSchema = z.object({
   database: shippedDatabaseDefinitionSchema,
   rows: z.array(shippedDatabaseRowSchema),

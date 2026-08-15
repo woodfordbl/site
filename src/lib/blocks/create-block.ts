@@ -10,10 +10,6 @@ import type { Block, BlockType } from "@/lib/schemas/block.ts";
 import type { PageLinkProps } from "@/lib/schemas/block-props.ts";
 import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 
-function createId(): string {
-  return crypto.randomUUID();
-}
-
 /** Removes a leading `/command` when the slash menu was used at block start. */
 export function stripSlashCommandText(text: string): string {
   return text.startsWith("/") ? "" : text;
@@ -23,7 +19,7 @@ export function createEmptyBlock<T extends BlockType>(type: T): BlockFor<T> {
   // Correlated-union construction TS cannot verify; BLOCK_DEFS guarantees the
   // props match the type.
   return {
-    id: createId(),
+    id: crypto.randomUUID(),
     type,
     props: getBlockDef(type).defaultProps(),
   } as unknown as BlockFor<T>;

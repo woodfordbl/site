@@ -51,12 +51,6 @@ export function presetToRange(
   return { from, to };
 }
 
-/** Number of inclusive calendar days in the range (minimum 1). */
-export function rangeDayCount(range: DayRange): number {
-  const ms = startOfDay(range.to).getTime() - startOfDay(range.from).getTime();
-  return Math.max(1, Math.round(ms / 86_400_000) + 1);
-}
-
 function toDayKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

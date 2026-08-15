@@ -87,14 +87,6 @@ export function useResolvedKeybindings(): ResolvedKeybindings {
   }, [overrideRows]);
 }
 
-/** Resolve a single command's effective combo (non-reactive convenience). */
-export function resolveHotkey(
-  id: CommandId,
-  resolved: ResolvedKeybindings
-): Hotkey {
-  return resolved[id] ?? getCommand(id).defaultHotkey;
-}
-
 /** Canonical form used to compare combos regardless of modifier order/casing. */
 function canonicalize(hotkey: string): string {
   try {

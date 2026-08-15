@@ -3,7 +3,7 @@
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
 import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import type {
   CommandId,
   SequenceCommandId,

@@ -14,7 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";

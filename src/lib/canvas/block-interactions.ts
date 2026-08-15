@@ -19,23 +19,6 @@ export function canSplitBlock(block: Block): boolean {
   );
 }
 
-export function getContainerParent(row: CanvasRow | null): CanvasRow | null {
-  return row?.children ? row : null;
-}
-
-export function shouldLiftEmptyContainerChildOnEnter(
-  parent: CanvasRow | null,
-  block: Block
-): boolean {
-  if (!parent) {
-    return false;
-  }
-  return (
-    getTextFromBlock(block).length === 0 &&
-    shouldLiftEmptyChildOnEnter(parent.effectiveBlock.type)
-  );
-}
-
 export function shouldLiftContainerChildOnEnterAtCaretStart(
   parent: CanvasRow | null
 ): boolean {

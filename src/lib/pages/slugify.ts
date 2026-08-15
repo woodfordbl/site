@@ -34,15 +34,6 @@ export function getPageSegment(slug: string): string {
   return segments.at(-1) ?? "home";
 }
 
-export function getPageSlugPrefix(slug: string): string | null {
-  const segments = parsePagePath(slug);
-  if (segments.length <= 1) {
-    return null;
-  }
-
-  return `/${segments.slice(0, -1).join("/")}`;
-}
-
 export function buildChildSlug(parentSlug: string, segment: string): string {
   if (parentSlug === "/") {
     return `/${segment}`;

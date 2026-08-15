@@ -10,20 +10,15 @@ import {
   countEventsByPage,
   countEventsByType,
 } from "@/lib/pages/page-activity-analytics.ts";
-import type { PageActivityEvent } from "@/lib/pages/page-activity-events.ts";
 
 export const siteActivityAnalyticsQueryKey = [
   "site-activity-analytics",
 ] as const;
 
-function fetchSiteActivityAnalytics(): Promise<PageActivityEvent[]> {
-  return readAllPageActivityEvents();
-}
-
 export function useSiteActivityAnalytics(enabled = true, days = 30) {
   const query = useQuery({
     enabled,
-    queryFn: fetchSiteActivityAnalytics,
+    queryFn: () => readAllPageActivityEvents(),
     queryKey: siteActivityAnalyticsQueryKey,
     staleTime: 60_000,
   });

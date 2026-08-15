@@ -139,10 +139,6 @@ export function getContainerDefinition(
   return isContainerBlockType(type) ? BLOCK_CONTAINER_CONFIG[type] : undefined;
 }
 
-export function isContainerType(type: BlockType): type is ContainerBlockType {
-  return isContainerBlockType(type);
-}
-
 export function acceptsEmptyMergeFromAfter(type: BlockType): boolean {
   return getContainerDefinition(type)?.acceptEmptyMergeFromAfter ?? false;
 }

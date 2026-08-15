@@ -24,8 +24,8 @@ import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-contex
 import { MobileBlockTypePicker } from "@/components/canvas/mobile-block-type-picker.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { ButtonGroup } from "@/components/ui/button-group.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { clampBlockIndent, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";

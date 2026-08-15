@@ -18,7 +18,7 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { Shortcut } from "@/components/ui/shortcut.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   type ActionMenuEntry,
   filterActionMenuItems,

@@ -2,7 +2,7 @@ import { IconArrowLeft, IconTable } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import type { FormulaRelatedDatabase } from "@/lib/databases/formula-values.ts";
 import {
   type FormulaCheckContext,

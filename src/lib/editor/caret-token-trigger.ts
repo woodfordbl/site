@@ -115,20 +115,6 @@ export function selectCaretTokenRange(context: CaretTokenContext): boolean {
 }
 
 /**
- * Replace the selected trigger run with plain text via `insertText` so the
- * rich-text field's input path + undo behave like typing.
- */
-export function replaceCaretTokenWithText(
-  context: CaretTokenContext,
-  text: string
-): boolean {
-  if (!selectCaretTokenRange(context)) {
-    return false;
-  }
-  return document.execCommand("insertText", false, text);
-}
-
-/**
  * Notify the rich-text field that its DOM changed outside the normal typing
  * path (e.g. after inserting an inline page-link anchor).
  */

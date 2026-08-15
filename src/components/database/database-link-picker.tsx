@@ -28,9 +28,6 @@ interface DatabaseLinkOption {
   name: string;
 }
 
-const ROW_CLASS =
-  "flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted";
-
 /**
  * Search-first single-select over every workspace database, powering the
  * database block's **Linked** tab: type-ahead substring filtering (the shared
@@ -109,7 +106,7 @@ export function DatabaseLinkPicker({
       >
         {options.map((option) => (
           <button
-            className={ROW_CLASS}
+            className="flex h-8 pointer-coarse:h-10 shrink-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted"
             key={option.id}
             onClick={() => onSelect(option.id)}
             type="button"

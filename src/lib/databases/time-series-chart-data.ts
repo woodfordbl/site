@@ -4,7 +4,7 @@ import type { HistoryResolution } from "@/lib/connectors/types.ts";
 /**
  * Pure helpers for time-axis charts: window presets, resolution selection, and
  * display clip helpers. Historical backfill + local capture are merged into the
- * field-history store by {@link ensureSeriesCoverage} (shared with live-markets
+ * field-history store by {@link ensureSeriesCoverageMany} (shared with live-markets
  * derived Change); this module stays IO-free.
  */
 

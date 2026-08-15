@@ -18,8 +18,6 @@ export const CHART_PALETTE_TOKENS = [
   "chart-5",
 ] as const;
 
-export type ChartPaletteToken = (typeof CHART_PALETTE_TOKENS)[number];
-
 export const CHART_PALETTES: Record<ChartPaletteId, { label: string }> = {
   colorful: { label: "Colorful" },
   orange: { label: "Orange" },

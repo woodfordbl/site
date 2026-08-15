@@ -13,8 +13,6 @@ export const UNSPLASH_APP_NAME = "blake_woodford_site";
 /** Results per page — shared by the proxy and the infinite-scroll client. */
 export const UNSPLASH_PAGE_SIZE = 24;
 
-export const UNSPLASH_HOME_URL = "https://unsplash.com";
-
 /** Appends the Unsplash-required referral UTM params to a profile/site link. */
 export function withUnsplashUtm(url: string): string {
   try {

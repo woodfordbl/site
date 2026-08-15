@@ -143,7 +143,7 @@ function computeDerivedCellForRow(
 
 /**
  * Build the derived overlay. `seriesByExternalId` is the covered price window
- * (from {@link ensureSeriesCoverage}). Pass `coverageReady: false` while the
+ * (from {@link ensureSeriesCoverageMany}). Pass `coverageReady: false` while the
  * ensure query is still in flight so Change keeps the seeded provider % until
  * we know whether the series can refine it.
  */

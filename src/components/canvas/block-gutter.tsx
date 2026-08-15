@@ -22,7 +22,7 @@ import {
 import {
   useIsCoarsePrimaryPointer,
   useIsNarrowViewport,
-} from "@/hooks/device-layout.ts";
+} from "@/components/layout/device-layout-provider.tsx";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { canvasGutterBodyFirstLineClassName } from "@/lib/blocks/block-spacing.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";

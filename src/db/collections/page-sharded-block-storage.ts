@@ -24,7 +24,8 @@ interface StoredItem<T> {
 
 type ShardMap<T> = Record<string, StoredItem<T>>;
 
-function shardKey(pageId: string): string {
+/** localStorage key for one page's block shard. */
+export function blockShardStorageKey(pageId: string): string {
   return `${BLOCK_SHARD_PREFIX}${pageId}`;
 }
 
@@ -44,7 +45,7 @@ function listShardPageIds(storage: Storage): string[] {
 }
 
 function readShard<T>(storage: Storage, pageId: string): ShardMap<T> | null {
-  const raw = storage.getItem(shardKey(pageId));
+  const raw = storage.getItem(blockShardStorageKey(pageId));
   if (!raw) {
     return null;
   }
@@ -62,11 +63,11 @@ function writeShard<T>(
   shard: ShardMap<T>
 ): void {
   if (Object.keys(shard).length === 0) {
-    storage.removeItem(shardKey(pageId));
+    storage.removeItem(blockShardStorageKey(pageId));
     return;
   }
 
-  storage.setItem(shardKey(pageId), JSON.stringify(shard));
+  storage.setItem(blockShardStorageKey(pageId), JSON.stringify(shard));
 }
 
 /**
@@ -146,7 +147,7 @@ export function createPageShardedBlockStorage(
     },
     clear(): void {
       for (const pageId of listShardPageIds(storage)) {
-        storage.removeItem(shardKey(pageId));
+        storage.removeItem(blockShardStorageKey(pageId));
       }
       lastShardSnapshot.clear();
     },
@@ -178,7 +179,7 @@ export function createPageShardedBlockStorage(
       }
 
       for (const pageId of listShardPageIds(storage)) {
-        storage.removeItem(shardKey(pageId));
+        storage.removeItem(blockShardStorageKey(pageId));
       }
       lastShardSnapshot.clear();
     },
@@ -225,7 +226,7 @@ export function createPageShardedBlockStorage(
           readShard(storage, pageId),
           {}
         );
-        storage.removeItem(shardKey(pageId));
+        storage.removeItem(blockShardStorageKey(pageId));
         lastShardSnapshot.delete(pageId);
         lastShardIds.delete(pageId);
       }
@@ -237,10 +238,6 @@ export const BLOCK_COLLECTION_STORAGE_KEY = "site-local-blocks";
 
 /** Single instance — TanStack `storage` and `storageEventApi` must share this reference. */
 export const pageShardedBlockStorage = createPageShardedBlockStorage();
-
-export function blockShardStorageKey(pageId: string): string {
-  return shardKey(pageId);
-}
 
 export function readBlockShardPageIds(
   storage: Storage = getBrowserStorage()

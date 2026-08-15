@@ -24,7 +24,10 @@ vi.mock("@/db/collections/local-collections.ts", () => ({
 
 // Fine pointer keeps the popover presentation (the drawer path needs vaul +
 // DeviceLayoutProvider scaffolding this test doesn't exercise).
-vi.mock("@/hooks/device-layout.ts", () => ({
+vi.mock(
+  "@/components/layout/device-layout-provider.tsx",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
   useIsCoarsePrimaryPointer: () => false,
 }));
 

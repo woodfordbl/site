@@ -12,7 +12,8 @@ interface StoredItem<T> {
 
 type ShardMap<T> = Record<string, StoredItem<T>>;
 
-function shardKey(databaseId: string): string {
+/** localStorage key for one database's row shard. */
+export function databaseRowShardStorageKey(databaseId: string): string {
   return `${DATABASE_ROW_SHARD_PREFIX}${databaseId}`;
 }
 
@@ -35,7 +36,7 @@ function readShard<T>(
   storage: Storage,
   databaseId: string
 ): ShardMap<T> | null {
-  const raw = storage.getItem(shardKey(databaseId));
+  const raw = storage.getItem(databaseRowShardStorageKey(databaseId));
   if (!raw) {
     return null;
   }
@@ -53,11 +54,11 @@ function writeShard<T>(
   shard: ShardMap<T>
 ): void {
   if (Object.keys(shard).length === 0) {
-    storage.removeItem(shardKey(databaseId));
+    storage.removeItem(databaseRowShardStorageKey(databaseId));
     return;
   }
 
-  storage.setItem(shardKey(databaseId), JSON.stringify(shard));
+  storage.setItem(databaseRowShardStorageKey(databaseId), JSON.stringify(shard));
 }
 
 /**
@@ -145,7 +146,7 @@ export function createDatabaseShardedRowStorage(
     },
     clear(): void {
       for (const databaseId of listShardDatabaseIds(storage)) {
-        storage.removeItem(shardKey(databaseId));
+        storage.removeItem(databaseRowShardStorageKey(databaseId));
       }
       lastShardSnapshot.clear();
     },
@@ -177,7 +178,7 @@ export function createDatabaseShardedRowStorage(
       }
 
       for (const databaseId of listShardDatabaseIds(storage)) {
-        storage.removeItem(shardKey(databaseId));
+        storage.removeItem(databaseRowShardStorageKey(databaseId));
       }
       lastShardSnapshot.clear();
     },
@@ -226,7 +227,7 @@ export function createDatabaseShardedRowStorage(
           readShard(storage, databaseId),
           {}
         );
-        storage.removeItem(shardKey(databaseId));
+        storage.removeItem(databaseRowShardStorageKey(databaseId));
         lastShardSnapshot.delete(databaseId);
         lastShardIds.delete(databaseId);
       }
@@ -236,18 +237,6 @@ export function createDatabaseShardedRowStorage(
 
 /** Single instance — TanStack `storage` and `storageEventApi` must share this reference. */
 export const databaseShardedRowStorage = createDatabaseShardedRowStorage();
-
-/** localStorage key for one database's row shard. */
-export function databaseRowShardStorageKey(databaseId: string): string {
-  return shardKey(databaseId);
-}
-
-/** Database ids that currently have a row shard in storage. */
-export function readDatabaseRowShardDatabaseIds(
-  storage: Storage = getBrowserStorage()
-): string[] {
-  return listShardDatabaseIds(storage);
-}
 
 type StorageListener = (event: StorageEvent) => void;
 

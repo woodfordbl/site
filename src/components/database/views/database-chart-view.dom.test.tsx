@@ -11,7 +11,10 @@ import type {
 
 // The chart wrapper reads the workspace palette/dither from the appearance
 // context; stub it so the test needs no ThemeProvider scaffolding.
-vi.mock("@/hooks/device-layout.ts", () => ({
+vi.mock(
+  "@/components/layout/device-layout-provider.tsx",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
   useIsCoarsePrimaryPointer: () => false,
 }));
 vi.mock("@/components/layout/theme-provider.tsx", () => ({

@@ -21,7 +21,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable.tsx";
 import { SidebarProvider } from "@/components/ui/sidebar.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import {
   clampSidebarWidthRem,
   PAGE_MAIN_PANEL_ID,

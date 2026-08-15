@@ -16,7 +16,7 @@ import { RowGutter } from "@/components/canvas/row-gutter.tsx";
 import {
   useIsCoarsePrimaryPointer,
   useIsNarrowViewport,
-} from "@/hooks/device-layout.ts";
+} from "@/components/layout/device-layout-provider.tsx";
 
 import { blockColorClassName } from "@/lib/blocks/block-colors.ts";
 import { getBlockShellSpacingClass } from "@/lib/blocks/block-spacing.ts";

@@ -11,14 +11,6 @@ export interface FieldHistoryPoint {
   v: number;
 }
 
-/** A single field's captured series for one row (ordered oldest → newest). */
-export interface FieldHistorySeries {
-  databaseId: string;
-  externalId: string;
-  fieldId: string;
-  points: FieldHistoryPoint[];
-}
-
 /** Hard cap on points per series after thinning (recency-biased). */
 export const MAX_POINTS_PER_SERIES = 2000;
 

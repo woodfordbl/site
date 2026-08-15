@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzip, zip } from "fflate";
+import { strToU8, unzip, zip } from "fflate";
 import { z } from "zod";
 
 /** Identifies archives produced by this app so import can reject foreign zips. */
@@ -51,10 +51,6 @@ export function mediaArchivePath(assetId: string, extension: string): string {
 
 export function encodeJsonEntry(value: unknown): Uint8Array {
   return strToU8(JSON.stringify(value, null, 2));
-}
-
-export function decodeTextEntry(bytes: Uint8Array): string {
-  return strFromU8(bytes);
 }
 
 /** Async (worker-backed) zip so large media never blocks the main thread. */

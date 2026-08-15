@@ -1,16 +1,12 @@
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
-function createId(): string {
-  return crypto.randomUUID();
-}
-
 /** Clone all page blocks with remapped ids so parentId references stay valid. */
 export function clonePageBlocks(blocks: Block[]): Block[] {
   const idMap = new Map<string, string>();
 
   for (const block of blocks) {
-    idMap.set(block.id, createId());
+    idMap.set(block.id, crypto.randomUUID());
   }
 
   return blocks.map((block) => {
@@ -22,7 +18,7 @@ export function clonePageBlocks(blocks: Block[]): Block[] {
 
     return {
       ...next,
-      id: idMap.get(source.id) ?? createId(),
+      id: idMap.get(source.id) ?? crypto.randomUUID(),
       indent: source.indent,
       parentId,
       props: structuredClone(source.props),

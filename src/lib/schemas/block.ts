@@ -169,8 +169,6 @@ export const placementSchema = z.discriminatedUnion("scope", [
   containerPlacementSchema,
 ]);
 
-export type Placement = z.infer<typeof placementSchema>;
-
 export function getBlockParentId(block: Block): string | null {
   return block.parentId ?? null;
 }

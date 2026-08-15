@@ -10,7 +10,7 @@ import {
 import { BlockGutterMenu } from "@/components/canvas/block-gutter-menu/block-gutter-menu.tsx";
 import { useCanvasEditorState } from "@/components/canvas/canvas-editor-context.tsx";
 import { useRowGutterHandlers } from "@/components/canvas/use-row-gutter-handlers.ts";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { type CanvasRow, flattenRows } from "@/lib/blocks/block-tree.ts";
 
 function DrawerRowMenu({ row }: { row: CanvasRow }) {

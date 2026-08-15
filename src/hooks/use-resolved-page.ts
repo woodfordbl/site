@@ -10,9 +10,6 @@ import type { Page } from "@/lib/schemas/page.ts";
 
 import { useLocalPages } from "./use-local-pages.ts";
 
-/** Server JSON page or a user-created row from `localPagesCollection`. */
-export type ResolvedPage =
-  | { kind: "server"; page: Page }
   | { kind: "user"; page: LocalPage };
 
 /**
@@ -60,21 +57,5 @@ export function useResolvedLocalPageBySlug(slug: string): LocalPage | null {
   return useMemo(
     () => resolveActiveLocalPageBySlug(localPages, normalized),
     [localPages, normalized]
-  );
-}
-
-/** User-created pages (`serverBaselineHash: null`) from the local collection. */
-export function useUserPages(): LocalPage[] {
-  const localPages = useLocalPages();
-
-  return useMemo(
-    () =>
-      localPages.filter(
-        (page) =>
-          isUserCreatedPage(page) &&
-          !isTemplatePageId(page.id) &&
-          !isDatabaseTemplatePageId(page.id)
-      ),
-    [localPages]
   );
 }

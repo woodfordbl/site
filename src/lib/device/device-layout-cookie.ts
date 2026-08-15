@@ -63,12 +63,6 @@ export function deviceLayoutHintsToCookie(
   };
 }
 
-export function serializeDeviceLayoutCookie(
-  cookie: DeviceLayoutCookie
-): string {
-  return JSON.stringify(cookie);
-}
-
 export function readDeviceLayoutCookieFromDocument(): DeviceLayoutCookie | null {
   return parseDeviceLayoutCookie(readDocumentCookie(DEVICE_LAYOUT_COOKIE_NAME));
 }
@@ -79,6 +73,6 @@ export function writeDeviceLayoutCookieToDocument(
 ): boolean {
   return writeDocumentCookie(
     DEVICE_LAYOUT_COOKIE_NAME,
-    serializeDeviceLayoutCookie(deviceLayoutHintsToCookie(hints))
+    JSON.stringify(deviceLayoutHintsToCookie(hints))
   );
 }

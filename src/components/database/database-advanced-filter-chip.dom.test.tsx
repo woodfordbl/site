@@ -9,7 +9,10 @@ import type { DatabaseView } from "@/lib/schemas/database.ts";
 // Fine pointer keeps the ui Popover a plain popover (no vaul drawer/
 // matchMedia scaffolding in jsdom). Stubbed so no DeviceLayoutProvider is
 // needed.
-vi.mock("@/hooks/device-layout.ts", () => ({
+vi.mock(
+  "@/components/layout/device-layout-provider.tsx",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
   useIsCoarsePrimaryPointer: () => false,
 }));
 

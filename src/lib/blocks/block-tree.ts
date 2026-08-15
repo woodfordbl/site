@@ -230,14 +230,3 @@ function findInSiblings(
   }
   return null;
 }
-
-export function getPreviousBlockId(
-  rows: CanvasRow[],
-  rowId: string
-): string | null {
-  const context = findRowContext(rows, rowId);
-  if (!context) {
-    return null;
-  }
-  return context.siblings[context.index - 1]?.effectiveBlock.id ?? null;
-}

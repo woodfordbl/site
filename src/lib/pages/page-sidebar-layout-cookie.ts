@@ -38,9 +38,6 @@ export const PAGE_SIDEBAR_RUBBER_BAND_MAX_REM = 2;
  */
 export const PAGE_SIDEBAR_RUBBER_BAND_RESISTANCE_REM = 3;
 
-/** Collapsed rail width — matches shadcn `SIDEBAR_WIDTH_ICON` (`3rem`). */
-export const PAGE_SIDEBAR_COLLAPSED_SIZE = "3rem";
-
 /** Desktop inset retained between the viewport edge and collapsed main panel. */
 export const PAGE_SIDEBAR_COLLAPSED_GUTTER_REM = 0.5;
 

@@ -336,10 +336,6 @@ export function formulaTypeFits(
   actual: FormulaType,
   expected: FormulaType
 ): boolean {
-  return typeFits(actual, expected);
-}
-
-function typeFits(actual: FormulaType, expected: FormulaType): boolean {
   if (actual.kind === "unknown" || actual.kind === "error") {
     return true;
   }
@@ -347,13 +343,13 @@ function typeFits(actual: FormulaType, expected: FormulaType): boolean {
     return true;
   }
   if (actual.kind === "union") {
-    return actual.members.some((member) => typeFits(member, expected));
+    return actual.members.some((member) => formulaTypeFits(member, expected));
   }
   if (expected.kind === "union") {
-    return expected.members.some((member) => typeFits(actual, member));
+    return expected.members.some((member) => formulaTypeFits(actual, member));
   }
   if (expected.kind === "list") {
-    return actual.kind === "list" && typeFits(actual.element, expected.element);
+    return actual.kind === "list" && formulaTypeFits(actual.element, expected.element);
   }
   if (expected.kind === "row") {
     return (
@@ -876,7 +872,7 @@ class Checker {
       return this.report(LAMBDA_AS_VALUE_MESSAGE, spanOf(node.operand));
     }
     if (node.op === "-") {
-      if (typeFits(operand, NUMBER_TYPE)) {
+      if (formulaTypeFits(operand, NUMBER_TYPE)) {
         return NUMBER_TYPE;
       }
       return this.report(
@@ -884,7 +880,7 @@ class Checker {
         spanOf(node.operand)
       );
     }
-    if (typeFits(operand, BOOLEAN_TYPE)) {
+    if (formulaTypeFits(operand, BOOLEAN_TYPE)) {
       return BOOLEAN_TYPE;
     }
     return this.report(
@@ -934,9 +930,9 @@ class Checker {
     right: FormulaType
   ): FormulaType {
     let offender: FormulaType | null = null;
-    if (!typeFits(left, BOOLEAN_TYPE)) {
+    if (!formulaTypeFits(left, BOOLEAN_TYPE)) {
       offender = left;
-    } else if (!typeFits(right, BOOLEAN_TYPE)) {
+    } else if (!formulaTypeFits(right, BOOLEAN_TYPE)) {
       offender = right;
     }
     if (offender === null) {
@@ -977,11 +973,11 @@ class Checker {
       return UNKNOWN_TYPE;
     }
     const numberOk =
-      typeFits(left, NUMBER_TYPE) && typeFits(right, NUMBER_TYPE);
+      formulaTypeFits(left, NUMBER_TYPE) && formulaTypeFits(right, NUMBER_TYPE);
     const textOk =
       (hasTextMember(left) || hasTextMember(right)) &&
-      typeFits(left, PLUS_COERCIBLE) &&
-      typeFits(right, PLUS_COERCIBLE);
+      formulaTypeFits(left, PLUS_COERCIBLE) &&
+      formulaTypeFits(right, PLUS_COERCIBLE);
     if (numberOk && textOk) {
       return unionTypeOf(NUMBER_TYPE, TEXT_TYPE);
     }
@@ -1002,7 +998,7 @@ class Checker {
     left: FormulaType,
     right: FormulaType
   ): FormulaType {
-    if (typeFits(left, NUMBER_TYPE) && typeFits(right, NUMBER_TYPE)) {
+    if (formulaTypeFits(left, NUMBER_TYPE) && formulaTypeFits(right, NUMBER_TYPE)) {
       return NUMBER_TYPE;
     }
     const display = node.op === "pow" ? "^" : node.op;
@@ -1319,7 +1315,7 @@ class Checker {
     }
     const condition = this.synth(node.args[0], env);
     let ok = true;
-    if (!typeFits(condition, BOOLEAN_TYPE)) {
+    if (!formulaTypeFits(condition, BOOLEAN_TYPE)) {
       this.report(
         expectsMismatchMessage("if", BOOLEAN_TYPE, condition),
         spanOf(node.args[0])
@@ -1348,7 +1344,7 @@ class Checker {
     let index = 1;
     while (index + 1 < node.args.length) {
       const caseType = this.synth(node.args[index], env);
-      if (!typeFits(caseType, subject)) {
+      if (!formulaTypeFits(caseType, subject)) {
         this.report(
           `This case is ${formulaTypeName(caseType)}, but the switch value is ${formulaTypeName(subject)}, so it can never match`,
           spanOf(node.args[index])
@@ -1403,7 +1399,7 @@ class Checker {
     // A lambda node here synthesizes the misplaced-lambda diagnostic itself
     // (and then fits as unknown) — one mistake, one diagnostic.
     const argType = this.synth(arg, env);
-    if (typeFits(argType, acceptedTypeFor(param, bindings))) {
+    if (formulaTypeFits(argType, acceptedTypeFor(param, bindings))) {
       bindTypeVariables(param.type, argType, bindings);
       return true;
     }
@@ -1531,7 +1527,7 @@ class Checker {
       }
       return true;
     }
-    if (typeFits(actual, returns)) {
+    if (formulaTypeFits(actual, returns)) {
       return true;
     }
     this.report(

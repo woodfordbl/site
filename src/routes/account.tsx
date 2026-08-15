@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import { syncContext } from "@/db/collections/sync-mode.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import {
@@ -41,13 +43,6 @@ interface InvitationRow {
   role?: string | null;
   status: string;
 }
-
-const inputClass =
-  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm";
-const buttonClass =
-  "rounded-md bg-foreground px-3 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50";
-const subtleButtonClass =
-  "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted";
 
 function slugify(name: string): string {
   const base = name
@@ -128,46 +123,46 @@ function AuthForms() {
       }}
     >
       <div className="flex gap-2">
-        <button
-          className={mode === "sign-up" ? buttonClass : subtleButtonClass}
+        <Button
           onClick={() => setMode("sign-up")}
           type="button"
+          variant={mode === "sign-up" ? "default" : "outline"}
         >
           Create account
-        </button>
-        <button
-          className={mode === "sign-in" ? buttonClass : subtleButtonClass}
+        </Button>
+        <Button
           onClick={() => setMode("sign-in")}
           type="button"
+          variant={mode === "sign-in" ? "default" : "outline"}
         >
           Sign in
-        </button>
+        </Button>
       </div>
       {mode === "sign-up" && (
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1 text-sm" htmlFor="account-name">
           Name
-          <input
-            className={inputClass}
+          <Input
+            id="account-name"
             onChange={(event) => setName(event.target.value)}
             required
             value={name}
           />
         </label>
       )}
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-1 text-sm" htmlFor="account-email">
         Email
-        <input
-          className={inputClass}
+        <Input
+          id="account-email"
           onChange={(event) => setEmail(event.target.value)}
           required
           type="email"
           value={email}
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-1 text-sm" htmlFor="account-password">
         Password
-        <input
-          className={inputClass}
+        <Input
+          id="account-password"
           minLength={8}
           onChange={(event) => setPassword(event.target.value)}
           required
@@ -176,9 +171,9 @@ function AuthForms() {
         />
       </label>
       {error && <p className="text-destructive text-sm">{error}</p>}
-      <button className={buttonClass} disabled={busy} type="submit">
+      <Button disabled={busy} type="submit">
         {mode === "sign-up" ? "Create account & workspace" : "Sign in"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -289,13 +284,13 @@ function SignedIn() {
                 )}
               </span>
               {org.id === activeWorkspaceId ? null : (
-                <button
-                  className={subtleButtonClass}
+                <Button
                   onClick={() => openWorkspace(org.id)}
                   type="button"
+                  variant="outline"
                 >
                   Open
-                </button>
+                </Button>
               )}
             </li>
           ))}
@@ -307,16 +302,13 @@ function SignedIn() {
             createWorkspace();
           }}
         >
-          <input
-            className={inputClass}
+          <Input
             onChange={(event) => setNewWorkspace(event.target.value)}
             placeholder="New workspace name"
             required
             value={newWorkspace}
           />
-          <button className={buttonClass} type="submit">
-            Create
-          </button>
+          <Button type="submit">Create</Button>
         </form>
       </section>
 
@@ -333,13 +325,12 @@ function SignedIn() {
                   Join {invitation.organizationName ?? "a workspace"} as{" "}
                   {invitation.role ?? "member"}
                 </span>
-                <button
-                  className={buttonClass}
+                <Button
                   onClick={() => acceptInvitation(invitation)}
                   type="button"
                 >
                   Accept
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -364,30 +355,27 @@ function SignedIn() {
               invite();
             }}
           >
-            <input
-              className={inputClass}
+            <Input
               onChange={(event) => setInviteEmail(event.target.value)}
               placeholder="teammate@email.com"
               required
               type="email"
               value={inviteEmail}
             />
-            <button className={buttonClass} type="submit">
-              Invite
-            </button>
+            <Button type="submit">Invite</Button>
           </form>
           {notice && <p className="text-muted-foreground text-sm">{notice}</p>}
         </section>
       )}
 
       <section>
-        <button
-          className={subtleButtonClass}
+        <Button
           onClick={() => signOutToLocalMode()}
           type="button"
+          variant="outline"
         >
           Sign out (back to local-only mode)
-        </button>
+        </Button>
       </section>
     </div>
   );

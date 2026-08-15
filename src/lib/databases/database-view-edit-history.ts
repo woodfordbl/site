@@ -73,11 +73,6 @@ export function getLastDatabaseViewEditRecordedAt(): number {
   return lastEditedAt;
 }
 
-/** View key (`databaseId:viewId`) touched by the latest recorded edit. */
-export function getLastDatabaseViewEditKey(): string | null {
-  return lastEditedKey;
-}
-
 /** Which domain last handled an undo — drives the next redo target. */
 export function getLastSessionUndoKind(): SessionUndoKind | null {
   return lastUndoKind;
@@ -186,19 +181,6 @@ export function tryRedoDatabaseViewEdit(): boolean {
   restoreDatabaseView(resolved.databaseId, restored);
   lastUndoKind = "database-view";
   return true;
-}
-
-/** Drops both stacks for one view (database delete, view delete). */
-export function clearDatabaseViewEditHistory(
-  databaseId: string,
-  viewId: string
-): void {
-  const key = viewHistoryKey(databaseId, viewId);
-  histories.delete(key);
-  if (lastEditedKey === key) {
-    lastEditedKey = null;
-    lastEditedAt = 0;
-  }
 }
 
 /** Drops every view's history (workspace reset). */

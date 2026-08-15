@@ -13,9 +13,6 @@ import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import { cn } from "@/lib/utils.ts";
 
-const pickerItemClassName =
-  "flex w-full cursor-default select-none items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm outline-hidden hover:bg-accent hover:text-accent-foreground active:bg-selection [&_svg:not([class*='size-'])]:size-5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:text-muted-foreground";
-
 interface MobileBlockTypePickerProps {
   onOpenChange: (open: boolean) => void;
   onSelect: (item: SlashMenuItem) => void;
@@ -68,7 +65,7 @@ export function MobileBlockTypePicker({
               const Icon = item.icon;
               return (
                 <button
-                  className={pickerItemClassName}
+                  className="flex w-full cursor-default select-none items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm outline-hidden hover:bg-accent hover:text-accent-foreground active:bg-selection [&_svg:not([class*='size-'])]:size-5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
                   key={item.key}
                   // The toolbar closes the picker (via `open`) before running the
                   // edit, so the sheet still dismisses even if the edit throws.

@@ -1,6 +1,6 @@
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 function Switch({

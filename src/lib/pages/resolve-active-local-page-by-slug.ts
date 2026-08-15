@@ -20,19 +20,3 @@ export function resolveActiveLocalPageBySlug(
     ) ?? null
   );
 }
-
-/**
- * Lazy-seeded shipped overlay on `/$` when metadata slug no longer matches server JSON.
- */
-export function resolveActiveShippedOverlayBySlug(
-  pages: LocalPage[],
-  slug: string
-): LocalPage | null {
-  const page = resolveActiveLocalPageBySlug(pages, slug);
-
-  if (!page || isUserCreatedPage(page)) {
-    return null;
-  }
-
-  return page;
-}

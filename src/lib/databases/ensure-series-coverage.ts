@@ -135,6 +135,10 @@ async function mapPool<T, R>(
   return results;
 }
 
+/**
+ * Ensure local history covers `[from, to]` for one series, fetching gaps via
+ * the connector when needed. Returns points clipped to the window.
+ */
 async function ensureOne(
   request: SeriesCoverageRequest,
   ctx: SeriesCoverageContext
@@ -207,17 +211,6 @@ async function ensureOne(
 }
 
 /**
- * Ensure local history covers `[from, to]` for one series, fetching gaps via
- * the connector when needed. Returns points clipped to the window.
- */
-export async function ensureSeriesCoverage(
-  request: SeriesCoverageRequest,
-  ctx: SeriesCoverageContext
-): Promise<FieldHistoryPoint[]> {
-  return await ensureOne(request, ctx);
-}
-
-/**
  * Ensure coverage for many rows (same field / window). In-flight dedupe +
  * concurrency limit prevent a 30-symbol Change column from stampeding.
  */
@@ -228,26 +221,4 @@ export async function ensureSeriesCoverageMany(
   return await mapPool(requests, FETCH_CONCURRENCY, (request) =>
     ensureOne(request, ctx)
   );
-}
-
-/** Build a coverage context from a connector id + config (browser default). */
-export async function seriesCoverageContextFromConnector(
-  connectorId: string,
-  config: Record<string, unknown>,
-  fetchFn: typeof fetch = globalThis.fetch.bind(globalThis)
-): Promise<SeriesCoverageContext | null> {
-  const connector = getConnector(connectorId);
-  if (!connector?.fetchHistory) {
-    return null;
-  }
-  const token =
-    (await Promise.resolve(getConnectorToken(connectorId)).catch(
-      () => undefined
-    )) ?? undefined;
-  return { connector, config, fetchFn, token };
-}
-
-/** Test helper — clears in-flight dedupe between cases. */
-export function resetSeriesCoverageInFlightForTests(): void {
-  inFlight.clear();
 }

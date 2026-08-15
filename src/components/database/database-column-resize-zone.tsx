@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 interface DatabaseColumnResizeZoneProps {

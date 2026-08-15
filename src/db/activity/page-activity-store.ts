@@ -17,19 +17,6 @@ function assertActivityStoreAvailable(): void {
   }
 }
 
-export async function readPageActivityEvents(
-  pageId: string,
-  limit = PAGE_ACTIVITY_EVENT_LIMIT
-): Promise<PageActivityEvent[]> {
-  if (typeof indexedDB === "undefined") {
-    return [];
-  }
-
-  const events =
-    (await get<PageActivityEvent[]>(activityKey(pageId), activityStore)) ?? [];
-  return events.slice(0, limit);
-}
-
 export async function appendPageActivityEvent(
   pageId: string,
   event: Omit<PageActivityEvent, "id" | "pageId">
@@ -79,12 +66,4 @@ export async function readAllPageActivityEvents(
         new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
     )
     .slice(0, limit);
-}
-
-export async function clearPageActivity(pageId: string): Promise<void> {
-  if (typeof indexedDB === "undefined") {
-    return;
-  }
-
-  await set(activityKey(pageId), [], activityStore);
 }

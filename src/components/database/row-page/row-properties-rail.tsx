@@ -39,7 +39,7 @@ import {
   setDatabaseRowPropertiesPlacement,
   setDatabaseRowPropertiesVisibleFieldIds,
 } from "@/db/queries/database-collection-ops.ts";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import { pageCanvasDesktopScrollTopInsetClassName } from "@/lib/pages/page-title-layout.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";

@@ -124,7 +124,7 @@ import {
   useDatabaseRows,
 } from "@/db/queries/use-database.ts";
 import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,

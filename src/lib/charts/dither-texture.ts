@@ -136,20 +136,3 @@ export function createDitherGradient(options: DitherGradientOptions): string {
 
   return canvas.toDataURL();
 }
-
-/** Parses a `#rgb`/`#rrggbb` hex string into an `[r, g, b]` tuple. */
-export function hexToRgb(hex: string): Rgb {
-  const clean = hex.replace("#", "");
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : clean;
-  return [
-    Number.parseInt(full.slice(0, 2), 16),
-    Number.parseInt(full.slice(2, 4), 16),
-    Number.parseInt(full.slice(4, 6), 16),
-  ];
-}

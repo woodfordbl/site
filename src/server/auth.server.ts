@@ -101,8 +101,6 @@ export const auth = betterAuth({
   ],
 });
 
-export type AuthSession = typeof auth.$Infer.Session;
-
 /** Resolves the Better Auth session from request headers, or null. */
 export async function getSession(headers: Headers) {
   return await auth.api.getSession({ headers });

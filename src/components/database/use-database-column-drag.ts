@@ -7,8 +7,8 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDragSource, usePointerRowDrag } from "@/components/dnd/use-dnd.ts";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 
 /** Hold this long before a coarse-pointer header arms for dragging (mirrors useBlockTouchGesture). */
 const LONG_PRESS_MS = 450;

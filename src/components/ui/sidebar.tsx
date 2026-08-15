@@ -29,8 +29,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 const SIDEBAR_WIDTH = "12rem";

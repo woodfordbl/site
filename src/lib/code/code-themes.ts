@@ -77,22 +77,7 @@ export const CODE_THEMES: Record<CodeThemeId, CodeThemeDefinition> = {
 
 export const DEFAULT_CODE_THEME_ID: CodeThemeId = "github";
 
-export function codeThemeIds(): readonly CodeThemeId[] {
-  return CODE_THEME_IDS;
-}
-
 /** The definition for `id`, falling back to the default for unknown ids. */
 export function codeTheme(id: string | undefined): CodeThemeDefinition {
   return CODE_THEMES[id as CodeThemeId] ?? CODE_THEMES[DEFAULT_CODE_THEME_ID];
-}
-
-/**
- * Every Shiki theme name the registry can ask for, so the highlighter can
- * validate a requested theme without importing the whole map.
- */
-export function codeThemeShikiNames(): readonly string[] {
-  return Object.values(CODE_THEMES).flatMap((entry) => [
-    entry.light,
-    entry.dark,
-  ]);
 }

@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
 import { usePageActions } from "@/hooks/use-page-actions.ts";

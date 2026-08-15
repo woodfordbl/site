@@ -51,20 +51,6 @@ export function columnFlexStyle(width: number | undefined): {
   return { flex: `${grow} 1 0`, minWidth: 0 };
 }
 
-/** Equal flex-grow ratios across column blocks. */
-export function equalizeColumnWidths(columnBlocks: Block[]): Block[] {
-  const width = DEFAULT_COLUMN_WIDTH;
-  return columnBlocks.map((block) => {
-    if (block.type !== "column") {
-      return block;
-    }
-    return {
-      ...block,
-      props: { ...block.props, width },
-    };
-  });
-}
-
 export function buildColumnBlock(
   parentId: string
 ): Extract<Block, { type: "column" }> {

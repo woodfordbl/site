@@ -3,7 +3,7 @@ import { type ReactNode, useMemo } from "react";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { buttonVariants, iconSlotClassName } from "@/components/ui/button.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";

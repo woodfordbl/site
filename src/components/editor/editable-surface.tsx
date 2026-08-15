@@ -50,7 +50,7 @@ import { cn } from "@/lib/utils.ts";
 export const editorFieldClassName =
   "block min-h-0 w-full overflow-visible rounded-none border-none bg-transparent px-1 py-0 shadow-none outline-none placeholder:text-muted-foreground focus-visible:border-none focus-visible:ring-0 dark:bg-transparent disabled:bg-transparent";
 
-export const editorTextareaClassName =
+const editorTextareaClassName =
   "field-sizing-content resize-none overflow-hidden";
 
 /** Placeholder for the rich-text surface (native fields use `placeholder=`). */

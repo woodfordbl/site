@@ -8,12 +8,9 @@ import { isSyncedMode } from "@/db/collections/sync-mode.ts";
 import type { TransactionLike } from "@/db/collections/synced-mutations.ts";
 import { pushTransactionMutations } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
-import {
-  buildDatabaseHubSlug,
-  resolveDatabaseSlug,
-} from "@/lib/databases/database-page-paths.ts";
+import { resolveDatabaseSlug } from "@/lib/databases/database-page-paths.ts";
 import { replacePageSlugPrefix } from "@/lib/pages/build-page-tree.ts";
-import { slugifyPageSegment } from "@/lib/pages/slugify.ts";
+import { buildChildSlug, slugifyPageSegment } from "@/lib/pages/slugify.ts";
 
 /**
  * Database ↔ page slug orchestration (rename cascades, hub subtree rewrites).
@@ -146,7 +143,7 @@ export function renameDatabase(
     ? localPagesCollection.get(hub.parentId)
     : undefined;
   const nextHubSlug = hub
-    ? buildDatabaseHubSlug(parent?.slug ?? "/", slug)
+    ? buildChildSlug(parent?.slug ?? "/", slug)
     : null;
 
   const tx = createPagesAndDatabasesTransaction();
@@ -212,7 +209,7 @@ export function reparentDatabaseHub(options: {
     resolveDatabaseSlug(database),
     newHostPageId
   );
-  const nextHubSlug = buildDatabaseHubSlug(host.slug, slug);
+  const nextHubSlug = buildChildSlug(host.slug, slug);
   const hubPrefix = hub.slug.endsWith("/") ? hub.slug : `${hub.slug}/`;
   const previousHubSlug = hub.slug;
 

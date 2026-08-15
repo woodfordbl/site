@@ -1,5 +1,4 @@
 /** Notion-like default reading column on desktop when full width is off. */
-export const PAGE_CONTENT_MAX_WIDTH_PX = 708;
 
 /**
  * Class names for the inner content column inside the canvas scroll area.

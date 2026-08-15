@@ -91,10 +91,3 @@ export function normalizeEditablePageBlocks(
     changed: true,
   };
 }
-
-export function ensureEditablePageBlocks(
-  blocks: Block[],
-  options?: NormalizeEditablePageBlocksOptions
-): Block[] {
-  return normalizeEditablePageBlocks(blocks, options).blocks;
-}

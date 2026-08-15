@@ -37,23 +37,19 @@ export function resolveRowSlug(
   return slugifyPageSegment(resolveDatabaseRowPageTitle(database, row));
 }
 
-export function buildDatabaseHubSlug(hostSlug: string, dbSlug: string): string {
-  return buildChildSlug(hostSlug, dbSlug);
-}
-
 export function buildDatabaseRowSlug(
   hostSlug: string,
   dbSlug: string,
   rowSlug: string
 ): string {
-  return buildChildSlug(buildDatabaseHubSlug(hostSlug, dbSlug), rowSlug);
+  return buildChildSlug(buildChildSlug(hostSlug, dbSlug), rowSlug);
 }
 
 export function buildDatabaseTemplateSlug(
   hostSlug: string,
   dbSlug: string
 ): string {
-  return buildChildSlug(buildDatabaseHubSlug(hostSlug, dbSlug), "template");
+  return buildChildSlug(buildChildSlug(hostSlug, dbSlug), "template");
 }
 
 function pathMatchesPrefix(path: string[], prefix: string[]): boolean {
@@ -168,7 +164,7 @@ export function databaseHubNavTarget(
   }
   return resolveDatabasePathNavTarget(
     host,
-    buildDatabaseHubSlug(host.slug, resolveDatabaseSlug(database))
+    buildChildSlug(host.slug, resolveDatabaseSlug(database))
   );
 }
 
@@ -185,7 +181,7 @@ export function resolveDatabaseHubSlug(
   if (!host) {
     return null;
   }
-  return buildDatabaseHubSlug(host.slug, resolveDatabaseSlug(database));
+  return buildChildSlug(host.slug, resolveDatabaseSlug(database));
 }
 
 /** Builds the canonical navigable path for a virtual database row. */

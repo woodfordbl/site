@@ -157,7 +157,7 @@ export async function readFieldHistory(
 
 /**
  * Sync peek at an already-hydrated series (empty when missing / not yet loaded).
- * Used by derived live-markets metrics after {@link ensureSeriesCoverage} has
+ * Used by derived live-markets metrics after {@link ensureSeriesCoverageMany} has
  * warmed the cache — never triggers IndexedDB IO.
  */
 export function peekFieldHistory(

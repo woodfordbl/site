@@ -338,21 +338,3 @@ export function resolveFormattingShortcut(event: {
       return null;
   }
 }
-
-export function handleEmptyDeleteKeyDown(
-  event: KeyboardEvent<CanvasField>,
-  isEmpty: boolean,
-  onDeleteWhenEmpty?: () => void
-): boolean {
-  if (
-    (event.key === "Backspace" || event.key === "Delete") &&
-    isEmpty &&
-    onDeleteWhenEmpty
-  ) {
-    event.preventDefault();
-    onDeleteWhenEmpty();
-    return true;
-  }
-
-  return false;
-}

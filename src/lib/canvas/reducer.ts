@@ -31,7 +31,6 @@ import {
 import {
   acceptsEmptyMergeFromAfter,
   isAllowedChild,
-  isContainerType,
 } from "@/lib/canvas/block-container-config.ts";
 import {
   canSplitBlock,
@@ -120,7 +119,7 @@ function coercePastedRootBlock(
   block: Block,
   destinationType: BlockType | null
 ): Block {
-  if (destinationType && isContainerType(destinationType)) {
+  if (destinationType && isContainerBlockType(destinationType)) {
     return isAllowedChild(destinationType, block.type)
       ? block
       : coerceContainerChildBlock(block, destinationType);

@@ -51,7 +51,13 @@ function rectContainsMarquee(
   );
 }
 
-function selectInScope(
+/**
+ * Rows selected by the marquee, in document order. Selection resolves at the
+ * deepest container scope whose content area fully contains the marquee, so a
+ * drag inside one column/tab/callout/toggle selects that scope's rows, while a
+ * drag that spans a container boundary selects containers whole.
+ */
+export function rowIdsIntersectingMarquee(
   scopeRows: CanvasRow[],
   marquee: MarqueeRect,
   rowRects: ReadonlyMap<string, DOMRect>,
@@ -63,7 +69,7 @@ function selectInScope(
   for (const row of scopeRows) {
     for (const scope of rowContentScopes(row, scopeRects)) {
       if (rectContainsMarquee(scope.rect, marquee)) {
-        return selectInScope(scope.children, marquee, rowRects, scopeRects);
+        return rowIdsIntersectingMarquee(scope.children, marquee, rowRects, scopeRects);
       }
     }
   }
@@ -82,17 +88,3 @@ function selectInScope(
   return selected;
 }
 
-/**
- * Rows selected by the marquee, in document order. Selection resolves at the
- * deepest container scope whose content area fully contains the marquee, so a
- * drag inside one column/tab/callout/toggle selects that scope's rows, while a
- * drag that spans a container boundary selects containers whole.
- */
-export function rowIdsIntersectingMarquee(
-  rows: CanvasRow[],
-  marquee: MarqueeRect,
-  rowRects: ReadonlyMap<string, DOMRect>,
-  scopeRects: ReadonlyMap<string, DOMRect>
-): string[] {
-  return selectInScope(rows, marquee, rowRects, scopeRects);
-}

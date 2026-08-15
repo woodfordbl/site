@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildDatabaseHubSlug,
   buildDatabaseRowSlug,
   buildDatabaseTemplateSlug,
   resolveDatabaseHubSlug,
@@ -52,9 +51,6 @@ describe("database page paths", () => {
   it("builds database and row paths from stable segments", () => {
     expect(resolveDatabaseSlug(database)).toBe("project-tracker");
     expect(resolveRowSlug(database, row)).toBe("launch-site");
-    expect(buildDatabaseHubSlug("/work/projects", "project-tracker")).toBe(
-      "/work/projects/project-tracker"
-    );
     expect(
       buildDatabaseRowSlug("/work/projects", "project-tracker", "launch-site")
     ).toBe("/work/projects/project-tracker/launch-site");

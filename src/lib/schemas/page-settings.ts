@@ -55,12 +55,6 @@ export function resolvePageFont(font: PageFont | undefined): PageFont {
   return font ?? DEFAULT_PAGE_FONT;
 }
 
-export function resolvePageTextScale(
-  textScale: PageTextScale | undefined
-): PageTextScale {
-  return textScale ?? DEFAULT_PAGE_TEXT_SCALE;
-}
-
 export function resolvePageFullWidth(fullWidth: boolean | undefined): boolean {
   return fullWidth ?? false;
 }

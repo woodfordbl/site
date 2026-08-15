@@ -20,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
@@ -29,7 +29,6 @@ import {
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useDelegatedLinkHover } from "@/hooks/use-delegated-link-hover.ts";
 import { usePageSummary } from "@/hooks/use-page-summary.ts";
 import { BLOCK_COLOR_DEFS } from "@/lib/blocks/block-colors.ts";
@@ -62,9 +61,9 @@ import { cn } from "@/lib/utils.ts";
  * `PAGE_LINK_PREVIEW_LINE_LIMIT` lines and says how many it withheld.
  */
 
-export const PAGE_LINK_PREVIEW_WIDTH_PX = 320;
-export const PAGE_LINK_PREVIEW_WIDTH_CLASSNAME = "w-[320px]";
-export const PAGE_LINK_PREVIEW_MAX_HEIGHT_CLASSNAME = "max-h-[240px]";
+const PAGE_LINK_PREVIEW_WIDTH_PX = 320;
+const PAGE_LINK_PREVIEW_WIDTH_CLASSNAME = "w-[320px]";
+const PAGE_LINK_PREVIEW_MAX_HEIGHT_CLASSNAME = "max-h-[240px]";
 
 /** Properties shown before the rest fall to the row page itself. */
 const ROW_PROPERTY_LIMIT = 3;

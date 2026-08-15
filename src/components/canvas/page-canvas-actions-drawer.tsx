@@ -18,7 +18,7 @@ import {
   DrawerMenuRow,
   DrawerMenuSectionLabel as SectionLabel,
 } from "@/components/ui/menu-presentation.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import {
   type PageCanvasFooterActionsInput,
   usePageCanvasFooterActions,

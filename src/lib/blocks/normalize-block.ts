@@ -2,10 +2,10 @@ import {
   createEmptyBlock,
   getTextFromBlock,
 } from "@/lib/blocks/create-block.ts";
+import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import {
   defaultChildTypeForContainer,
   isAllowedChild,
-  isContainerType,
 } from "@/lib/canvas/block-container-config.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import { blockSchema } from "@/lib/schemas/block.ts";
@@ -280,7 +280,7 @@ export function ensureTableMinimumGrid(blocks: Block[]): Block[] {
 export function coerceContainerChildBlocks(blocks: Block[]): Block[] {
   const containerTypesById = new Map(
     blocks
-      .filter((block) => isContainerType(block.type))
+      .filter((block) => isContainerBlockType(block.type))
       .map((block) => [block.id, block.type])
   );
 

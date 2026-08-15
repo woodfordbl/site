@@ -128,12 +128,6 @@ const EVENT_CATEGORY: Record<PageActivityEventType, ActivityCategory> = {
   "page.settings.updated": "lifecycle",
 };
 
-export const ACTIVITY_CATEGORY_LABELS: Record<ActivityCategory, string> = {
-  content: "Writing",
-  structure: "Structure",
-  lifecycle: "Page changes",
-};
-
 export interface ActivityDayDetail {
   /** Distinct pages touched that day — the secondary-axis line. */
   activePages: number;

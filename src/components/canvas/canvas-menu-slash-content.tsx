@@ -9,20 +9,15 @@ import { getMarkdownShortcutHint } from "@/lib/canvas/markdown-shortcuts.ts";
 import { buildRootSlashMenuItems } from "@/lib/canvas/slash-menu-list.ts";
 import { filterPageLinkTargetItems } from "@/lib/pages/page-slash-menu.ts";
 
-const slashMenuItemClassName =
-  "relative flex w-full cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden hover:bg-accent hover:text-accent-foreground data-highlighted:bg-selection data-highlighted:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0";
 const slashMenuLabelClassName =
   "px-1.5 py-1 font-medium text-muted-foreground text-xs";
-
-const slashMenuScrollClassName = "max-h-72 overflow-hidden";
-const slashMenuScrollViewportClassName = "max-h-72 p-1";
 
 function SlashMenuScrollArea({ children }: { children: React.ReactNode }) {
   return (
     <ScrollArea
-      className={slashMenuScrollClassName}
+      className="max-h-72 overflow-hidden"
       fadeEdges
-      viewportClassName={slashMenuScrollViewportClassName}
+      viewportClassName="max-h-72 p-1"
     >
       {children}
     </ScrollArea>
@@ -42,7 +37,7 @@ export function SlashMenuRow({
 }) {
   return (
     <button
-      className={slashMenuItemClassName}
+      className="relative flex w-full cursor-default select-none items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden hover:bg-accent hover:text-accent-foreground data-highlighted:bg-selection data-highlighted:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
       data-highlighted={highlighted ? "" : undefined}
       onClick={onClick}
       onMouseDown={(event) => {

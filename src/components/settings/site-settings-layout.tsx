@@ -11,7 +11,7 @@ import {
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { SiteSettingsSidebar } from "@/components/settings/site-settings-sidebar.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
 interface SiteSettingsLayoutProps {

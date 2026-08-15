@@ -49,7 +49,7 @@ function readTemplateRecordFromCollection(): LocalPage | null {
 }
 
 /** Reads the template page row from the live collection or localStorage bootstrap. */
-function readTemplateRecord(): LocalPage | null {
+export function readTemplateLocalPage(): LocalPage | null {
   const fromCollection = readTemplateRecordFromCollection();
   if (fromCollection) {
     return fromCollection;
@@ -65,17 +65,12 @@ function readTemplateRecord(): LocalPage | null {
   );
 }
 
-/** Returns the template's local page record when a snapshot exists. */
-export function readTemplateLocalPage(): LocalPage | null {
-  return readTemplateRecord();
-}
-
 /** True when a template snapshot record exists locally. */
 export function templateExists(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
-  return readTemplateRecord() != null;
+  return readTemplateLocalPage() != null;
 }
 
 function nowIso(): string {
@@ -87,7 +82,7 @@ function upsertTemplateRecord(
   settings: Omit<TemplateSnapshot, "blocks">
 ): void {
   const now = nowIso();
-  if (readTemplateRecord()) {
+  if (readTemplateLocalPage()) {
     localPagesCollection.update(TEMPLATE_PAGE_ID, (draft) => {
       draft.icon = settings.icon;
       draft.headerImage = settings.headerImage;
@@ -132,7 +127,7 @@ export function deleteTemplate(): void {
   deleteAllBlocksForPage(readBlockShardForPage(TEMPLATE_PAGE_ID));
   clearPageSnapshots(TEMPLATE_PAGE_ID).catch(() => undefined);
   markPageClean(TEMPLATE_PAGE_ID);
-  if (readTemplateRecord()) {
+  if (readTemplateLocalPage()) {
     localPagesCollection.delete(TEMPLATE_PAGE_ID);
   }
 }
@@ -181,7 +176,7 @@ export async function buildTemplateSnapshotFromPage(
 
 /** Reads the stored template snapshot for seeding a new page, or null. */
 export function readTemplateSnapshotForCreate(): TemplateSnapshot | null {
-  const record = readTemplateRecord();
+  const record = readTemplateLocalPage();
   if (!record) {
     return null;
   }

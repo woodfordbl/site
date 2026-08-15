@@ -39,8 +39,3 @@ export function getShippedPageByRelativePath(
 ): Page | undefined {
   return getPagesByRelativePath().get(relativePath);
 }
-
-/** Revision token for the shipped catalog; exposed to the client for deploy freshness. */
-export function getPagesCatalogRevision(): string {
-  return computePagesCatalogRevision(getShippedPages());
-}

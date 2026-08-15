@@ -161,27 +161,14 @@ export const embedPropsSchema = z.object({
 });
 
 export type HeadingProps = z.infer<typeof headingPropsSchema>;
-export type ToggleHeadingProps = z.infer<typeof toggleHeadingPropsSchema>;
-export type TextProps = z.infer<typeof textPropsSchema>;
-export type ListProps = z.infer<typeof listPropsSchema>;
-export type QuoteProps = z.infer<typeof quotePropsSchema>;
-export type CalloutProps = z.infer<typeof calloutPropsSchema>;
-export type CodeProps = z.infer<typeof codePropsSchema>;
-export type ChecklistProps = z.infer<typeof checklistPropsSchema>;
-export type ChecklistItemProps = z.infer<typeof checklistItemPropsSchema>;
+
 export type PageLinkProps = z.infer<typeof pageLinkPropsSchema>;
-export type DividerProps = z.infer<typeof dividerPropsSchema>;
-export type ColumnsProps = z.infer<typeof columnsPropsSchema>;
-export type ColumnProps = z.infer<typeof columnPropsSchema>;
-export type TabsProps = z.infer<typeof tabsPropsSchema>;
+
 export type TabsSize = z.infer<typeof tabsSizeSchema>;
 export type TabsVariant = z.infer<typeof tabsVariantSchema>;
-export type TabProps = z.infer<typeof tabPropsSchema>;
+
 export type MediaKind = z.infer<typeof mediaKindSchema>;
-export type MediaSource = z.infer<typeof mediaSourceSchema>;
+
 export type MediaProps = z.infer<typeof mediaPropsSchema>;
 export type DatabaseProps = z.infer<typeof databasePropsSchema>;
 export type EmbedProps = z.infer<typeof embedPropsSchema>;
-export type TableProps = z.infer<typeof tablePropsSchema>;
-export type TableRowProps = z.infer<typeof tableRowPropsSchema>;
-export type TableCellProps = z.infer<typeof tableCellPropsSchema>;

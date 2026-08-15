@@ -18,8 +18,8 @@ import {
   useState,
 } from "react";
 import { DrawerContent, DrawerNestedRoot } from "@/components/ui/drawer.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 /**

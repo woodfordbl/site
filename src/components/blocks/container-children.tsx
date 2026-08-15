@@ -3,7 +3,7 @@ import { BlockRenderer } from "@/components/blocks/block-renderer.tsx";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { CanvasRowShell } from "@/components/canvas/canvas-row-shell.tsx";
 import { RowGutter } from "@/components/canvas/row-gutter.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import type { BlockMode } from "@/lib/canvas/block-spec.types.ts";
 

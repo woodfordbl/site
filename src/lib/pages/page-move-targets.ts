@@ -139,13 +139,3 @@ export function hasPageMoveTargets(
 ): boolean {
   return getPageMoveTargetItems(pageId, pages).length > 0;
 }
-
-/** Home page id lookup for guards in delete/move UI. */
-export function findHomePageId(pages: PageSummary[]): string | undefined {
-  for (const page of pages) {
-    if (page.slug === "/") {
-      return page.id;
-    }
-  }
-  return;
-}

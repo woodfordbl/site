@@ -29,7 +29,7 @@ import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import {
   useIsCoarsePrimaryPointer,
   useIsNarrowViewport,
-} from "@/hooks/device-layout.ts";
+} from "@/components/layout/device-layout-provider.tsx";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";

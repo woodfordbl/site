@@ -22,7 +22,7 @@ export function registerSyncedReader(
   syncedReaders.set(storageKey, read);
 }
 
-function readStoredCollection<T>(
+export function readLocalStorageCollection<T>(
   storageKey: string,
   schema: z.ZodType<T>
 ): T[] {
@@ -65,11 +65,4 @@ function readStoredCollection<T>(
   } catch {
     return [];
   }
-}
-
-export function readLocalStorageCollection<T>(
-  storageKey: string,
-  schema: z.ZodType<T>
-): T[] {
-  return readStoredCollection(storageKey, schema);
 }

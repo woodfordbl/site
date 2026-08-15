@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { Kbd } from "@/components/ui/kbd.tsx";
-import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import { createPreviewResolutionKeyDownHandler } from "@/lib/dialog/preview-resolution-keys.ts";
 import { keepLocalPageVersion } from "@/lib/pages/keep-local-page-version.ts";

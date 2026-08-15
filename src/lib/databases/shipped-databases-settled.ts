@@ -21,11 +21,6 @@ export function markShippedDatabasesSettled(): void {
   }
 }
 
-/** Test-only: reset the once-per-session settled flag. */
-export function resetShippedDatabasesSettledForTests(): void {
-  settled = false;
-}
-
 function subscribe(onStoreChange: () => void): () => void {
   listeners.add(onStoreChange);
   return () => {

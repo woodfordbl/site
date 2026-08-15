@@ -67,10 +67,6 @@ export interface ServerPageSource {
   title: string;
 }
 
-function createId(): string {
-  return crypto.randomUUID();
-}
-
 function blockIds(blocks: Block[]): string[] {
   return blocks.map((block) => block.id);
 }
@@ -540,7 +536,7 @@ export function usePageCanvas(
   const insertRowAtPosition = useCallback(
     (position: RowPlacement, block: Block): string => {
       const session = getSession();
-      const nextBlock = block.id ? block : { ...block, id: createId() };
+      const nextBlock = block.id ? block : { ...block, id: crypto.randomUUID() };
       const { block: inserted, flatIndex } = session.insertBlock(
         position,
         nextBlock

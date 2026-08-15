@@ -28,7 +28,10 @@ import type { DatabaseField } from "@/lib/schemas/database.ts";
 // textarea surface without CM6/jsdom scaffolding; the code-editor block
 // flips it to false. Stubbed so no DeviceLayoutProvider/matchMedia is needed.
 const pointer = vi.hoisted(() => ({ coarse: true }));
-vi.mock("@/hooks/device-layout.ts", () => ({
+vi.mock(
+  "@/components/layout/device-layout-provider.tsx",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
   useIsCoarsePrimaryPointer: () => pointer.coarse,
 }));
 

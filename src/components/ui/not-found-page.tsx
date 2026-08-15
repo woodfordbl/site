@@ -18,7 +18,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
-import { useIsNarrowViewport } from "@/hooks/device-layout.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 
 export function NotFoundPage() {
   return (

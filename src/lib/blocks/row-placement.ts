@@ -50,12 +50,7 @@ export function resolveScopeStartPlacement(
   return { parentId, atScopeStart: true };
 }
 
-export function chainPlacementPlans(
-  rows: CanvasRow[],
-  targetRowId: string,
-  blocks: Block[],
-  edge: "before" | "after" = "after"
-): Array<{ block: Block; position: RowPlacement }> {
+> {
   if (blocks.length === 0) {
     return [];
   }

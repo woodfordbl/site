@@ -2,7 +2,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useRef, useState } from "react";
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
-import { useHaptics } from "@/hooks/haptics.ts";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { type CanvasRow, findRowById } from "@/lib/blocks/block-tree.ts";
 import {

@@ -1,4 +1,3 @@
-import { normalizeUrlInput } from "@/lib/schemas/url-input.ts";
 
 export interface EmbedProviderMatch {
   embedUrl: string;
@@ -57,8 +56,4 @@ export function resolveEmbedProvider(url: string): EmbedProviderMatch | null {
     return { provider: "vimeo", embedUrl: vimeo };
   }
   return null;
-}
-
-export function normalizeEmbedUrl(raw: string): string {
-  return normalizeUrlInput(raw);
 }

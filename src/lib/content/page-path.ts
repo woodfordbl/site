@@ -20,13 +20,3 @@ export function slugToRelativePath(slug: string): string {
 
   return `${segments.join("/")}.json`;
 }
-
-export function relativePathToSlug(relativePath: string): string {
-  const withoutExtension = relativePath.replace(JSON_EXTENSION_REGEX, "");
-
-  if (withoutExtension === "home") {
-    return "/";
-  }
-
-  return `/${withoutExtension.replace(LEADING_SLASH_REGEX, "")}`;
-}
