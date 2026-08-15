@@ -3,7 +3,6 @@ import {
   readFieldHistory,
 } from "@/db/history/field-history-store.ts";
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
-import { getConnector } from "@/lib/connectors/registry.ts";
 import { getConnectorToken } from "@/lib/connectors/token-store.ts";
 import type {
   ConnectorDefinition,

@@ -1,7 +1,6 @@
 import { normalizePageSlug } from "@/lib/pages/slugify.ts";
 import {
   isLocallyDeletedPage,
-  isUserCreatedPage,
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
 

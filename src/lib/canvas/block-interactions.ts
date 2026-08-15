@@ -1,12 +1,10 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
-import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
 import {
   defaultChildTypeForContainer,
   isAllowedChild,
   shouldLiftChildOnEnterAtCaretStart,
   shouldLiftDisallowedChildConversion,
   shouldLiftEmptyChildOnDelete,
-  shouldLiftEmptyChildOnEnter,
 } from "@/lib/canvas/block-container-config.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
 

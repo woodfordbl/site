@@ -1,6 +1,5 @@
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { findRowContext } from "@/lib/blocks/block-tree.ts";
-import type { Block } from "@/lib/schemas/block.ts";
 
 export interface RowPlacement {
   /** Row to insert relative to; omitted when `atScopeStart` is true. */

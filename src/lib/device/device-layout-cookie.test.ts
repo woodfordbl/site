@@ -4,7 +4,6 @@ import {
   deviceLayoutCookieToHints,
   deviceLayoutHintsToCookie,
   parseDeviceLayoutCookie,
-  serializeDeviceLayoutCookie,
 } from "@/lib/device/device-layout-cookie.ts";
 
 describe("parseDeviceLayoutCookie", () => {
@@ -35,7 +34,7 @@ describe("device layout cookie round-trip", () => {
     };
 
     const cookie = deviceLayoutHintsToCookie(hints);
-    expect(serializeDeviceLayoutCookie(cookie)).toBe('{"nv":1,"cp":0}');
+    expect(JSON.stringify(cookie)).toBe('{"nv":1,"cp":0}');
     expect(deviceLayoutCookieToHints(cookie)).toEqual(hints);
   });
 });

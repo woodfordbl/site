@@ -1,4 +1,3 @@
-import { computePagesCatalogRevision } from "@/lib/content/pages-catalog-revision.ts";
 import { ensureShippedPagesCache } from "@/lib/content/shipped-pages-cache.ts";
 import { type Page, pageSchema } from "@/lib/schemas/page.ts";
 

@@ -1,8 +1,5 @@
 import { normalizePageSlug, parsePagePath } from "@/lib/pages/slugify.ts";
 
-const LEADING_SLASH_REGEX = /^\//;
-const JSON_EXTENSION_REGEX = /\.json$/u;
-
 export function slugToRelativePath(slug: string): string {
   const normalized = normalizePageSlug(slug);
 

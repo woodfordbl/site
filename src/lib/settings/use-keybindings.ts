@@ -5,7 +5,6 @@ import { localKeybindingsCollection } from "@/db/collections/local-collections.t
 import type { LocalKeybinding } from "@/lib/schemas/local-keybinding.ts";
 import {
   type CommandId,
-  getCommand,
   KEYBOARD_COMMANDS,
 } from "@/lib/settings/keyboard-commands.ts";
 
