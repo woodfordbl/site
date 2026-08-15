@@ -38,14 +38,11 @@ vi.mock("@/hooks/use-page-list.ts", () => ({
   useMergedPageListItems: () => ({ pages: mocks.pages }),
 }));
 
-vi.mock(
-  "@/components/layout/device-layout-provider.tsx",
-  async (importOriginal) => ({
-    ...(await importOriginal<object>()),
-    useIsCoarsePrimaryPointer: () => false,
-    useIsNarrowViewport: () => false,
-  })
-);
+vi.mock("@/components/layout/device-layout-provider.tsx", async (orig) => ({
+  ...(await orig<object>()),
+  useIsCoarsePrimaryPointer: () => false,
+  useIsNarrowViewport: () => false,
+}));
 
 vi.mock("@/components/layout/haptics-provider.tsx", async (importOriginal) => ({
   ...(await importOriginal<object>()),

@@ -28,13 +28,9 @@ import type { DatabaseField } from "@/lib/schemas/database.ts";
 // textarea surface without CM6/jsdom scaffolding; the code-editor block
 // flips it to false. Stubbed so no DeviceLayoutProvider/matchMedia is needed.
 const pointer = vi.hoisted(() => ({ coarse: true }));
-vi.mock(
-  "@/components/layout/device-layout-provider.tsx",
-  async (importOriginal) => ({
-    ...(await importOriginal<object>()),
-    useIsCoarsePrimaryPointer: () => pointer.coarse,
-  })
-);
+vi.mock("@/components/layout/device-layout-provider.tsx", () => ({
+  useIsCoarsePrimaryPointer: () => pointer.coarse,
+}));
 
 // The sheet layout mounts CM6 even on coarse pointers. The sheet tests flip
 // this to keep the lazy editor suspended forever, so the Suspense fallback

@@ -9,13 +9,10 @@ import type { DatabaseView } from "@/lib/schemas/database.ts";
 // Fine pointer keeps the ui Popover a plain popover (no vaul drawer/
 // matchMedia scaffolding in jsdom). Stubbed so no DeviceLayoutProvider is
 // needed.
-vi.mock(
-  "@/components/layout/device-layout-provider.tsx",
-  async (importOriginal) => ({
-    ...(await importOriginal<object>()),
-    useIsCoarsePrimaryPointer: () => false,
-  })
-);
+vi.mock("@/components/layout/device-layout-provider.tsx", async (orig) => ({
+  ...(await orig<object>()),
+  useIsCoarsePrimaryPointer: () => false,
+}));
 
 // Keep the lazy CM6 editor suspended forever so the Suspense fallback
 // TEXTAREA stays the editing surface deterministically (the panel dom tests'

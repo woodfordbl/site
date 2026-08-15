@@ -17,13 +17,10 @@ import type {
  * filter → sort pipeline in `DatabaseTableView`, not their rendering.
  */
 
-vi.mock(
-  "@/components/layout/device-layout-provider.tsx",
-  async (importOriginal) => ({
-    ...(await importOriginal<object>()),
-    useIsCoarsePrimaryPointer: () => false,
-  })
-);
+vi.mock("@/components/layout/device-layout-provider.tsx", async (orig) => ({
+  ...(await orig<object>()),
+  useIsCoarsePrimaryPointer: () => false,
+}));
 
 // The virtualized grid needs real layout; the pipeline test only needs to
 // see WHICH rows reached it.

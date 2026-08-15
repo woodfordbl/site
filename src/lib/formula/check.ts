@@ -328,9 +328,8 @@ const DELETED_FIELD_MESSAGE = "References a deleted or unknown field";
 /**
  * Optimistic acceptance: `unknown` fits everywhere and accepts everything, a
  * union fits when ANY member fits, an unbound type variable accepts anything
- * (it binds afterwards), and `error` never cascades into a second
- * diagnostic. Exported for the editor autocomplete's type-aware ranking —
- * the same relation the checker diagnoses against.
+ * (it binds afterwards), and `error` never cascades into a second diagnostic.
+ * Exported for the editor autocomplete's type-aware ranking.
  */
 export function formulaTypeFits(
   actual: FormulaType,
@@ -1001,10 +1000,9 @@ class Checker {
     left: FormulaType,
     right: FormulaType
   ): FormulaType {
-    if (
-      formulaTypeFits(left, NUMBER_TYPE) &&
-      formulaTypeFits(right, NUMBER_TYPE)
-    ) {
+    const numbersOk =
+      formulaTypeFits(left, NUMBER_TYPE) && formulaTypeFits(right, NUMBER_TYPE);
+    if (numbersOk) {
       return NUMBER_TYPE;
     }
     const display = node.op === "pow" ? "^" : node.op;
