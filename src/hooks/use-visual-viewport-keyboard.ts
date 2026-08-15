@@ -153,7 +153,7 @@ function followAtRest(posGap: number, vel: number, targetVel: number): boolean {
  * `position: fixed` is viewport-relative, and should carry `will-change:
  * transform` + `backface-visibility: hidden` so the compositor layer is
  * allocated up front. See
- * [keyboard-toolbar](../../docs/architecture/keyboard-toolbar.md).
+ * keyboard-toolbar.
  */
 export function useKeyboardToolbarAnchor(
   ref: RefObject<HTMLElement | null>,

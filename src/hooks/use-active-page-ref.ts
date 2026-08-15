@@ -11,7 +11,6 @@ export interface ActivePageRef {
 
 /**
  * Derives the active page slug from `/`, `/$`, or `/p/…` pathnames (normalized metadata slug).
- * @see docs/architecture/pages.md#navigation
  */
 export function parseActivePageRef(pathname: string): ActivePageRef {
   const userPageMatch = pathname.match(USER_PAGE_PATH_PATTERN);
@@ -29,7 +28,7 @@ export function parseActivePageRef(pathname: string): ActivePageRef {
   return { pageId: null, slug: normalizePageSlug(pathname) };
 }
 
-/** Active page slug from the current router pathname. @see docs/architecture/pages.md#navigation */
+/** Active page slug from the current router pathname. */
 export function useActivePageRef(): ActivePageRef {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,

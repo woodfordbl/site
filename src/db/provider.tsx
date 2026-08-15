@@ -23,7 +23,6 @@ interface AppProvidersProps {
  * icon-picker warmup. The QueryClientProvider comes from the router's
  * ssr-query integration — wrapping again here would shadow the client the
  * loaders populated (an empty one on the server, breaking SSR reads).
- * @see docs/architecture/local-first-persistence.md#app-boot-effects-appproviders
  */
 export function AppProviders({ children }: AppProvidersProps) {
   return (

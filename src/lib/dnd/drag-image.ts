@@ -98,7 +98,7 @@ export const CANVAS_ROW_DRAG_PREVIEW_OPACITY = 0.5;
  * descendant bleeding left (the database grid's negative scrollport margins)
  * therefore shifts the ghost by a constant no hotspot can cancel. Surfaces with
  * such previews use the `overlay` strategy instead, which positions the preview
- * itself. See docs/architecture/drag-and-drop.md#preview-anchoring.
+ * itself.
  */
 export function setClonedDragImage(event: DragEvent, node: HTMLElement): void {
   if (!event.dataTransfer) {

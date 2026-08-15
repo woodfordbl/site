@@ -105,7 +105,6 @@ function applyDragImage(
  * Provides one drag surface: owns its transient {@link DragStore}, caches row
  * rects at drag start, batches pointer updates with rAF, and resolves drop
  * targets via the surface's domain logic.
- * @see docs/architecture/drag-and-drop.md
  */
 export function DndSurface<TDropTarget>({
   config,

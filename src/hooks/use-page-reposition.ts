@@ -22,7 +22,7 @@ export interface PageRepositionCommand {
  * Shared `page.reposition` dispatcher that lazily seeds any server pages (the
  * moved page, its new siblings, and the link parent) before persisting. Used by
  * both the sidebar drag-drop and the canvas page-drop so the seeding stays in one
- * place. @see docs/architecture/pages.md#sidebar-drag-and-drop
+ * place.
  */
 export function usePageReposition(
   pages: PageSummary[],

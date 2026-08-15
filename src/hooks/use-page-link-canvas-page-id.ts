@@ -10,7 +10,6 @@ import { normalizePageSlug } from "@/lib/pages/slugify.ts";
  * Resolves the page id of the canvas being edited (editor context or active route).
  * Drives the relational `pageLink` external-icon rule (subpage vs link) in
  * [`pageLinkShowsExternalIcon`](../lib/pages/page-link-display.ts).
- * @see docs/architecture/pages.md#page-links
  */
 export function usePageLinkCanvasPageId(): string | null {
   const ctx = useContext(CanvasEditorContext);

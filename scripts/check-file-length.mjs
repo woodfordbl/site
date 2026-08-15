@@ -15,7 +15,14 @@ const update = process.argv.includes("--update");
 
 const tracked = execFileSync(
   "git",
-  ["ls-files", "src", "routes", "scripts", "--", "*.ts", "*.tsx", "*.mjs"],
+  [
+    "ls-files",
+    "--",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "routes/**/*.ts",
+    "scripts/*.mjs",
+  ],
   { encoding: "utf8" }
 )
   .trim()

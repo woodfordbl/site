@@ -17,7 +17,6 @@ export type ResolvedPage =
 
 /**
  * Resolves a user page by stable id (sidebar payloads, `pageLink` props).
- * @see docs/architecture/pages.md#navigation
  */
 export function useResolvedUserPageById(
   pageId: string | null
@@ -40,7 +39,6 @@ export function useResolvedUserPageById(
 /**
  * Resolves a user page for `/p/$` by metadata slug (normalized path segments).
  * Skips delete tombstones via {@link resolveActiveUserPageBySlug}.
- * @see docs/architecture/pages.md#navigation
  */
 export function useResolvedUserPage(slug: string): LocalPage | null {
   const normalized = normalizePageSlug(slug);
@@ -54,7 +52,6 @@ export function useResolvedUserPage(slug: string): LocalPage | null {
 
 /**
  * Resolves any live local page by metadata slug (shipped overlay or user row).
- * @see docs/architecture/pages.md#navigation
  */
 export function useResolvedLocalPageBySlug(slug: string): LocalPage | null {
   const normalized = normalizePageSlug(slug);

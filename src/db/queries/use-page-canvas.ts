@@ -8,7 +8,7 @@
  * open, placement math reads session rows so it matches in-flight mutations.
  *
  * Undo capture: whenever a transaction actually changed blocks, the
- * *pre-transaction* block list is recorded in `page-edit-history.ts`;
+ * pre-transaction block list is recorded in `page-edit-history.ts`;
  * single-block typing bursts pass a `historyCoalesceKey` so repeats collapse.
  * Applying undo/redo replays the entry through a normal block transaction
  * with capture suppressed (the pop already moved state between stacks).

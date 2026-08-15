@@ -8,7 +8,6 @@ import type { DragPointer } from "@/lib/dnd/drag-store.ts";
  * Portals a follow-the-pointer drag preview to `document.body` while a drag is
  * active. The render prop receives the dragging id and live pointer so the
  * surface can position its own preview content.
- * @see docs/architecture/drag-and-drop.md
  */
 export function DragOverlay({
   children,

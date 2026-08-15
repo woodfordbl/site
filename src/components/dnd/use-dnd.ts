@@ -196,7 +196,6 @@ function compose<E>(
  * Headless drag-source binding: returns props to spread onto the draggable
  * element plus drag/grab state. Composes click-vs-drag detection and optional
  * hold-to-grab.
- * @see docs/architecture/drag-and-drop.md
  */
 export function useDragSource(options: UseDragSourceOptions): {
   getSourceProps: (overrides?: SourceOverrides) => SourceHandlers;
