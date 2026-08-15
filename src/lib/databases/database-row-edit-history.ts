@@ -23,8 +23,6 @@ import type { LocalDatabaseRow } from "@/lib/schemas/database.ts";
  * Session-scoped undo/redo for database row deletions. Complements canvas
  * block history and saved-view option history: Ctrl+Z picks whichever domain
  * recorded the more recent edit.
- *
- * @see docs/architecture/databases.md
  */
 
 /** Hard cap; oldest entries drop first. */
@@ -133,7 +131,6 @@ export function getLastDatabaseRowEditRecordedAt(): number {
  * a session undo entry so Mod+Z restores them. Synced non-live-market rows
  * are skipped (same as {@link deleteDatabaseRows}). Returns whether anything
  * was deleted.
- * @see docs/architecture/databases.md
  */
 export function deleteDatabaseRowsUndoable(
   rowIds: readonly string[],

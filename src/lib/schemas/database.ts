@@ -6,7 +6,14 @@ import { blockColorSchema } from "./rich-text.ts";
  * a page): the definition here owns typed fields and saved views; rows live in
  * a separate sharded collection (`localDatabaseRowsCollection`). Canvas
  * `database` blocks only reference a database by id — rows never enter the
- * block tree. See docs/proposals/notion-style-databases.md.
+ * block tree, and several blocks may link the same database (linked views,
+ * each with its own `viewId`).
+ *
+ * Invariants: every database has exactly one primary (title-like) field
+ * (`primaryFieldId` — it can never be removed or hidden); field ids are
+ * stable, so renames never rewrite rows or stored formulas; formula field
+ * values are computed at read time (`lib/databases/formula-values.ts`) and
+ * never stored in `row.values`.
  */
 
 export const databaseFieldTypeSchema = z.enum([

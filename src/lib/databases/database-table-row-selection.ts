@@ -1,8 +1,6 @@
 /**
  * Live table-grid row selection, so canvas Delete/Backspace can prefer
  * selected database rows over deleting the canvas `database` block.
- *
- * @see docs/architecture/databases.md
  */
 
 export interface DatabaseTableRowSelectionSource {

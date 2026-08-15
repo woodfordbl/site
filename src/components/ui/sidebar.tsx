@@ -99,8 +99,7 @@ function SidebarProvider({
       // runs inside the trigger's onClick (a user gesture), which is the only
       // window iOS Safari's web-haptics switch trick works in. Firing from an
       // effect after the state commit (as this component used to) lands outside
-      // that window and silently does nothing on iOS. See
-      // docs/architecture/haptics.md.
+      // that window and silently does nothing on iOS.
       haptic("selection");
       setOpenMobile((open) => !open);
       return;

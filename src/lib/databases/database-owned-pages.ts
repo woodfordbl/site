@@ -34,8 +34,6 @@ function hasOwnedAncestor(
  * Descendants are dropped because `page.delete` already cascades them, and
  * deleting an already hard-deleted page a second time re-inserts it as a
  * tombstone row.
- *
- * @see docs/architecture/databases.md
  */
 export function resolveDatabaseOwnedPageDeleteRoots(
   databaseId: string,

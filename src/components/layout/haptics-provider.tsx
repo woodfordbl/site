@@ -44,11 +44,10 @@ import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-pro
  * - `success` — a two-stage pulse for a completed, consequential action.
  *
  * This union is the allowlist: call sites go through {@link useHaptics}, never
- * `web-haptics` presets or `navigator.vibrate` directly. For when each moment is
- * (and is NOT) appropriate, see
- * [haptics architecture](../../../docs/architecture/haptics.md).
- *
- * @see docs/architecture/haptics.md
+ * `web-haptics` presets or `navigator.vibrate` directly. Extend it (plus
+ * `MOMENT_PRESET`) only with a real call site — `success` is mapped but
+ * reserved, and the remaining `web-haptics` presets (`light`, `heavy`,
+ * `error`, …) stay unmapped until a genuine surface needs them.
  */
 export type HapticMoment =
   | "selection"
@@ -82,8 +81,6 @@ const HapticsContext = createContext<HapticTrigger | null>(null);
  * deliberately does *not* gate on `isSupported`: iOS Safari reports no
  * `navigator.vibrate` yet still produces feedback through the library's switch
  * trick, which `isSupported` does not account for.
- *
- * @see docs/architecture/haptics.md
  */
 export function HapticsProvider({ children }: { children: ReactNode }) {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
@@ -108,8 +105,6 @@ export function HapticsProvider({ children }: { children: ReactNode }) {
  * Returns `haptic(moment)` for firing semantic haptic feedback. Safe to call
  * outside a `HapticsProvider` (returns a no-op) so it never throws in tests or
  * isolated renders.
- *
- * @see docs/architecture/haptics.md
  */
 export function useHaptics(): HapticTrigger {
   const context = useContext(HapticsContext);

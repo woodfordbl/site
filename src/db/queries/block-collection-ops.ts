@@ -1,3 +1,19 @@
+/**
+ * @fileoverview Block persistence ops for canvas structural edits.
+ *
+ * Invariant: `localPagesCollection.blockOrder` is the document order — reads
+ * must apply it before building the row tree and must never rely on
+ * localStorage/collection enumeration order. Every structural edit writes the
+ * full next order *in the same transaction* as the block-row mutations
+ * (`patchBlockOrder` alongside inserts/deletes), so order can never drift
+ * from the block shard. The hot path is one `PageBlockTransaction` per
+ * reducer dispatch committed by `commitPageBlockTransaction`;
+ * `applyPageBlockDiff` covers bulk edits (paste, columns). Order-changing
+ * commits bump page `updatedAt` but never `createdAt`.
+ *
+ * `deletedInTransaction` tracks rows already deleted in the open transaction
+ * so a re-insert of the same id uses collection `insert`, not `update`.
+ */
 import { createTransaction } from "@tanstack/react-db";
 
 import {

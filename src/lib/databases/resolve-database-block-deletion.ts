@@ -10,8 +10,6 @@ import { findRowById, flattenRows } from "@/lib/blocks/block-tree.ts";
  * deletes the entity; the canvas routes these deletes through a confirmation
  * first. Unlinked blocks (`databaseId: ""`) resolve to nothing and delete
  * silently.
- *
- * @see docs/architecture/databases.md
  */
 export function resolveDeletedDatabaseIds(
   rows: CanvasRow[],

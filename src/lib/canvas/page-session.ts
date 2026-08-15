@@ -10,6 +10,12 @@ import {
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
+/**
+ * Mirrors the flat block array and row tree while a page is being edited, so
+ * reducer effects apply synchronously and placement math can read in-flight
+ * state before the block transaction commits (`use-page-canvas.ts`). Blocks
+ * are immutable per version — mutations swap in new objects.
+ */
 export class CanvasPageSession {
   private readonly blocksById = new Map<string, Block>();
   private blockOrder: string[] = [];

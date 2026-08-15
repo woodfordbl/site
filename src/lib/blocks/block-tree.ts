@@ -11,9 +11,11 @@ import type { Block } from "@/lib/schemas/block.ts";
 import { getBlockParentId } from "@/lib/schemas/block.ts";
 
 /**
- * Pure block-tree shape shared by the canvas: an ordered forest of rows where
- * container blocks own their children via `parentId`.
- * @see docs/architecture/block-model.md
+ * Pure block-tree shape shared by the canvas: an ordered forest of rows built
+ * from the flat block list, where container blocks own their children via
+ * `parentId`. Input order is document order (`blockOrder` already applied —
+ * see `src/db/queries/block-collection-ops.ts`); sibling order is positional,
+ * never stored on blocks.
  */
 export interface CanvasRow {
   children: CanvasRow[];

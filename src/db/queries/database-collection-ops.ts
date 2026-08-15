@@ -646,7 +646,6 @@ export function deleteLiveMarketRows(rowIds: string[]): void {
  * (`externalId`) and missing ids are skipped — copies never inherit
  * `externalId` or `pageId`. Returns the inserted rows in the same order as
  * the source ids that were duplicated.
- * @see docs/architecture/databases.md#table-view
  */
 export function duplicateDatabaseRows(rowIds: string[]): LocalDatabaseRow[] {
   const sources: LocalDatabaseRow[] = [];
@@ -1570,7 +1569,6 @@ function writeLiveMarketInstruments(
 /**
  * Re-insert previously deleted rows (and optional live-market instruments).
  * Session undo uses this; it does not record history.
- * @see docs/architecture/databases.md
  */
 export function restoreDatabaseRows(
   rows: readonly LocalDatabaseRow[],
@@ -1607,7 +1605,6 @@ export function restoreDatabaseRows(
  * Replay a row deletion (session redo): delete by id, skipping missing keys,
  * and optionally restore live-market instruments to the post-delete list.
  * Does not record history and does not re-run live-market keep-one guards.
- * @see docs/architecture/databases.md
  */
 export function reapplyDatabaseRowDeletion(
   rowIds: readonly string[],
@@ -1730,7 +1727,6 @@ export function clearDatabaseRowPageLinks(databaseId: string): void {
  * `database` block across pages is removed (mirrors the page-link cascade on
  * `page.delete`). Hub/row pages already render a not-found shell when the
  * definition is gone.
- * @see docs/architecture/databases.md
  */
 export function deleteDatabase(databaseId: string): void {
   const database = localDatabasesCollection.get(databaseId);

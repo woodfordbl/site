@@ -1,3 +1,19 @@
+/**
+ * @fileoverview SSR bridge for local drafts: the `site-local-dirty` cookie
+ * mirrors which page ids have local draft data, because localStorage is
+ * unavailable during SSR. localStorage remains the source of truth on the
+ * client — the cookie is reconciled from it at boot
+ * (reconcile-dirty-pages-cookie.ts), marked dirty on first local edit
+ * (metadata or blocks, only after a successful commit) and clean on reset,
+ * page delete, and author save.
+ *
+ * Server-side jobs: 404 semantics (an unknown slug on `/$` throws `notFound()`
+ * unless dirty/preview cookies suggest a matching local page) and knowing that
+ * a dirty page still SSRs the server baseline — the local draft swaps in after
+ * hydration. Writes share the ~3800-byte encoded-value budget guard in
+ * src/lib/cookies/document-cookie.ts (browsers silently drop oversized
+ * `document.cookie` writes, which would freeze a stale value forever).
+ */
 import {
   readDocumentCookie,
   writeDocumentCookie,

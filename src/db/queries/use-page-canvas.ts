@@ -1,3 +1,18 @@
+/**
+ * @fileoverview Binds the canvas editor to persistence. Hydrates a
+ * `CanvasPageSession` from `usePageBlocks` (lazy-seeding shipped pages) and
+ * runs `runBlockTransaction` around each reducer dispatch: effects mutate the
+ * session, then one transaction commits incremental inserts/deletes/order
+ * patches (`block-collection-ops.ts`). There is no draft overlay — every
+ * keystroke writes through the same transaction path. While a transaction is
+ * open, placement math reads session rows so it matches in-flight mutations.
+ *
+ * Undo capture: whenever a transaction actually changed blocks, the
+ * *pre-transaction* block list is recorded in `page-edit-history.ts`;
+ * single-block typing bursts pass a `historyCoalesceKey` so repeats collapse.
+ * Applying undo/redo replays the entry through a normal block transaction
+ * with capture suppressed (the pop already moved state between stacks).
+ */
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { localPagesCollection } from "@/db/collections/local-collections.ts";

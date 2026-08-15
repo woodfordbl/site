@@ -95,7 +95,6 @@ export function clearDatabaseRowPage({
  * hub page, the template sentinel, or row property values. Not undoable.
  *
  * @returns How many page ids were deleted.
- * @see docs/architecture/databases.md#row-pages-slug-paths--seed-on-open
  */
 export function clearDatabaseRowPages({
   databaseId,

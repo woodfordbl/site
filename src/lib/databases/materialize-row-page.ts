@@ -66,7 +66,6 @@ function linkRowOncePageExistsAsync(
  *   false for seed-on-demand; routes already own navigation)
  * - Local and connector-synced rows both seed — synced rows still need a real
  *   page for header/cover/menu; property sync continues on the row entity
- * @see docs/architecture/databases.md#row-pages-slug-paths--seed-on-open
  */
 export async function ensureDatabaseRowPage(options: {
   database: LocalDatabase;

@@ -113,19 +113,6 @@
       }
     },
     {
-      "includes": ["scripts/docs-*.mjs"],
-      "linter": {
-        "rules": {
-          "performance": {
-            "useTopLevelRegex": "off"
-          },
-          "style": {
-            "useForOf": "off"
-          }
-        }
-      }
-    },
-    {
       "includes": ["**/*.test.ts", "**/*.test.tsx"],
       "linter": {
         "rules": {

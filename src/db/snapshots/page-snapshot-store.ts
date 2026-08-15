@@ -1,3 +1,14 @@
+/**
+ * @fileoverview IndexedDB store for page version-history checkpoints.
+ *
+ * The layout is deliberately split so capturing or pruning one checkpoint
+ * never rewrites the others' block payloads: `${pageId}:index` holds the
+ * descriptor list (read for timeline render, capture decisions, thinning)
+ * and `${pageId}:snap:${id}` holds one checkpoint's full content (one read
+ * to restore, one write to capture). Retention coarsens over time via
+ * src/lib/pages/thin-page-snapshots.ts. All writes are best-effort — quota
+ * errors surface through the persistence-error sink and never block an edit.
+ */
 import { createStore, del, get, keys, set } from "idb-keyval";
 
 import type {

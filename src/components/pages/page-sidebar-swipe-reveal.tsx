@@ -154,8 +154,7 @@ export function PageSidebarSwipeReveal({
   // that ends a captured-pointer drag — firing only on release is why the swipe
   // felt dead while the (no-drag) backdrop tap and hamburger worked. A tap still
   // ticks fine on release, and a velocity flick that lands on a state the drag
-  // never crossed gets a best-effort tick at commit. See
-  // docs/architecture/haptics.md.
+  // never crossed gets a best-effort tick at commit.
   const tickHapticForState = useCallback(
     (projectedOpen: boolean) => {
       if (projectedOpen !== hapticStateRef.current) {

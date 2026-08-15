@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Media queries for the three independent device axes: viewport
+ * width (shell layout), primary-pointer coarseness (canvas touch UX, haptics),
+ * and hover capability (the CSS reveal affordances in styles.css). Pick the
+ * axis that matches the behavior — they are deliberately not interchangeable.
+ */
+
 /** Matches Tailwind `md:` breakpoint. */
 export const NARROW_VIEWPORT_PX = 768;
 

@@ -17,8 +17,7 @@ function RadioGroup({
       onValueChange={(value, eventDetails) => {
         // Picking a radio is a discrete value change — light tick on coarse
         // pointers (no-op on desktop via the provider). Wired at the group level,
-        // not per item, so a selection ticks exactly once. Mirrors `checkbox.tsx`;
-        // see docs/architecture/haptics.md.
+        // not per item, so a selection ticks exactly once. Mirrors `checkbox.tsx`.
         haptic("selection");
         onValueChange?.(value, eventDetails);
       }}

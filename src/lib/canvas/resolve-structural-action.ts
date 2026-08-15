@@ -117,6 +117,25 @@ function resolveCaretAtStartActions(ctx: StructuralContext): CanvasCommand[] {
   return [];
 }
 
+/**
+ * Maps a structural Backspace/Delete (caret at start, or empty block — gated
+ * by `resolveStructuralDeleteKey` in `src/lib/editor/field-keydown.ts`) to
+ * canvas commands. Resolution priority:
+ *
+ * 1. `pageLink`/`divider` → `row.delete` + focus adjacent (whole-row blocks).
+ * 2. Empty: outdent (`indent > 0`) → delete-in-place with previous sibling
+ *    (list items stay in the list) → lift-out per container policy (first or
+ *    sole empty item; sole item replaces the container row) → only child of
+ *    `column`/`tab` → `columns.removeColumn`/`tabs.removeTab` →
+ *    `container.unwrap` → merge into previous canvas row → top-level
+ *    `row.delete` (no-op on the sole top-level row).
+ * 3. Caret at start, non-empty: outdent → merge text into previous sibling →
+ *    `block.liftAsText` for container children.
+ *
+ * The toggle-heading *title* is not a child row; its Enter/Backspace are
+ * handled locally in `toggle-heading-view.tsx`, not here. Drag reorder and
+ * sidebar page actions never route through this resolver.
+ */
 export function resolveStructuralAction(
   ctx: StructuralContext
 ): CanvasCommand[] {

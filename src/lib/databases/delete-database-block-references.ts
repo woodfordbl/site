@@ -93,7 +93,6 @@ async function cleanShippedHost(
  * page's content. Locally-seeded host pages are rewritten in place; never-edited
  * shipped host pages are seeded locally and cleaned (local-first). Mirrors
  * `deletePageLinkReferences` for the page-link cascade.
- * @see docs/architecture/databases.md
  */
 export async function deleteDatabaseBlockReferences(
   databaseId: string,

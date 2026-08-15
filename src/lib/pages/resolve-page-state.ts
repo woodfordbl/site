@@ -1,3 +1,17 @@
+/**
+ * @fileoverview Shared resolver for a page's origin, dirty, and stale state.
+ *
+ * Sidebar union rule: `visiblePages = serverCatalog ∪ userPages − tombstones`.
+ * Pristine shipped pages (no local row) always read the latest bundled JSON;
+ * lazy-seeded overlays (`serverBaselineHash` set) and user pages
+ * (`serverBaselineHash: null`) stay local-first until reset.
+ *
+ * Stale detection is deliberately split: {@link computePageStaleState}
+ * (per-open) compares both block and metadata baselines, while the global
+ * settings refresh uses the content-only summary check
+ * ({@link isOverriddenSummaryContentStale}) so a workspace-wide pull never
+ * nags users over a metadata-only (slug/order) hash drift.
+ */
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import type { PageSummary } from "@/lib/content/list-pages.ts";
 import { hashPageMetadata } from "@/lib/content/page-metadata-hash.ts";
@@ -9,6 +23,13 @@ import {
 } from "@/lib/schemas/local-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
 
+/**
+ * Where a page's content comes from: `server` (pristine shipped, no local
+ * row), `server-overridden` (shipped page with a lazy-seeded local overlay),
+ * `user` (local-only, `serverBaselineHash: null`), `tombstoned` (shipped page
+ * hidden locally via `deletedAt`), or `orphaned` (local overlay whose shipped
+ * id no longer exists in the catalog — prompted for discard).
+ */
 export type PageOrigin =
   | "server"
   | "server-overridden"

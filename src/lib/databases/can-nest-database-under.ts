@@ -23,9 +23,6 @@ export interface CanNestDatabaseUnderOptions {
  * {@link findDatabaseHostPageId host}, is owned by a database (hub or
  * materialized row page), or is too deep to take the reparented hub as a
  * child.
- *
- * @see docs/architecture/databases.md
- * @see docs/architecture/drag-and-drop.md
  */
 export function canNestDatabaseUnder(
   options: CanNestDatabaseUnderOptions

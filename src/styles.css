@@ -392,7 +392,8 @@
    * Trigger: a [data-reveal-group] ancestor (hover / focus-within), or a
    * site-specific group-hover utility (e.g. table add-row reveals on last-row
    * hover). Timing comes from per-instance --reveal-duration / --reveal-delay
-   * custom properties (default 150ms / 0ms; see docs/architecture/motion.md);
+   * custom properties set inline (default 150ms / 0ms — e.g. table structure
+   * handles force 0ms duration, column dividers a deliberate 300ms delay);
    * the delay applies on reveal only, so controls hide instantly.
    *
    * Selectors stay at zero specificity (:where) and below any real utility, so a
@@ -505,6 +506,10 @@
      transition, a linear curve, and removing the open-sidebar scroll lock. */
   html,
   body {
+    /* The app shell is fixed-height and never scrolls, so a touch fling at a
+       scroll boundary must not rubber-band the page — on iOS the rubber-band
+       pans the visual viewport, the main source of keyboard-toolbar jitter.
+       Inner scrollers add their own overscroll containment. */
     overscroll-behavior: none;
     background-color: color-mix(
       in oklab,

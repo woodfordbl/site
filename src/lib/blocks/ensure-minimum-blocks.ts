@@ -64,7 +64,13 @@ function defaultCreateBlankBlock(): Extract<Block, { type: "text" }> {
   return createEmptyBlock("text") as Extract<Block, { type: "text" }>;
 }
 
-/** Ensures at least one trailing empty top-level text row when the last row is not already blank. */
+/**
+ * Editor invariants for editable canvases: zero blocks get one empty `text`
+ * row, and when the last top-level row is not empty `text` one is appended
+ * (user-created blank rows beyond that are preserved). Blank rows use normal
+ * block ids and shapes and are persisted through the same structural write
+ * path as any other row, so `blockOrder` always includes them.
+ */
 export function normalizeEditablePageBlocks(
   blocks: Block[],
   options?: NormalizeEditablePageBlocksOptions

@@ -60,9 +60,6 @@ export interface MoveDatabaseHostResult {
  *
  * Returns the previous/next hub slug prefixes when the move applied so callers
  * can router-navigate if the active tab is on the hub or a row under it.
- *
- * @see docs/architecture/databases.md
- * @see docs/architecture/drag-and-drop.md
  */
 export async function moveDatabaseHost(options: {
   databaseId: string;

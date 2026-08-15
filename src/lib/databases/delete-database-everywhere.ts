@@ -25,8 +25,6 @@ interface DeleteDatabasesEverywhereOptions {
  * Together those clear both sidebar surfaces — the workspace **Databases**
  * section (entity-driven) and the hosted-database rows under each host page
  * (block-driven). Not undoable; callers confirm first.
- *
- * @see docs/architecture/databases.md
  */
 export function deleteDatabasesEverywhere({
   databaseIds,
