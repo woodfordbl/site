@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Renders a table block's full grid itself — cells never go
+ * through `BlockTreeNode`, so there are no per-row gutters inside the grid;
+ * only the outer table block keeps the normal canvas gutter. The ui `Table`
+ * primitives provide semantic markup only (no TanStack Table). Legacy stored
+ * ratio column widths (values ≤ 10) migrate to pixels at render time, never
+ * in storage.
+ */
 import {
   type ComponentProps,
   type ReactNode,

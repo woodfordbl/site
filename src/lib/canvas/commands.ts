@@ -11,7 +11,7 @@ import type {
   PageTextScale,
 } from "@/lib/schemas/page-settings.ts";
 
-/** Discriminated union of canvas structural commands. @see docs/reference/canvas-commands.md */
+/** Discriminated union of canvas structural commands, handled by `canvasReducer` in `reducer.ts`. */
 export type CanvasCommand =
   | { type: "row.update"; rowId: string; block: Block }
   | {
@@ -168,7 +168,7 @@ export type CanvasCommand =
   | { type: "page.revertToServer" }
   | { type: "page.acknowledgeServerBaseline" };
 
-/** Page tree and metadata commands (sidebar, title editor). @see docs/reference/page-commands.md */
+/** Page tree and metadata commands (sidebar, title editor), handled by `pageReducer` in `src/hooks/use-page-dispatch.ts`. */
 export type PageCommand =
   | {
       type: "page.create";

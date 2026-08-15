@@ -431,6 +431,14 @@ export function resolveTopLevelInsertEdge(
   return { rowId: last.rowId, edge: "after" };
 }
 
+/**
+ * Canvas-domain drop resolver: pointer position + cached row rects → the
+ * insertion target for a row drag. The same resolver runs on each batched
+ * `dragover` and again on `drop`, so the indicator line and the committed
+ * move always agree. Nested rows win over their parent container when rects
+ * overlap (deepest row first); a pointer above the first or below the last
+ * top-level row snaps to the start/end of the page row list.
+ */
 export function resolveDropTargetFromPointer(
   rows: CanvasRow[],
   clientX: number,

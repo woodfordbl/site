@@ -1,3 +1,14 @@
+/**
+ * @fileoverview Planners for editable table blocks: a `table` container holds
+ * `tableRow` children, each holding `tableCell` leaves with plain text —
+ * persisted flat in the block collection like lists and columns. Sibling
+ * order inside a row IS the column index, so column operations
+ * (add/remove/duplicate/reorder) must touch every row in one batch and keep
+ * `columnWidths` (pixel widths on the `table` block) spliced in step. When
+ * `hasHeaderRow` is set, the first `tableRow` is the header. Grid shape is
+ * bounded by the MIN/MAX constants below; `deriveTableGrid` projects the
+ * nested tree into the flat shape the UI and tests consume.
+ */
 import { getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import {
   buildBlockTree,

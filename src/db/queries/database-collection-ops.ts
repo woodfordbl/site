@@ -1,3 +1,20 @@
+/**
+ * @fileoverview Mutation ops for database definitions, rows, fields, and
+ * views. Every write is a single explicit-commit transaction
+ * (`createTransaction({ autoCommit: false })`) with commit failures routed to
+ * `reportPersistenceError`.
+ *
+ * Contracts maintainers must know:
+ * - Manual row ordering is midpoint-then-renumber over the sparse `order`
+ *   key: insertions take sibling midpoints until the gap closes below
+ *   `MIN_ORDER_GAP`, then the database's rows renumber in one transaction.
+ * - Field removal strips every view reference to the field (see
+ *   {@link removeDatabaseField}) so `views[]` never dangles on a field id.
+ * - Never spread TanStack DB update drafts into the stored document — they
+ *   are change-tracking proxies; JSON-flatten via {@link toPlain} first.
+ * - Rows carrying `externalId` are connector-owned: row deletion skips them
+ *   (see {@link deleteDatabaseRows}) and duplication never copies the id.
+ */
 import { createTransaction } from "@tanstack/react-db";
 
 import {
