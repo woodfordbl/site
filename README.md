@@ -1,9 +1,53 @@
-hi i'm [blake](linkedin.com/in/blakewoodford)
+# site
 
-this is my personal site
+Personal site of [Blake Woodford](https://linkedin.com/in/blakewoodford), built as a
+local-first workspace platform: a TanStack Start app whose TanStack DB collections
+boot in one of two modes — anonymous visitors get localStorage-backed collections,
+signed-in users (Better Auth workspaces) get Electric-protocol sync against Postgres.
 
-i used it as an excuse to play with some ai tools, the tanstack ecosystem, and explore client first apps i built this to be scalable to a real time sync notetaking and collaboration platform similar to [notion](https://notion.so) or [obsidean](https://obsidian.md/) but with an extreme emphasis on performance and user interaction. it's fully compatable with [electricSQL](https://tanstack.com/db/latest/docs/collections/electric-collection) and uses [tanstackDB](https://tanstack.com/db/latest) under the hood for the reactive client store; however, for now everything is stored locally and uses browser primitives.
+## Running it
 
-enjoy!
+```sh
+pnpm install
+pnpm dev
+```
 
-[buhlake.com](buhlake.com)
+That is the whole loop for local-only mode. To run the optional sync backend:
+
+1. Start Postgres with logical replication (`wal_level=logical`) — either a local
+   install (apt) or Docker via `pnpm electric:up` (see `dev/electric/`).
+2. Apply the schema: `node scripts/db-migrate.mjs`.
+
+Verify sync with `node scripts/sync-e2e-check.mjs` (headless end-to-end check) or
+`node scripts/demo/two-browser-sync.mjs` (two live browsers editing one page).
+
+`pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:size` must pass before
+committing.
+
+## Documentation
+
+Docs live in the code as JSDoc — start at `AGENTS.md` for the standard.
+`docs/proposals/` holds active design plans; there is no other markdown tree.
+
+## Architecture
+
+TanStack Start + TanStack Router on Nitro; ShadCN on Base UI, Tabler icons,
+Tailwind v4; TanStack DB for the reactive client store; Zod schemas in
+`src/lib/schemas/`; server pages are JSON in `content/pages/` bundled at build
+time. Capabilities nest: Pages → Canvas (block rows, commands, editor) → Blocks.
+
+| Layer | Path |
+| ----- | ---- |
+| UI primitives | `src/components/ui/` |
+| Layout | `src/components/layout/` |
+| Blocks / Canvas / Pages | `src/components/{blocks,canvas,pages}/` |
+| Routes | `src/routes/` (API routes in `routes/api/`, registered in `vite.config.ts`) |
+| Data | `src/db/` (collections + reactive `use-*` queries) |
+| Core logic | `src/lib/canvas/`, `src/lib/pages/` (pure, no React) |
+
+Request flow: a route loader loads the server page JSON (or the client resolves a
+user page from its collection), `buildBlockTree` shapes it, and
+`PageWorkspace → PageCanvas → BlockTreeNode` renders it. Edits dispatch a
+`CanvasCommand` through the canvas reducer, which plans effects applied to the
+TanStack DB collections — persisted per mode to localStorage shards or synced
+via Electric.
