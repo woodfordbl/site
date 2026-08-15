@@ -11,7 +11,7 @@ interface PageLinkDeleteDialogProps {
  * Confirmation shown when deleting a nested subpage `pageLink` block from the
  * canvas. Deleting the block deletes the page it points at (and its descendants),
  * so this mirrors the sidebar "Delete page?" dialog rather than silently removing
- * the link. @see docs/architecture/pages.md#page-links
+ * the link.
  */
 export function PageLinkDeleteDialog({
   pageId,

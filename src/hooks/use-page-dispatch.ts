@@ -60,6 +60,11 @@ function createId(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * User pages hard-delete (row + snapshots removed); shipped pages hide behind
+ * a `deletedAt` tombstone (snapshots kept), inserting a tombstone row when the
+ * page was never lazy-seeded. Shipped JSON is never touched.
+ */
 function deleteLocalPage(pageId: string, pages: PageSummary[]): void {
   const summary = pages.find((page) => page.id === pageId);
   const localPage =

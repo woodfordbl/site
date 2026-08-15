@@ -13,7 +13,6 @@ interface DatabaseBlockDeleteDialogProps {
  * block is the database's canvas presence, so removing it deletes the entity
  * (definition, rows, hub page) and every other linked view — this mirrors the
  * sidebar "Delete database?" dialog rather than silently dropping the block.
- * @see docs/architecture/databases.md
  */
 export function DatabaseBlockDeleteDialog({
   databaseIds,

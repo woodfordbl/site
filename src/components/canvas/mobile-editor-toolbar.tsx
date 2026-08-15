@@ -100,7 +100,8 @@ function ToolbarButton({
  * Chromium it flips this element to a `bottom`-anchor and lets CSS resize handle
  * it; on iOS Safari it drives a composited `transform` from the visual viewport.
  * The `top-0` base class below is the iOS anchor; the hook overrides it on
- * Chromium. See [keyboard-toolbar](../../../docs/architecture/keyboard-toolbar.md).
+ * Chromium. Full positioning rationale lives with the hook in
+ * `src/hooks/use-visual-viewport-keyboard.ts`.
  */
 export function MobileEditorToolbar() {
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();

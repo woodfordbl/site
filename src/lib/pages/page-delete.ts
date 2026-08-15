@@ -16,6 +16,7 @@ export function resolvePageDeleteTargets(
   return [pageId, ...collectDescendantPageIds(pageId, pages)];
 }
 
+/** Delete never removes home (`/`) and never leaves the workspace with zero pages. */
 export function canDeletePage(pageId: string, pages: PageSummary[]): boolean {
   const page = pages.find((candidate) => candidate.id === pageId);
   if (!page || page.slug === "/") {
