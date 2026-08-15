@@ -126,8 +126,8 @@ afterEach(() => {
  * The no-flash invariant for local-first pages: once a page has a local draft
  * (dirty cookie set), the server baseline must never be painted for it — not
  * during SSR, not on the first client frame, not when navigating back to it
- * from a clean server page.
- * @see docs/architecture/local-first-persistence.md ("Flash-free render swap")
+ * from a clean server page. See the render-pipeline notes in
+ * `page-canvas.tsx`.
  */
 describe("PageCanvas no-SSR-flash guarantee", () => {
   it("SSR emits full server content for a clean page", () => {

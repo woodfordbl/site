@@ -1,3 +1,12 @@
+/**
+ * @fileoverview Flash-free render pipeline: SSR and the first client render
+ * emit `PageCanvasServer` (matches the SSR HTML); a pre-paint layout effect
+ * swaps dirty pages to `PageCanvasLocalView` (synchronous localStorage read
+ * in the main bundle, not the editor chunk); the lazily-imported
+ * `PageCanvasEditor` then replaces it with identical markup. All three share
+ * the same body layout, so a dirty refresh never shows the stale server
+ * frame and the swaps cause no layout shift.
+ */
 import {
   type ComponentType,
   type ReactNode,
@@ -127,7 +136,7 @@ export function PageCanvas({
     // First-time/clean visitors get full SSR content. Locally-edited pages are
     // rendered purely client-side from local (TanStack DB): emit NO SSR content
     // at all (no server title/icon, no placeholder body) so the browser never
-    // paints any server frame for a dirty page. @see docs/architecture/local-first-persistence.md
+    // paints any server frame for a dirty page.
     if (pageHasLocalDraft) {
       return null;
     }

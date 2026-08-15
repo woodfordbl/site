@@ -127,6 +127,9 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
      * Expression source (`lib/formula` grammar) evaluated per row with
      * `thisRow`/`thisPage` property scope. Computed at read time — formula
      * values never live in `row.values`, and formula cells are read-only.
+     * Stored text is id-canonical (`prop("<fieldId>")` / `db("<dbId>")`, see
+     * `lib/formula/ref-rewrite.ts`), so field and database renames never
+     * break saved formulas; editors humanize to names for display only.
      */
     expression: z.string().default(""),
   }),

@@ -729,8 +729,7 @@ function PageCanvasEditorBody({
                             // Desktop: this is the inner scroller — `overscroll-contain`
                             // keeps its rubber-band from chaining to the page and
                             // panning the visual viewport (keyboard-toolbar jitter on
-                            // iOS; see useKeyboardToolbarAnchor +
-                            // docs/architecture/keyboard-toolbar.md). On mobile the
+                            // iOS; see useKeyboardToolbarAnchor). On mobile the
                             // document is the scroller, so this is normal flow and
                             // body/html `overscroll-behavior: none` owns chain control.
                             "relative flex flex-col max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overscroll-contain",
