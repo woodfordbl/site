@@ -36,6 +36,14 @@ import type { InlineMark } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
 
 /**
+ * @fileoverview The shared editable text surface for canvas blocks. It owns
+ * the field keyboard priority chain — slash menu → modifier arrows → arrows →
+ * indent → markdown shortcuts → Enter → structural delete (see `handleKeyDown`
+ * order) — but never cross-row policy: it only emits canvas commands and
+ * callbacks; all structural decisions live in `src/lib/canvas/reducer.ts`.
+ */
+
+/**
  * Canvas editor fields: no chrome, no focus ring. Textareas grow via
  * field-sizing-content. Text color is inherited (not `text-foreground`) so
  * block-level colors on the shell flow into the field.

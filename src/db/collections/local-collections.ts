@@ -1,9 +1,9 @@
 /**
  * @fileoverview Content collections and the boot sequence that starts them.
  *
- * Two storage paths back every page: shipped defaults in
- * `content/pages/**/*.json` (git, survives deploys) and local overlays in
- * these collections (localStorage, per-browser). Page metadata lives in
+ * Two storage paths back every page: shipped defaults in the JSON files under
+ * `content/pages/` (git, survives deploys) and local overlays in these
+ * collections (localStorage, per-browser). Page metadata lives in
  * `localPagesCollection` (`site-local-pages`); block content lives in
  * `localBlocksCollection`, sharded one localStorage key per page
  * (`site-local-blocks:<pageId>` — see page-sharded-block-storage.ts).
@@ -16,13 +16,13 @@
  * insert on `page.create` with one empty text block.
  *
  * Boot fork (sync-mode.ts): the mode is fixed once per page load. Anonymous
- * → localStorage collections plus the local-only boot work below (storage
- * migrations, dirty-cookie reconcile, formula-ref canonicalization).
- * Signed-in → Electric-backed collections with identical ids/schemas/keys
- * boot straight from the shape stream, so every import site is oblivious.
- * Cross-tab sync in local mode rides `storage` events on the metadata key
- * and block shard keys. Idle boot work (orphan-asset sweep, snapshot purge)
- * is scheduled here, off the critical path.
+ * mode uses localStorage collections plus the local-only boot work below
+ * (storage migrations, dirty-cookie reconcile, formula-ref canonicalization).
+ * Signed-in mode swaps in Electric-backed collections with identical
+ * ids/schemas/keys that boot straight from the shape stream, so every import
+ * site is oblivious. Cross-tab sync in local mode rides `storage` events on
+ * the metadata key and block shard keys. Idle boot work (orphan-asset sweep,
+ * snapshot purge) is scheduled here, off the critical path.
  */
 import { BTreeIndex } from "@tanstack/db";
 import { electricCollectionOptions } from "@tanstack/electric-db-collection";
