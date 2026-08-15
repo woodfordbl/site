@@ -1,7 +1,8 @@
 /**
  * Canvas and page effect unions consumed by reducers and dispatch hooks.
- * @see docs/architecture/canvas-editor.md
- * @see docs/reference/page-commands.md
+ * Canvas block edits use {@link CanvasEffect} only (applied by
+ * `apply-effects.ts`); page lifecycle uses {@link PageEffect} (applied by
+ * `src/hooks/use-page-dispatch.ts`).
  */
 import type { RowPlacement } from "@/lib/blocks/row-placement.ts";
 import type { PageMetadataSeed } from "@/lib/pages/persist-page-metadata.ts";
@@ -58,7 +59,7 @@ export type CanvasEffect =
   | { type: "page.revertToServer" }
   | { type: "page.acknowledgeServerBaseline" };
 
-/** Page lifecycle effects applied by `usePageDispatch` (not `canvasReducer`). @see docs/reference/page-commands.md */
+/** Page lifecycle effects applied by `usePageDispatch` (not `canvasReducer`). */
 export type PageEffect =
   | {
       type: "page.persist";

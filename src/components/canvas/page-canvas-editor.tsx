@@ -257,7 +257,7 @@ function PageCanvasEditorBody({
   // Dragging a sidebar page onto the canvas inserts a child pageLink at the drop
   // position and re-nests the page under this one (cycle/depth guarded). The
   // reposition uses appendPageLinkOnParent:false because we place the link
-  // ourselves. @see docs/architecture/pages.md
+  // ourselves.
   const handleDropPageIntoCanvas = useCallback(
     (droppedPageId: string, clientY: number) => {
       if (!canDropPageIntoCanvas({ currentPageId, droppedPageId, pages })) {

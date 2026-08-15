@@ -40,8 +40,9 @@ import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 /**
  * One slash-menu controller per canvas (only one menu can be open), keyed by
  * the row the user is typing in. Rows wire up via {@link useRowSlash} instead
- * of threading a dozen callbacks through every container layer.
- * @see docs/architecture/canvas-editor.md#slash-menu
+ * of threading a dozen callbacks through every container layer. Escape or
+ * outside dismiss leaves the typed `/query` in the block text but suppresses
+ * reopening the menu until the leading `/` is removed.
  */
 export interface CanvasSlashActions {
   close: () => void;

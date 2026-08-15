@@ -12,7 +12,7 @@ import {
  * - `"content-edge"` — the row-page family (database row pages, row templates,
  *   preview-as-row): row content starts flush at the content column's left
  *   edge, so blocks line up with the properties band above them, which has no
- *   icon-slot indent. @see docs/architecture/databases.md
+ *   icon-slot indent.
  */
 export type TopLevelBlockAlign = "content-edge" | "title-text";
 
