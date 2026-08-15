@@ -142,9 +142,7 @@ export function renameDatabase(
   const parent = hub?.parentId
     ? localPagesCollection.get(hub.parentId)
     : undefined;
-  const nextHubSlug = hub
-    ? buildChildSlug(parent?.slug ?? "/", slug)
-    : null;
+  const nextHubSlug = hub ? buildChildSlug(parent?.slug ?? "/", slug) : null;
 
   const tx = createPagesAndDatabasesTransaction();
   tx.mutate(() => {

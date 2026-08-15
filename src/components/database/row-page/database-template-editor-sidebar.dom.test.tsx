@@ -42,14 +42,13 @@ vi.mock(
   "@/components/layout/device-layout-provider.tsx",
   async (importOriginal) => ({
     ...(await importOriginal<object>()),
-  useIsCoarsePrimaryPointer: () => false,
-  useIsNarrowViewport: () => false,
-}));
+    useIsCoarsePrimaryPointer: () => false,
+    useIsNarrowViewport: () => false,
+  })
+);
 
-vi.mock(
-  "@/components/layout/haptics-provider.tsx",
-  async (importOriginal) => ({
-    ...(await importOriginal<object>()),
+vi.mock("@/components/layout/haptics-provider.tsx", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   useHaptics: () => vi.fn(),
 }));
 

@@ -536,7 +536,9 @@ export function usePageCanvas(
   const insertRowAtPosition = useCallback(
     (position: RowPlacement, block: Block): string => {
       const session = getSession();
-      const nextBlock = block.id ? block : { ...block, id: crypto.randomUUID() };
+      const nextBlock = block.id
+        ? block
+        : { ...block, id: crypto.randomUUID() };
       const { block: inserted, flatIndex } = session.insertBlock(
         position,
         nextBlock

@@ -85,4 +85,3 @@ export function recordFullWidthSettingActivity(
     enabled ? "Turned on full width" : "Turned off full width"
   );
 }
-

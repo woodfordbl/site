@@ -28,8 +28,9 @@ vi.mock(
   "@/components/layout/device-layout-provider.tsx",
   async (importOriginal) => ({
     ...(await importOriginal<object>()),
-  useIsCoarsePrimaryPointer: () => false,
-}));
+    useIsCoarsePrimaryPointer: () => false,
+  })
+);
 
 const TARGET_DATABASE: LocalDatabase = {
   id: "db-target",

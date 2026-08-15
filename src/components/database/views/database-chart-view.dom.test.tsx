@@ -15,8 +15,9 @@ vi.mock(
   "@/components/layout/device-layout-provider.tsx",
   async (importOriginal) => ({
     ...(await importOriginal<object>()),
-  useIsCoarsePrimaryPointer: () => false,
-}));
+    useIsCoarsePrimaryPointer: () => false,
+  })
+);
 vi.mock("@/components/layout/theme-provider.tsx", () => ({
   useSiteAppearance: () => ({
     chartPalette: "colorful",

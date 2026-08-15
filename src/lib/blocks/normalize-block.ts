@@ -1,8 +1,8 @@
+import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import {
   createEmptyBlock,
   getTextFromBlock,
 } from "@/lib/blocks/create-block.ts";
-import { isContainerBlockType } from "@/lib/blocks/block-defs.ts";
 import {
   defaultChildTypeForContainer,
   isAllowedChild,

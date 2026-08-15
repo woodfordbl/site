@@ -69,7 +69,12 @@ export function rowIdsIntersectingMarquee(
   for (const row of scopeRows) {
     for (const scope of rowContentScopes(row, scopeRects)) {
       if (rectContainsMarquee(scope.rect, marquee)) {
-        return rowIdsIntersectingMarquee(scope.children, marquee, rowRects, scopeRects);
+        return rowIdsIntersectingMarquee(
+          scope.children,
+          marquee,
+          rowRects,
+          scopeRects
+        );
       }
     }
   }
@@ -87,4 +92,3 @@ export function rowIdsIntersectingMarquee(
   }
   return selected;
 }
-

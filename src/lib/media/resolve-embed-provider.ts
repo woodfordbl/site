@@ -1,4 +1,3 @@
-
 export interface EmbedProviderMatch {
   embedUrl: string;
   provider: "youtube" | "vimeo";

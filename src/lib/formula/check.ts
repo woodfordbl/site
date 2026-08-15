@@ -349,7 +349,10 @@ export function formulaTypeFits(
     return expected.members.some((member) => formulaTypeFits(actual, member));
   }
   if (expected.kind === "list") {
-    return actual.kind === "list" && formulaTypeFits(actual.element, expected.element);
+    return (
+      actual.kind === "list" &&
+      formulaTypeFits(actual.element, expected.element)
+    );
   }
   if (expected.kind === "row") {
     return (
@@ -998,7 +1001,10 @@ class Checker {
     left: FormulaType,
     right: FormulaType
   ): FormulaType {
-    if (formulaTypeFits(left, NUMBER_TYPE) && formulaTypeFits(right, NUMBER_TYPE)) {
+    if (
+      formulaTypeFits(left, NUMBER_TYPE) &&
+      formulaTypeFits(right, NUMBER_TYPE)
+    ) {
       return NUMBER_TYPE;
     }
     const display = node.op === "pow" ? "^" : node.op;

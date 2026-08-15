@@ -58,7 +58,10 @@ function writeShard<T>(
     return;
   }
 
-  storage.setItem(databaseRowShardStorageKey(databaseId), JSON.stringify(shard));
+  storage.setItem(
+    databaseRowShardStorageKey(databaseId),
+    JSON.stringify(shard)
+  );
 }
 
 /**

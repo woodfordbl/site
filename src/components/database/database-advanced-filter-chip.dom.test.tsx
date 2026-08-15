@@ -13,8 +13,9 @@ vi.mock(
   "@/components/layout/device-layout-provider.tsx",
   async (importOriginal) => ({
     ...(await importOriginal<object>()),
-  useIsCoarsePrimaryPointer: () => false,
-}));
+    useIsCoarsePrimaryPointer: () => false,
+  })
+);
 
 // Keep the lazy CM6 editor suspended forever so the Suspense fallback
 // TEXTAREA stays the editing surface deterministically (the panel dom tests'
