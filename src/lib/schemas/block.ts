@@ -151,24 +151,6 @@ export const blockSchema = z.discriminatedUnion("type", [
 
 export type Block = z.infer<typeof blockSchema>;
 
-export const canvasPlacementSchema = z.object({
-  scope: z.literal("canvas"),
-  anchorId: z.string(),
-  position: z.enum(["before", "after", "end"]),
-});
-
-export const containerPlacementSchema = z.object({
-  scope: z.literal("container"),
-  parentId: z.string(),
-  position: z.enum(["start", "after"]),
-  anchorId: z.string().optional(),
-});
-
-export const placementSchema = z.discriminatedUnion("scope", [
-  canvasPlacementSchema,
-  containerPlacementSchema,
-]);
-
 export function getBlockParentId(block: Block): string | null {
   return block.parentId ?? null;
 }
