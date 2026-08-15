@@ -26,7 +26,7 @@ plans, scheduled for relocation).
 ## Size and complexity limits
 
 - **Files: 600 lines max.** Enforced by `pnpm check:size`
-  (`scripts/check-file-length.mjs`) as a ratchet: files already over the cap
+  (`apps/web/scripts/check-file-length.mjs`) as a ratchet: files already over the cap
   are grandfathered at their current length and may only shrink; new files
   and new violations fail the check.
 - **Cognitive complexity: 15 per function** (Biome
@@ -47,10 +47,10 @@ plans, scheduled for relocation).
 
 ## Project facts
 
-- TanStack Start + Nitro; API routes live in `routes/api/` and are registered
-  explicitly in `vite.config.ts` (no filesystem scanning).
-- Content collections (`src/db/collections/`) are mode-forked at boot:
+- TanStack Start + Nitro; API routes live in `apps/web/routes/api/` and are registered
+  explicitly in `apps/web/vite.config.ts` (no filesystem scanning).
+- Content collections (`apps/web/src/db/collections/`) are mode-forked at boot:
   anonymous → localStorage, signed-in → Electric-protocol sync. See the
-  `@fileoverview` blocks in `src/db/collections/` for the contracts.
+  `@fileoverview` blocks in `apps/web/src/db/collections/` for the contracts.
 - `pnpm test` (vitest), `pnpm typecheck`, `pnpm check` (lint), and
   `pnpm check:size` must all pass before a commit.
