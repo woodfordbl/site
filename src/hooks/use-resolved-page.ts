@@ -10,8 +10,6 @@ import type { Page } from "@/lib/schemas/page.ts";
 
 import { useLocalPages } from "./use-local-pages.ts";
 
-  | { kind: "user"; page: LocalPage };
-
 /**
  * Resolves a user page by stable id (sidebar payloads, `pageLink` props).
  */
