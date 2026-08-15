@@ -20,26 +20,3 @@ export interface PageActivityEvent {
 }
 
 export const PAGE_ACTIVITY_EVENT_LIMIT = 100;
-
-const BLOCK_TYPE_LABELS: Record<string, string> = {
-  callout: "Callout",
-  checklist: "Checklist",
-  checklistItem: "Checklist item",
-  column: "Column",
-  columns: "Columns",
-  divider: "Divider",
-  embed: "Embed",
-  heading: "Heading",
-  list: "List",
-  media: "Media",
-  pageLink: "Page link",
-  quote: "Quote",
-  table: "Table",
-  tableCell: "Table cell",
-  tableRow: "Table row",
-  text: "Text",
-};
-
-export function blockActivityLabel(blockType: string): string {
-  return BLOCK_TYPE_LABELS[blockType] ?? "Block";
-}
