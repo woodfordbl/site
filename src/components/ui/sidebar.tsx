@@ -13,6 +13,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
@@ -29,8 +31,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
-import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { cn } from "@/lib/utils.ts";
 
 const SIDEBAR_WIDTH = "12rem";

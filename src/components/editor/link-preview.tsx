@@ -11,10 +11,9 @@ import {
   useRef,
   useState,
 } from "react";
-
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { useDelegatedLinkHover } from "@/hooks/use-delegated-link-hover.ts";
 import {
   usePrefetchUrlPreview,

@@ -20,6 +20,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
@@ -36,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { standardActionMenuWidthClassName } from "@/components/ui/menu-widths.ts";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { useFavoriteActions, useIsFavorite } from "@/hooks/use-favorites.ts";
 import { useImportMarkdownPage } from "@/hooks/use-import-markdown-page.ts";
 import { usePageActions } from "@/hooks/use-page-actions.ts";

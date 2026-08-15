@@ -8,8 +8,8 @@ import {
 import { type ReactNode, useState } from "react";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import type { FormulaChipTap } from "@/components/database/formula-code-editor.tsx";
-import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import { useHaptics } from "@/components/layout/haptics-provider.tsx";
+import { Popover, PopoverContent } from "@/components/ui/popover.tsx";
 import type { FormulaRefDatabase } from "@/lib/formula/ref-rewrite.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";

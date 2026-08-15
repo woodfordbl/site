@@ -52,8 +52,8 @@ import {
 import { DragOverlay } from "@/components/dnd/drag-overlay.tsx";
 import { useDragState, useDropZone } from "@/components/dnd/use-dnd.ts";
 import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
-import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useCanvasEditor } from "@/hooks/use-canvas-editor.ts";
 import { useCanvasKeyboard } from "@/hooks/use-canvas-keyboard.ts";
 import { useCanvasOverclick } from "@/hooks/use-canvas-overclick.ts";

@@ -14,6 +14,7 @@ import {
 import { type PanelSize, usePanelRef } from "react-resizable-panels";
 
 import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { PageSidebarHoverReveal } from "@/components/pages/page-sidebar-hover-reveal.tsx";
 import { PageSidebarSwipeReveal } from "@/components/pages/page-sidebar-swipe-reveal.tsx";
 import {
@@ -21,7 +22,6 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable.tsx";
 import { SidebarProvider } from "@/components/ui/sidebar.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import {
   clampSidebarWidthRem,
   PAGE_MAIN_PANEL_ID,

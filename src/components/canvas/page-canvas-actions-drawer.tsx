@@ -5,6 +5,7 @@ import { type ReactNode, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Drawer,
@@ -18,7 +19,6 @@ import {
   DrawerMenuRow,
   DrawerMenuSectionLabel as SectionLabel,
 } from "@/components/ui/menu-presentation.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import {
   type PageCanvasFooterActionsInput,
   usePageCanvasFooterActions,

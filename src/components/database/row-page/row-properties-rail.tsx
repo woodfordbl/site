@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 
 import { visibleFieldIdsAfterHide } from "@/components/database/database-column-menu-helpers.ts";
 import { DatabasePropertiesList } from "@/components/database/database-properties-list.tsx";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Collapsible,
@@ -39,7 +40,6 @@ import {
   setDatabaseRowPropertiesPlacement,
   setDatabaseRowPropertiesVisibleFieldIds,
 } from "@/db/queries/database-collection-ops.ts";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import { pageCanvasDesktopScrollTopInsetClassName } from "@/lib/pages/page-title-layout.ts";
 import type { LocalDatabase } from "@/lib/schemas/database.ts";

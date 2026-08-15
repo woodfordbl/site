@@ -7,8 +7,8 @@ import {
   PageLinkPreviewPopover,
   usePageLinkPreviewController,
 } from "@/components/editor/page-link-preview.tsx";
-import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { usePageSummary } from "@/hooks/use-page-summary.ts";
 import { inlineTokenBorderOffsetClassName } from "@/lib/editor/inline-token-rule.ts";

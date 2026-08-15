@@ -2,7 +2,7 @@
 
 import { IconCheck, IconX } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
-
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { SnapshotPreview } from "@/components/pages/snapshot-preview.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { ConfirmDialogFooter } from "@/components/ui/confirm-dialog-footer.tsx";
@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { Kbd } from "@/components/ui/kbd.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { createConfirmDialogKeyDownHandler } from "@/lib/dialog/confirm-dialog-keys.ts";
 import { createPreviewResolutionKeyDownHandler } from "@/lib/dialog/preview-resolution-keys.ts";
 import { keepLocalPageVersion } from "@/lib/pages/keep-local-page-version.ts";

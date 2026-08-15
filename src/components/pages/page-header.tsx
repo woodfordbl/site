@@ -3,6 +3,7 @@
 import { IconLayoutSidebar, IconSlash } from "@tabler/icons-react";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
@@ -14,7 +15,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import type { PageCanvasFooterActionsInput } from "@/hooks/use-page-canvas-footer-actions.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";

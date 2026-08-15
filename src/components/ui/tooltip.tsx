@@ -1,9 +1,8 @@
 "use client";
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
-
-import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { SequenceShortcut, Shortcut } from "@/components/ui/shortcut.tsx";
 import type {
   CommandId,
   SequenceCommandId,

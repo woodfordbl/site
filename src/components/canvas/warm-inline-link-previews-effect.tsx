@@ -2,9 +2,8 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-
-import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
 import { scheduleIdleCallback } from "@/lib/dom/schedule-idle-callback.ts";
 import { collectInlineLinkHrefs } from "@/lib/media/collect-inline-link-hrefs.ts";
 import { preloadInlineLinkPreviews } from "@/lib/media/preload-inline-link-previews.ts";

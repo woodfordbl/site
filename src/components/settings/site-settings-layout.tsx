@@ -1,7 +1,7 @@
 "use client";
 
 import { Outlet } from "@tanstack/react-router";
-
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageMainPanelFooterLane } from "@/components/pages/page-main-panel-footer-lane.tsx";
 import {
@@ -11,7 +11,6 @@ import {
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { SiteSettingsSidebar } from "@/components/settings/site-settings-sidebar.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import type { SettingsSearch } from "@/lib/settings/settings-search.ts";
 
 interface SiteSettingsLayoutProps {

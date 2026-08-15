@@ -16,8 +16,8 @@ import {
   DndContext,
   type DndContextValue,
 } from "@/components/dnd/dnd-surface.tsx";
-import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { usePointerClickVsDrag } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { prepareDataTransferForMove } from "@/lib/dnd/drag-channel.ts";
 import type { DragState, DragStore } from "@/lib/dnd/drag-store.ts";

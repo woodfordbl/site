@@ -74,6 +74,7 @@ import {
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { FormulaFunctionManagerDialog } from "@/components/database/formula-function-manager.tsx";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -124,7 +125,6 @@ import {
   useDatabaseRows,
 } from "@/db/queries/use-database.ts";
 import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,

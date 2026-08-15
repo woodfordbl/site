@@ -10,6 +10,7 @@ import {
 } from "@/components/database/row-page/row-properties-rail.tsx";
 import { RowTemplateBreadcrumb } from "@/components/database/row-page/row-template-breadcrumb.tsx";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import {
   PageHeaderSidebarToggle,
   pageHeaderShellClassName,
@@ -17,7 +18,6 @@ import {
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { useRowTemplate } from "@/hooks/use-row-template.ts";
 import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";

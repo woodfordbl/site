@@ -31,6 +31,7 @@ import {
   loadedFormulaCodeEditor,
   preloadFormulaCodeEditor,
 } from "@/components/database/preload-formula-code-editor.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { TokenChip } from "@/components/ui/chip.tsx";
 import {
@@ -48,7 +49,6 @@ import {
   SelectValue,
 } from "@/components/ui/select.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   computeFormulaRowValues,
   type FormulaRelatedDatabase,

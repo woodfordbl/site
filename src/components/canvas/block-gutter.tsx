@@ -11,6 +11,10 @@ import { BlockGutterMenu } from "@/components/canvas/block-gutter-menu/block-gut
 import { useCanvasMenu } from "@/components/canvas/canvas-menu-context.tsx";
 import { useDragSource } from "@/components/dnd/use-dnd.ts";
 import { useMenuCommandKeys } from "@/components/keyboard/use-menu-command-keys.ts";
+import {
+  useIsCoarsePrimaryPointer,
+  useIsNarrowViewport,
+} from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Kbd } from "@/components/ui/kbd.tsx";
 import {
@@ -19,10 +23,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import {
-  useIsCoarsePrimaryPointer,
-  useIsNarrowViewport,
-} from "@/components/layout/device-layout-provider.tsx";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { canvasGutterBodyFirstLineClassName } from "@/lib/blocks/block-spacing.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";

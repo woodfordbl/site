@@ -5,6 +5,7 @@ import { type ReactNode, useCallback, useEffect, useRef } from "react";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import { HubPageTitleSlot } from "@/components/database/hub-page-title-slot.tsx";
 import { useCommandHotkeys } from "@/components/keyboard/use-command-hotkeys.ts";
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageInsetFooter } from "@/components/pages/page-inset-footer.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
@@ -24,7 +25,6 @@ import {
   localBlocksCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";

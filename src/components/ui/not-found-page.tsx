@@ -1,6 +1,6 @@
 import { IconFileOff, IconHome } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-
+import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import {
@@ -18,7 +18,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
-import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 
 export function NotFoundPage() {
   return (

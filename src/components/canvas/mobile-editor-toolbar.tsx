@@ -22,10 +22,10 @@ import { createPortal } from "react-dom";
 
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { MobileBlockTypePicker } from "@/components/canvas/mobile-block-type-picker.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { useHaptics } from "@/components/layout/haptics-provider.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { clampBlockIndent, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";

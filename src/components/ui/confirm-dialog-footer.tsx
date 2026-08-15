@@ -1,7 +1,7 @@
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { DialogFooter } from "@/components/ui/dialog.tsx";
 import { Kbd } from "@/components/ui/kbd.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 
 interface ConfirmDialogFooterProps {
   confirmDisabled?: boolean;

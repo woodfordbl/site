@@ -16,7 +16,7 @@ import {
   useEffect,
   useState,
 } from "react";
-
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { usePageCover } from "@/components/pages/page-cover-context.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { ButtonGroup } from "@/components/ui/button-group.tsx";
@@ -33,7 +33,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   resolveMediaDisplayUrl,
   useAssetObjectUrl,

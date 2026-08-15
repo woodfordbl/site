@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { FormulaCodeEditorBoundary } from "@/components/database/formula-editor-panel.tsx";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Chip, ChipButton, ChipSegment } from "@/components/ui/chip.tsx";
 import {
@@ -18,7 +19,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   type FormulaRelatedDatabase,
   formulaCheckContext,

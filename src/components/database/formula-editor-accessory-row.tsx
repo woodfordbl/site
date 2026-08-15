@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import {
@@ -27,7 +28,6 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
-import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import {
   FORMULA_FUNCTION_CATALOG,

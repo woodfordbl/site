@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   KeyboardSequenceRow,
   KeyboardShortcutRow,
@@ -8,7 +9,6 @@ import {
 import { SettingsItemCard } from "@/components/settings/settings-item-card.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   COMMAND_GROUPS,
   getCommandsInGroup,

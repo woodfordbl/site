@@ -1,7 +1,6 @@
 import type { Hotkey } from "@tanstack/react-hotkeys";
-
-import { Kbd, KbdGroup } from "@/components/ui/kbd.tsx";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { Kbd, KbdGroup } from "@/components/ui/kbd.tsx";
 import { formatHotkeyTokens } from "@/lib/settings/format-hotkey.ts";
 import type { CommandId } from "@/lib/settings/keyboard-commands.ts";
 import {

@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { SIDEBAR_WIDTH_MOBILE, useSidebar } from "@/components/ui/sidebar.tsx";
 import { useHaptics } from "@/components/layout/haptics-provider.tsx";
+import { SIDEBAR_WIDTH_MOBILE, useSidebar } from "@/components/ui/sidebar.tsx";
 import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
 import { cn } from "@/lib/utils.ts";
 

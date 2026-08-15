@@ -9,6 +9,10 @@ import {
 
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { PageCommandHotkeys } from "@/components/keyboard/page-command-hotkeys.tsx";
+import {
+  useIsCoarsePrimaryPointer,
+  useIsNarrowViewport,
+} from "@/components/layout/device-layout-provider.tsx";
 import { PageCover } from "@/components/pages/page-cover.tsx";
 import { PageCoverProvider } from "@/components/pages/page-cover-context.tsx";
 import { PageHeader } from "@/components/pages/page-header.tsx";
@@ -26,10 +30,6 @@ import { PageVersionPreview } from "@/components/pages/page-version-preview.tsx"
 import { ServerVersionPreview } from "@/components/pages/server-version-preview.tsx";
 import { VersionPreviewProvider } from "@/components/pages/version-preview-context.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
-import {
-  useIsCoarsePrimaryPointer,
-  useIsNarrowViewport,
-} from "@/components/layout/device-layout-provider.tsx";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";

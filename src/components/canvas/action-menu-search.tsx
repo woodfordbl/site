@@ -4,6 +4,7 @@ import { IconSearch } from "@tabler/icons-react";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { MENU_COMMAND_SEARCH_ATTRIBUTE } from "@/components/keyboard/use-menu-command-keys.ts";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu.tsx";
 import {
   Empty,
@@ -18,7 +19,6 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group.tsx";
 import { Shortcut } from "@/components/ui/shortcut.tsx";
-import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import {
   type ActionMenuEntry,
   filterActionMenuItems,
