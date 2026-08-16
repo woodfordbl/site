@@ -38,6 +38,12 @@ vi.mock("@/components/database/formula-editor-panel.tsx", async () => {
 
 // Collection-backed hooks and the relation resolver: neither has anything to
 // say about dismissal, and both reach for browser-only local collections.
+// These tests exercise the fine-pointer anchored popover; coarse pointers
+// take the studio drawer path (no DeviceLayoutProvider in the harness).
+vi.mock("@/hooks/device-layout.ts", () => ({
+  useIsCoarsePrimaryPointer: () => false,
+}));
+
 vi.mock("@/db/queries/use-database.ts", () => ({ useAllDatabases: () => [] }));
 vi.mock("@/db/queries/use-formula-functions.ts", () => ({
   useFormulaUserFunctions: () => [],

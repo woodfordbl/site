@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { useInlineFormulaPage } from "@/components/editor/inline-formula-page.tsx";
+import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
 import { useAllDatabases } from "@/db/queries/use-database.ts";
 import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
+import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { findRowById } from "@/lib/blocks/block-tree.ts";
 import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
 import {
@@ -126,6 +128,7 @@ function targetForToken(rowId: string, offset: number): PopoverTarget | null {
 
 export function InlineFormulaPopover() {
   const canvas = useCanvasEditorContext();
+  const coarsePointer = useIsCoarsePrimaryPointer();
   const model = useInlineFormulaPage();
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
@@ -275,6 +278,41 @@ export function InlineFormulaPopover() {
 
   if (target === null) {
     return null;
+  }
+
+  if (coarsePointer) {
+    // Phones edit tokens in the full-screen studio drawer — the anchored
+    // desktop popover renders under the on-screen keyboard (see
+    // FormulaTokenPopover). data-slot="drawer-content" already counts as
+    // "inside the panel" for this popover's dismissal selector.
+    return (
+      <Drawer
+        onOpenChange={(open) => {
+          if (!open) {
+            setTarget(null);
+          }
+        }}
+        open
+      >
+        <DrawerContent hasTitle={false} variant="full">
+          <div className="flex min-h-0 flex-1 flex-col px-3 pt-1">
+            <FormulaEditorPanel
+              expression={target.expression}
+              fields={fields}
+              layout="studio"
+              onCancel={() => {
+                setTarget(null);
+              }}
+              onSave={handleSave}
+              previewRows={previewRows}
+              relatedDatabases={relatedDatabases}
+              relations={relations}
+              userFunctions={userFunctions}
+            />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
   }
 
   const placeAbove =

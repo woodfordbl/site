@@ -1455,7 +1455,7 @@ function StudioLayout({
   wizard: ReactNode | null;
 }): ReactNode {
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-2 p-1 pb-14">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-2 p-1 pb-14">
       {header}
       {editor}
       {diagnostics}

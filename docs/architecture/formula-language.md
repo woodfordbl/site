@@ -676,12 +676,16 @@ a CM6 affordance). Type-driven picker sheets for closed-type placeholders
 
 ### Mobile studio (full-screen)
 
-On coarse pointers the column menu's "Edit property" item — same escalation
-shape as the fine-pointer dialog — closes the menu and opens a **full-height
-drawer** (`DrawerContent variant="full"`, ~97svh) hosting the panel's
-`layout="studio"` form (v3 proposal §6.2, design B): a dedicated editing
-surface instead of the old drawer-in-a-drawer sheet, so there is exactly ONE
-header and one dismissal semantics. Anatomy, top to bottom:
+On coarse pointers the column menu's "Edit property" item opens a
+**full-height drawer** (`DrawerContent variant="full"`, ~97svh) hosting the
+panel's `layout="studio"` form (v3 proposal §6.2, design B) — a dedicated
+editing surface instead of the old drawer-in-a-drawer sheet. The studio is a
+**nested** drawer (`DrawerNestedRoot`, the `FormulaStudioDrawerItem` in
+`database-column-menu.tsx`): vaul scales the column-menu drawer back behind
+it, so dismissing the studio returns to the still-open menu while Save
+closes both. Every coarse host of `EditPropertySubmenu` gets this path (the
+column menu, the row-properties panel, settings-menu property items).
+Anatomy, top to bottom:
 
 - **Header** — Cancel / *column name* / Done (the shared `SheetHeader` with a
   `title`; Done gated exactly like Save but rendered `aria-disabled` rather
@@ -712,13 +716,23 @@ The keyboard-anchored accessory row (below) still rides the keyboard for
 typing-first users, so the studio degrades gracefully to the sheet's
 interaction model the moment the editor has focus.
 
-Hosts that cannot escalate (settings-menu property items, which pass no
-`onOpenFormulaEditor`) keep the previous behavior: the "Edit property"
-submenu drawer hosting the panel's `layout="sheet"` form — same
-Cancel/"Formula"/Done header, CM6 editor, tappable **status pill**
-("✓ number" / "1 issue") toggling the first-diagnostic message, and the live
-preview line. In both layouts there is no inline desktop reference list —
-insertion also lives in
+The canvas surfaces route here too: on coarse pointers the `#` caret
+trigger (`formula-token-popover.tsx`) and the tap-to-edit token popover
+(`inline-formula-popover.tsx`) open the studio in a `variant="full"` drawer
+instead of the caret-anchored desktop popover, which `position: fixed` would
+otherwise paint under the on-screen keyboard (iOS pans the visual viewport
+rather than shrinking the layout viewport). Relatedly,
+[`ios-input-zoom-guard.tsx`](../../src/components/ui/ios-input-zoom-guard.tsx)
+(mounted in `AppProviders`) appends `maximum-scale=1` to the viewport meta on
+iOS only — Safari honors the cap for the sub-16px focus auto-zoom but
+ignores it for user pinch gestures, while other engines (which would lose
+pinch-zoom) never see it.
+
+The panel's `layout="sheet"` form (Cancel/"Formula"/Done header, CM6 editor,
+tappable status pill, preview line) remains as the pre-studio layout with no
+production host — every coarse path now escalates. In both mobile layouts
+there is no inline desktop reference list — typing-first insertion also
+lives in
 [`formula-editor-accessory-row.tsx`](../../src/components/database/formula-editor-accessory-row.tsx),
 a keyboard accessory row pinned above the on-screen keyboard via
 `useKeyboardToolbarAnchor` (portaled to `document.body`, composited-transform

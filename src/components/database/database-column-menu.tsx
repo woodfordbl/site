@@ -82,7 +82,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
-import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
+import { DrawerContent, DrawerNestedRoot } from "@/components/ui/drawer.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -682,6 +682,55 @@ function DatePropertyEditor({ databaseId, field }: DatePropertyEditorProps) {
   );
 }
 
+/**
+ * "Edit property" for formula columns on coarse pointers: opens the
+ * full-screen studio as a drawer NESTED inside the column-menu drawer
+ * (`DrawerNestedRoot`), so dismissing the studio lands back on the still-open
+ * menu. Save closes both — the edit is done.
+ */
+function FormulaStudioDrawerItem({
+  databaseId,
+  field,
+  onRequestClose,
+}: {
+  databaseId: string;
+  field: DatabaseField & { type: "formula" };
+  onRequestClose: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <DropdownMenuItem
+        closeOnClick={false}
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        <IconSettings />
+        Edit property
+      </DropdownMenuItem>
+      <DrawerNestedRoot onOpenChange={setOpen} open={open}>
+        <DrawerContent hasTitle={false} variant="full">
+          <div className="flex min-h-0 flex-1 flex-col px-3 pt-1">
+            <FormulaExpressionEditor
+              databaseId={databaseId}
+              field={field}
+              layout="studio"
+              onCancel={() => {
+                setOpen(false);
+              }}
+              onSaved={() => {
+                setOpen(false);
+                onRequestClose();
+              }}
+            />
+          </div>
+        </DrawerContent>
+      </DrawerNestedRoot>
+    </>
+  );
+}
+
 interface EditPropertySubmenuProps {
   databaseId: string;
   /**
@@ -733,12 +782,21 @@ function EditPropertySubmenu({
   }
 
   if (field.type === "formula") {
-    // Both pointer classes escalate out of the menu when the host provides a
-    // surface: fine pointers to the wide dialog, coarse pointers to the
-    // full-screen studio drawer — the 360px submenu (and the old
-    // drawer-in-a-drawer sheet) is too cramped for real formula work.
-    // Dialog-less hosts (settings-menu property items) keep the in-menu
-    // stacked panel on fine pointers and the sheet submenu drawer on coarse.
+    // Coarse pointers always take the full-screen studio as a NESTED drawer:
+    // vaul scales the column-menu drawer back behind it, so closing the
+    // studio returns to the still-open menu instead of dumping the user back
+    // on the table. Fine pointers escalate to the wide dialog when the host
+    // provides one; dialog-less hosts (settings-menu property items) keep
+    // the in-menu stacked panel.
+    if (coarsePointer) {
+      return (
+        <FormulaStudioDrawerItem
+          databaseId={databaseId}
+          field={field}
+          onRequestClose={onRequestClose}
+        />
+      );
+    }
     if (onOpenFormulaEditor !== undefined) {
       return (
         <DropdownMenuItem onClick={onOpenFormulaEditor}>
@@ -1141,7 +1199,6 @@ export function DatabaseColumnMenu({
   view,
 }: DatabaseColumnMenuProps): ReactNode {
   const showViewActions = actions === "all";
-  const coarsePointer = useIsCoarsePrimaryPointer();
   const [open, setOpen] = useState(false);
   const [draftName, setDraftName] = useState(field.name);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -1470,30 +1527,7 @@ export function DatabaseColumnMenu({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {field.type === "formula" && coarsePointer ? (
-        // Coarse pointers escalate to the full-screen studio drawer — a
-        // dedicated editing surface (single Cancel/name/Done header, tall
-        // editor, tappable diagnostics, reference tray) instead of the old
-        // drawer-in-a-drawer sheet.
-        <Drawer onOpenChange={setFormulaEditorOpen} open={formulaEditorOpen}>
-          <DrawerContent hasTitle={false} variant="full">
-            <div className="flex min-h-0 flex-1 flex-col px-3 pt-1">
-              <FormulaExpressionEditor
-                databaseId={databaseId}
-                field={field}
-                layout="studio"
-                onCancel={() => {
-                  setFormulaEditorOpen(false);
-                }}
-                onSaved={() => {
-                  setFormulaEditorOpen(false);
-                }}
-              />
-            </div>
-          </DrawerContent>
-        </Drawer>
-      ) : null}
-      {field.type === "formula" && !coarsePointer ? (
+      {field.type === "formula" ? (
         <Dialog
           onOpenChange={(nextOpen) => {
             setFormulaEditorOpen(nextOpen);

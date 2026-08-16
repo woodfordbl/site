@@ -331,12 +331,13 @@ explicit `rowAware` field beside them).
    the editor handle with `undo`/`redo`/`blur`, pin a trailing key group,
    fire the `disabled` haptic on an empty history stack. Highest
    severity-per-line on the whole mobile list.
-2. **Sheet-ify canvas inline formulas** — on phones, inline formula tokens
-   open the 720px desktop popover clamped to ~366px: two cramped columns, the
-   plain textarea (no chips, no accessory row), no keyboard avoidance, and a
-   dead `onCancel`. Route coarse pointers to the same `layout="sheet"` drawer
-   the column path uses. This is the worst formula surface in the app and the
-   one prose writers hit most.
+2. **Sheet-ify canvas inline formulas** — **[shipped]**, as studio drawers:
+   on coarse pointers the `#` caret trigger and the tap-to-edit token popover
+   open the full-screen studio instead of the caret-anchored 720px popover
+   (which rendered under the on-screen keyboard). The column-menu studio also
+   nests (`DrawerNestedRoot`) so dismissing it returns to the menu, and an
+   iOS-only `maximum-scale=1` viewport guard stops the sub-16px focus
+   auto-zoom while preserving pinch-zoom.
 3. **Type-driven picker sheets for placeholders** — the deferred §7 headline
    and the difference between "workable" and "differentiator". All pieces
    exist: `expectedArgumentType` (currently used only for completion
