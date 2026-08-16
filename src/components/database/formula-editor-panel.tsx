@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/select.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
+import { useHaptics } from "@/hooks/haptics.ts";
 import {
   computeFormulaRowValues,
   type FormulaRelatedDatabase,
@@ -198,7 +199,6 @@ interface SpliceGeneratedTarget {
   insertAtCaret: (text: string, caretOffset: number) => void;
   setDraft: (draft: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  thisRowInScope: boolean;
 }
 
 /**
@@ -215,14 +215,7 @@ function spliceGeneratedExpression(
   generated: string,
   target: SpliceGeneratedTarget
 ): void {
-  const {
-    codeEditorRef,
-    databases,
-    draft,
-    fields,
-    textareaRef,
-    thisRowInScope,
-  } = target;
+  const { codeEditorRef, databases, draft, fields, textareaRef } = target;
   const blank = draft.trim() === "";
   const editor = codeEditorRef.current;
   if (editor !== null) {
@@ -239,9 +232,7 @@ function spliceGeneratedExpression(
     editor.insertText(generated, generated.length);
     return;
   }
-  const display = humanizeExpression(generated, fields, databases, {
-    thisRowInScope,
-  });
+  const display = humanizeExpression(generated, fields, databases);
   if (!blank) {
     target.insertAtCaret(display, display.length);
     return;
@@ -577,7 +568,7 @@ function FormulaPreviewLine({
         >
           <SelectTrigger
             aria-label="Preview row"
-            className="h-5 max-w-32 shrink-0 gap-1 rounded-md border-border bg-transparent px-1 text-muted-foreground text-xs hover:text-foreground md:text-xs"
+            className="h-5 pointer-coarse:h-9 max-w-32 shrink-0 gap-1 rounded-md border-border bg-transparent pointer-coarse:px-2 px-1 text-muted-foreground text-xs hover:text-foreground md:text-xs"
             onKeyDown={stopMenuKeys}
           >
             {/* Values are row ids; render the row's label instead. */}
@@ -669,14 +660,6 @@ export interface FormulaEditorPanelProps {
    * hand-typed self-reference still chips and evaluates as a named cycle.
    */
   selfFieldId?: string;
-  /**
-   * Whether `thisRow` is a scope-root synonym of `thisPage`: offered in
-   * autocomplete and parsed as a property reference. Defaults true
-   * (formula columns, filters, row pages). Inline tokens on ordinary
-   * pages pass false — `thisRow` is then a bare name
-   * (`Unknown name "thisRow"`).
-   */
-  thisRowInScope?: boolean;
   /**
    * Named user-defined functions (prepared registry —
    * `useFormulaUserFunctions()` at interactive call sites): threads into
@@ -1018,11 +1001,15 @@ function SheetHeader({
   doneDisabled,
   onCancel,
   onDone,
+  onDoneBlocked,
 }: {
   doneDisabled: boolean;
   onCancel: (() => void) | undefined;
   onDone: () => void;
+  /** Tapping Done while invalid: explain instead of a dead button. */
+  onDoneBlocked: () => void;
 }): ReactNode {
+  const haptic = useHaptics();
   return (
     <div className="flex items-center justify-between gap-2">
       {onCancel === undefined ? (
@@ -1038,9 +1025,19 @@ function SheetHeader({
       )}
       <span className="font-medium text-foreground text-sm">Formula</span>
       <Button
-        className="pointer-coarse:h-10"
-        disabled={doneDisabled}
-        onClick={onDone}
+        aria-disabled={doneDisabled}
+        className={cn("pointer-coarse:h-10", doneDisabled && "opacity-50")}
+        onClick={() => {
+          // Stay tappable while invalid: a silent dead button reads as a
+          // broken sheet on touch. The boundary haptic plus the expanded
+          // status pill say WHY Done won't fire.
+          if (doneDisabled) {
+            haptic("disabled");
+            onDoneBlocked();
+            return;
+          }
+          onDone();
+        }}
       >
         Done
       </Button>
@@ -1086,13 +1083,16 @@ function SheetRollupButton({
 function StatusPill({
   checked,
   displayPosition,
+  expanded,
+  onExpandedChange,
   parsed,
 }: {
   checked: FormulaCheckResult | null;
   displayPosition: (offset: number) => number;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   parsed: ParseFormulaResult | null;
 }): ReactNode {
-  const [expanded, setExpanded] = useState(false);
   if (parsed === null) {
     return null;
   }
@@ -1103,13 +1103,13 @@ function StatusPill({
       <button
         aria-expanded={expanded}
         className={cn(
-          "min-h-6 self-start rounded-full border px-2.5 py-0.5 text-xs",
+          "min-h-6 pointer-coarse:min-h-9 self-start rounded-full border pointer-coarse:px-3 px-2.5 py-0.5 text-xs",
           clean
             ? "border-border text-muted-foreground"
             : "border-destructive/40 text-destructive"
         )}
         onClick={() => {
-          setExpanded((value) => !value);
+          onExpandedChange(!expanded);
         }}
         type="button"
       >
@@ -1130,12 +1130,25 @@ function StatusPill({
 function layoutClasses(
   wide: boolean,
   compact: boolean,
+  sheet: boolean,
   chromeless: string
 ): {
   codeEditor: string | undefined;
   reference: string | undefined;
   textarea: string | undefined;
 } {
+  if (sheet) {
+    // The drawer is 88svh tall — give the editor the room the sheet
+    // escalated for (the base theme caps the scroller at 8rem), and bump
+    // the type above the desktop 12px: legible on phones, and ≥16px in the
+    // textarea fallback keeps iOS Safari from auto-zooming on focus.
+    return {
+      codeEditor:
+        "w-full text-sm [&_.cm-content]:min-h-32! [&_.cm-scroller]:max-h-[36svh]!",
+      reference: undefined,
+      textarea: cn("max-h-[36svh] min-h-32 text-base", chromeless),
+    };
+  }
   if (!wide) {
     return { codeEditor: undefined, reference: undefined, textarea: undefined };
   }
@@ -1167,7 +1180,6 @@ export function FormulaEditorPanel({
   relatedDatabases,
   relations,
   selfFieldId,
-  thisRowInScope = true,
   userFunctions,
 }: FormulaEditorPanelProps): ReactNode {
   // `popover` is the wide form everywhere the editor chrome is concerned —
@@ -1186,6 +1198,8 @@ export function FormulaEditorPanel({
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
   /** The chip the option menu is open for; `null` while closed. */
   const [chipTap, setChipTap] = useState<FormulaChipTap | null>(null);
+  /** Sheet status pill expansion — lifted so a blocked Done can open it. */
+  const [statusExpanded, setStatusExpanded] = useState(false);
   const coarsePointer = useIsCoarsePrimaryPointer();
   // The sheet layout mounts CM6 even on coarse pointers (its native touch
   // caret/IME handling is the point of the sheet); everywhere else coarse
@@ -1248,9 +1262,8 @@ export function FormulaEditorPanel({
   // round-trip to themselves), so typing never sees the text change under
   // the caret.
   const displayDraft = useMemo(
-    () =>
-      humanizeExpression(draft, fields, relatedDatabases, { thisRowInScope }),
-    [draft, fields, relatedDatabases, thisRowInScope]
+    () => humanizeExpression(draft, fields, relatedDatabases),
+    [draft, fields, relatedDatabases]
   );
 
   /**
@@ -1273,9 +1286,7 @@ export function FormulaEditorPanel({
     const nextDisplay =
       displayDraft.slice(0, start) + text + displayDraft.slice(end);
     setDraft(
-      canonicalizeExpression(nextDisplay, fields, relatedDatabases, {
-        thisRowInScope,
-      }).text
+      canonicalizeExpression(nextDisplay, fields, relatedDatabases).text
     );
     const caret = start + caretOffset;
     requestAnimationFrame(() => {
@@ -1389,23 +1400,24 @@ export function FormulaEditorPanel({
       insertAtCaret,
       setDraft,
       textareaRef,
-      thisRowInScope,
     });
   };
 
   const trimmed = draft.trim();
-  const parsed =
-    trimmed === "" ? null : parseFormula(draft, { thisRowInScope });
+  // Memoized: parseFormula on every render would also defeat the `checked`
+  // and preview memos below (a fresh `parsed` object per render), turning
+  // every render into a full parse + check + evaluate.
+  const parsed = useMemo(
+    () => (trimmed === "" ? null : parseFormula(draft)),
+    [draft, trimmed]
+  );
 
   // Static check of the parsed draft against the schema — formula fields
   // typed via the same topological pass the overlay uses; related databases
   // (when supplied) type member access on relation rows.
   const checkContext = useMemo(
-    () => ({
-      ...formulaCheckContext(fields, relatedDatabases, userFunctions),
-      thisRowInScope,
-    }),
-    [fields, relatedDatabases, thisRowInScope, userFunctions]
+    () => formulaCheckContext(fields, relatedDatabases, userFunctions),
+    [fields, relatedDatabases, userFunctions]
   );
   const checked: FormulaCheckResult | null = useMemo(
     () => (parsed?.ok ? checkFormula(parsed.ast, checkContext) : null),
@@ -1422,11 +1434,7 @@ export function FormulaEditorPanel({
     if (saveDisabled) {
       return;
     }
-    onSave(
-      canonicalizeExpression(draft, fields, relatedDatabases, {
-        thisRowInScope,
-      }).text
-    );
+    onSave(canonicalizeExpression(draft, fields, relatedDatabases).text);
   };
 
   // The picked preview row, defaulting to the first (and healing a stale
@@ -1590,7 +1598,7 @@ export function FormulaEditorPanel({
   // goes chromeless.
   const chromeless =
     "rounded-none border-0 bg-transparent focus-visible:border-transparent dark:bg-transparent";
-  const sizing = layoutClasses(wide, compact, chromeless);
+  const sizing = layoutClasses(wide, compact, sheet, chromeless);
   const expressionTextarea = (
     <Textarea
       aria-label="Formula expression"
@@ -1601,9 +1609,8 @@ export function FormulaEditorPanel({
       )}
       onChange={(event) => {
         setDraft(
-          canonicalizeExpression(event.target.value, fields, relatedDatabases, {
-            thisRowInScope,
-          }).text
+          canonicalizeExpression(event.target.value, fields, relatedDatabases)
+            .text
         );
       }}
       onKeyDown={stopMenuKeys}
@@ -1765,6 +1772,9 @@ export function FormulaEditorPanel({
               doneDisabled={saveDisabled}
               onCancel={onCancel}
               onDone={save}
+              onDoneBlocked={() => {
+                setStatusExpanded(true);
+              }}
             />
           }
           preview={previewLine}
@@ -1772,6 +1782,8 @@ export function FormulaEditorPanel({
             <StatusPill
               checked={checked}
               displayPosition={displayPosition}
+              expanded={statusExpanded}
+              onExpandedChange={setStatusExpanded}
               parsed={parsed}
             />
           }

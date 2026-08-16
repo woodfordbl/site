@@ -499,10 +499,42 @@ interface EngineDatabaseChange {
 }
 
 /**
- * Any databases-collection change is the coarse schema path: update the
- * mirror, rebuild graph + reverse indexes (synchronously, so row events
- * later in the same burst see the new graph), and mark every changed
- * database — plus columns traversing into it — fully dirty.
+ * Does a database record update change anything a formula can OBSERVE?
+ * Formulas read `fields` (schema + expressions), `name` (cycle and member
+ * error messages), and `primaryFieldId` (row-ref display labels). View
+ * config — filters, sorts, column widths, grouping — lives on the same
+ * record but is invisible to the engine, and view edits are FREQUENT
+ * (a column drag-resize writes per gesture), so treating every record
+ * write as a schema change meant a full graph rebuild plus an all-rows
+ * recompute per resize tick. Reference equality first (in-tab writes reuse
+ * untouched sub-objects); a structural compare backstops cross-tab syncs,
+ * whose JSON round-trip breaks reference identity.
+ */
+function databaseSchemaObservablyChanged(
+  previous: LocalDatabase | undefined,
+  next: LocalDatabase
+): boolean {
+  if (previous === undefined) {
+    return true;
+  }
+  if (
+    previous.name !== next.name ||
+    previous.primaryFieldId !== next.primaryFieldId
+  ) {
+    return true;
+  }
+  if (previous.fields === next.fields) {
+    return false;
+  }
+  return JSON.stringify(previous.fields) !== JSON.stringify(next.fields);
+}
+
+/**
+ * A databases-collection change that touches the observable schema is the
+ * coarse path: update the mirror, rebuild graph + reverse indexes
+ * (synchronously, so row events later in the same burst see the new graph),
+ * and mark every changed database — plus columns traversing into it — fully
+ * dirty. View-only record writes just refresh the mirror.
  */
 function handleDatabaseChanges(changes: readonly EngineDatabaseChange[]): void {
   const engine = state;
@@ -519,9 +551,15 @@ function handleDatabaseChanges(changes: readonly EngineDatabaseChange[]): void {
     }
     const database = change.value;
     if (database !== undefined) {
+      const previous = engine.databases.get(database.id);
       engine.databases.set(database.id, database);
-      changedIds.add(database.id);
+      if (databaseSchemaObservablyChanged(previous, database)) {
+        changedIds.add(database.id);
+      }
     }
+  }
+  if (changedIds.size === 0) {
+    return;
   }
   rebuildEngineGraph(engine);
   for (const databaseId of changedIds) {

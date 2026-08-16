@@ -127,9 +127,14 @@ function relationCellToRowRefs(
 /**
  * Map a stored cell to a formula value, mirroring the checker's
  * `formulaPropertyValueType`. Empty, missing, and mistyped cells are blank —
- * except relation cells, which are always a list (see
- * {@link relationCellToRowRefs}) when a resolver is on hand, and blank
- * without one (pure callers that predate relations keep their behavior).
+ * with three deliberate exceptions that keep runtime values matching the
+ * checker's static types: a relation cell is always a list (see
+ * {@link relationCellToRowRefs}) when a resolver is on hand (blank without
+ * one — pure callers that predate relations keep their behavior); an unset
+ * checkbox is `false`, never blank, so `if(thisPage.Done, …)` works on rows
+ * that were never toggled; and an unset multiSelect is the EMPTY list, the
+ * same rule relations follow, so `length()`/`includes()` never trip over
+ * blank.
  */
 function cellToFormulaValue(
   field: DatabaseField,
@@ -144,6 +149,12 @@ function cellToFormulaValue(
       relations
     );
   }
+  if (field.type === "checkbox") {
+    return coerced === true;
+  }
+  if (field.type === "multiSelect") {
+    return Array.isArray(coerced) ? multiSelectCellToList(field, coerced) : [];
+  }
   if (coerced === null) {
     return null;
   }
@@ -153,14 +164,8 @@ function cellToFormulaValue(
       return typeof coerced === "string" ? coerced : null;
     case "number":
       return typeof coerced === "number" ? coerced : null;
-    case "checkbox":
-      return typeof coerced === "boolean" ? coerced : null;
     case "select":
       return cellToPlainText(field, coerced);
-    case "multiSelect":
-      return Array.isArray(coerced)
-        ? multiSelectCellToList(field, coerced)
-        : null;
     case "date":
       return typeof coerced === "string"
         ? dateCellToFormulaDate(coerced)
@@ -170,18 +175,46 @@ function cellToFormulaValue(
   }
 }
 
+/** Id- and normalized-name-keyed lookup maps over one schema's fields. */
+interface FieldIndex {
+  byId: ReadonlyMap<string, DatabaseField>;
+  byName: ReadonlyMap<string, DatabaseField>;
+}
+
+/**
+ * Per-schema field index, memoized on the fields array's identity. Scopes
+ * are created per row — at 10k rows × 20 fields the two maps were ~80% of a
+ * scope's construction cost, for a schema that never changes mid-pass; the
+ * WeakMap makes them once per schema instead.
+ */
+const FIELD_INDEX_CACHE = new WeakMap<readonly DatabaseField[], FieldIndex>();
+
+function fieldIndexOf(fields: readonly DatabaseField[]): FieldIndex {
+  let index = FIELD_INDEX_CACHE.get(fields);
+  if (index === undefined) {
+    const byId = new Map<string, DatabaseField>();
+    const byName = new Map<string, DatabaseField>();
+    for (const field of fields) {
+      byId.set(field.id, field);
+      const key = normalizeFormulaPropertyName(field.name);
+      if (!byName.has(key)) {
+        byName.set(key, field);
+      }
+    }
+    index = { byId, byName };
+    FIELD_INDEX_CACHE.set(fields, index);
+  }
+  return index;
+}
+
 /** Field lookup by exact id first, then normalized name (first match wins). */
 function fieldForMemberName(
   fields: readonly DatabaseField[],
   name: string
 ): DatabaseField | undefined {
-  const byId = fields.find((field) => field.id === name);
-  if (byId !== undefined) {
-    return byId;
-  }
-  const key = normalizeFormulaPropertyName(name);
-  return fields.find(
-    (field) => normalizeFormulaPropertyName(field.name) === key
+  const index = fieldIndexOf(fields);
+  return (
+    index.byId.get(name) ?? index.byName.get(normalizeFormulaPropertyName(name))
   );
 }
 
@@ -303,15 +336,7 @@ export function createFormulaRowScope(
   resolved?: ResolvedFormulaValues,
   opts?: CreateFormulaRowScopeOptions
 ): FormulaScope {
-  const fieldsById = new Map<string, DatabaseField>();
-  const fieldsByName = new Map<string, DatabaseField>();
-  for (const field of fields) {
-    fieldsById.set(field.id, field);
-    const key = normalizeFormulaPropertyName(field.name);
-    if (!fieldsByName.has(key)) {
-      fieldsByName.set(key, field);
-    }
-  }
+  const { byId: fieldsById, byName: fieldsByName } = fieldIndexOf(fields);
   const relations = opts?.relations;
   const getProperty = (name: string): FormulaValue => {
     const field =

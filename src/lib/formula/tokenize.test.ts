@@ -325,8 +325,35 @@ describe("tokenize operators", () => {
     ]);
   });
 
-  it("gives a hint for a lone &", () => {
-    expect(errorOf("true & false").message).toContain('"&&"');
+  it("lexes & as the concatenation punct and && as boolean and", () => {
+    expect(tokensOf('"a" & "b"')).toEqual([
+      { type: "string", value: "a", position: 0, end: 3 },
+      { type: "punct", value: "&", position: 4, end: 5 },
+      { type: "string", value: "b", position: 6, end: 9 },
+      { type: "eof", position: 9, end: 9 },
+    ]);
+    expect(tokensOf("a && b")[1]).toEqual({
+      type: "punct",
+      value: "&&",
+      position: 2,
+      end: 4,
+    });
+  });
+
+  it("lexes <> as one not-equal punct", () => {
+    expect(tokensOf("a <> b")[1]).toEqual({
+      type: "punct",
+      value: "<>",
+      position: 2,
+      end: 4,
+    });
+  });
+
+  it("gives a hint for the ** exponent typo", () => {
+    expect(errorOf("2 ** 3")).toEqual({
+      message: 'Unexpected "**" — use "^" to raise to a power',
+      position: 2,
+    });
   });
 
   it("gives a hint for a lone |", () => {

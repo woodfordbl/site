@@ -7,9 +7,10 @@
  *
  * Beyond the retired v1 lexer this one skips `//` line comments and
  * slash-star block comments, accepts exponent number literals (`1e5`,
- * `2.5e-3`), and recognizes the `??`, `^`, and `=>` operators plus the `=`
- * and `;` puncts of top-level `let` statements (the parser rejects them
- * everywhere else, with hints).
+ * `2.5e-3`), and recognizes the `??`, `^`, `=>`, `&` (text concatenation),
+ * and `<>` (spreadsheet not-equal) operators plus the `=` and `;` puncts of
+ * top-level `let` statements (the parser rejects them everywhere else, with
+ * hints).
  */
 
 /** A source-positioned lexer/parser error. `position` is a 0-based character index. */
@@ -22,6 +23,7 @@ export interface FormulaSourceError {
 export type FormulaPunct =
   | "=="
   | "!="
+  | "<>"
   | "<="
   | ">="
   | "&&"
@@ -34,6 +36,7 @@ export type FormulaPunct =
   | "/"
   | "%"
   | "^"
+  | "&"
   | "("
   | ")"
   | ","
@@ -72,6 +75,7 @@ const TWO_CHAR_PUNCTS = [
   "==",
   "=>",
   "!=",
+  "<>",
   "<=",
   ">=",
   "&&",
@@ -86,6 +90,7 @@ const SINGLE_CHAR_PUNCTS = new Set<FormulaPunct>([
   "/",
   "%",
   "^",
+  "&",
   "(",
   ")",
   ",",
@@ -108,7 +113,6 @@ const STRING_ESCAPES = new Map<string, string>([
 
 /** Hints for characters that are only valid as part of a two-character operator. */
 const LONELY_CHAR_HINTS = new Map<string, string>([
-  ["&", 'Unexpected "&" — use "&&" or "and"'],
   ["|", 'Unexpected "|" — use "||" or "or"'],
   ["?", 'Unexpected "?" — use "??" to fall back when a value is blank'],
 ]);
@@ -213,6 +217,14 @@ function readPunct(
   source: string,
   start: number
 ): TokenStep | FormulaSourceError {
+  // `**` would otherwise lex as two `*` tokens and fail later with an
+  // unhelpful "Unexpected \"*\"" — catch the common exponent typo here.
+  if (source.startsWith("**", start)) {
+    return {
+      message: 'Unexpected "**" — use "^" to raise to a power',
+      position: start,
+    };
+  }
   for (const punct of TWO_CHAR_PUNCTS) {
     if (source.startsWith(punct, start)) {
       return {

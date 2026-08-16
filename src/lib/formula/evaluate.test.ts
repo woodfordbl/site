@@ -204,6 +204,33 @@ describe("equality", () => {
   });
 });
 
+describe("text concatenation (&)", () => {
+  it("joins values as text with spreadsheet coercion", () => {
+    expect(run('"a" & "b"')).toBe("ab");
+    expect(run('"total: " & 3')).toBe("total: 3");
+    expect(run("1 & 2")).toBe("12");
+    expect(run('"done: " & true')).toBe("done: true");
+  });
+
+  it("treats blank as the empty string, unlike +", () => {
+    expect(run('null & "x"')).toBe("x");
+    expect(run('"x" & null')).toBe("x");
+    expect(errorMessage(run('null + "x"'))).toContain("Cannot add");
+  });
+
+  it("propagates errors and rejects listy operands", () => {
+    expect(errorMessage(run('(1 / 0) & "x"'))).toBe("Division by zero");
+    expect(errorMessage(run('[1, 2] & "x"'))).toBe(
+      "Cannot convert a list to text"
+    );
+  });
+
+  it("evaluates <> as not-equal", () => {
+    expect(run("1 <> 2")).toBe(true);
+    expect(run('"a" <> "a"')).toBe(false);
+  });
+});
+
 describe("coalesce", () => {
   it("returns the left side unless it is blank", () => {
     expect(run('"a" ?? "b"')).toBe("a");
@@ -761,9 +788,18 @@ describe("date functions", () => {
     );
   });
 
+  it("dateAdd supports weeks", () => {
+    expect(run('format(dateAdd(parseDate("2026-01-01"), 1, "weeks"))')).toBe(
+      "2026-01-08"
+    );
+    expect(
+      run('dateDiff(parseDate("2026-01-15"), parseDate("2026-01-01"), "weeks")')
+    ).toBe(2);
+  });
+
   it("dateAdd rejects bad input like v1", () => {
     expect(
-      errorMessage(run('dateAdd(parseDate("2026-01-01"), 1, "weeks")'))
+      errorMessage(run('dateAdd(parseDate("2026-01-01"), 1, "fortnights")'))
     ).toContain("unknown unit");
     expect(
       errorMessage(run('dateAdd(parseDate("2026-01-01"), "x", "days")'))

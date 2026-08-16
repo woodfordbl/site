@@ -50,18 +50,13 @@ describe("highlightFormula", () => {
     ]);
   });
 
-  it("classifies thisRow as a name when it is not a scope root", () => {
-    expect(
-      highlightFormula("thisRow", { thisRowInScope: false }).map(
-        (span) => `${span.kind}:${"thisRow".slice(span.start, span.end)}`
-      )
-    ).toEqual(["name:thisRow"]);
+  it("classifies thisRow as a property root on every host", () => {
     const source = "thisRow.Title";
     expect(
-      highlightFormula(source, { thisRowInScope: false }).map(
+      highlightFormula(source).map(
         (span) => `${span.kind}:${source.slice(span.start, span.end)}`
       )
-    ).toEqual(["name:thisRow", "operator:.", "property:Title"]);
+    ).toEqual(["property:thisRow.Title"]);
   });
 
   it("spans a whole prop() reference including the quoted id", () => {

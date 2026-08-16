@@ -53,19 +53,31 @@ import { cn } from "@/lib/utils.ts";
  * haptic.
  */
 
-/** Operator/punctuation keys, in typing-frequency order (proposal §7). */
-const OPERATOR_KEYS = [
-  "(",
-  ")",
-  ",",
-  '"',
-  "+",
-  "-",
-  "*",
-  "/",
-  ".",
-  "==",
-] as const;
+/**
+ * Operator/punctuation keys, grouped so the horizontally-scrolling strip
+ * reads in families: punctuation, arithmetic, comparison (the ONLY way to
+ * type `!=`/`<=` without the symbol keyboard's second plane), then blank
+ * handling and the word operators, then chaining/lambda. Word keys insert
+ * with surrounding spaces so `1 and 2` never fuses into an identifier.
+ */
+interface OperatorKeySpec {
+  /** Text spliced at the caret. */
+  insert: string;
+  /** Key-cap label (defaults to the inserted text, trimmed). */
+  label: string;
+}
+
+function operatorKey(insert: string): OperatorKeySpec {
+  return { insert, label: insert.trim() };
+}
+
+const OPERATOR_KEY_GROUPS: readonly (readonly OperatorKeySpec[])[] = [
+  ["(", ")", ",", '"'].map(operatorKey),
+  ["+", "-", "*", "/", "&"].map(operatorKey),
+  ["==", "!=", "<", "<=", ">", ">="].map(operatorKey),
+  ["??", " and ", " or ", " not "].map(operatorKey),
+  [".", "=>"].map(operatorKey),
+];
 
 type PickerMode = "function" | "property";
 
@@ -430,19 +442,21 @@ export function FormulaEditorAccessoryRow({
                 fn
               </AccessoryKey>
             </ButtonGroup>
-            <ButtonGroup className="shrink-0">
-              {OPERATOR_KEYS.map((key) => (
-                <AccessoryKey
-                  key={key}
-                  label={`Insert ${key}`}
-                  onPress={() => {
-                    onInsertAtCaret(key, key.length);
-                  }}
-                >
-                  {key}
-                </AccessoryKey>
-              ))}
-            </ButtonGroup>
+            {OPERATOR_KEY_GROUPS.map((group) => (
+              <ButtonGroup className="shrink-0" key={group[0].label}>
+                {group.map((key) => (
+                  <AccessoryKey
+                    key={key.label}
+                    label={`Insert ${key.label}`}
+                    onPress={() => {
+                      onInsertAtCaret(key.insert, key.insert.length);
+                    }}
+                  >
+                    {key.label}
+                  </AccessoryKey>
+                ))}
+              </ButtonGroup>
+            ))}
           </div>
         </div>,
         document.body

@@ -51,9 +51,14 @@ pure callers stay deterministic; interactive callers inject the real clock.
 
 ## Syntax
 
-Conventional precedence: `??` < `or` < `and` < `==`/`!=` < comparisons < `+`/`-` <
-`*`/`/`/`%` < unary < `^` (right-associative, parses to `pow`) < postfix `.name` /
-`.fn(…)`. Beyond the retired v1 grammar (everything it accepted still parses to
+Conventional precedence: `??` < `or` < `and` < `==`/`!=` < comparisons < `&` <
+`+`/`-` < `*`/`/`/`%` < unary < `^` (right-associative, parses to `pow`) < postfix
+`.name` / `.fn(…)`. `&` is spreadsheet text concatenation — both sides coerce
+through `formulaValueToText`, so numbers/booleans/dates read naturally and blank
+reads as the empty string (unlike `+`, which rejects blank operands); lists and
+rows still error. `<>` is accepted as a spreadsheet-spelling alias of `!=`
+(normalized at parse time), and the `**` exponent typo gets a targeted hint
+pointing at `^`. Beyond the retired v1 grammar (everything it accepted still parses to
 equivalent shapes, guarded by the frozen
 [`corpus.fixture.ts`](../../src/lib/formula/corpus.fixture.ts) golden corpus):
 
@@ -62,8 +67,9 @@ equivalent shapes, guarded by the frozen
   the chain back in its original shape. Bare member access (`r.Estimate`) is a
   `member` node; whether it exists is the checker's concern. **Bracket member
   access** — `r["Story Points"]` parses to the exact same `member` node as the dot
-  form, for names that aren't identifiers or that the grammar reads specially
-  (`r.not` would lex as the keyword). Deliberately conservative: only `[` immediately
+  form, for names that aren't identifiers (spaces, punctuation; keywords after
+  `.` actually parse fine as members — the bracket form is only *required* for
+  non-identifier names). Deliberately conservative: only `[` immediately
   followed by a string literal is member access; everything else (`[1, 2]`, `f()[0]`)
   keeps its list-literal meaning or original diagnostic.
 - **`let(name, value, body)` / `lets(…)`** — named intermediates. Evaluator special
@@ -108,15 +114,17 @@ equivalent shapes, guarded by the frozen
 
 The stored form of a property reference is **`prop("<fieldId>")`** — field ids are
 stable, so renaming a field never touches (or breaks) any stored formula. The display
-forms `thisPage.Name` / `thisRow["Name"]` remain accepted input on
-**database-row hosts** (formula columns, filters, row pages, row templates);
+forms `thisPage.Name` / `thisRow["Name"]` remain accepted input everywhere;
 the AST records which spelling was used (`via: "prop" | "scope"`). `thisPage`
-is a scope root on every page. `thisRow` is a synonym of `thisPage` **only**
-when the host has a database row — see
-[`pageHasFormulaRowContext`](../../src/lib/databases/page-formula-fields.ts).
-On ordinary pages `thisRow` parses as a bare identifier; the checker reports
-`Unknown name "thisRow"` like any other unbound name, and autocomplete does
-not offer it.
+and `thisRow` are **unconditional synonyms** on every host: both parse to the
+same property node, and resolution against the page or row scope happens at
+check/evaluation time. (The earlier design made `thisRow` a scope root only on
+database-row hosts, threading a `thisRowInScope` flag through the parser,
+checker, highlighter, rewriters, and editor — ~60 sites of conditional code
+whose only user-visible effect was a different error message on ordinary
+pages. The flag is gone; the system still only ever *writes* `thisPage` —
+`humanizeExpression` and autocomplete teach one spelling, and `thisRow` is
+kept purely as accepted input for stored formulas and muscle memory.)
 
 - [`ref-rewrite.ts`](../../src/lib/formula/ref-rewrite.ts) converts between the two by
   splicing property-node spans right-to-left, so spacing/casing/comments are never
@@ -136,6 +144,10 @@ not offer it.
   a real list of option names, empty/mistyped → blank. `relation` fields exist in
   `FormulaFieldKind` but stay compile-neutral for now: they type as unknown and
   evaluate as blank until the relation evaluation stage lands (`list<row>` values).
+  Two deliberate blank exceptions keep runtime values matching the checker's
+  static types: an unset checkbox reads `false` (never blank, so
+  `if(thisPage.Done, …)` works on never-toggled rows) and an unset multiSelect
+  reads the EMPTY list, the same rule relation cells follow.
 - **Startup migration** —
   [`formula-ref-migration.ts`](../../src/db/queries/formula-ref-migration.ts)
   (wired in `startLocalCollectionsSync`,
@@ -153,8 +165,15 @@ tests assert every example parses and evaluates cleanly), and the implementation
 the checker, evaluator, and editor reference UI can't drift. Arity and top-level
 argument-type errors are generated generically from the signature; `lenient` params
 opt out and coerce inside the implementation (preserving v1 text-coercion behavior).
-`FORMULA_OPERATOR_CATALOG` feeds the editor's Operators section;
+`FORMULA_OPERATOR_CATALOG` feeds the editor's Operators section (including the
+`&` text-join operator);
 `VOLATILE_FORMULA_FUNCTION_NAMES` (`now`/`today`) drives volatility detection.
+Error recovery and conversion live in the catalog too: `ifError(value,
+fallback)` / `isError(value)` are lazy forms (an eager signature would
+propagate the error before the implementation ever saw it), `toNumber(value)`
+parses text to a number (blank when it doesn't read as one — a data condition,
+not an error), and `dateAdd`/`dateDiff` accept `"weeks"` alongside the
+day/month/year/hour/minute units.
 
 ## Static checker
 
@@ -452,11 +471,16 @@ per-database `FormulaOverlay` snapshots to React.
   always taken from the engine's own mirror): relation fields →
   `formulaRelationCellChanged` (old/new target ids), others →
   `formulaDataCellChanged`; inserts → `formulaRowAdded`; deletes →
-  `formulaRowRemoved` **plus** `evictFormulaCacheRow` (the core never evicts). Any
-  databases-collection change is the coarse path: rebuild graph + reverse indexes
-  synchronously, prune cached cells for columns that no longer exist, then
-  `formulaSchemaChanged` per changed database. Synchronous bursts coalesce into
-  one evaluation pass via a queued microtask.
+  `formulaRowRemoved` **plus** `evictFormulaCacheRow` (the core never evicts).
+  Databases-collection changes are gated on what a formula can OBSERVE
+  (`fields` — reference identity first, structural compare as the cross-tab
+  backstop — plus `name` and `primaryFieldId`): view-only record writes
+  (filters, sorts, column resizes, grouping — frequent, per-gesture) just
+  refresh the mirror, while a real schema change takes the coarse path —
+  rebuild graph + reverse indexes synchronously, prune cached cells for
+  columns that no longer exist, then `formulaSchemaChanged` per changed
+  database. Synchronous bursts coalesce into one evaluation pass via a queued
+  microtask.
 - **Snapshots** — `useFormulaOverlay(databaseId)` returns a per-database overlay
   with a STABLE reference, replaced only when that database's cache changed
   (per-database version counters; affected databases = initially-dirty columns'
@@ -532,7 +556,10 @@ On fine pointers — and on coarse ones in the sheet layout — the expression i
 [`formula-code-editor.tsx`](../../src/components/database/formula-code-editor.tsx),
 a CodeMirror 6 editor **lazy-loaded** at the panel boundary (`React.lazy`, plain
 textarea as the Suspense fallback) so CM6 stays out of the main bundle; coarse
-pointers outside the sheet keep the textarea. The CM6 doc is the
+pointers outside the sheet keep the textarea. `DatabaseColumnMenu` warms the
+chunk the moment it opens over a formula column (the same reachability rule
+`InlineFormulaValues` follows), so the editor is one tap away with its chips
+already loadable. The CM6 doc is the
 canonical text; canonical property spans (located token-level by
 `formulaPropIdSpans`) render as **atomic schema-labeled chips**:
 `Decoration.replace` widgets (TokenChip-styled DOM built without React — field-type
@@ -579,9 +606,8 @@ unparseable-mid-keystroke drafts still highlight.
 **Fused autocomplete** (proposal §6.2): one completion source merges properties
 (labeled/filtered by field name, applied as the canonical `prop("<id>")` text — one
 atomic chip — with the field-type icon and value type as detail; a typed
-`thisPage.`-prefix narrows to properties and is replaced whole; `thisRow.`
-does the same only on database-row hosts, and ordinary pages omit `thisRow`
-from the completion list; the formula column being edited (`selfFieldId`) is
+`thisPage.`- or `thisRow.`-prefix narrows to properties and is replaced whole
+(autocomplete offers only `thisPage` — `thisRow` stays accepted input); the formula column being edited (`selfFieldId`) is
 omitted from property options so it cannot pick itself — a hand-typed
 self-reference still chips and evaluates as a named cycle), catalog functions
 (signature as detail, description as the info card, caret placed inside the inserted
@@ -589,7 +615,7 @@ parens — after them for zero-argument functions), and the word operators/keywo
 (`and`/`or`/`not`/`true`/`false`). Completion rows show a leading icon only
 when they have one: field-type for properties, ƒ for functions, the database
 glyph for database names, and the default page glyph (Tabler `IconFile`, same
-as `DEFAULT_PAGE_ICON`) for `thisPage`/`thisRow`. `db` and keywords left-align
+as `DEFAULT_PAGE_ICON`) for `thisPage`. `db` and keywords left-align
 with no empty icon slot. When databases are wired, a `db` entry
 completes like a scope root — accepting inserts the opener `db("` and reopens
 the popup — and **database-name completions** fill the `db("` argument
@@ -658,7 +684,9 @@ a CM6 affordance). Type-driven picker sheets for closed-type placeholders
 
 On coarse pointers the "Edit property" submenu drawer hosts the panel's
 `layout="sheet"` form (proposal §7): an explicit **Cancel / "Formula" / Done**
-header (Done is the sheet's only save affordance, gated exactly like Save), the
+header (Done is the sheet's only save affordance, gated exactly like Save — but
+rendered `aria-disabled` rather than dead: a blocked tap fires the `disabled`
+boundary haptic and expands the status pill so the sheet explains WHY), the
 **CM6 editor even on coarse pointers** (its native touch caret/IME handling is the
 point — the plain textarea remains only as the Suspense fallback), a compact
 tappable **status pill** ("✓ number" / "1 issue") that toggles the full
@@ -671,7 +699,10 @@ tracking on iOS — the same machinery as the canvas `MobileEditorToolbar`): a
 property button and a function button open bottom **picker drawers** (vaul
 `variant="menu"`, `modal={false}` + `onCloseAutoFocus` preventDefault so the editor
 reclaims the keyboard after an insert; each has its own search), followed by the
-operator keys `( ) , " + - * / . ==`. All insertions go through the panel's caret
+operator keys in grouped families — `( ) , "`, `+ - * / &`, `== != < <= > >=`,
+`?? and or not`, `. =>` — so every comparison, the blank fallback, and the
+lambda arrow are reachable without the symbol keyboard's second plane (word
+keys insert with surrounding spaces). All insertions go through the panel's caret
 splice / `insertPropertyReference` paths (canonical `prop("<id>")` chips on CM6),
 taps fire selection haptics, and the row hides while a picker drawer is open. The
 property picker omits the column being edited (`selfFieldId`), matching the
@@ -717,9 +748,7 @@ lives in [`formula-function-ops.ts`](../../src/db/queries/formula-function-ops.t
 via the pure validators in
 [`user-functions.ts`](../../src/lib/formula/user-functions.ts): identifier-safe
 per the REAL tokenizer (the rollup-template discipline), not a reserved word or
-a reference root (`prop`/`db`/`thisPage`/`thisRow` — `thisRow` stays reserved
-even on ordinary pages, because a function of that name would be uncallable
-from a row formula) or an evaluator special
+a reference root (`prop`/`db`/`thisPage`/`thisRow`) or an evaluator special
 form (`let`/`lets`), not a catalog name OR alias, and unique among definitions
 case-insensitively. Parameters follow the lambda-parameter rules plus the
 reference-root exclusion. The schema itself stays structural — stored rows
@@ -822,14 +851,13 @@ errors inline as "⚠ message". Never throws.
 **Inline formula tokens** (the `formula` rich-text mark) share the same `thisPage`
 vocabulary. Ordinary pages expose the base fields from
 [`page-scope.ts`](../../src/lib/formula/page-scope.ts) (Title / Created at /
-Updated at) and do **not** treat `thisRow` as a scope root — typing it is
-`Unknown name "thisRow"`, and it is omitted from autocomplete. Database row
+Updated at); `thisRow` is a synonym of `thisPage` there too (it resolves
+against the same base fields). Database row
 and template pages layer the database's columns on top via
 [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts)
 (`createInlinePageFormulaScope` / `inlinePageFormulaCheckProperties` /
-`pageFormulaFields` / `pageHasFormulaRowContext`) — name collisions favor the
-column; base ids stay reachable as `prop("page:…")`; `thisRow` is a synonym
-of `thisPage`. [`InlineFormulaPageProvider`](../../src/components/editor/inline-formula-page.tsx)
+`pageFormulaFields`) — name collisions favor the
+column; base ids stay reachable as `prop("page:…")`. [`InlineFormulaPageProvider`](../../src/components/editor/inline-formula-page.tsx)
 resolves the overlay from `databaseRowSource` or a `db-template:…` page id.
 Hovering an editable token shows [`InlineFormulaTokenTooltip`](../../src/components/canvas/inline-formula-tooltip.tsx)
 — **Edit formula** over the expression — instead of a native `title`.

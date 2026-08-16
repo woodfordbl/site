@@ -105,7 +105,6 @@ const USER_FN_ARITY_AT_RE =
   /weightedScore\(\) expects 2 arguments, got 1.*\(at character \d+\)/;
 const USER_FN_BROKEN_AT_RE =
   /The custom function "brokenFn" has an error.*\(at character \d+\)/;
-const THIS_ROW_UNKNOWN_AT_RE = /Unknown name "thisRow".*\(at character/;
 const ROLLUP_TITLE_RE = /Rollup: /;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
@@ -280,21 +279,23 @@ describe("FormulaEditorPanel", () => {
     expect(onSave).toHaveBeenCalledWith("abs(-2)");
   });
 
-  it("treats thisRow as an unknown name when it is not in scope", async () => {
+  it("treats thisRow as a synonym of thisPage on every host", async () => {
+    const onSave = vi.fn();
     render(
       <FormulaEditorPanel
         expression=""
         fields={FIELDS}
-        onSave={vi.fn()}
+        onSave={onSave}
         previewRows={PREVIEW_ROWS}
-        thisRowInScope={false}
       />
     );
     await flushFrames();
 
     const textarea = screen.getByLabelText("Formula expression");
-    fireEvent.change(textarea, { target: { value: "thisRow" } });
-    expect(screen.getByText(THIS_ROW_UNKNOWN_AT_RE)).toBeDefined();
+    fireEvent.change(textarea, { target: { value: "thisRow.Price * 2" } });
+    // The reference canonicalizes like thisPage.Price would.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
   });
 
   it("humanizes stored canonical expressions into the draft", async () => {
@@ -1032,11 +1033,13 @@ describe("FormulaEditorPanel", () => {
       fireEvent.click(done);
       expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
 
-      // Parse errors gate Done exactly like Save in the other layouts.
+      // Parse errors gate Done exactly like Save in the other layouts —
+      // the button stays tappable (aria-disabled) so a blocked tap can
+      // explain itself, but never saves.
       await fire(() => {
         fireEvent.change(textarea, { target: { value: "1 +" } });
       });
-      expect(done.hasAttribute("disabled")).toBe(true);
+      expect(done.getAttribute("aria-disabled")).toBe("true");
       fireEvent.click(done);
       expect(onSave).toHaveBeenCalledTimes(1);
     });

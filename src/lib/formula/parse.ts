@@ -1,7 +1,7 @@
 /**
  * Recursive-descent parser for the v2 formula language (`lib/formula`).
  * Turns a source string into a typed AST with conventional precedence:
- * `??` < `or` < `and` < `==`/`!=` < `<`/`<=`/`>`/`>=` < `+`/`-` <
+ * `??` < `or` < `and` < `==`/`!=` < `<`/`<=`/`>`/`>=` < `&` < `+`/`-` <
  * `*`/`/`/`%` < unary `-`/`not` < `^` (right-associative) < postfix
  * `.name` / `.fn(…)` < primary. Parse failures are returned as a Result —
  * never thrown to callers.
@@ -33,23 +33,14 @@ export type ParseFormulaResult =
   | { ok: true; ast: FormulaNode }
   | { ok: false; error: FormulaSourceError };
 
-/**
- * Options that change which identifiers the grammar treats as scope roots.
- * Default (`thisRowInScope` omitted or true) is a database-row host: formula
- * columns, filters, row pages, and row templates. Ordinary pages pass
- * `thisRowInScope: false` so `thisRow` is a bare name like any other
- * identifier — it is not a page/row reference there.
- */
-export interface ParseFormulaOptions {
-  readonly thisRowInScope?: boolean;
-}
-
 /** Lowercased `thisPage` scope root — available on every page. */
 export const FORMULA_PAGE_SCOPE_ROOT = "thispage";
 
 /**
- * Lowercased `thisRow` scope root — a synonym of `thisPage` only when
- * {@link ParseFormulaOptions.thisRowInScope} is true.
+ * Lowercased `thisRow` scope root — an unconditional synonym of `thisPage`.
+ * Kept for compatibility with hand-typed input and stored formulas; the
+ * system itself only ever writes `thisPage` (see `humanizeExpression`) and
+ * autocomplete offers only `thisPage`.
  */
 export const FORMULA_ROW_SCOPE_ROOT = "thisrow";
 
@@ -59,55 +50,26 @@ export const FORMULA_PAGE_SCOPE_LABEL = "thisPage";
 /** Display casing for {@link FORMULA_ROW_SCOPE_ROOT}. */
 export const FORMULA_ROW_SCOPE_LABEL = "thisRow";
 
-const PAGE_SCOPE_ROOTS: ReadonlySet<string> = new Set([
-  FORMULA_PAGE_SCOPE_ROOT,
-]);
-
-const ROW_SCOPE_ROOTS: ReadonlySet<string> = new Set([
+/**
+ * The scope roots the grammar accepts (`thisPage` + `thisRow`, lowercased).
+ * `thisRow` is a synonym of `thisPage` on every host: both parse to the same
+ * property node, and resolution against the page or row scope happens at
+ * check/evaluation time. Name validators (user-defined functions) reserve
+ * both.
+ */
+export const FORMULA_SCOPE_ROOTS: ReadonlySet<string> = new Set([
   FORMULA_PAGE_SCOPE_ROOT,
   FORMULA_ROW_SCOPE_ROOT,
 ]);
 
 /**
- * Every scope root the grammar can accept (`thisPage` + `thisRow`,
- * lowercased). Exported so name validators (user-defined functions) reserve
- * both even when a given host does not treat `thisRow` as a scope root —
- * a function named `thisRow` would be uncallable from a row formula.
+ * Display labels for {@link FORMULA_SCOPE_ROOTS} (grammar is case-blind).
+ * Autocomplete offers only `thisPage`; `thisRow` stays accepted input.
  */
-export const FORMULA_SCOPE_ROOTS: ReadonlySet<string> = ROW_SCOPE_ROOTS;
-
-/**
- * Whether `thisRow` is a scope-root synonym of `thisPage`. Omitted/`true`
- * (the default) is a database-row host; `false` is an ordinary page.
- */
-export function formulaThisRowInScope(options?: ParseFormulaOptions): boolean {
-  return options?.thisRowInScope !== false;
-}
-
-/**
- * Scope roots for a formula's host: `thisPage` always; `thisRow` only when
- * the host has a database row.
- */
-export function formulaScopeRoots(
-  thisRowInScope: boolean
-): ReadonlySet<string> {
-  return thisRowInScope ? ROW_SCOPE_ROOTS : PAGE_SCOPE_ROOTS;
-}
-
-/**
- * Display labels for {@link formulaScopeRoots} (grammar is case-blind).
- * Autocomplete offers these; `thisRow` is omitted on ordinary pages.
- */
-export function formulaScopeRootLabels(
-  thisRowInScope: boolean
-): readonly (
-  | typeof FORMULA_PAGE_SCOPE_LABEL
-  | typeof FORMULA_ROW_SCOPE_LABEL
-)[] {
-  return thisRowInScope
-    ? [FORMULA_PAGE_SCOPE_LABEL, FORMULA_ROW_SCOPE_LABEL]
-    : [FORMULA_PAGE_SCOPE_LABEL];
-}
+export const FORMULA_SCOPE_ROOT_LABELS = [
+  FORMULA_PAGE_SCOPE_LABEL,
+  FORMULA_ROW_SCOPE_LABEL,
+] as const;
 
 /**
  * The canonical reference form `prop("<fieldId>")` (lowercased). Syntax, not
@@ -119,8 +81,9 @@ export const FORMULA_PROP_ROOT = "prop";
 /**
  * The whole-database reference form `db("<databaseId>")` (lowercased).
  * Syntax exactly like {@link FORMULA_PROP_ROOT} — it parses straight to a
- * database node, never appears in the function catalog, and stays usable as
- * a lambda parameter name. Exported for the highlighter.
+ * database node and never appears in the function catalog. Like the other
+ * reference roots it can't name a lambda parameter or `let` binding (the
+ * binding could never be read back). Exported for the highlighter.
  */
 export const FORMULA_DB_ROOT = "db";
 
@@ -136,31 +99,18 @@ const RESERVED_WORDS = new Set(["true", "false", "null", "and", "or", "not"]);
 /** Public read-only view of the grammar's reserved words (lowercased). */
 export const FORMULA_RESERVED_WORDS: ReadonlySet<string> = RESERVED_WORDS;
 
-const PAGE_STATEMENT_RESERVED_NAMES: ReadonlySet<string> = new Set([
-  FORMULA_PROP_ROOT,
-  FORMULA_DB_ROOT,
-  ...PAGE_SCOPE_ROOTS,
-]);
-
-const ROW_STATEMENT_RESERVED_NAMES: ReadonlySet<string> = new Set([
-  FORMULA_PROP_ROOT,
-  FORMULA_DB_ROOT,
-  ...ROW_SCOPE_ROOTS,
-]);
-
 /**
- * Names a `let` STATEMENT can't bind, beyond {@link RESERVED_WORDS}: the
- * reference syntax roots that are in scope for this parse. A binding named
- * `prop`/`db`/`thisPage` (and `thisRow` when it is a scope root) could never
- * be read back (a bare mention re-enters the reference grammar and fails),
- * so the statement form rejects them up front. On ordinary pages `thisRow`
- * is a bare name, so `let thisRow = …` is legal there.
+ * Names a binder (`let` statement or lambda parameter) can't use, beyond
+ * {@link RESERVED_WORDS}: the reference syntax roots. A binding named
+ * `prop`/`db`/`thisPage`/`thisRow` could never be read back — a bare mention
+ * re-enters the reference grammar and fails with a confusing message — so
+ * binders reject them up front, matching the user-function name rules.
  */
-function statementReservedNames(thisRowInScope: boolean): ReadonlySet<string> {
-  return thisRowInScope
-    ? ROW_STATEMENT_RESERVED_NAMES
-    : PAGE_STATEMENT_RESERVED_NAMES;
-}
+const REFERENCE_ROOT_NAMES: ReadonlySet<string> = new Set([
+  FORMULA_PROP_ROOT,
+  FORMULA_DB_ROOT,
+  ...FORMULA_SCOPE_ROOTS,
+]);
 
 /** The `let` statement keyword (lowercased; matched case-insensitively). */
 const LET_KEYWORD = "let";
@@ -209,7 +159,6 @@ interface LetStatement {
 
 class Parser {
   private readonly tokens: FormulaToken[];
-  private readonly thisRowInScope: boolean;
   private index = 0;
   private depth = 0;
   /**
@@ -220,9 +169,8 @@ class Parser {
    */
   private lastEnd = 0;
 
-  constructor(tokens: FormulaToken[], thisRowInScope: boolean) {
+  constructor(tokens: FormulaToken[]) {
     this.tokens = tokens;
-    this.thisRowInScope = thisRowInScope;
   }
 
   /**
@@ -345,10 +293,7 @@ class Parser {
       throw this.unexpectedToken(token);
     }
     const lower = token.value.toLowerCase();
-    if (
-      RESERVED_WORDS.has(lower) ||
-      statementReservedNames(this.thisRowInScope).has(lower)
-    ) {
+    if (RESERVED_WORDS.has(lower) || REFERENCE_ROOT_NAMES.has(lower)) {
       throw new FormulaParseFailure(
         `"${token.value}" is reserved and can't be a let name`,
         token.position
@@ -539,14 +484,34 @@ class Parser {
   private parseEquality(): FormulaNode {
     return this.parseBinaryTier(
       () => this.parseRelational(),
-      () => this.matchOpPunct(["==", "!="])
+      () => {
+        const matched = this.matchOpPunct(["==", "!="]);
+        if (matched !== null) {
+          return matched;
+        }
+        // Spreadsheet spelling: `<>` normalizes to `!=` at parse time.
+        const token = this.matchPunct("<>");
+        return token === null ? null : { op: "!=", token };
+      }
     );
   }
 
   private parseRelational(): FormulaNode {
     return this.parseBinaryTier(
-      () => this.parseAdditive(),
+      () => this.parseConcat(),
       () => this.matchOpPunct(["<=", ">=", "<", ">"])
+    );
+  }
+
+  /**
+   * `&` text concatenation, between comparison and additive so
+   * `"total: " & 1 + 2` reads `"total: " & (3)` and `a & b == c` compares
+   * the joined text — the spreadsheet precedence users expect.
+   */
+  private parseConcat(): FormulaNode {
+    return this.parseBinaryTier(
+      () => this.parseAdditive(),
+      () => this.matchOpPunct(["&"])
     );
   }
 
@@ -750,7 +715,7 @@ class Parser {
         end: token.end,
       };
     }
-    if (formulaScopeRoots(this.thisRowInScope).has(lower)) {
+    if (FORMULA_SCOPE_ROOTS.has(lower)) {
       return this.parsePropertyAccess(token.value, token.position);
     }
     if (lower === FORMULA_PROP_ROOT) {
@@ -942,7 +907,14 @@ class Parser {
     return this.parseLambdaBody(params, open.position);
   }
 
-  /** Validate a parameter token; reserved words can't shadow literals/operators. */
+  /**
+   * Validate a parameter token. Reserved words can't shadow
+   * literals/operators, and the reference roots (`prop`/`db`/`thisPage`/
+   * `thisRow`) are rejected too — a parameter with one of those names could
+   * never be read back (a bare mention re-enters the reference grammar and
+   * fails with a far worse message), matching the `let`-statement and
+   * user-function parameter rules.
+   */
   private toLambdaParam(token: FormulaToken): FormulaLambdaParam {
     if (token.type !== "identifier") {
       throw new FormulaParseFailure(
@@ -950,7 +922,8 @@ class Parser {
         token.position
       );
     }
-    if (RESERVED_WORDS.has(token.value.toLowerCase())) {
+    const lower = token.value.toLowerCase();
+    if (RESERVED_WORDS.has(lower) || REFERENCE_ROOT_NAMES.has(lower)) {
       throw new FormulaParseFailure(
         `"${token.value}" is reserved and can't be a parameter name`,
         token.position
@@ -1050,14 +1023,8 @@ function describeToken(token: FormulaToken): string {
  * Parse a formula source string into an AST. Never throws: lexical and
  * syntactic problems come back as `{ ok: false, error: { message, position } }`
  * with a 0-based character position into `source`.
- *
- * `options.thisRowInScope` defaults true (database-row hosts). Pass `false`
- * on ordinary pages so `thisRow` parses as a bare name, not a scope root.
  */
-export function parseFormula(
-  source: string,
-  options?: ParseFormulaOptions
-): ParseFormulaResult {
+export function parseFormula(source: string): ParseFormulaResult {
   if (source.length > MAX_EXPRESSION_LENGTH) {
     return {
       ok: false,
@@ -1074,7 +1041,7 @@ export function parseFormula(
   try {
     return {
       ok: true,
-      ast: new Parser(lexed.tokens, formulaThisRowInScope(options)).parse(),
+      ast: new Parser(lexed.tokens).parse(),
     };
   } catch (error) {
     if (error instanceof FormulaParseFailure) {

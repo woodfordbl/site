@@ -117,6 +117,24 @@ function applyPlus(left: FormulaValue, right: FormulaValue): FormulaValue {
   return cannotAdd();
 }
 
+/**
+ * `&` text concatenation: both sides coerce through `formulaValueToText`, so
+ * numbers, booleans, and dates read naturally and blank reads as the empty
+ * string (the spreadsheet rule — unlike `+`, which rejects blank operands).
+ * Lists and rows still error, matching the text functions.
+ */
+function applyConcat(left: FormulaValue, right: FormulaValue): FormulaValue {
+  const leftText = formulaValueToText(left);
+  if (typeof leftText !== "string") {
+    return leftText;
+  }
+  const rightText = formulaValueToText(right);
+  if (typeof rightText !== "string") {
+    return rightText;
+  }
+  return leftText + rightText;
+}
+
 function applyArithmetic(
   op: "-" | "*" | "/" | "%",
   left: FormulaValue,
@@ -201,6 +219,8 @@ function applyBinary(
   switch (op) {
     case "+":
       return applyPlus(left, right);
+    case "&":
+      return applyConcat(left, right);
     case "-":
     case "*":
     case "/":

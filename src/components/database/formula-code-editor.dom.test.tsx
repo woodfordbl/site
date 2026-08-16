@@ -862,7 +862,7 @@ describe("FormulaCodeEditor", () => {
       );
     });
 
-    it("shows the default page icon for thisPage and thisRow completions", async () => {
+    it("shows the default page icon for the thisPage completion", async () => {
       renderEditor();
       typeText("thi");
 
@@ -874,9 +874,9 @@ describe("FormulaCodeEditor", () => {
       expect(
         rowByLabel("thisPage")?.querySelector(".cm-formula-completion-icon svg")
       ).not.toBeNull();
-      expect(
-        rowByLabel("thisRow")?.querySelector(".cm-formula-completion-icon svg")
-      ).not.toBeNull();
+      // thisRow stays accepted input but is deliberately not offered — the
+      // system teaches one spelling.
+      expect(rowByLabel("thisRow")).toBeUndefined();
     });
 
     it("completes scope roots and chains into the property list", async () => {
@@ -885,7 +885,7 @@ describe("FormulaCodeEditor", () => {
 
       const open = await waitForPopup();
       expect(optionLabels(open)).toContain("thisPage");
-      expect(optionLabels(open)).toContain("thisRow");
+      expect(optionLabels(open)).not.toContain("thisRow");
       await settleInteractionDelay();
 
       fireEvent.keyDown(cmContent(), { key: "Enter" });
@@ -904,7 +904,7 @@ describe("FormulaCodeEditor", () => {
       render(
         <FormulaCodeEditor
           ariaLabel="Formula expression"
-          checkContext={{ ...CHECK_CONTEXT, thisRowInScope: false }}
+          checkContext={CHECK_CONTEXT}
           fields={FIELDS}
           onChange={vi.fn()}
           value=""

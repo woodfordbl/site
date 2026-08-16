@@ -68,9 +68,7 @@ import {
 import { type FormulaHoverInfo, formulaHoverAt } from "@/lib/formula/hover.ts";
 import {
   FORMULA_PAGE_SCOPE_LABEL,
-  FORMULA_ROW_SCOPE_LABEL,
-  formulaScopeRootLabels,
-  formulaThisRowInScope,
+  FORMULA_SCOPE_ROOT_LABELS,
   parseFormula,
 } from "@/lib/formula/parse.ts";
 import {
@@ -307,12 +305,9 @@ function highlightMark(kind: FormulaHighlightKind): Decoration {
   return mark;
 }
 
-function buildHighlightDecorations(
-  source: string,
-  thisRowInScope: boolean
-): DecorationSet {
+function buildHighlightDecorations(source: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  for (const span of highlightFormula(source, { thisRowInScope })) {
+  for (const span of highlightFormula(source)) {
     builder.add(span.start, span.end, highlightMark(span.kind));
   }
   return builder.finish();
@@ -404,28 +399,19 @@ const checkContextState = StateField.define<FormulaCheckContext>({
  * Whole-document re-highlight on every doc change. Fine at our scale: input
  * is capped at 10k characters (`MAX_EXPRESSION_LENGTH`) and the classifier
  * is a single linear tokenize pass, so incremental ranges aren't worth it.
- * Also rebuilds when `thisRow` enters or leaves scope so `thisRow` restyles
- * from property-root to bare name (and back).
  */
 const formulaHighlighter = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
 
     constructor(view: EditorView) {
-      this.decorations = buildHighlightDecorations(
-        view.state.doc.toString(),
-        formulaThisRowInScope(view.state.field(checkContextState))
-      );
+      this.decorations = buildHighlightDecorations(view.state.doc.toString());
     }
 
     update(update: ViewUpdate) {
-      const scopeChanged =
-        formulaThisRowInScope(update.startState.field(checkContextState)) !==
-        formulaThisRowInScope(update.state.field(checkContextState));
-      if (update.docChanged || scopeChanged) {
+      if (update.docChanged) {
         this.decorations = buildHighlightDecorations(
-          update.state.doc.toString(),
-          formulaThisRowInScope(update.state.field(checkContextState))
+          update.state.doc.toString()
         );
       }
     }
@@ -987,9 +973,7 @@ const typedReferenceCanonicalizer = ViewPlugin.fromClass(
       const { state } = this.view;
       const source = state.doc.toString();
       const rewrites = [
-        ...canonicalPropertyRewrites(source, state.field(chipFields), {
-          thisRowInScope: formulaThisRowInScope(state.field(checkContextState)),
-        }),
+        ...canonicalPropertyRewrites(source, state.field(chipFields)),
         ...canonicalDatabaseRewrites(source, state.field(chipDatabases)),
       ].filter((rewrite) => !selectionTouches(state.selection, rewrite));
       if (rewrites.length === 0) {
@@ -1052,7 +1036,7 @@ function rawDiagnosticSpans(
   if (source.trim() === "") {
     return [];
   }
-  const parsed = parseFormula(source, context);
+  const parsed = parseFormula(source);
   if (!parsed.ok) {
     const span = parseErrorSpan(source, parsed.error.position);
     return span === null ? [] : [span];
@@ -1495,16 +1479,15 @@ const IDENTIFIER_VALID_FOR_RE = /^[A-Za-z0-9_]*$/;
  * A scope-root reference prefix (`thisPage.` / `thisRow.`, any casing)
  * directly before a position: completions triggered there narrow to
  * properties and replace the WHOLE reference with one canonical chip.
- * `thisRow.` is only a prefix when the host has a database row.
  */
-function scopePrefixRe(thisRowInScope: boolean): RegExp {
-  const roots = [...formulaScopeRootLabels(thisRowInScope)].join("|");
-  return new RegExp(`(?:${roots})\\s*\\.\\s*$`, "i");
-}
+const SCOPE_PREFIX_RE = new RegExp(
+  `(?:${FORMULA_SCOPE_ROOT_LABELS.join("|")})\\s*\\.\\s*$`,
+  "i"
+);
 
 /** Start of the scope-root prefix ending at `prefix`'s end, else its length. */
-function scopePrefixStart(prefix: string, thisRowInScope: boolean): number {
-  const match = scopePrefixRe(thisRowInScope).exec(prefix);
+function scopePrefixStart(prefix: string): number {
+  const match = SCOPE_PREFIX_RE.exec(prefix);
   return match === null ? prefix.length : match.index;
 }
 
@@ -1607,9 +1590,7 @@ const completionFields = new WeakMap<Completion, DatabaseField>();
  */
 function renderCompletionIcon(completion: Completion): Node | null {
   const field = completionFields.get(completion);
-  const isScopeRoot =
-    completion.label === FORMULA_PAGE_SCOPE_LABEL ||
-    completion.label === FORMULA_ROW_SCOPE_LABEL;
+  const isScopeRoot = completion.label === FORMULA_PAGE_SCOPE_LABEL;
   if (
     field === undefined &&
     completion.type !== "database" &&
@@ -1660,10 +1641,7 @@ function propertyCompletion(
 ): Completion {
   const completion: Completion = {
     apply: (view, _completion, from, to) => {
-      const start = scopePrefixStart(
-        view.state.sliceDoc(0, from),
-        formulaThisRowInScope(view.state.field(checkContextState))
-      );
+      const start = scopePrefixStart(view.state.sliceDoc(0, from));
       const insert = canonicalPropertyReference(field.id);
       applyInsert(view, { from: start, to }, insert, start + insert.length);
     },
@@ -1750,20 +1728,20 @@ function keywordCompletions(expected: FormulaType | null): Completion[] {
 }
 
 /** Display info for each scope-root completion. */
-const SCOPE_ROOT_INFO = {
+const SCOPE_ROOT_INFO: Record<string, string> = {
   thisPage: "This page's properties — picking one inserts its reference.",
-  thisRow: "This row's properties — picking one inserts its reference.",
-} as const;
+};
 
 /**
  * Scope-root references complete too — typing `thi…` lands on `thisPage.`
  * — and accepting one immediately reopens the popup, which the trailing
  * dot puts in property-only mode, so the property pick (which replaces the
- * whole reference with one canonical chip) is a keystroke away. `thisRow`
- * is offered only when the host has a database row.
+ * whole reference with one canonical chip) is a keystroke away. Only
+ * `thisPage` is offered: `thisRow` stays accepted input everywhere (an
+ * unconditional synonym) but the system teaches one spelling.
  */
-function scopeRootCompletions(thisRowInScope: boolean): Completion[] {
-  return formulaScopeRootLabels(thisRowInScope).map((label) => ({
+function scopeRootCompletions(): Completion[] {
+  return [FORMULA_PAGE_SCOPE_LABEL].map((label) => ({
     apply: (
       view: EditorView,
       _completion: Completion,
@@ -1906,12 +1884,8 @@ function dbArgumentCompletions(
 }
 
 /** Is `position` inside a string or comment (no completions there)? */
-function insideStringOrComment(
-  source: string,
-  position: number,
-  thisRowInScope: boolean
-): boolean {
-  return highlightFormula(source, { thisRowInScope }).some(
+function insideStringOrComment(source: string, position: number): boolean {
+  return highlightFormula(source).some(
     (span) =>
       (span.kind === "string" || span.kind === "comment") &&
       span.start < position &&
@@ -1938,17 +1912,14 @@ function formulaCompletionSource(
   if (dbArgument !== null) {
     return dbArgument;
   }
-  const thisRowInScope = formulaThisRowInScope(
-    context.state.field(checkContextState)
-  );
   const word = context.matchBefore(IDENTIFIER_TAIL_RE);
   const from = word?.from ?? context.pos;
-  const scopeStart = scopePrefixStart(doc.slice(0, from), thisRowInScope);
+  const scopeStart = scopePrefixStart(doc.slice(0, from));
   const propertyOnly = scopeStart < from;
   if (word === null && !(context.explicit || propertyOnly)) {
     return null;
   }
-  if (insideStringOrComment(doc, context.pos, thisRowInScope)) {
+  if (insideStringOrComment(doc, context.pos)) {
     return null;
   }
   const fields = formulaPickableFields(
@@ -1979,10 +1950,7 @@ function formulaCompletionSource(
         options.push(userFunctionCompletion(def));
       }
     }
-    options.push(
-      ...keywordCompletions(expected),
-      ...scopeRootCompletions(thisRowInScope)
-    );
+    options.push(...keywordCompletions(expected), ...scopeRootCompletions());
     if (context.state.field(chipDatabases).length > 0) {
       options.push(dbRootCompletion());
     }

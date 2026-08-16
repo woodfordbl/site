@@ -39,7 +39,6 @@ import {
   formulaMinArgs,
   formulaParamAt,
 } from "@/lib/formula/catalog.ts";
-import type { ParseFormulaOptions } from "@/lib/formula/parse.ts";
 import {
   BLANK_TYPE,
   BOOLEAN_TYPE,
@@ -111,11 +110,8 @@ export interface FormulaCheckDatabase {
   readonly properties: readonly FormulaCheckProperty[];
 }
 
-/** Schema context a formula checks against. `thisRowInScope` (from
- * {@link ParseFormulaOptions}) defaults true — database-row hosts. Ordinary
- * pages set it false so `thisRow` is a bare name, not a scope root.
- */
-export interface FormulaCheckContext extends ParseFormulaOptions {
+/** Schema context a formula checks against. */
+export interface FormulaCheckContext {
   /**
    * Databases relation members resolve against, keyed by database id.
    * Optional — without it, member access on typed rows checks
@@ -256,6 +252,7 @@ export function formulaTypeBadge(type: FormulaType): string {
 const OP_LEXEME_LENGTH: Record<FormulaBinaryOp, number> = {
   "!=": 2,
   "%": 1,
+  "&": 1,
   "*": 1,
   "+": 1,
   "-": 1,
@@ -923,9 +920,36 @@ class Checker {
         return this.checkComparison(node, left, right);
       case "+":
         return this.checkPlus(node, left, right);
+      case "&":
+        return this.checkConcat(node, left, right);
       default:
         return this.checkArithmetic(node, left, right);
     }
+  }
+
+  /**
+   * Mirror the runtime `&`: both sides coerce through `formulaValueToText`
+   * (text, number, boolean, date, blank — blank reads as ""), so the only
+   * rejects are values with no text form (lists, rows).
+   */
+  private checkConcat(
+    node: FormulaBinaryNode,
+    left: FormulaType,
+    right: FormulaType
+  ): FormulaType {
+    let offender: FormulaType | null = null;
+    if (!typeFits(left, LENIENT_TEXT_ACCEPTS)) {
+      offender = left;
+    } else if (!typeFits(right, LENIENT_TEXT_ACCEPTS)) {
+      offender = right;
+    }
+    if (offender === null) {
+      return TEXT_TYPE;
+    }
+    return this.report(
+      `Cannot convert ${formulaTypeName(offender)} to text`,
+      opSpan(node)
+    );
   }
 
   private checkLogical(

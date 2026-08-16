@@ -237,6 +237,23 @@ describe("operators", () => {
     expect(typeOf("1 + 2 == 3")).toEqual(BOOLEAN_TYPE);
   });
 
+  it("types & as text over every coercible operand, blank included", () => {
+    expect(typeOf('"a" & "b"')).toEqual(TEXT_TYPE);
+    expect(typeOf('"total: " & 1')).toEqual(TEXT_TYPE);
+    expect(typeOf("1 & 2")).toEqual(TEXT_TYPE);
+    expect(typeOf('null & "x"')).toEqual(TEXT_TYPE);
+    expect(typeOf('now() & ""')).toEqual(TEXT_TYPE);
+  });
+
+  it("diagnoses & operands with no text form, at the operator", () => {
+    expect(soleDiagnostic('[1] & "x"')).toEqual({
+      end: 5,
+      message: "Cannot convert list of numbers to text",
+      severity: "error",
+      start: 4,
+    });
+  });
+
   it("requires one shared orderable type for comparisons", () => {
     expect(soleDiagnostic('"a" < 1')).toEqual({
       end: 5,
@@ -1011,23 +1028,15 @@ describe("bare names", () => {
     });
   });
 
-  it("reports thisRow as an unknown name when it is not a scope root", () => {
-    const parsed = parseFormula("thisRow", { thisRowInScope: false });
+  it("reports a bare thisRow as an incomplete property reference", () => {
+    // `thisRow` is an unconditional synonym of `thisPage`, so a bare
+    // mention is a parse error asking for the property hop — never an
+    // unknown name.
+    const parsed = parseFormula("thisRow");
+    expect(parsed.ok).toBe(false);
     if (!parsed.ok) {
-      throw new Error(`parse failed: ${parsed.error.message}`);
+      expect(parsed.error.message).toContain('Expected "." or "["');
     }
-    const result = checkFormula(parsed.ast, {
-      properties: [],
-      thisRowInScope: false,
-    });
-    expect(result.diagnostics).toEqual([
-      {
-        end: "thisRow".length,
-        message: 'Unknown name "thisRow"',
-        severity: "error",
-        start: 0,
-      },
-    ]);
   });
 });
 

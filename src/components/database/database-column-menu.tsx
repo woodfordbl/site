@@ -74,6 +74,7 @@ import {
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { FormulaFunctionManagerDialog } from "@/components/database/formula-function-manager.tsx";
+import { warmFormulaCodeEditor } from "@/components/database/preload-formula-code-editor.ts";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Dialog,
@@ -712,6 +713,17 @@ function EditPropertySubmenu({
   onRequestClose,
 }: EditPropertySubmenuProps) {
   const coarsePointer = useIsCoarsePrimaryPointer();
+  const isFormula = field.type === "formula";
+
+  // The open column menu is one tap away from the formula editor — warm the
+  // CM6 chunk now so the panel mounts chips on its first render instead of
+  // the fallback textarea (the same reachability rule InlineFormulaValues
+  // follows).
+  useEffect(() => {
+    if (isFormula) {
+      warmFormulaCodeEditor();
+    }
+  }, [isFormula]);
 
   if (displayOnly && field.type !== "date" && field.type !== "number") {
     return null;

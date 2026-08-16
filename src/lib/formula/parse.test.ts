@@ -119,6 +119,12 @@ describe("parse precedence", () => {
     ["2 * 3 ^ 2", "(* 2 (pow 3 2))"],
     ["-2 ^ 2 + 1", "(+ (- (pow 2 2)) 1)"],
     ["not 2 ^ 2 == 4", "(== (not (pow 2 2)) 4)"],
+    // & sits between comparison and additive, like a spreadsheet.
+    ['"n: " & 1 + 2', '(& "n: " (+ 1 2))'],
+    ['"a" & "b" & "c"', '(& (& "a" "b") "c")'],
+    ['"a" & "b" == "ab"', '(== (& "a" "b") "ab")'],
+    // <> normalizes to != at parse time.
+    ["1 <> 2", "(!= 1 2)"],
     // Postfix method calls bind tighter than everything, spacing-insensitive.
     ["1 + 2 . abs()", "(+ 1 (.abs 2))"],
     ["-2.abs()", "(- (.abs 2))"],
@@ -148,32 +154,9 @@ describe("parse property references", () => {
     });
   });
 
-  it("treats thisRow as a synonym for thisPage on row hosts", () => {
+  it("treats thisRow as an unconditional synonym for thisPage", () => {
     expect(sexpr(astOf("thisRow.Score"))).toBe(sexpr(astOf("thisPage.Score")));
-  });
-
-  it("parses thisRow as a bare name when it is not in scope", () => {
-    const result = parseFormula("thisRow", { thisRowInScope: false });
-    if (!result.ok) {
-      throw new Error(`expected ok: ${result.error.message}`);
-    }
-    expect(sexpr(result.ast)).toBe("name:thisRow");
-  });
-
-  it("parses thisRow.X as member access when thisRow is not in scope", () => {
-    const result = parseFormula("thisRow.Title", { thisRowInScope: false });
-    if (!result.ok) {
-      throw new Error(`expected ok: ${result.error.message}`);
-    }
-    expect(sexpr(result.ast)).toBe("(member name:thisRow Title)");
-  });
-
-  it("still parses thisPage as a scope root when thisRow is not in scope", () => {
-    const result = parseFormula("thisPage.Title", { thisRowInScope: false });
-    if (!result.ok) {
-      throw new Error(`expected ok: ${result.error.message}`);
-    }
-    expect(sexpr(result.ast)).toBe("prop:Title");
+    expect(sexpr(astOf("thisRow.Title"))).toBe("prop:Title");
   });
 
   it("matches scope roots case-insensitively", () => {
@@ -314,8 +297,10 @@ describe("parse db references", () => {
     });
   });
 
-  it("keeps db usable as a lambda parameter name, like prop", () => {
-    expect(sexpr(astOf("db => 1"))).toBe("(lambda (db) 1)");
+  it("rejects db as a lambda parameter name, like the other roots", () => {
+    // A parameter named `db` could never be read back — a bare mention
+    // re-enters the reference grammar — so binders reject it up front.
+    expect(errorOf("db => 1").message).toContain("reserved");
   });
 
   it("rejects db with no argument", () => {
@@ -1006,16 +991,6 @@ describe("parse let statements", () => {
     expect(errorOf("let db = 1; 2").message).toContain("reserved");
     expect(errorOf("let thisPage = 1; 2").message).toContain("reserved");
     expect(errorOf("let thisRow = 1; 2").message).toContain("reserved");
-  });
-
-  it("allows let thisRow when thisRow is not a scope root", () => {
-    const result = parseFormula("let thisRow = 1; thisRow", {
-      thisRowInScope: false,
-    });
-    if (!result.ok) {
-      throw new Error(`expected ok: ${result.error.message}`);
-    }
-    expect(sexpr(result.ast)).toBe("(let name:thisRow 1 name:thisRow)");
   });
 
   it("reports a stray semicolon with the statement-position hint", () => {
