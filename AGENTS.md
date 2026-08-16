@@ -49,8 +49,7 @@ plans, scheduled for relocation).
 
 - TanStack Start + Nitro; API routes live in `apps/web/routes/api/` and are registered
   explicitly in `apps/web/vite.config.ts` (no filesystem scanning).
-- Content collections (`apps/web/src/db/collections/`) are mode-forked at boot:
-  anonymous → localStorage, signed-in → Electric-protocol sync. See the
-  `@fileoverview` blocks in `apps/web/src/db/collections/` for the contracts.
+- Content collections (`apps/web/src/db/collections/`) are localStorage-backed
+  local-first stores; see their `@fileoverview` blocks for the contracts.
 - `pnpm test` (vitest), `pnpm typecheck`, `pnpm check` (lint), and
   `pnpm check:size` must all pass before a commit.

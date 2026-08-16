@@ -4,9 +4,6 @@ import {
   localBlocksCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
-import { isSyncedMode } from "@/db/collections/sync-mode.ts";
-import type { TransactionLike } from "@/db/collections/synced-mutations.ts";
-import { pushTransactionMutations } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import {
   beginPageBlockTransaction,
@@ -127,12 +124,6 @@ export function syncHubPageMetadataFromDatabase(
   const tx = createTransaction({
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
-      if (isSyncedMode()) {
-        await pushTransactionMutations(
-          transaction as unknown as TransactionLike
-        );
-        return;
-      }
       localPagesCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },
