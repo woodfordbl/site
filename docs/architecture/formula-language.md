@@ -702,7 +702,11 @@ Anatomy, top to bottom:
 - **Reference tray** (`StudioTray`) — a Properties / Functions / Operators
   browser using the app-wide `Tabs` (indicator variant, same as the database
   view switcher) with per-tab search filling everything below the fold (the
-  space the keyboard takes while typing).
+  space the keyboard takes while typing). The active-tab indicator and the
+  status row's type badge are both `--muted`, and a drawer re-bases the
+  neutral ramp onto its own recessed ground (`--surface-recess` in
+  `styles.css`), so they keep the same contrast step here that they have on
+  a page instead of flattening into the darker surface.
   Property rows insert canonical references; function rows insert the
   placeholder snippet and carry a chevron that expands the docs IN PLACE
   (description + first runnable example — what desktop's detail strip shows);

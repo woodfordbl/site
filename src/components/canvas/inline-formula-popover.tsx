@@ -297,14 +297,22 @@ export function InlineFormulaPopover() {
       }
     };
     document.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", handleScroll, true);
+    // Reposition-driven dismissal is desktop-only. The mobile studio is a
+    // viewport-fixed drawer with nothing to re-anchor, and on a phone both
+    // events are on-screen-keyboard artifacts rather than the page moving:
+    // focusing the editor or the tray's search field opens the keyboard,
+    // which fires `resize` and scrolls the document — closing the drawer the
+    // moment the user started typing in it.
+    if (!coarsePointer) {
+      window.addEventListener("resize", close);
+      window.addEventListener("scroll", handleScroll, true);
+    }
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [target]);
+  }, [coarsePointer, target]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
   const relations = useMemo(
