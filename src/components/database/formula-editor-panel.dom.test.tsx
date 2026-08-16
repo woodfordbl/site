@@ -95,6 +95,12 @@ const PARSE_ERROR_RE = /Unexpected end of expression/;
 // Status-row position expectations (display coordinates, not canonical).
 // Anchored on the "(at character N)" suffix only the status message carries,
 // so the live preview's own "⚠ abs() expects…" rendering never matches.
+const STUDIO_PRICE_ROW_RE = /^Price/;
+const STUDIO_ABS_ROW_RE = /^abs\(/;
+const STUDIO_ABS_DOCS_RE = /absolute value/;
+const STUDIO_CONCAT_ROW_RE = /^&Joins values as text/;
+const STUDIO_EXPECTS_NUMBER_RE = /expects a number/;
+
 const ABS_DIAG_RE = /abs\(\) expects .*\(at character \d+\)/;
 const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
 const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
@@ -1155,7 +1161,9 @@ describe("FormulaEditorPanel", () => {
       await flushFrames();
 
       await fire(() => {
-        fireEvent.click(screen.getByRole("button", { name: /^Price/ }));
+        fireEvent.click(
+          screen.getByRole("button", { name: STUDIO_PRICE_ROW_RE })
+        );
       });
       const textarea = screen.getByLabelText(
         "Formula expression"
@@ -1171,14 +1179,16 @@ describe("FormulaEditorPanel", () => {
         fireEvent.click(screen.getByRole("button", { name: "Functions" }));
       });
       // Docs are hidden until the chevron expands the row.
-      expect(screen.queryByText(/absolute value/)).toBeNull();
+      expect(screen.queryByText(STUDIO_ABS_DOCS_RE)).toBeNull();
       await fire(() => {
         fireEvent.click(screen.getByRole("button", { name: "abs details" }));
       });
-      expect(screen.getByText(/absolute value/)).toBeDefined();
+      expect(screen.getByText(STUDIO_ABS_DOCS_RE)).toBeDefined();
 
       await fire(() => {
-        fireEvent.click(screen.getByRole("button", { name: /^abs\(/ }));
+        fireEvent.click(
+          screen.getByRole("button", { name: STUDIO_ABS_ROW_RE })
+        );
       });
       const textarea = screen.getByLabelText(
         "Formula expression"
@@ -1202,7 +1212,7 @@ describe("FormulaEditorPanel", () => {
         },
         () => {
           fireEvent.click(
-            screen.getByRole("button", { name: /^&Joins values as text/ })
+            screen.getByRole("button", { name: STUDIO_CONCAT_ROW_RE })
           );
         }
       );
@@ -1217,7 +1227,9 @@ describe("FormulaEditorPanel", () => {
       await fire(() => {
         fireEvent.change(textarea, { target: { value: 'abs("oops")' } });
       });
-      const row = screen.getByRole("button", { name: /expects a number/ });
+      const row = screen.getByRole("button", {
+        name: STUDIO_EXPECTS_NUMBER_RE,
+      });
       expect(row.textContent).toContain("Go ›");
 
       // Clean drafts render no diagnostics chrome at all.
@@ -1225,7 +1237,7 @@ describe("FormulaEditorPanel", () => {
         fireEvent.change(textarea, { target: { value: "1 + 2" } });
       });
       expect(
-        screen.queryByRole("button", { name: /expects a number/ })
+        screen.queryByRole("button", { name: STUDIO_EXPECTS_NUMBER_RE })
       ).toBeNull();
     });
   });
