@@ -95,11 +95,11 @@ equivalent shapes, guarded by the frozen
   identifier (bare name reference, lambda parameter). A trailing `;` after the
   final expression is tolerated; a `;` anywhere else is a parse error with a hint,
   as is a lone `=` (both are tokens only so these statements can lex). Statement
-  names reject the reserved words plus the reference roots in scope
-  (`prop`/`db`/`thisPage`, and `thisRow` on database-row hosts). On ordinary
-  pages `thisRow` is a bare name, so `let thisRow = …` is legal there. Each
-  statement spends one level of the parse-depth budget, preserving the
-  "parse depth bounds AST depth" contract.
+  names reject the reserved words plus the reference roots
+  (`prop`/`db`/`thisPage`) — a binding with one of those names could never be
+  read back. Lambda parameters follow the same rule. Each statement spends
+  one level of the parse-depth budget, preserving the "parse depth bounds
+  AST depth" contract.
 - **Lambdas** — `x => expr`, `(a, b) => expr`; body extends maximally right. Named
   parameters only — no implicit `current`. Lambda application is depth-capped
   (`MAX_CALL_DEPTH` 100) because higher-order recursion is otherwise unbounded.
@@ -114,17 +114,12 @@ equivalent shapes, guarded by the frozen
 
 The stored form of a property reference is **`prop("<fieldId>")`** — field ids are
 stable, so renaming a field never touches (or breaks) any stored formula. The display
-forms `thisPage.Name` / `thisRow["Name"]` remain accepted input everywhere;
+forms `thisPage.Name` / `thisPage["Name"]` remain accepted input everywhere;
 the AST records which spelling was used (`via: "prop" | "scope"`). `thisPage`
-and `thisRow` are **unconditional synonyms** on every host: both parse to the
-same property node, and resolution against the page or row scope happens at
-check/evaluation time. (The earlier design made `thisRow` a scope root only on
-database-row hosts, threading a `thisRowInScope` flag through the parser,
-checker, highlighter, rewriters, and editor — ~60 sites of conditional code
-whose only user-visible effect was a different error message on ordinary
-pages. The flag is gone; the system still only ever *writes* `thisPage` —
-`humanizeExpression` and autocomplete teach one spelling, and `thisRow` is
-kept purely as accepted input for stored formulas and muscle memory.)
+is the ONLY scope root — the language has no `thisRow`. (Earlier designs had
+`thisRow` as a synonym, at one point gated by a `thisRowInScope` flag
+threaded through ~60 sites; both the flag and the word are gone. `thisRow`
+now parses as an ordinary identifier and diagnoses as an unknown name.)
 
 - [`ref-rewrite.ts`](../../src/lib/formula/ref-rewrite.ts) converts between the two by
   splicing property-node spans right-to-left, so spacing/casing/comments are never
@@ -606,8 +601,7 @@ unparseable-mid-keystroke drafts still highlight.
 **Fused autocomplete** (proposal §6.2): one completion source merges properties
 (labeled/filtered by field name, applied as the canonical `prop("<id>")` text — one
 atomic chip — with the field-type icon and value type as detail; a typed
-`thisPage.`- or `thisRow.`-prefix narrows to properties and is replaced whole
-(autocomplete offers only `thisPage` — `thisRow` stays accepted input); the formula column being edited (`selfFieldId`) is
+`thisPage.`-prefix narrows to properties and is replaced whole; the formula column being edited (`selfFieldId`) is
 omitted from property options so it cannot pick itself — a hand-typed
 self-reference still chips and evaluates as a named cycle), catalog functions
 (signature as detail, description as the info card, caret placed inside the inserted
@@ -748,7 +742,7 @@ lives in [`formula-function-ops.ts`](../../src/db/queries/formula-function-ops.t
 via the pure validators in
 [`user-functions.ts`](../../src/lib/formula/user-functions.ts): identifier-safe
 per the REAL tokenizer (the rollup-template discipline), not a reserved word or
-a reference root (`prop`/`db`/`thisPage`/`thisRow`) or an evaluator special
+a reference root (`prop`/`db`/`thisPage`) or an evaluator special
 form (`let`/`lets`), not a catalog name OR alias, and unique among definitions
 case-insensitively. Parameters follow the lambda-parameter rules plus the
 reference-root exclusion. The schema itself stays structural — stored rows
@@ -851,8 +845,7 @@ errors inline as "⚠ message". Never throws.
 **Inline formula tokens** (the `formula` rich-text mark) share the same `thisPage`
 vocabulary. Ordinary pages expose the base fields from
 [`page-scope.ts`](../../src/lib/formula/page-scope.ts) (Title / Created at /
-Updated at); `thisRow` is a synonym of `thisPage` there too (it resolves
-against the same base fields). Database row
+Updated at). Database row
 and template pages layer the database's columns on top via
 [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts)
 (`createInlinePageFormulaScope` / `inlinePageFormulaCheckProperties` /

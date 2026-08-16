@@ -771,8 +771,7 @@ property row), type `#` for the formula builder under the caret (Save inserts an
 inline formula token whose Properties list includes the database's fields plus
 base page fields — Title / Created at / Updated at — via
 [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts);
-`thisRow` is a synonym of `thisPage` here and appears in autocomplete, unlike
-ordinary pages; Escape leaves `#` so markdown headings still work), or type
+Escape leaves `#` so markdown headings still work), or type
 `@` to mention a page inline. Live inline tokens on the template and on seeded
 row pages evaluate against the same layered `thisPage` scope (template preview
 uses `rowDefaults`; row pages use the open row's values). Mustache `{{ … }}`

@@ -63,7 +63,7 @@ grammar extension with no compat risk.
   with `Expected "(" to open the "db(…)" reference` — a binding that could
   never be read. `let` statements and user-function parameters already
   rejected the reference roots; lambda parameters now apply the same rule
-  (`prop`/`db`/`thisPage`/`thisRow` are uniformly un-bindable).
+  (`prop`/`db`/`thisPage` are uniformly un-bindable).
 - **`**` hint.** Previously lexed as two `*` tokens and failed downstream
   with `Unexpected "*"`; now a tokenizer-level hint names `^`.
 
@@ -110,12 +110,12 @@ single hidden blocker for the whole naturalness program.
 
 ## 3. thisPage vs thisRow — decision record [shipped]
 
-**Verdict: one scope, two accepted spellings, zero conditional machinery.**
+**Verdict: `thisRow` is removed from the language entirely. `thisPage` is
+the one and only scope root.**
 
-`thisRow` was already a pure synonym of `thisPage` on database-row hosts —
-identical AST, identical resolution. The only thing the `thisRowInScope` flag
-bought was a *different error message* on ordinary pages (`Unknown name
-"thisRow"` instead of a property-resolution error), at the cost of:
+`thisRow` was a pure synonym of `thisPage` — identical AST, identical
+resolution. The `thisRowInScope` flag that gated it per host bought only a
+*different error message* on ordinary pages, at the cost of:
 
 - `ParseFormulaOptions` existing solely to carry the flag, threaded through
   `parseFormula`, `checkFormula`'s context, `highlightFormula`,
@@ -128,17 +128,17 @@ bought was a *different error message* on ordinary pages (`Unknown name
 - asymmetric binder rules (`let thisRow = 1` legal on one host, illegal on
   another — a distinction no user could perceive as intentional).
 
-v3 makes `thisRow` an unconditional synonym everywhere and deletes the flag
-and all of its threading. Direction of travel is still **thisPage-only**: the
-system never *writes* `thisRow` (`humanizeExpression` always emits
-`thisPage`), autocomplete now offers only `thisPage` on every host, and docs
-teach one spelling. `thisRow` remains accepted input indefinitely — stored
-formulas and muscle memory cost nothing to keep, and dropping the parse-time
-acceptance would buy nothing back.
-
-Behavior changes: ordinary pages now resolve `thisRow.Title` against the base
-page fields (strictly better than erroring), and a bare `thisRow` is the same
-"expected `.` or `[`" parse error `thisPage` gives.
+The removal happened in two steps within this PR's history: first the flag
+was deleted and `thisRow` kept as an unconditional synonym; then the synonym
+itself was dropped — no backwards-compatibility parse acceptance, no
+deprecation window. Today `thisRow` is an ordinary identifier: it highlights
+as a name, diagnoses as `Unknown name "thisRow"`, is legal as a lambda
+parameter or `let` binding, and no longer occupies a reserved slot in the
+user-function name rules. The system's own writers (`humanizeExpression`,
+autocomplete, the rollup generator) only ever emitted `thisPage`, so nothing
+system-generated ever contained `thisRow`; hand-typed occurrences surface as
+visible unknown-name diagnostics in the editor rather than silently changing
+meaning.
 
 ## 4. Types and properties
 

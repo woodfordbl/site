@@ -58,9 +58,7 @@ export interface InlinePageFormulaOverlay {
 /**
  * Live `thisPage` model for inline formula tokens on the current canvas.
  * Ordinary pages carry only {@link page}; row/template pages fill
- * {@link databaseFields} / {@link cellValues}. `thisRow` is an unconditional
- * synonym of `thisPage` — on ordinary pages it simply resolves against the
- * base page fields.
+ * {@link databaseFields} / {@link cellValues}.
  */
 export interface InlineFormulaPageModel {
   /**

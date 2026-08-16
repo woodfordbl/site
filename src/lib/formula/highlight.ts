@@ -150,7 +150,7 @@ function commentEnd(source: string, start: number, limit: number): number {
 }
 
 /**
- * Classify a scope reference starting at `thisPage`/`thisRow`: one property
+ * Classify a scope reference starting at `thisPage`: one property
  * span covering the root plus its immediate `.name` or `["name"]` hop (the
  * hop is the reference; deeper members are ordinary member access). Returns
  * the next unconsumed token index.

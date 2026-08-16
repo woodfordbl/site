@@ -32,8 +32,7 @@ export type { InlineFormulaPageModel } from "@/lib/databases/page-formula-fields
  * On database row pages (`databaseRowSource`) and row-template pages
  * (`db-template:…`), `databaseFields` / `cellValues` layer the database's
  * columns onto the base page fields so `thisPage.Tags` resolves like a row
- * template token, and `thisRow` is a synonym of `thisPage`. On ordinary
- * pages `thisRow` is a bare name, not a scope root.
+ * template token.
  */
 
 const InlineFormulaPageContext = createContext<InlineFormulaPageModel | null>(

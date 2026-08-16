@@ -133,7 +133,7 @@ describe("property typing", () => {
   it("types canonical prop() and bracket references identically", () => {
     expect(typeOf('prop("f_est")', SCHEMA)).toEqual(NUMBER_TYPE);
     expect(typeOf('thisPage["Estimate"]', SCHEMA)).toEqual(NUMBER_TYPE);
-    expect(typeOf('thisRow["Tags"]', SCHEMA)).toEqual(listTypeOf(TEXT_TYPE));
+    expect(typeOf('thisPage["Tags"]', SCHEMA)).toEqual(listTypeOf(TEXT_TYPE));
   });
 
   it("types property refs as plain T, never T | blank", () => {
@@ -1028,15 +1028,9 @@ describe("bare names", () => {
     });
   });
 
-  it("reports a bare thisRow as an incomplete property reference", () => {
-    // `thisRow` is an unconditional synonym of `thisPage`, so a bare
-    // mention is a parse error asking for the property hop — never an
-    // unknown name.
-    const parsed = parseFormula("thisRow");
-    expect(parsed.ok).toBe(false);
-    if (!parsed.ok) {
-      expect(parsed.error.message).toContain('Expected "." or "["');
-    }
+  it("reports thisRow as a plain unknown name", () => {
+    // thisRow is not part of the language — it's an ordinary identifier.
+    expect(soleDiagnostic("thisRow").message).toBe('Unknown name "thisRow"');
   });
 });
 

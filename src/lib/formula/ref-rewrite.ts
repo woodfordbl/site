@@ -120,7 +120,7 @@ function fieldsByNormalizedName(
  * Rewrite every property reference whose name resolves to a field into the
  * canonical `prop("<fieldId>")` form:
  *
- * - Scope syntax (`thisPage.X` / `thisRow["X"]` — synonyms on every host)
+ * - Scope syntax (`thisPage.X` / `thisPage["X"]`)
  *   resolves by name exactly like `createFormulaRowScope` — normalized
  *   (trimmed, lowercased), first field in schema order wins on collisions.
  * - `prop("X")` where X is NOT a field id but normalizes to a field NAME

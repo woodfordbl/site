@@ -95,8 +95,8 @@ describe("pageFormulaCheckProperties", () => {
     expect(result.diagnostics.length).toBeGreaterThan(0);
   });
 
-  it("treats thisRow as a synonym of thisPage on ordinary pages too", () => {
-    const parsed = parseFormula("thisRow.Title");
+  it("checks the bracket spelling of a base field", () => {
+    const parsed = parseFormula('thisPage["Title"]');
     if (!parsed.ok) {
       throw new Error("Test setup: should parse");
     }

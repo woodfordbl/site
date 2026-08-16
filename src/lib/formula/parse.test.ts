@@ -154,14 +154,15 @@ describe("parse property references", () => {
     });
   });
 
-  it("treats thisRow as an unconditional synonym for thisPage", () => {
-    expect(sexpr(astOf("thisRow.Score"))).toBe(sexpr(astOf("thisPage.Score")));
-    expect(sexpr(astOf("thisRow.Title"))).toBe("prop:Title");
+  it("parses thisRow as an ordinary bare identifier", () => {
+    // thisRow is not part of the language — only thisPage is a scope root.
+    expect(sexpr(astOf("thisRow"))).toBe("name:thisRow");
+    expect(sexpr(astOf("thisRow.Title"))).toBe("(member name:thisRow Title)");
   });
 
   it("matches scope roots case-insensitively", () => {
     expect(sexpr(astOf("THISPAGE.Score"))).toBe("prop:Score");
-    expect(sexpr(astOf("thisrow.Score"))).toBe("prop:Score");
+    expect(sexpr(astOf("ThisPage.Score"))).toBe("prop:Score");
   });
 
   it("parses bracket access with spaces in the name", () => {
@@ -175,7 +176,7 @@ describe("parse property references", () => {
   });
 
   it("parses single-quoted bracket access", () => {
-    expect(sexpr(astOf("thisRow['A b c']"))).toBe("prop:A b c");
+    expect(sexpr(astOf("thisPage['A b c']"))).toBe("prop:A b c");
   });
 
   it("requires a property name after the dot", () => {
@@ -477,7 +478,7 @@ describe("parse member access", () => {
 
   it("keeps scope references as property nodes, not members", () => {
     expect(astOf("thisPage.X").kind).toBe("property");
-    expect(astOf("thisRow.X").kind).toBe("property");
+    expect(astOf("thisPage.X").kind).toBe("property");
   });
 
   it("parses members after scope and prop references", () => {
@@ -990,7 +991,6 @@ describe("parse let statements", () => {
     });
     expect(errorOf("let db = 1; 2").message).toContain("reserved");
     expect(errorOf("let thisPage = 1; 2").message).toContain("reserved");
-    expect(errorOf("let thisRow = 1; 2").message).toContain("reserved");
   });
 
   it("reports a stray semicolon with the statement-position hint", () => {
@@ -1159,9 +1159,9 @@ describe("v1 golden corpus", () => {
 
   const corpus: [string, string][] = [
     ["thisPage.Score", "prop:Score"],
-    ["thisRow.Score", "prop:Score"],
+    ["thisPage.Score", "prop:Score"],
     ['thisPage["Due Date"]', "prop:Due Date"],
-    ["thisRow['A b c']", "prop:A b c"],
+    ["thisPage['A b c']", "prop:A b c"],
     ['prop("f_8a2c")', "prop:f_8a2c"],
     ["now()", "(now )"],
     [

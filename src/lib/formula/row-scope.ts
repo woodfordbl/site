@@ -3,7 +3,7 @@
  * {@link FormulaScope} that resolves property references against a row's
  * fields and cell values — by exact field ID first (the canonical
  * `prop("<id>")` form), then by field NAME (case-insensitive, trimmed) for
- * the `thisPage.X` / `thisRow.X` display forms.
+ * the `thisPage.X` display form.
  *
  * Cell → value mapping mirrors the checker's `formulaPropertyValueType`
  * exactly, so checking and evaluation can never disagree: text/url → text,

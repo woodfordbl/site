@@ -103,10 +103,6 @@ describe("createFormulaRowScope name resolution", () => {
     );
   });
 
-  it("treats thisRow and thisPage as the same scope", () => {
-    expect(run("thisRow.Name")).toBe(run("thisPage.Name"));
-  });
-
   it("errors on unknown properties without throwing", () => {
     expect(errorMessage(run("thisPage.Nope"))).toBe('Unknown property "Nope"');
   });

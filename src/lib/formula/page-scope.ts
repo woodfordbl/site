@@ -17,8 +17,7 @@ import {
  * evaluate against (`docs/proposals/inline-prose-tokens.md`).
  *
  * Every page carries a small set of base fields, so `{{ thisPage.UpdatedAt }}`
- * works in any prose (`thisRow` is an unconditional synonym of `thisPage`,
- * so it resolves here too). A database ROW / template page is a superset:
+ * works in any prose. A database ROW / template page is a superset:
  * the row's own fields on top of these, with database fields winning a name
  * collision — that layering lives in `lib/databases/page-formula-fields.ts`
  * so this module stays free of database types.

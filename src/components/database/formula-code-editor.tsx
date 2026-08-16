@@ -66,11 +66,7 @@ import {
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
 import { type FormulaHoverInfo, formulaHoverAt } from "@/lib/formula/hover.ts";
-import {
-  FORMULA_PAGE_SCOPE_LABEL,
-  FORMULA_SCOPE_ROOT_LABELS,
-  parseFormula,
-} from "@/lib/formula/parse.ts";
+import { FORMULA_PAGE_SCOPE_LABEL, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalDatabaseReference,
   canonicalPropertyReference,
@@ -1476,12 +1472,12 @@ const IDENTIFIER_TAIL_RE = /[A-Za-z_][A-Za-z0-9_]*$/;
 const IDENTIFIER_VALID_FOR_RE = /^[A-Za-z0-9_]*$/;
 
 /**
- * A scope-root reference prefix (`thisPage.` / `thisRow.`, any casing)
- * directly before a position: completions triggered there narrow to
- * properties and replace the WHOLE reference with one canonical chip.
+ * A scope-root reference prefix (`thisPage.`, any casing) directly before a
+ * position: completions triggered there narrow to properties and replace
+ * the WHOLE reference with one canonical chip.
  */
 const SCOPE_PREFIX_RE = new RegExp(
-  `(?:${FORMULA_SCOPE_ROOT_LABELS.join("|")})\\s*\\.\\s*$`,
+  `${FORMULA_PAGE_SCOPE_LABEL}\\s*\\.\\s*$`,
   "i"
 );
 
@@ -1584,7 +1580,7 @@ const completionFields = new WeakMap<Completion, DatabaseField>();
  * The leading icon of each completion row (replaces CM's built-in icon
  * classes): the field-type/custom icon for properties, the database glyph
  * for database options, a function glyph for functions, and the default
- * page/document glyph for `thisPage`/`thisRow`. Completions without an
+ * page/document glyph for `thisPage`. Completions without an
  * icon (`db`, keywords, operators) return null so they left-align — no
  * reserved empty column.
  */
@@ -1736,9 +1732,7 @@ const SCOPE_ROOT_INFO: Record<string, string> = {
  * Scope-root references complete too — typing `thi…` lands on `thisPage.`
  * — and accepting one immediately reopens the popup, which the trailing
  * dot puts in property-only mode, so the property pick (which replaces the
- * whole reference with one canonical chip) is a keystroke away. Only
- * `thisPage` is offered: `thisRow` stays accepted input everywhere (an
- * unconditional synonym) but the system teaches one spelling.
+ * whole reference with one canonical chip) is a keystroke away.
  */
 function scopeRootCompletions(): Completion[] {
   return [FORMULA_PAGE_SCOPE_LABEL].map((label) => ({

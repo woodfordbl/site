@@ -279,25 +279,6 @@ describe("FormulaEditorPanel", () => {
     expect(onSave).toHaveBeenCalledWith("abs(-2)");
   });
 
-  it("treats thisRow as a synonym of thisPage on every host", async () => {
-    const onSave = vi.fn();
-    render(
-      <FormulaEditorPanel
-        expression=""
-        fields={FIELDS}
-        onSave={onSave}
-        previewRows={PREVIEW_ROWS}
-      />
-    );
-    await flushFrames();
-
-    const textarea = screen.getByLabelText("Formula expression");
-    fireEvent.change(textarea, { target: { value: "thisRow.Price * 2" } });
-    // The reference canonicalizes like thisPage.Price would.
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
-  });
-
   it("humanizes stored canonical expressions into the draft", async () => {
     renderPanel(vi.fn(), 'prop("f-price") * prop("f-qty")');
     await flushFrames();

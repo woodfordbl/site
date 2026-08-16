@@ -36,40 +36,17 @@ export type ParseFormulaResult =
 /** Lowercased `thisPage` scope root — available on every page. */
 export const FORMULA_PAGE_SCOPE_ROOT = "thispage";
 
-/**
- * Lowercased `thisRow` scope root — an unconditional synonym of `thisPage`.
- * Kept for compatibility with hand-typed input and stored formulas; the
- * system itself only ever writes `thisPage` (see `humanizeExpression`) and
- * autocomplete offers only `thisPage`.
- */
-export const FORMULA_ROW_SCOPE_ROOT = "thisrow";
-
 /** Display casing for {@link FORMULA_PAGE_SCOPE_ROOT}. */
 export const FORMULA_PAGE_SCOPE_LABEL = "thisPage";
 
-/** Display casing for {@link FORMULA_ROW_SCOPE_ROOT}. */
-export const FORMULA_ROW_SCOPE_LABEL = "thisRow";
-
 /**
- * The scope roots the grammar accepts (`thisPage` + `thisRow`, lowercased).
- * `thisRow` is a synonym of `thisPage` on every host: both parse to the same
- * property node, and resolution against the page or row scope happens at
- * check/evaluation time. Name validators (user-defined functions) reserve
- * both.
+ * The scope roots the grammar accepts — just `thisPage` (lowercased; the
+ * grammar is case-blind). Name validators (user-defined functions) reserve
+ * it.
  */
 export const FORMULA_SCOPE_ROOTS: ReadonlySet<string> = new Set([
   FORMULA_PAGE_SCOPE_ROOT,
-  FORMULA_ROW_SCOPE_ROOT,
 ]);
-
-/**
- * Display labels for {@link FORMULA_SCOPE_ROOTS} (grammar is case-blind).
- * Autocomplete offers only `thisPage`; `thisRow` stays accepted input.
- */
-export const FORMULA_SCOPE_ROOT_LABELS = [
-  FORMULA_PAGE_SCOPE_LABEL,
-  FORMULA_ROW_SCOPE_LABEL,
-] as const;
 
 /**
  * The canonical reference form `prop("<fieldId>")` (lowercased). Syntax, not
@@ -102,7 +79,7 @@ export const FORMULA_RESERVED_WORDS: ReadonlySet<string> = RESERVED_WORDS;
 /**
  * Names a binder (`let` statement or lambda parameter) can't use, beyond
  * {@link RESERVED_WORDS}: the reference syntax roots. A binding named
- * `prop`/`db`/`thisPage`/`thisRow` could never be read back — a bare mention
+ * `prop`/`db`/`thisPage` could never be read back — a bare mention
  * re-enters the reference grammar and fails with a confusing message — so
  * binders reject them up front, matching the user-function name rules.
  */
@@ -909,10 +886,10 @@ class Parser {
 
   /**
    * Validate a parameter token. Reserved words can't shadow
-   * literals/operators, and the reference roots (`prop`/`db`/`thisPage`/
-   * `thisRow`) are rejected too — a parameter with one of those names could
-   * never be read back (a bare mention re-enters the reference grammar and
-   * fails with a far worse message), matching the `let`-statement and
+   * literals/operators, and the reference roots (`prop`/`db`/`thisPage`)
+   * are rejected too — a parameter with one of those names could never be
+   * read back (a bare mention re-enters the reference grammar and fails
+   * with a far worse message), matching the `let`-statement and
    * user-function parameter rules.
    */
   private toLambdaParam(token: FormulaToken): FormulaLambdaParam {

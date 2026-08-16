@@ -45,18 +45,18 @@ describe("highlightFormula", () => {
       "operator:*",
       "number:2",
     ]);
-    expect(spansOf('thisRow["Unit Count"]')).toEqual([
-      'property:thisRow["Unit Count"]',
+    expect(spansOf('thisPage["Unit Count"]')).toEqual([
+      'property:thisPage["Unit Count"]',
     ]);
   });
 
-  it("classifies thisRow as a property root on every host", () => {
+  it("classifies thisRow as an ordinary name, not a scope root", () => {
     const source = "thisRow.Title";
     expect(
       highlightFormula(source).map(
         (span) => `${span.kind}:${source.slice(span.start, span.end)}`
       )
-    ).toEqual(["property:thisRow.Title"]);
+    ).toEqual(["name:thisRow", "operator:.", "property:Title"]);
   });
 
   it("spans a whole prop() reference including the quoted id", () => {

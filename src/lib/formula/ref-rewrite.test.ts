@@ -32,8 +32,8 @@ describe("canonicalizeExpression", () => {
     });
   });
 
-  it("resolves names case-insensitively and via thisRow", () => {
-    expect(canonicalizeExpression("thisrow.price", FIELDS).text).toBe(
+  it("resolves names case-insensitively", () => {
+    expect(canonicalizeExpression("thispage.price", FIELDS).text).toBe(
       'prop("f-price")'
     );
     expect(canonicalizeExpression('THISPAGE["  price  "]', FIELDS).text).toBe(
@@ -178,7 +178,7 @@ describe("round-trips", () => {
     const cases: [string, string][] = [
       ["thispage.price * 2", "thisPage.Price * 2"],
       [
-        'thisRow["unit count"] + thisPage.PRICE',
+        'thisPage["unit count"] + thisPage.PRICE',
         'thisPage["Unit Count"] + thisPage.Price',
       ],
       ['thisPage["A \\"B\\" \\\\C"]', 'thisPage["A \\"B\\" \\\\C"]'],

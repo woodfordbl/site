@@ -12,7 +12,7 @@
  * - lex as exactly one identifier token (the REAL tokenizer decides, the
  *   same never-drifts discipline as `rollup-template.ts`);
  * - avoid the grammar's reserved words (`true`/`and`/…), the reference
- *   roots (`prop`/`db`/`thisPage`/`thisRow` — a call would re-enter the
+ *   roots (`prop`/`db`/`thisPage` — a call would re-enter the
  *   reference grammar), and the evaluator special forms (`let`/`lets`,
  *   which are matched before any function lookup);
  * - avoid every catalog function name AND alias (catalog-first resolution

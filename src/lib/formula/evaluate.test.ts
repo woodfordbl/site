@@ -849,7 +849,7 @@ describe("scope properties", () => {
   it("resolves values from the scope", () => {
     const scope = scopeOf({ Score: 10, Name: "Ada", Done: true, Empty: null });
     expect(run("thisPage.Score * 2", scope)).toBe(20);
-    expect(run('thisRow.Name + "!"', scope)).toBe("Ada!");
+    expect(run('thisPage.Name + "!"', scope)).toBe("Ada!");
     expect(run("thisPage.Done and true", scope)).toBe(true);
     expect(run("empty(thisPage.Empty)", scope)).toBe(true);
     expect(run('prop("Score") + 1', scope)).toBe(11);
