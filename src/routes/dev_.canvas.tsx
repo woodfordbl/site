@@ -17,7 +17,7 @@ import {
 
 export const Route = createFileRoute("/dev_/canvas")({
   beforeLoad: () => {
-    if (!import.meta.env.DEV) {
+    if (!import.meta.env.VITE_DEV_ROUTES_ENABLED) {
       throw notFound();
     }
   },

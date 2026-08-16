@@ -20,6 +20,18 @@ const SITE_ORIGIN = resolveSiteOrigin() ?? "http://localhost:3000";
 // "preview" | "development"; plain local runs fall back to "development".
 const DEPLOY_ENV = process.env.VERCEL_ENV || "development";
 
+// Whether the /dev routes (component showcase, canvas fixture, OG playground)
+// are reachable: everywhere except production, so a branch can be reviewed on
+// its Vercel preview against a real production build.
+//
+// This is a `define` rather than a helper module export on purpose. Each route
+// gates its `lazy(() => import(…))` on this value, and only a literal
+// substituted into the route module itself folds at build time — an imported
+// const does not propagate, and Rollup then emits the dev-only chunks
+// (component-showcase, MapLibre, og-playground) into the production bundle as
+// dead weight.
+const DEV_ROUTES_ENABLED = DEPLOY_ENV !== "production";
+
 const ogHandler = fileURLToPath(
   new URL("./routes/api/og.get.ts", import.meta.url)
 );
@@ -102,6 +114,8 @@ const config = defineConfig({
   define: {
     "import.meta.env.VITE_SITE_ORIGIN": JSON.stringify(SITE_ORIGIN),
     "import.meta.env.VITE_DEPLOY_ENV": JSON.stringify(DEPLOY_ENV),
+    "import.meta.env.VITE_DEV_ROUTES_ENABLED":
+      JSON.stringify(DEV_ROUTES_ENABLED),
   },
   server: {
     // Honor an externally-assigned port (e.g. a preview harness sets PORT);

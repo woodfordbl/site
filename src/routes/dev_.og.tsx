@@ -4,7 +4,7 @@ import { lazy, Suspense } from "react";
 
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
 
-const OgPlayground = import.meta.env.DEV
+const OgPlayground = import.meta.env.VITE_DEV_ROUTES_ENABLED
   ? lazy(() =>
       import("@/components/dev/og-playground.tsx").then((module) => ({
         default: module.OgPlayground,
@@ -26,7 +26,7 @@ function OgPlaygroundRoute() {
 
 export const Route = createFileRoute("/dev_/og")({
   beforeLoad: () => {
-    if (!import.meta.env.DEV) {
+    if (!import.meta.env.VITE_DEV_ROUTES_ENABLED) {
       throw notFound();
     }
   },
