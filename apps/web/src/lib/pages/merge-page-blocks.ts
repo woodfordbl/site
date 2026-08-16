@@ -1,0 +1,214 @@
+import { hashBlock, hashPageBlocks } from "@/lib/content/block-hash.ts";
+import type { Block } from "@/lib/schemas/block.ts";
+
+export interface PageBlocksMergeResult {
+  /** True when `merged` differs from the local document (something to apply). */
+  changed: boolean;
+  /** Blocks where both sides changed differently — resolved to the local side. */
+  conflictBlockIds: string[];
+  /** Merged flat document (already in final order). */
+  merged: Block[];
+  /** Remote-driven changes applied (adds + edits + deletes taken from remote). */
+  tookRemote: number;
+}
+
+/**
+ * Three-way merge of a page's flat block document. `base` is the shipped
+ * content the local overlay was seeded from (the stored page baseline),
+ * `local` is the current local document (already in `blockOrder` order), and
+ * `remote` is the newly shipped content.
+ *
+ * Blocks are id-keyed, so this is a per-block three-way resolution, not a text
+ * diff. Per id: a side that is unchanged from base yields to the other side;
+ * identical results merge trivially; when both sides changed differently
+ * (including edit-vs-delete in either direction) the **local side wins** and
+ * the id is reported in `conflictBlockIds` — nothing is ever resolved to
+ * silent data loss of a local edit. `parentId`/`indent` live inside block
+ * content, so moves count as edits; hashes come from `hashBlock`.
+ *
+ * Order: whichever side still matches the base sequence yields the ordering
+ * spine to the other (local wins when both reordered), and blocks missing from
+ * the spine are spliced in after their nearest surviving predecessor from
+ * their own side's sequence, preserving runs of consecutive insertions.
+ */
+export function mergePageBlocks(
+  base: Block[],
+  local: Block[],
+  remote: Block[]
+): PageBlocksMergeResult {
+  const baseById = new Map(base.map((block) => [block.id, block]));
+  const localById = new Map(local.map((block) => [block.id, block]));
+  const remoteById = new Map(remote.map((block) => [block.id, block]));
+
+  const hashes = new Map<Block, string>();
+  const hashOf = (block: Block): string => {
+    let hash = hashes.get(block);
+    if (hash === undefined) {
+      hash = hashBlock(block);
+      hashes.set(block, hash);
+    }
+    return hash;
+  };
+
+  const conflictBlockIds: string[] = [];
+  let tookRemote = 0;
+
+  const ids = new Set<string>([
+    ...base.map((block) => block.id),
+    ...local.map((block) => block.id),
+    ...remote.map((block) => block.id),
+  ]);
+
+  /** id → merged block; absent = deleted in the merged document. */
+  const mergedById = new Map<string, Block>();
+
+  for (const id of ids) {
+    const resolution = resolveMergedBlock(
+      baseById.get(id),
+      localById.get(id),
+      remoteById.get(id),
+      hashOf
+    );
+    if (resolution.block) {
+      mergedById.set(id, resolution.block);
+    }
+    if (resolution.conflict) {
+      conflictBlockIds.push(id);
+    }
+    if (resolution.tookRemote) {
+      tookRemote += 1;
+    }
+  }
+
+  const merged = orderMergedBlocks(base, local, remote, mergedById);
+
+  return {
+    merged,
+    conflictBlockIds,
+    tookRemote,
+    changed: hashPageBlocks(merged) !== hashPageBlocks(local),
+  };
+}
+
+interface BlockResolution {
+  /** The block to include, or undefined when it is deleted in the merge. */
+  block?: Block;
+  conflict?: boolean;
+  tookRemote?: boolean;
+}
+
+function resolveBothPresent(
+  inBase: Block | undefined,
+  inLocal: Block,
+  inRemote: Block,
+  hashOf: (block: Block) => string
+): BlockResolution {
+  const localHash = hashOf(inLocal);
+  const remoteHash = hashOf(inRemote);
+  if (localHash === remoteHash) {
+    return { block: inLocal };
+  }
+  const baseHash = inBase ? hashOf(inBase) : null;
+  if (baseHash === localHash) {
+    return { block: inRemote, tookRemote: true };
+  }
+  if (baseHash === remoteHash) {
+    return { block: inLocal };
+  }
+  // Divergent edits (or an id independently created on both sides).
+  return { block: inLocal, conflict: true };
+}
+
+function resolveMergedBlock(
+  inBase: Block | undefined,
+  inLocal: Block | undefined,
+  inRemote: Block | undefined,
+  hashOf: (block: Block) => string
+): BlockResolution {
+  if (inLocal && inRemote) {
+    return resolveBothPresent(inBase, inLocal, inRemote, hashOf);
+  }
+
+  if (inLocal) {
+    if (!inBase) {
+      return { block: inLocal }; // local-only addition
+    }
+    if (hashOf(inLocal) === hashOf(inBase)) {
+      return { tookRemote: true }; // take the remote deletion
+    }
+    // Edit-vs-delete: keep the local edit, flag it.
+    return { block: inLocal, conflict: true };
+  }
+
+  if (inRemote) {
+    if (!inBase) {
+      return { block: inRemote, tookRemote: true }; // remote-only addition
+    }
+    if (hashOf(inRemote) === hashOf(inBase)) {
+      return {}; // keep the local deletion
+    }
+    // Delete-vs-edit: the local deletion wins, flag it.
+    return { conflict: true };
+  }
+
+  // In base only: deleted on both sides — stays deleted.
+  return {};
+}
+
+function sharedSequence(order: string[], other: ReadonlySet<string>): string {
+  // Delimiter that cannot appear in block ids, so joined sequences stay unambiguous.
+  return order.filter((id) => other.has(id)).join("\u0000");
+}
+
+function orderMergedBlocks(
+  base: Block[],
+  local: Block[],
+  remote: Block[],
+  mergedById: ReadonlyMap<string, Block>
+): Block[] {
+  const baseOrder = base.map((block) => block.id);
+  const localOrder = local.map((block) => block.id);
+  const remoteOrder = remote.map((block) => block.id);
+  const baseIds = new Set(baseOrder);
+  const localIds = new Set(localOrder);
+
+  // Local kept the base sequence → adopt remote's order as the spine (it may
+  // carry deliberate remote moves); otherwise local's order wins.
+  const localReordered =
+    sharedSequence(localOrder, baseIds) !== sharedSequence(baseOrder, localIds);
+  const spineSource = localReordered ? localOrder : remoteOrder;
+  const donorSource = localReordered ? remoteOrder : localOrder;
+
+  const spine = spineSource.filter((id) => mergedById.has(id));
+  const inSpine = new Set(spine);
+
+  // Splice donor-side survivors (e.g. remote additions when local order won)
+  // after their nearest preceding donor neighbor already in the spine. Runs of
+  // consecutive additions stay in donor order because each insertion becomes
+  // the next one's predecessor.
+  for (let index = 0; index < donorSource.length; index++) {
+    const id = donorSource[index];
+    if (!mergedById.has(id) || inSpine.has(id)) {
+      continue;
+    }
+    let insertAt = 0;
+    for (let cursor = index - 1; cursor >= 0; cursor--) {
+      const predecessor = donorSource[cursor];
+      const spineIndex = spine.indexOf(predecessor);
+      if (spineIndex !== -1) {
+        insertAt = spineIndex + 1;
+        break;
+      }
+    }
+    spine.splice(insertAt, 0, id);
+    inSpine.add(id);
+  }
+
+  return spine.map((id) => {
+    const block = mergedById.get(id);
+    if (!block) {
+      throw new Error(`merged order references missing block: ${id}`);
+    }
+    return block;
+  });
+}

@@ -1,0 +1,38 @@
+import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
+import { IconCheck } from "@tabler/icons-react";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
+import { cn } from "@/lib/utils.ts";
+
+function Checkbox({
+  className,
+  onCheckedChange,
+  ...props
+}: CheckboxPrimitive.Root.Props) {
+  const haptic = useHaptics();
+  return (
+    <CheckboxPrimitive.Root
+      className={cn(
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-border outline-none transition-colors after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 group-has-disabled/field:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground aria-invalid:data-checked:border-destructive dark:bg-input/30 dark:data-checked:bg-primary dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 dark:aria-invalid:data-checked:border-destructive/50",
+        className
+      )}
+      data-slot="checkbox"
+      onCheckedChange={(checked, eventDetails) => {
+        // A toggle is a discrete choice changing — light tick on coarse pointers
+        // (no-op on desktop via the provider). Fire before delegating so the
+        // feedback is immediate regardless of what the handler does.
+        haptic("selection");
+        onCheckedChange?.(checked, eventDetails);
+      }}
+      {...props}
+    >
+      <CheckboxPrimitive.Indicator
+        className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
+        data-slot="checkbox-indicator"
+      >
+        <IconCheck />
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
+  );
+}
+
+export { Checkbox };

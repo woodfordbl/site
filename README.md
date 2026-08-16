@@ -1,9 +1,37 @@
-hi i'm [blake](linkedin.com/in/blakewoodford)
+# site
 
-this is my personal site
+Personal site of [Blake Woodford](https://linkedin.com/in/blakewoodford), built as a
+local-first workspace platform: a TanStack Start app whose TanStack DB collections
+persist to localStorage/IndexedDB, layered over shipped blog content that renders
+from build-time JSON.
 
-i used it as an excuse to play with some ai tools, the tanstack ecosystem, and explore client first apps i built this to be scalable to a real time sync notetaking and collaboration platform similar to [notion](https://notion.so) or [obsidean](https://obsidian.md/) but with an extreme emphasis on performance and user interaction. it's fully compatable with [electricSQL](https://tanstack.com/db/latest/docs/collections/electric-collection) and uses [tanstackDB](https://tanstack.com/db/latest) under the hood for the reactive client store; however, for now everything is stored locally and uses browser primitives.
+## Repository layout
 
-enjoy!
+pnpm workspace monorepo:
 
-[buhlake.com](buhlake.com)
+- `apps/web` — the TanStack Start application (routes, editor, collections,
+  Nitro API handlers, scripts).
+- `packages/` — reserved for shared packages as they materialize.
+- `docs/proposals/` — active design plans (sync engine, file mirror, platform
+  architecture).
+- `dev/` — local development infrastructure.
+
+## Running it
+
+```sh
+pnpm install
+pnpm dev
+```
+
+`pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:size` are the
+commit gates (root scripts delegate into `apps/web`).
+
+## Architecture in brief
+
+TanStack Start + Nitro on Vercel. The canvas editor is a custom command-bus
+design (UI → commands → reducer → effects → TanStack DB transactions); pages
+and blocks are flat, id-keyed rows; shipped content renders server-side and is
+lazily seeded into local collections on first edit. Documentation lives in the
+code as Google-style JSDoc (see `AGENTS.md` for the standard); start from the
+`@fileoverview` blocks in `apps/web/src/db/collections/` and
+`apps/web/src/lib/canvas/`.
