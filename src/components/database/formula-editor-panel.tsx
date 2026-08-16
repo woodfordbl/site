@@ -1,5 +1,4 @@
 import {
-  IconAlertTriangle,
   IconChevronDown,
   IconMathFunction,
   IconPlus,
@@ -49,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select.tsx";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
 import { useHaptics } from "@/hooks/haptics.ts";
@@ -1019,8 +1019,12 @@ function SheetHeader({
   doneDisabled: boolean;
   onCancel: (() => void) | undefined;
   onDone: () => void;
-  /** Tapping Done while invalid: explain instead of a dead button. */
-  onDoneBlocked: () => void;
+  /**
+   * Tapping Done while invalid: explain instead of a dead button. Optional —
+   * the studio's always-visible status line already explains itself, so only
+   * the sheet (whose pill collapses the message) needs the expansion hook.
+   */
+  onDoneBlocked?: () => void;
   title?: string;
 }): ReactNode {
   const haptic = useHaptics();
@@ -1049,7 +1053,7 @@ function SheetHeader({
           // status pill say WHY Done won't fire.
           if (doneDisabled) {
             haptic("disabled");
-            onDoneBlocked();
+            onDoneBlocked?.();
             return;
           }
           onDone();
@@ -1086,85 +1090,6 @@ function SheetRollupButton({
       <IconSum />
       Rollup
     </Button>
-  );
-}
-
-/**
- * Every issue in the draft as studio diagnostic rows: the parse error (as a
- * one-character span at its position), else the checker's span-accurate
- * diagnostics. Empty for a blank or clean draft.
- */
-function studioDiagnosticEntriesOf(
-  parsed: ParseFormulaResult | null,
-  checked: FormulaCheckResult | null
-): StudioDiagnosticEntry[] {
-  if (parsed === null) {
-    return [];
-  }
-  if (!parsed.ok) {
-    return [
-      {
-        end: parsed.error.position + 1,
-        message: parsed.error.message,
-        start: parsed.error.position,
-      },
-    ];
-  }
-  return (checked?.diagnostics ?? []).map((diagnostic) => ({
-    end: diagnostic.end,
-    message: diagnostic.message,
-    start: diagnostic.start,
-  }));
-}
-
-/** One tappable issue for the studio diagnostics list. */
-interface StudioDiagnosticEntry {
-  /** Canonical span end (exclusive); parse errors get a 1-char span. */
-  end: number;
-  message: string;
-  /** Canonical span start — the CM6 doc IS the canonical text. */
-  start: number;
-}
-
-/**
- * The studio's diagnostics: EVERY issue as a tappable row (the sheet's pill
- * shows only the first, as prose with a character offset — useless on a
- * phone). Tapping a row selects the offending span in the editor and scrolls
- * it into view; on the textarea fallback the rows still list every message,
- * they just can't jump. Renders nothing while the draft is clean.
- */
-function StudioDiagnostics({
-  entries,
-  onJump,
-}: {
-  entries: readonly StudioDiagnosticEntry[];
-  onJump: (start: number, end: number) => void;
-}): ReactNode {
-  if (entries.length === 0) {
-    return null;
-  }
-  return (
-    <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
-      {entries.map((entry, index) => (
-        <button
-          className={cn(
-            "flex min-h-9 pointer-coarse:min-h-10 w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
-            index > 0 && "border-border/60 border-t"
-          )}
-          key={`${entry.start}:${entry.message}`}
-          onClick={() => {
-            onJump(entry.start, entry.end);
-          }}
-          type="button"
-        >
-          <IconAlertTriangle className="size-3.5 shrink-0 stroke-[1.5px] text-destructive" />
-          <span className="min-w-0 flex-1 truncate text-foreground">
-            {entry.message}
-          </span>
-          <span className="shrink-0 text-muted-foreground">Go ›</span>
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -1221,26 +1146,23 @@ function StudioTray({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-1.5">
-        <div className="flex flex-1 rounded-lg bg-muted p-0.5">
-          {STUDIO_TABS.map((candidate) => (
-            <button
-              aria-pressed={tab === candidate.key}
-              className={cn(
-                "min-h-8 pointer-coarse:min-h-9 flex-1 rounded-md text-xs",
-                tab === candidate.key
-                  ? "bg-background font-medium text-foreground shadow-sm"
-                  : "text-muted-foreground"
-              )}
-              key={candidate.key}
-              onClick={() => {
-                setTab(candidate.key);
-              }}
-              type="button"
-            >
-              {candidate.label}
-            </button>
-          ))}
-        </div>
+        {/* The app-wide tabs (indicator variant, same as the view switcher) —
+            not a bespoke segmented control. */}
+        <Tabs
+          className="min-w-0 flex-1"
+          onValueChange={(value) => {
+            setTab(value as StudioTrayTab);
+          }}
+          value={tab}
+        >
+          <TabsList className="pointer-coarse:h-9 w-full" variant="indicator">
+            {STUDIO_TABS.map((candidate) => (
+              <TabsTrigger key={candidate.key} value={candidate.key}>
+                {candidate.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         {rollupAvailable ? (
           <Button
             className="pointer-coarse:h-9 shrink-0"
@@ -1431,13 +1353,13 @@ function StudioFunctionRow({
 
 /**
  * Arranges the full-screen studio's slots in one column: header (Cancel /
- * column name / Done), the roomy editor, tappable diagnostics, the
- * status-pill + preview row, then the reference tray filling everything
- * below (the open rollup wizard swaps in for the tray). The bottom padding
- * clears the keyboard-anchored accessory row parked at the viewport bottom.
+ * column name / Done), the roomy editor, the status line + preview (the same
+ * plain red-text diagnostics the desktop layouts show — no boxed rows, no
+ * validity pill), then the reference tray filling everything below (the open
+ * rollup wizard swaps in for the tray). The bottom padding clears the
+ * keyboard-anchored accessory row parked at the viewport bottom.
  */
 function StudioLayout({
-  diagnostics,
   editor,
   header,
   preview,
@@ -1445,7 +1367,6 @@ function StudioLayout({
   tray,
   wizard,
 }: {
-  diagnostics: ReactNode;
   editor: ReactNode;
   header: ReactNode;
   preview: ReactNode;
@@ -1458,11 +1379,8 @@ function StudioLayout({
     <div className="flex min-h-0 w-full flex-1 flex-col gap-2 p-1 pb-14">
       {header}
       {editor}
-      {diagnostics}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        {status}
-        {preview}
-      </div>
+      {status}
+      {preview}
       {wizard ?? tray}
     </div>
   );
@@ -2177,40 +2095,17 @@ export function FormulaEditorPanel({
     return (
       <>
         <StudioLayout
-          diagnostics={
-            <StudioDiagnostics
-              entries={studioDiagnosticEntriesOf(parsed, checked)}
-              onJump={(start, end) => {
-                // Diagnostics are canonical offsets and the CM6 doc IS the
-                // canonical text; the textarea fallback can't jump (its
-                // display text is humanized), so the handle being null is a
-                // clean no-op.
-                codeEditorRef.current?.selectRange(start, end);
-              }}
-            />
-          }
           editor={editorSurface}
           header={
             <SheetHeader
               doneDisabled={saveDisabled}
               onCancel={onCancel}
               onDone={save}
-              onDoneBlocked={() => {
-                setStatusExpanded(true);
-              }}
               title={title}
             />
           }
           preview={previewLine}
-          status={
-            <StatusPill
-              checked={checked}
-              displayPosition={displayPosition}
-              expanded={statusExpanded}
-              onExpandedChange={setStatusExpanded}
-              parsed={parsed}
-            />
-          }
+          status={statusRow}
           tray={
             <StudioTray
               entries={{

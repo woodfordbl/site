@@ -129,6 +129,9 @@ export function MobileEditorToolbar() {
   const anchorRef = useRef<HTMLDivElement>(null);
   // Row of the focused field (null when focus is on the title or off-canvas).
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
+  // Whether the focused field is a rich-text surface — the only place inline
+  // formula marks can live, so the formula button hides everywhere else.
+  const [richTextFocused, setRichTextFocused] = useState(false);
   const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
   // Captured when a picker opens, since opening it blurs the field.
   const pickerTargetRef = useRef<string | null>(null);
@@ -138,11 +141,17 @@ export function MobileEditorToolbar() {
   useKeyboardToolbarAnchor(anchorRef, visible);
 
   useEffect(() => {
-    const onFocusIn = () => setFocusedRowId(getActiveCanvasRowId());
+    const onFocusIn = () => {
+      setFocusedRowId(getActiveCanvasRowId());
+      setRichTextFocused(activeRichTextField() !== null);
+    };
     // Scrolling does not blur the field, so the bar stays put through scroll;
     // only a real blur (keyboard dismissed / focus left the canvas) hides it.
     const onFocusOut = () => {
-      requestAnimationFrame(() => setFocusedRowId(getActiveCanvasRowId()));
+      requestAnimationFrame(() => {
+        setFocusedRowId(getActiveCanvasRowId());
+        setRichTextFocused(activeRichTextField() !== null);
+      });
     };
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
@@ -358,13 +367,14 @@ export function MobileEditorToolbar() {
               >
                 <IconExchange aria-hidden />
               </ToolbarButton>
-              <ToolbarButton
-                canRun={() => activeRichTextField() !== null}
-                label="Insert formula"
-                onPress={handleInsertFormula}
-              >
-                <IconMathFunction aria-hidden />
-              </ToolbarButton>
+              {richTextFocused ? (
+                <ToolbarButton
+                  label="Insert formula"
+                  onPress={handleInsertFormula}
+                >
+                  <IconMathFunction aria-hidden />
+                </ToolbarButton>
+              ) : null}
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
               <ToolbarButton

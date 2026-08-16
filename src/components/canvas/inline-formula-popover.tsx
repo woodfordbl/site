@@ -112,6 +112,40 @@ function resolveTarget(node: Node | null): PopoverTarget | null {
   };
 }
 
+/**
+ * Slop around a token's rect for touch hit-testing. Small on purpose: its job
+ * is to forgive a slightly-off fingertip, not to grow the target — iOS Safari
+ * already maps a tap in the blank run to the right of a line onto the line's
+ * LAST inline element, and a generous slop would re-create exactly the bug
+ * the rect check exists to prevent (a tap meant to place the caret after the
+ * token reading as a tap ON the token).
+ */
+const TOUCH_SLOP_PX = 4;
+
+/**
+ * The token target for a touch press, only when the touch point actually
+ * falls on the token's box (± slop). `resolveTarget` alone is not enough on
+ * touch: the browser's tap heuristics can deliver a token as `event.target`
+ * for a press that was visually nowhere near it.
+ */
+function resolveTouchTarget(event: PointerEvent): PopoverTarget | null {
+  const element =
+    event.target instanceof Element
+      ? event.target
+      : (event.target as Node | null)?.parentElement;
+  const token = element?.closest(FORMULA_TOKEN_SELECTOR);
+  if (!(token instanceof HTMLElement)) {
+    return null;
+  }
+  const rect = token.getBoundingClientRect();
+  const inside =
+    event.clientX >= rect.left - TOUCH_SLOP_PX &&
+    event.clientX <= rect.right + TOUCH_SLOP_PX &&
+    event.clientY >= rect.top - TOUCH_SLOP_PX &&
+    event.clientY <= rect.bottom + TOUCH_SLOP_PX;
+  return inside ? resolveTarget(token) : null;
+}
+
 /** The token at `offset` in `rowId`'s field, once the canvas has rendered it. */
 function targetForToken(rowId: string, offset: number): PopoverTarget | null {
   const field = document
@@ -145,12 +179,16 @@ export function InlineFormulaPopover() {
      * panel the menu belonged to.
      */
     let pressedInsidePanel = false;
+    /**
+     * Deadline for swallowing the tap's synthetic click after a touch open.
+     * The drawer mounts between pointerup and the click the browser then
+     * synthesizes, so that click lands on the drawer's overlay — which vaul
+     * reads as an outside click and closes the drawer it just opened.
+     */
+    let swallowClickDeadline = 0;
     const handlePointerDown = (event: PointerEvent) => {
       pressedInsidePanel = isInsidePanel(event.target as Node | null);
-      if (
-        event.pointerType !== "mouse" &&
-        resolveTarget(event.target as Node | null)
-      ) {
+      if (event.pointerType !== "mouse" && resolveTouchTarget(event)) {
         // A touch press on a token is claimed before the browser acts on it:
         // preventing the pointerdown default stops the field from taking
         // focus (no keyboard flash under the drawer) and suppresses the
@@ -164,15 +202,24 @@ export function InlineFormulaPopover() {
       if (event.pointerType === "mouse") {
         return;
       }
-      const next = resolveTarget(event.target as Node | null);
+      const next = resolveTouchTarget(event);
       if (next) {
         // Touch opens on pointerup rather than waiting for a click: iOS
         // Safari does not reliably synthesize one for a tap on a
         // `contenteditable=false` island inside an editable field — the tap
         // gets consumed by selection handling, which left tokens un-tappable
-        // on phones. If a click does arrive it resolves the same token and
-        // re-sets the same target, which is harmless.
+        // on phones.
+        swallowClickDeadline = performance.now() + 400;
         setTarget(next);
+      }
+    };
+    const handleClickCapture = (event: MouseEvent) => {
+      if (performance.now() <= swallowClickDeadline) {
+        // The opening tap's synthetic click — it belongs to the gesture that
+        // opened the drawer, not to anything now under the finger.
+        swallowClickDeadline = 0;
+        event.preventDefault();
+        event.stopPropagation();
       }
     };
     const handleClick = (event: MouseEvent) => {
@@ -211,11 +258,13 @@ export function InlineFormulaPopover() {
     // mounting after the canvas has finished with the press.
     document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("click", handleClickCapture, true);
     document.addEventListener("click", handleClick);
     document.addEventListener(INLINE_FORMULA_EDIT_EVENT, handleEditRequest);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("click", handleClickCapture, true);
       document.removeEventListener("click", handleClick);
       document.removeEventListener(
         INLINE_FORMULA_EDIT_EVENT,

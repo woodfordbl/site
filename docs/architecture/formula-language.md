@@ -689,22 +689,20 @@ Anatomy, top to bottom:
 
 - **Header** — Cancel / *column name* / Done (the shared `SheetHeader` with a
   `title`; Done gated exactly like Save but rendered `aria-disabled` rather
-  than dead — a blocked tap fires the `disabled` boundary haptic and expands
-  the status pill).
+  than dead — a blocked tap fires the `disabled` boundary haptic; the
+  always-visible status line below already explains why).
 - **Editor** — CM6 even on coarse pointers, with real multi-line room
   (`min-h-36` content, `30svh` scroller cap, `text-sm`; the textarea fallback
   is `text-base` so iOS never focus-zooms).
-- **Diagnostics rows** — EVERY parse/checker issue as a tappable row
-  (`StudioDiagnostics`): ⚠ message + "Go ›", where a tap calls the editor
-  handle's `selectRange(start, end)` to select the offending span and scroll
-  it into view. Diagnostics are canonical offsets and the CM6 doc IS the
-  canonical text, so no translation is needed; the textarea fallback lists
-  the messages but cannot jump. Replaces "at character 23" prose entirely.
-- **Status + preview** — the status pill ("✓ number" / "N issues") and live
-  preview line share one wrapping row.
-- **Reference tray** (`StudioTray`) — a segmented
-  Properties / Functions / Operators browser with per-tab search filling
-  everything below the fold (the space the keyboard takes while typing).
+- **Status + preview** — the same plain `StatusRow` the desktop layouts show
+  (red first-diagnostic text or "✓ Valid" + result-type badge), then the live
+  preview line. Deliberately NOT boxed diagnostic rows or a tappable
+  validity pill — the studio mirrors desktop's diagnostics surface, and the
+  in-editor wavy underlines already point at the offending span.
+- **Reference tray** (`StudioTray`) — a Properties / Functions / Operators
+  browser using the app-wide `Tabs` (indicator variant, same as the database
+  view switcher) with per-tab search filling everything below the fold (the
+  space the keyboard takes while typing).
   Property rows insert canonical references; function rows insert the
   placeholder snippet and carry a chevron that expands the docs IN PLACE
   (description + first runnable example — what desktop's detail strip shows);
@@ -724,9 +722,17 @@ pans the visual viewport rather than shrinking the layout viewport). Touch
 taps open on `pointerup` rather than `click` — iOS Safari does not reliably
 synthesize a click for a tap on a `contenteditable=false` island inside an
 editable field — with the pointerdown default prevented so the field never
-grabs focus (and the keyboard never flashes) under the drawer. New tokens
+grabs focus (and the keyboard never flashes) under the drawer. Two guards
+keep that path honest: the touch point must actually fall on the token's
+rect (±4px slop — iOS maps a tap in the blank run to the right of a line
+onto the line's last inline element, and without the check a tap meant to
+place the caret after the token hijacked into the drawer), and the tap's
+synthetic click is swallowed for 400ms after opening (it fires after the
+drawer mounts, lands on the overlay, and vaul would read it as an outside
+click and close the drawer it just opened). New tokens
 enter through the canvas `MobileEditorToolbar`'s **formula button**
-(`IconMathFunction`, enabled while a rich-text field is focused), which
+(`IconMathFunction`, rendered only while a rich-text field is focused —
+title, database-cell, and non-text fields never show it), which
 splices an empty token at the caret and fires `requestInlineFormulaEdit` —
 token first, editor second, exactly like the slash menu's formula item. The
 `#` caret trigger (`formula-token-popover.tsx`) is desktop-only: like the

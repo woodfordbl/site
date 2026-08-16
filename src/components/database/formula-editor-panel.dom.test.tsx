@@ -100,6 +100,7 @@ const STUDIO_ABS_ROW_RE = /^abs\(/;
 const STUDIO_ABS_DOCS_RE = /absolute value/;
 const STUDIO_CONCAT_ROW_RE = /^&Joins values as text/;
 const STUDIO_EXPECTS_NUMBER_RE = /expects a number/;
+const STUDIO_ISSUE_PILL_RE = /^1 issue/;
 
 const ABS_DIAG_RE = /abs\(\) expects .*\(at character \d+\)/;
 const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
@@ -1176,7 +1177,7 @@ describe("FormulaEditorPanel", () => {
       await flushFrames();
 
       await fire(() => {
-        fireEvent.click(screen.getByRole("button", { name: "Functions" }));
+        fireEvent.click(screen.getByRole("tab", { name: "Functions" }));
       });
       // Docs are hidden until the chevron expands the row.
       expect(screen.queryByText(STUDIO_ABS_DOCS_RE)).toBeNull();
@@ -1208,7 +1209,7 @@ describe("FormulaEditorPanel", () => {
           fireEvent.change(textarea, { target: { value: "1" } });
         },
         () => {
-          fireEvent.click(screen.getByRole("button", { name: "Operators" }));
+          fireEvent.click(screen.getByRole("tab", { name: "Operators" }));
         },
         () => {
           fireEvent.click(
@@ -1219,7 +1220,7 @@ describe("FormulaEditorPanel", () => {
       expect(textarea.value).toBe("1 & ");
     });
 
-    it("lists every diagnostic as a tappable row", async () => {
+    it("shows the plain desktop-style status line, not boxed diagnostics", async () => {
       renderStudio();
       await flushFrames();
 
@@ -1227,18 +1228,22 @@ describe("FormulaEditorPanel", () => {
       await fire(() => {
         fireEvent.change(textarea, { target: { value: 'abs("oops")' } });
       });
-      const row = screen.getByRole("button", {
-        name: STUDIO_EXPECTS_NUMBER_RE,
-      });
-      expect(row.textContent).toContain("Go ›");
-
-      // Clean drafts render no diagnostics chrome at all.
-      await fire(() => {
-        fireEvent.change(textarea, { target: { value: "1 + 2" } });
-      });
+      // The red status line is the whole diagnostics surface — same as the
+      // desktop layouts: no tappable rows, no validity pill. (The message
+      // also echoes in the preview line, hence the *AllBy* query.)
+      expect(
+        screen.getAllByText(STUDIO_EXPECTS_NUMBER_RE).length
+      ).toBeGreaterThan(0);
       expect(
         screen.queryByRole("button", { name: STUDIO_EXPECTS_NUMBER_RE })
       ).toBeNull();
+      expect(screen.queryByText(STUDIO_ISSUE_PILL_RE)).toBeNull();
+
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: "1 + 2" } });
+      });
+      expect(screen.queryAllByText(STUDIO_EXPECTS_NUMBER_RE)).toHaveLength(0);
+      expect(screen.getByText("✓ Valid")).toBeDefined();
     });
   });
 
