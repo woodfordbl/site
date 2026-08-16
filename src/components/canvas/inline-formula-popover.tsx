@@ -147,6 +147,33 @@ export function InlineFormulaPopover() {
     let pressedInsidePanel = false;
     const handlePointerDown = (event: PointerEvent) => {
       pressedInsidePanel = isInsidePanel(event.target as Node | null);
+      if (
+        event.pointerType !== "mouse" &&
+        resolveTarget(event.target as Node | null)
+      ) {
+        // A touch press on a token is claimed before the browser acts on it:
+        // preventing the pointerdown default stops the field from taking
+        // focus (no keyboard flash under the drawer) and suppresses the
+        // compatibility mouse events. Scrolling is unaffected — touch panning
+        // is governed by `touch-action`, and a pan that starts here ends in
+        // `pointercancel`, so it never reaches the open below.
+        event.preventDefault();
+      }
+    };
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") {
+        return;
+      }
+      const next = resolveTarget(event.target as Node | null);
+      if (next) {
+        // Touch opens on pointerup rather than waiting for a click: iOS
+        // Safari does not reliably synthesize one for a tap on a
+        // `contenteditable=false` island inside an editable field — the tap
+        // gets consumed by selection handling, which left tokens un-tappable
+        // on phones. If a click does arrive it resolves the same token and
+        // re-sets the same target, which is harmless.
+        setTarget(next);
+      }
     };
     const handleClick = (event: MouseEvent) => {
       const pressedInside = pressedInsidePanel;
@@ -183,10 +210,12 @@ export function InlineFormulaPopover() {
     // click stays in bubble, where it has always been, to keep the panel
     // mounting after the canvas has finished with the press.
     document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("pointerup", handlePointerUp);
     document.addEventListener("click", handleClick);
     document.addEventListener(INLINE_FORMULA_EDIT_EVENT, handleEditRequest);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("pointerup", handlePointerUp);
       document.removeEventListener("click", handleClick);
       document.removeEventListener(
         INLINE_FORMULA_EDIT_EVENT,

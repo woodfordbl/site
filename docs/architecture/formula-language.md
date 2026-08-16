@@ -716,12 +716,24 @@ The keyboard-anchored accessory row (below) still rides the keyboard for
 typing-first users, so the studio degrades gracefully to the sheet's
 interaction model the moment the editor has focus.
 
-The canvas surfaces route here too: on coarse pointers the `#` caret
-trigger (`formula-token-popover.tsx`) and the tap-to-edit token popover
-(`inline-formula-popover.tsx`) open the studio in a `variant="full"` drawer
-instead of the caret-anchored desktop popover, which `position: fixed` would
-otherwise paint under the on-screen keyboard (iOS pans the visual viewport
-rather than shrinking the layout viewport). Relatedly,
+The canvas surfaces route here too. On coarse pointers the tap-to-edit
+token popover (`inline-formula-popover.tsx`) opens the studio in a
+`variant="full"` drawer instead of the caret-anchored desktop popover, which
+`position: fixed` would otherwise paint under the on-screen keyboard (iOS
+pans the visual viewport rather than shrinking the layout viewport). Touch
+taps open on `pointerup` rather than `click` — iOS Safari does not reliably
+synthesize a click for a tap on a `contenteditable=false` island inside an
+editable field — with the pointerdown default prevented so the field never
+grabs focus (and the keyboard never flashes) under the drawer. New tokens
+enter through the canvas `MobileEditorToolbar`'s **formula button**
+(`IconMathFunction`, enabled while a rich-text field is focused), which
+splices an empty token at the caret and fires `requestInlineFormulaEdit` —
+token first, editor second, exactly like the slash menu's formula item. The
+`#` caret trigger (`formula-token-popover.tsx`) is desktop-only: like the
+typed slash command, it never fires on coarse pointers (`readContext`
+returns null), because `#` on a phone keyboard is usually a hashtag or
+heading, and its caret-anchored popover had nowhere sane to live above the
+keyboard anyway. Relatedly,
 [`ios-input-zoom-guard.tsx`](../../src/components/ui/ios-input-zoom-guard.tsx)
 (mounted in `AppProviders`) appends `maximum-scale=1` to the viewport meta on
 iOS only — Safari honors the cap for the sub-16px focus auto-zoom but

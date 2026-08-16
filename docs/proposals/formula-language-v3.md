@@ -332,9 +332,16 @@ explicit `rowAware` field beside them).
    fire the `disabled` haptic on an empty history stack. Highest
    severity-per-line on the whole mobile list.
 2. **Sheet-ify canvas inline formulas** — **[shipped]**, as studio drawers:
-   on coarse pointers the `#` caret trigger and the tap-to-edit token popover
-   open the full-screen studio instead of the caret-anchored 720px popover
-   (which rendered under the on-screen keyboard). The column-menu studio also
+   on coarse pointers the tap-to-edit token popover opens the full-screen
+   studio instead of the caret-anchored 720px popover (which rendered under
+   the on-screen keyboard). Tokens open on touch `pointerup` (iOS Safari does
+   not reliably synthesize a click on a `contenteditable=false` island inside
+   an editable field) and wear a dotted **border** rule rather than a text
+   underline — Safari has no `overflow-clip-margin`, so the old underline was
+   clipped away by the token's `overflow-clip` on iOS. New tokens insert via
+   the mobile editor toolbar's formula button (token at caret, then the
+   studio — the slash formula item's flow); the `#` caret trigger is
+   desktop-only, like the typed slash command. The column-menu studio also
    nests (`DrawerNestedRoot`) so dismissing it returns to the menu, and an
    iOS-only `maximum-scale=1` viewport guard stops the sub-16px focus
    auto-zoom while preserving pinch-zoom.

@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { useInlineFormulaPage } from "@/components/editor/inline-formula-page.tsx";
-import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
 import { useAllDatabases } from "@/db/queries/use-database.ts";
 import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { useIsCoarsePrimaryPointer } from "@/hooks/device-layout.ts";
@@ -30,6 +29,12 @@ import {
  * token (same mark as slash / `{{`) with the drafted expression, replacing
  * the `#…` run. Escape closes without insert and leaves `#` as plain text so
  * markdown `#` + Space headings still work.
+ *
+ * Desktop-only, like the typed slash command: on coarse pointers the trigger
+ * never fires — a `#` typed on a phone keyboard is far more often a hashtag
+ * or a heading than a formula, and the mobile entry points are the editor
+ * toolbar's formula button and tapping an existing token (both open the
+ * studio drawer via {@link InlineFormulaPopover}).
  */
 
 const POPOVER_WIDTH_PX = 720;
@@ -41,7 +46,10 @@ export function FormulaTokenPopover(): ReactNode {
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
 
-  const readContext = useCallback(() => readCaretTokenContext("#"), []);
+  const readContext = useCallback(
+    () => (coarsePointer ? null : readCaretTokenContext("#")),
+    [coarsePointer]
+  );
   const { anchorRect, close, context, freeze, frozen } =
     useCaretTokenSession(readContext);
 
@@ -152,46 +160,6 @@ export function FormulaTokenPopover(): ReactNode {
 
   if (!openContext) {
     return null;
-  }
-
-  if (coarsePointer) {
-    // Phones get the full-screen studio drawer instead of the caret-anchored
-    // desktop popover: a fixed panel positioned below the caret lands under
-    // the on-screen keyboard (iOS pans the visual viewport rather than
-    // shrinking the layout viewport, so `position: fixed` can't avoid it).
-    // The drawer content carries the session's popover marker so taps inside
-    // it never read as click-away.
-    return (
-      <Drawer
-        onOpenChange={(open) => {
-          if (!open) {
-            dismiss();
-          }
-        }}
-        open
-      >
-        <DrawerContent
-          data-caret-token-popover=""
-          hasTitle={false}
-          variant="full"
-        >
-          <div className="flex min-h-0 flex-1 flex-col px-3 pt-1">
-            <FormulaEditorPanel
-              expression={openContext.query}
-              fields={fields}
-              key={`${openContext.start}:${openContext.query}`}
-              layout="studio"
-              onCancel={dismiss}
-              onSave={handleInsert}
-              previewRows={previewRows}
-              relatedDatabases={relatedDatabases}
-              relations={relations}
-              userFunctions={userFunctions}
-            />
-          </div>
-        </DrawerContent>
-      </Drawer>
-    );
   }
 
   if (!anchorRect) {
