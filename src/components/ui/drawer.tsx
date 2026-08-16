@@ -6,7 +6,7 @@ import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils.ts";
 
-type DrawerVariant = "auto" | "menu";
+type DrawerVariant = "auto" | "menu" | "full";
 
 /**
  * When a nested drawer opens, vaul scales the parent drawer back
@@ -286,9 +286,12 @@ function DrawerContent({
           // recessed, with grouped item cards on --card above it.
           "group/drawer-content fixed z-50 flex flex-col bg-sidebar bg-clip-padding text-popover-foreground",
           "inset-x-0 bottom-0 rounded-t-2xl border-t",
-          variant === "menu"
-            ? "mt-12 h-[88svh] max-h-[88svh]"
-            : "mt-24 h-auto max-h-[85svh]",
+          variant === "menu" ? "mt-12 h-[88svh] max-h-[88svh]" : null,
+          // "full" is the immersive editing surface (the formula studio):
+          // effectively the whole viewport, with a sliver of top inset so the
+          // sheet still reads as dismissible.
+          variant === "full" ? "mt-4 h-[97svh] max-h-[97svh]" : null,
+          variant === "auto" ? "mt-24 h-auto max-h-[85svh]" : null,
           "pb-[env(safe-area-inset-bottom)]",
           className
         )}

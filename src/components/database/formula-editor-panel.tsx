@@ -1,4 +1,6 @@
 import {
+  IconAlertTriangle,
+  IconChevronDown,
   IconMathFunction,
   IconPlus,
   IconSearch,
@@ -614,10 +616,11 @@ export interface FormulaEditorPanelProps {
    * coarse pointers, a tappable status pill, and the keyboard-anchored
    * accessory row + picker drawers instead of the inline reference list.
    */
-  layout?: "popover" | "sheet" | "stack" | "wide";
+  layout?: "popover" | "sheet" | "stack" | "studio" | "wide";
   /**
-   * Sheet header's Cancel — backs out without saving (typically closes the
-   * host drawer). Only rendered in the `sheet` layout.
+   * Sheet/studio header's Cancel — backs out without saving (typically
+   * closes the host drawer). Only rendered in the `sheet` and `studio`
+   * layouts.
    */
   onCancel?: () => void;
   /**
@@ -660,6 +663,12 @@ export interface FormulaEditorPanelProps {
    * hand-typed self-reference still chips and evaluates as a named cycle.
    */
   selfFieldId?: string;
+  /**
+   * Header title for the sheet/studio layouts — typically the formula
+   * column's name, so the full-screen editor says what is being edited.
+   * Defaults to "Formula".
+   */
+  title?: string;
   /**
    * Named user-defined functions (prepared registry —
    * `useFormulaUserFunctions()` at interactive call sites): threads into
@@ -973,12 +982,15 @@ function SheetLayout({
   preview,
   status,
   tools,
+  wizard,
 }: {
   editor: ReactNode;
   header: ReactNode;
   preview: ReactNode;
   status: ReactNode;
   tools: ReactNode;
+  /** The open rollup wizard; non-null, it replaces the tools slot. */
+  wizard: ReactNode | null;
 }): ReactNode {
   return (
     <div className="flex w-full flex-col gap-2 p-1 pb-16">
@@ -986,7 +998,7 @@ function SheetLayout({
       {editor}
       {status}
       {preview}
-      {tools}
+      {wizard ?? tools}
     </div>
   );
 }
@@ -1002,12 +1014,14 @@ function SheetHeader({
   onCancel,
   onDone,
   onDoneBlocked,
+  title = "Formula",
 }: {
   doneDisabled: boolean;
   onCancel: (() => void) | undefined;
   onDone: () => void;
   /** Tapping Done while invalid: explain instead of a dead button. */
   onDoneBlocked: () => void;
+  title?: string;
 }): ReactNode {
   const haptic = useHaptics();
   return (
@@ -1023,7 +1037,9 @@ function SheetHeader({
           Cancel
         </Button>
       )}
-      <span className="font-medium text-foreground text-sm">Formula</span>
+      <span className="min-w-0 truncate px-1 font-medium text-foreground text-sm">
+        {title}
+      </span>
       <Button
         aria-disabled={doneDisabled}
         className={cn("pointer-coarse:h-10", doneDisabled && "opacity-50")}
@@ -1070,6 +1086,385 @@ function SheetRollupButton({
       <IconSum />
       Rollup
     </Button>
+  );
+}
+
+/**
+ * Every issue in the draft as studio diagnostic rows: the parse error (as a
+ * one-character span at its position), else the checker's span-accurate
+ * diagnostics. Empty for a blank or clean draft.
+ */
+function studioDiagnosticEntriesOf(
+  parsed: ParseFormulaResult | null,
+  checked: FormulaCheckResult | null
+): StudioDiagnosticEntry[] {
+  if (parsed === null) {
+    return [];
+  }
+  if (!parsed.ok) {
+    return [
+      {
+        end: parsed.error.position + 1,
+        message: parsed.error.message,
+        start: parsed.error.position,
+      },
+    ];
+  }
+  return (checked?.diagnostics ?? []).map((diagnostic) => ({
+    end: diagnostic.end,
+    message: diagnostic.message,
+    start: diagnostic.start,
+  }));
+}
+
+/** One tappable issue for the studio diagnostics list. */
+interface StudioDiagnosticEntry {
+  /** Canonical span end (exclusive); parse errors get a 1-char span. */
+  end: number;
+  message: string;
+  /** Canonical span start — the CM6 doc IS the canonical text. */
+  start: number;
+}
+
+/**
+ * The studio's diagnostics: EVERY issue as a tappable row (the sheet's pill
+ * shows only the first, as prose with a character offset — useless on a
+ * phone). Tapping a row selects the offending span in the editor and scrolls
+ * it into view; on the textarea fallback the rows still list every message,
+ * they just can't jump. Renders nothing while the draft is clean.
+ */
+function StudioDiagnostics({
+  entries,
+  onJump,
+}: {
+  entries: readonly StudioDiagnosticEntry[];
+  onJump: (start: number, end: number) => void;
+}): ReactNode {
+  if (entries.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+      {entries.map((entry, index) => (
+        <button
+          className={cn(
+            "flex min-h-9 pointer-coarse:min-h-10 w-full items-center gap-2 px-3 py-1.5 text-left text-xs",
+            index > 0 && "border-border/60 border-t"
+          )}
+          key={`${entry.start}:${entry.message}`}
+          onClick={() => {
+            onJump(entry.start, entry.end);
+          }}
+          type="button"
+        >
+          <IconAlertTriangle className="size-3.5 shrink-0 stroke-[1.5px] text-destructive" />
+          <span className="min-w-0 flex-1 truncate text-foreground">
+            {entry.message}
+          </span>
+          <span className="shrink-0 text-muted-foreground">Go ›</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type StudioTrayTab = "functions" | "operators" | "properties";
+
+const STUDIO_TABS: readonly { key: StudioTrayTab; label: string }[] = [
+  { key: "properties", label: "Properties" },
+  { key: "functions", label: "Functions" },
+  { key: "operators", label: "Operators" },
+];
+
+/** Shared row chrome for the studio tray lists (44px touch targets). */
+const studioRowClassName =
+  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm outline-none pointer-coarse:min-h-11 hover:bg-accent hover:text-accent-foreground";
+
+/**
+ * The studio's bottom half: a segmented Properties / Functions / Operators
+ * browser with search — the desktop reference list reborn as a tall,
+ * touch-first tray that occupies the space the keyboard takes while typing.
+ * Function rows expand in place (chevron) to show the description and a
+ * runnable example BEFORE inserting; row taps insert at the caret through
+ * the same paths every other surface uses.
+ */
+function StudioTray({
+  entries,
+  onInsertAtCaret,
+  onInsertCustomFunction,
+  onInsertFunction,
+  onInsertProperty,
+  onOpenRollup,
+  onQueryChange,
+  query,
+  rollupAvailable,
+}: {
+  entries: ReferenceListEntries;
+  onInsertAtCaret: (text: string, caretOffset: number) => void;
+  onInsertCustomFunction: (def: FormulaPreparedUserFunction) => void;
+  onInsertFunction: (entry: FormulaFunctionEntry) => void;
+  onInsertProperty: (propertyField: DatabaseField) => void;
+  onOpenRollup: () => void;
+  onQueryChange: (query: string) => void;
+  query: string;
+  rollupAvailable: boolean;
+}): ReactNode {
+  const [tab, setTab] = useState<StudioTrayTab>("properties");
+  /** Which function row's docs are expanded; keyed by (custom?)+name. */
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const {
+    customFunctionEntries,
+    functionEntries,
+    operatorEntries,
+    propertyFields,
+  } = entries;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex items-center gap-1.5">
+        <div className="flex flex-1 rounded-lg bg-muted p-0.5">
+          {STUDIO_TABS.map((candidate) => (
+            <button
+              aria-pressed={tab === candidate.key}
+              className={cn(
+                "min-h-8 pointer-coarse:min-h-9 flex-1 rounded-md text-xs",
+                tab === candidate.key
+                  ? "bg-background font-medium text-foreground shadow-sm"
+                  : "text-muted-foreground"
+              )}
+              key={candidate.key}
+              onClick={() => {
+                setTab(candidate.key);
+              }}
+              type="button"
+            >
+              {candidate.label}
+            </button>
+          ))}
+        </div>
+        {rollupAvailable ? (
+          <Button
+            className="pointer-coarse:h-9 shrink-0"
+            onClick={onOpenRollup}
+            variant="outline"
+          >
+            <IconSum />
+            Rollup
+          </Button>
+        ) : null}
+      </div>
+      <InputGroup className="h-9 shrink-0">
+        <InputGroupAddon align="inline-start">
+          <InputGroupText>
+            <IconSearch />
+          </InputGroupText>
+        </InputGroupAddon>
+        <InputGroupInput
+          aria-label={`Search ${tab}`}
+          autoComplete="off"
+          onChange={(event) => {
+            onQueryChange(event.target.value);
+          }}
+          onKeyDown={stopMenuKeys}
+          placeholder={`Search ${tab}…`}
+          value={query}
+        />
+      </InputGroup>
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex flex-col">
+          {tab === "properties"
+            ? propertyFields.map((propertyField) => {
+                const FieldIcon = resolveFieldIcon(propertyField);
+                return (
+                  <button
+                    className={studioRowClassName}
+                    key={propertyField.id}
+                    onClick={() => {
+                      onInsertProperty(propertyField);
+                    }}
+                    type="button"
+                  >
+                    <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">
+                      {propertyField.name}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground text-xs">
+                      {propertyField.type}
+                    </span>
+                  </button>
+                );
+              })
+            : null}
+          {tab === "functions" ? (
+            <>
+              {functionEntries.map((entry) => (
+                <StudioFunctionRow
+                  description={entry.description}
+                  example={entry.examples[0]}
+                  expanded={expandedKey === entry.name}
+                  key={entry.name}
+                  name={entry.name}
+                  onInsert={() => {
+                    onInsertFunction(entry);
+                  }}
+                  onToggleExpanded={() => {
+                    setExpandedKey((current) =>
+                      current === entry.name ? null : entry.name
+                    );
+                  }}
+                  signature={entry.signature}
+                />
+              ))}
+              {customFunctionEntries.map((def) => (
+                <StudioFunctionRow
+                  description={def.description ?? "Custom function."}
+                  expanded={expandedKey === `custom:${def.name}`}
+                  key={`custom:${def.name}`}
+                  name={def.name}
+                  onInsert={() => {
+                    onInsertCustomFunction(def);
+                  }}
+                  onToggleExpanded={() => {
+                    setExpandedKey((current) =>
+                      current === `custom:${def.name}`
+                        ? null
+                        : `custom:${def.name}`
+                    );
+                  }}
+                  signature={def.signature}
+                />
+              ))}
+            </>
+          ) : null}
+          {tab === "operators"
+            ? operatorEntries.map((entry) => (
+                <button
+                  className={studioRowClassName}
+                  key={entry.symbol}
+                  onClick={() => {
+                    // Same insert shape as the desktop reference list: the
+                    // operator with breathing room, caret after it.
+                    onInsertAtCaret(
+                      ` ${entry.symbol} `,
+                      entry.symbol.length + 2
+                    );
+                  }}
+                  type="button"
+                >
+                  <span className="w-8 shrink-0 font-mono text-foreground">
+                    {entry.symbol}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+                    {entry.description}
+                  </span>
+                </button>
+              ))
+            : null}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/**
+ * One function row in the studio tray: tap inserts (placeholder snippet on
+ * CM6), the trailing chevron expands the docs in place — description plus
+ * the first runnable example — so mobile finally sees what desktop's detail
+ * strip shows.
+ */
+function StudioFunctionRow({
+  description,
+  example,
+  expanded,
+  name,
+  onInsert,
+  onToggleExpanded,
+  signature,
+}: {
+  description: string;
+  example?: string;
+  expanded: boolean;
+  name: string;
+  onInsert: () => void;
+  onToggleExpanded: () => void;
+  signature: string;
+}): ReactNode {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center">
+        <button
+          className={cn(studioRowClassName, "flex-1")}
+          onClick={onInsert}
+          type="button"
+        >
+          <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
+          <span className="shrink-0 font-medium">{name}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
+            {signature.slice(name.length)}
+          </span>
+        </button>
+        <button
+          aria-expanded={expanded}
+          aria-label={`${name} details`}
+          className="flex h-9 pointer-coarse:h-11 pointer-coarse:w-11 w-9 shrink-0 items-center justify-center text-muted-foreground"
+          onClick={onToggleExpanded}
+          type="button"
+        >
+          <IconChevronDown
+            className={cn(
+              "size-4 stroke-[1.5px] transition-transform",
+              expanded && "rotate-180"
+            )}
+          />
+        </button>
+      </div>
+      {expanded ? (
+        <div className="flex flex-col gap-1 px-3 pb-2.5 pl-9.5">
+          <span className="text-muted-foreground text-xs">{description}</span>
+          {example === undefined ? null : (
+            <code className="font-mono text-foreground text-xs">{example}</code>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Arranges the full-screen studio's slots in one column: header (Cancel /
+ * column name / Done), the roomy editor, tappable diagnostics, the
+ * status-pill + preview row, then the reference tray filling everything
+ * below (the open rollup wizard swaps in for the tray). The bottom padding
+ * clears the keyboard-anchored accessory row parked at the viewport bottom.
+ */
+function StudioLayout({
+  diagnostics,
+  editor,
+  header,
+  preview,
+  status,
+  tray,
+  wizard,
+}: {
+  diagnostics: ReactNode;
+  editor: ReactNode;
+  header: ReactNode;
+  preview: ReactNode;
+  status: ReactNode;
+  tray: ReactNode;
+  /** The open rollup wizard; non-null, it replaces the tray slot. */
+  wizard: ReactNode | null;
+}): ReactNode {
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col gap-2 p-1 pb-14">
+      {header}
+      {editor}
+      {diagnostics}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {status}
+        {preview}
+      </div>
+      {wizard ?? tray}
+    </div>
   );
 }
 
@@ -1131,12 +1526,24 @@ function layoutClasses(
   wide: boolean,
   compact: boolean,
   sheet: boolean,
+  studio: boolean,
   chromeless: string
 ): {
   codeEditor: string | undefined;
   reference: string | undefined;
   textarea: string | undefined;
 } {
+  if (studio) {
+    // Full-screen surface: the editor gets real multi-line room but leaves
+    // the lower half to the reference tray; type is bumped for phones
+    // (base-16px in the textarea fallback stops iOS focus auto-zoom).
+    return {
+      codeEditor:
+        "w-full text-sm [&_.cm-content]:min-h-36! [&_.cm-scroller]:max-h-[30svh]!",
+      reference: undefined,
+      textarea: "max-h-[30svh] min-h-36 text-base",
+    };
+  }
   if (sheet) {
     // The drawer is 88svh tall — give the editor the room the sheet
     // escalated for (the base theme caps the scroller at 8rem), and bump
@@ -1180,6 +1587,7 @@ export function FormulaEditorPanel({
   relatedDatabases,
   relations,
   selfFieldId,
+  title,
   userFunctions,
 }: FormulaEditorPanelProps): ReactNode {
   // `popover` is the wide form everywhere the editor chrome is concerned —
@@ -1187,6 +1595,7 @@ export function FormulaEditorPanel({
   const compact = layout === "popover";
   const wide = layout === "wide" || compact;
   const sheet = layout === "sheet";
+  const studio = layout === "studio";
   // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
   // natively; the textarea path humanizes for display below.
   const [draft, setDraft] = useState(expression);
@@ -1201,10 +1610,10 @@ export function FormulaEditorPanel({
   /** Sheet status pill expansion — lifted so a blocked Done can open it. */
   const [statusExpanded, setStatusExpanded] = useState(false);
   const coarsePointer = useIsCoarsePrimaryPointer();
-  // The sheet layout mounts CM6 even on coarse pointers (its native touch
-  // caret/IME handling is the point of the sheet); everywhere else coarse
-  // pointers keep the plain textarea.
-  const usesTextarea = coarsePointer && !sheet;
+  // The sheet and studio layouts mount CM6 even on coarse pointers (its
+  // native touch caret/IME handling is the point of escalating); everywhere
+  // else coarse pointers keep the plain textarea.
+  const usesTextarea = coarsePointer && !(sheet || studio);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const codeEditorRef = useRef<FormulaCodeEditorHandle>(null);
   /**
@@ -1598,7 +2007,7 @@ export function FormulaEditorPanel({
   // goes chromeless.
   const chromeless =
     "rounded-none border-0 bg-transparent focus-visible:border-transparent dark:bg-transparent";
-  const sizing = layoutClasses(wide, compact, sheet, chromeless);
+  const sizing = layoutClasses(wide, compact, sheet, studio, chromeless);
   const expressionTextarea = (
     <Textarea
       aria-label="Formula expression"
@@ -1760,6 +2169,81 @@ export function FormulaEditorPanel({
     </>
   );
 
+  if (studio) {
+    // Full-screen editing surface (the "studio"): every diagnostic is a
+    // tappable row that jumps the caret, and the reference tray fills the
+    // bottom half whenever the keyboard is down. The accessory row still
+    // rides the keyboard for typing-first users.
+    return (
+      <>
+        <StudioLayout
+          diagnostics={
+            <StudioDiagnostics
+              entries={studioDiagnosticEntriesOf(parsed, checked)}
+              onJump={(start, end) => {
+                // Diagnostics are canonical offsets and the CM6 doc IS the
+                // canonical text; the textarea fallback can't jump (its
+                // display text is humanized), so the handle being null is a
+                // clean no-op.
+                codeEditorRef.current?.selectRange(start, end);
+              }}
+            />
+          }
+          editor={editorSurface}
+          header={
+            <SheetHeader
+              doneDisabled={saveDisabled}
+              onCancel={onCancel}
+              onDone={save}
+              onDoneBlocked={() => {
+                setStatusExpanded(true);
+              }}
+              title={title}
+            />
+          }
+          preview={previewLine}
+          status={
+            <StatusPill
+              checked={checked}
+              displayPosition={displayPosition}
+              expanded={statusExpanded}
+              onExpandedChange={setStatusExpanded}
+              parsed={parsed}
+            />
+          }
+          tray={
+            <StudioTray
+              entries={{
+                customFunctionEntries,
+                functionEntries,
+                operatorEntries,
+                propertyFields,
+              }}
+              onInsertAtCaret={insertAtCaret}
+              onInsertCustomFunction={insertCustomFunction}
+              onInsertFunction={insertFunctionEntry}
+              onInsertProperty={insertPropertyReference}
+              onOpenRollup={() => {
+                setRollupOpen(true);
+              }}
+              onQueryChange={setQuery}
+              query={query}
+              rollupAvailable={rollupAvailable}
+            />
+          }
+          wizard={wizard}
+        />
+        <FormulaEditorAccessoryRow
+          fields={fields}
+          onInsertAtCaret={insertAtCaret}
+          onInsertFunction={insertFunctionEntry}
+          onInsertProperty={insertPropertyReference}
+          selfFieldId={selfFieldId}
+        />
+      </>
+    );
+  }
+
   if (sheet) {
     // No search/reference list/detail strip — the accessory row's picker
     // drawers cover insertion; the Rollup button keeps the wizard reachable.
@@ -1788,15 +2272,14 @@ export function FormulaEditorPanel({
             />
           }
           tools={
-            wizard ?? (
-              <SheetRollupButton
-                available={rollupAvailable}
-                onOpen={() => {
-                  setRollupOpen(true);
-                }}
-              />
-            )
+            <SheetRollupButton
+              available={rollupAvailable}
+              onOpen={() => {
+                setRollupOpen(true);
+              }}
+            />
           }
+          wizard={wizard}
         />
         <FormulaEditorAccessoryRow
           fields={fields}

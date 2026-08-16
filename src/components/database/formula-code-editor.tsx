@@ -204,6 +204,13 @@ export interface FormulaCodeEditorHandle {
    * Offsets clamp to the doc so a stale span can never throw.
    */
   replaceRange: (from: number, to: number, text: string) => void;
+  /**
+   * Select the doc span `[from, to)`, scroll it into view, and refocus — the
+   * studio diagnostics list's tap-to-locate path ("Go ›" jumps the caret to
+   * the offending span instead of describing it as a character offset).
+   * Offsets clamp to the doc so a stale diagnostic can never throw.
+   */
+  selectRange: (from: number, to: number) => void;
 }
 
 /**
@@ -2462,6 +2469,20 @@ export function FormulaCodeEditor({
         view.dispatch({
           changes: { from: start, insert: text, to: end },
           selection: { anchor: start + text.length },
+        });
+        view.focus();
+      },
+      selectRange: (from, to) => {
+        const view = viewRef.current;
+        if (view === null) {
+          return;
+        }
+        const docLength = view.state.doc.length;
+        const start = Math.min(from, docLength);
+        const end = Math.min(Math.max(to, start), docLength);
+        view.dispatch({
+          selection: { anchor: start, head: end },
+          scrollIntoView: true,
         });
         view.focus();
       },

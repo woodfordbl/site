@@ -674,18 +674,51 @@ textarea path keeps the caret-inside-parens `name()` insert (placeholders are
 a CM6 affordance). Type-driven picker sheets for closed-type placeholders
 (unit enums, select options) are deferred.
 
-### Mobile sheet
+### Mobile studio (full-screen)
 
-On coarse pointers the "Edit property" submenu drawer hosts the panel's
-`layout="sheet"` form (proposal §7): an explicit **Cancel / "Formula" / Done**
-header (Done is the sheet's only save affordance, gated exactly like Save — but
-rendered `aria-disabled` rather than dead: a blocked tap fires the `disabled`
-boundary haptic and expands the status pill so the sheet explains WHY), the
-**CM6 editor even on coarse pointers** (its native touch caret/IME handling is the
-point — the plain textarea remains only as the Suspense fallback), a compact
-tappable **status pill** ("✓ number" / "1 issue") that toggles the full
-first-diagnostic message beneath it, and the live preview line. There is no inline
-search/reference list/detail strip — insertion moves to
+On coarse pointers the column menu's "Edit property" item — same escalation
+shape as the fine-pointer dialog — closes the menu and opens a **full-height
+drawer** (`DrawerContent variant="full"`, ~97svh) hosting the panel's
+`layout="studio"` form (v3 proposal §6.2, design B): a dedicated editing
+surface instead of the old drawer-in-a-drawer sheet, so there is exactly ONE
+header and one dismissal semantics. Anatomy, top to bottom:
+
+- **Header** — Cancel / *column name* / Done (the shared `SheetHeader` with a
+  `title`; Done gated exactly like Save but rendered `aria-disabled` rather
+  than dead — a blocked tap fires the `disabled` boundary haptic and expands
+  the status pill).
+- **Editor** — CM6 even on coarse pointers, with real multi-line room
+  (`min-h-36` content, `30svh` scroller cap, `text-sm`; the textarea fallback
+  is `text-base` so iOS never focus-zooms).
+- **Diagnostics rows** — EVERY parse/checker issue as a tappable row
+  (`StudioDiagnostics`): ⚠ message + "Go ›", where a tap calls the editor
+  handle's `selectRange(start, end)` to select the offending span and scroll
+  it into view. Diagnostics are canonical offsets and the CM6 doc IS the
+  canonical text, so no translation is needed; the textarea fallback lists
+  the messages but cannot jump. Replaces "at character 23" prose entirely.
+- **Status + preview** — the status pill ("✓ number" / "N issues") and live
+  preview line share one wrapping row.
+- **Reference tray** (`StudioTray`) — a segmented
+  Properties / Functions / Operators browser with per-tab search filling
+  everything below the fold (the space the keyboard takes while typing).
+  Property rows insert canonical references; function rows insert the
+  placeholder snippet and carry a chevron that expands the docs IN PLACE
+  (description + first runnable example — what desktop's detail strip shows);
+  operator rows insert ` symbol ` with the caret after it; custom functions
+  append to the Functions tab. The Rollup button sits beside the tabs and
+  swaps the tray for the wizard.
+
+The keyboard-anchored accessory row (below) still rides the keyboard for
+typing-first users, so the studio degrades gracefully to the sheet's
+interaction model the moment the editor has focus.
+
+Hosts that cannot escalate (settings-menu property items, which pass no
+`onOpenFormulaEditor`) keep the previous behavior: the "Edit property"
+submenu drawer hosting the panel's `layout="sheet"` form — same
+Cancel/"Formula"/Done header, CM6 editor, tappable **status pill**
+("✓ number" / "1 issue") toggling the first-diagnostic message, and the live
+preview line. In both layouts there is no inline desktop reference list —
+insertion also lives in
 [`formula-editor-accessory-row.tsx`](../../src/components/database/formula-editor-accessory-row.tsx),
 a keyboard accessory row pinned above the on-screen keyboard via
 `useKeyboardToolbarAnchor` (portaled to `document.body`, composited-transform

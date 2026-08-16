@@ -346,23 +346,24 @@ explicit `rowAware` field beside them).
    a snippet whose first placeholder is closed-typed opens its picker
    immediately — pick `dateAdd` and it *asks you for a date*, which is
    exactly Apple Numbers.
-4. **Collapse the double header** — the "sheet" is a drawer-in-a-drawer with
-   a Back chevron ~10px above a Cancel button that dismisses a different
-   amount of stack, plus a drag handle: four exits, three destinations.
-   Escalate the coarse-pointer formula path to a dedicated top-level drawer,
-   the way fine pointers escalate to the dialog.
-5. **Docs on mobile** — function-picker rows get an expandable
-   description+example (both already rendered on desktop and computed then
-   discarded on mobile); the rollup wizard's `onShowDetail` currently renders
-   into a void in the sheet — inline the details instead. Relocate the
-   argument info card into the accessory row's leading slot (the row telling
-   you which argument you're on is the Numbers move).
+4. **Collapse the double header** — **[shipped]** as the full-screen studio
+   (design B of the mockup canvas): the column menu's Edit property now
+   escalates coarse pointers to a dedicated `variant="full"` drawer hosting
+   `layout="studio"` — one Cancel/name/Done header, a roomier editor,
+   tappable all-diagnostics rows with `selectRange` tap-to-locate, and a
+   segmented Properties/Functions/Operators tray with in-place function
+   docs. The old sheet remains only for dialog-less hosts.
+5. **Docs on mobile** — **[partly shipped]**: the studio tray's function
+   rows expand in place (description + first example). Remaining: the same
+   treatment in the accessory row's function picker drawer, inlined rollup
+   wizard details, and the argument info card relocated into the accessory
+   row's leading slot (the row telling you which argument you're on is the
+   Numbers move).
 6. **Rollup into the accessory row** — the wizard (the "compose rollups
    without touching the keyboard" flow) is below the fold under the keyboard;
    promote it to a third leading button opening its own picker drawer.
-7. **All-diagnostics pill with tap-to-locate** — the pill shows only
-   `diagnostics[0]` as prose with a character offset (useless on a phone);
-   list all diagnostics as tappable rows that select the offending span, and
+7. **All-diagnostics tap-to-locate** — **[shipped]** in the studio
+   (`StudioDiagnostics` + the editor handle's `selectRange`). Remaining:
    phrase placeholder-span diagnostics as "Fill in `unit`" rather than
    `Unknown name`.
 8. **Keyboard-aware sheet** — only the accessory row tracks the keyboard;

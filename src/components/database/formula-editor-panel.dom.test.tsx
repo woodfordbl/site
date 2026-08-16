@@ -1108,6 +1108,128 @@ describe("FormulaEditorPanel", () => {
     });
   });
 
+  describe("studio layout (mobile full-screen)", () => {
+    beforeEach(() => {
+      pointer.coarse = true;
+      // Keep the CM6 mount suspended so the Suspense fallback textarea is
+      // the stable editing surface (see the module mock above).
+      cm6.suppressMount = true;
+    });
+
+    function renderStudio({ expression = "" } = {}) {
+      const onCancel = vi.fn();
+      const onSave = vi.fn();
+      render(
+        <FormulaEditorPanel
+          expression={expression}
+          fields={FIELDS}
+          layout="studio"
+          onCancel={onCancel}
+          onSave={onSave}
+          previewRows={PREVIEW_ROWS}
+          title="Price with tax"
+        />
+      );
+      return { onCancel, onSave };
+    }
+
+    async function fire(...events: (() => void)[]): Promise<void> {
+      for (const event of events) {
+        event();
+        await flushFrames();
+      }
+    }
+
+    it("titles the header with the column name; Done is the only save", async () => {
+      renderStudio();
+      await flushFrames();
+
+      expect(screen.getByText("Price with tax")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Done" })).toBeDefined();
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    });
+
+    it("inserts a property from the tray's Properties tab", async () => {
+      renderStudio();
+      await flushFrames();
+
+      await fire(() => {
+        fireEvent.click(screen.getByRole("button", { name: /^Price/ }));
+      });
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe("thisPage.Price");
+    });
+
+    it("Functions tab expands docs in place and inserts on tap", async () => {
+      renderStudio();
+      await flushFrames();
+
+      await fire(() => {
+        fireEvent.click(screen.getByRole("button", { name: "Functions" }));
+      });
+      // Docs are hidden until the chevron expands the row.
+      expect(screen.queryByText(/absolute value/)).toBeNull();
+      await fire(() => {
+        fireEvent.click(screen.getByRole("button", { name: "abs details" }));
+      });
+      expect(screen.getByText(/absolute value/)).toBeDefined();
+
+      await fire(() => {
+        fireEvent.click(screen.getByRole("button", { name: /^abs\(/ }));
+      });
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe("abs()");
+    });
+
+    it("Operators tab inserts the symbol with breathing room", async () => {
+      renderStudio();
+      await flushFrames();
+
+      const textarea = screen.getByLabelText(
+        "Formula expression"
+      ) as HTMLTextAreaElement;
+      await fire(
+        () => {
+          fireEvent.change(textarea, { target: { value: "1" } });
+        },
+        () => {
+          fireEvent.click(screen.getByRole("button", { name: "Operators" }));
+        },
+        () => {
+          fireEvent.click(
+            screen.getByRole("button", { name: /^&Joins values as text/ })
+          );
+        }
+      );
+      expect(textarea.value).toBe("1 & ");
+    });
+
+    it("lists every diagnostic as a tappable row", async () => {
+      renderStudio();
+      await flushFrames();
+
+      const textarea = screen.getByLabelText("Formula expression");
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: 'abs("oops")' } });
+      });
+      const row = screen.getByRole("button", { name: /expects a number/ });
+      expect(row.textContent).toContain("Go ›");
+
+      // Clean drafts render no diagnostics chrome at all.
+      await fire(() => {
+        fireEvent.change(textarea, { target: { value: "1 + 2" } });
+      });
+      expect(
+        screen.queryByRole("button", { name: /expects a number/ })
+      ).toBeNull();
+    });
+  });
+
   describe("chip option menu (drawer presentation)", () => {
     // The sheet tests keep the CM6 mount suspended (see the module mock), so
     // chips never render on the fallback textarea and there's nothing to tap
