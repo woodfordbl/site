@@ -2,6 +2,7 @@ import {
   BLOCK_SHARD_PREFIX,
   blockShardStorageKey,
 } from "@/db/collections/page-sharded-block-storage.ts";
+import { assignFractionalIndexes } from "@/lib/blocks/fractional-order.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import { toLocalBlock } from "@/lib/schemas/local-block.ts";
 import {
@@ -15,11 +16,14 @@ const CREATED_AT_BACKFILL_FLAG_KEY = "site-local-pages-created-at-backfill";
 const BLOCK_CREATED_AT_BACKFILL_FLAG_KEY =
   "site-local-blocks-created-at-backfill";
 const CALLOUT_CONTAINER_FLAG_KEY = "site-callout-container-v1";
+const FRACTIONAL_INDEX_BACKFILL_FLAG_KEY =
+  "site-local-blocks-fractional-index-backfill";
 
 export {
   BLOCK_CREATED_AT_BACKFILL_FLAG_KEY,
   CALLOUT_CONTAINER_FLAG_KEY,
   CREATED_AT_BACKFILL_FLAG_KEY,
+  FRACTIONAL_INDEX_BACKFILL_FLAG_KEY,
   LEGACY_PAGES_KEY,
 };
 
@@ -315,6 +319,128 @@ export function migrateCalloutsToContainers(): void {
     localStorage.setItem(CALLOUT_CONTAINER_FLAG_KEY, "done");
   } catch {
     localStorage.setItem(CALLOUT_CONTAINER_FLAG_KEY, "done");
+  }
+}
+
+/** `pageId → blockOrder` for every stored local page carrying an order. */
+function readPageBlockOrders(): Map<string, string[]> {
+  const orders = new Map<string, string[]>();
+  const raw = localStorage.getItem(LEGACY_PAGES_KEY);
+  if (!raw) {
+    return orders;
+  }
+
+  const parsed = JSON.parse(raw) as Record<
+    string,
+    StoredItem<Record<string, unknown>>
+  >;
+  for (const stored of Object.values(parsed)) {
+    const data = stored.data;
+    if (!data || typeof data !== "object") {
+      continue;
+    }
+    const { id, blockOrder } = data;
+    if (typeof id === "string" && Array.isArray(blockOrder)) {
+      orders.set(
+        id,
+        blockOrder.filter((entry): entry is string => typeof entry === "string")
+      );
+    }
+  }
+  return orders;
+}
+
+/**
+ * Assigns `fractionalIndex` to one shard's rows that lack it, in the page's
+ * legacy `blockOrder` (rows missing from the order — e.g. container children
+ * backfilled by earlier migrations — keep their append-last position). Rows
+ * that already carry a consistent index keep it.
+ */
+function backfillShardFractionalIndexes(
+  key: string,
+  blockOrder: string[]
+): void {
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    return;
+  }
+
+  const shard = JSON.parse(raw) as Record<
+    string,
+    StoredItem<Record<string, unknown>>
+  >;
+  const rowsById = new Map<string, Record<string, unknown>>();
+  for (const stored of Object.values(shard)) {
+    const data = stored.data;
+    if (data && typeof data === "object" && typeof data.id === "string") {
+      rowsById.set(data.id, data);
+    }
+  }
+
+  const inOrder = blockOrder.filter((id) => rowsById.has(id));
+  const orderedIds = new Set(inOrder);
+  const documentOrder = [
+    ...inOrder,
+    ...[...rowsById.keys()].filter((id) => !orderedIds.has(id)),
+  ];
+
+  const indexById = new Map<string, string | undefined>(
+    documentOrder.map((id) => {
+      const stored = rowsById.get(id)?.fractionalIndex;
+      return [id, typeof stored === "string" ? stored : undefined];
+    })
+  );
+  if ([...indexById.values()].every((index) => index !== undefined)) {
+    return;
+  }
+
+  const assigned = assignFractionalIndexes(
+    documentOrder,
+    indexById,
+    documentOrder
+  );
+  for (const [id, fractionalIndex] of assigned) {
+    const row = rowsById.get(id);
+    if (row) {
+      row.fractionalIndex = fractionalIndex;
+    }
+  }
+
+  localStorage.setItem(key, JSON.stringify(shard));
+}
+
+/**
+ * Assigns initial `fractionalIndex` keys to legacy block rows across all
+ * shards, in each page's `blockOrder`. Idempotent (flag-guarded, and a no-op
+ * for already-indexed shards); runs once per boot like its siblings.
+ */
+export function backfillBlockFractionalIndexes(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (localStorage.getItem(FRACTIONAL_INDEX_BACKFILL_FLAG_KEY) === "done") {
+    return;
+  }
+
+  try {
+    const blockOrders = readPageBlockOrders();
+    const shardKeys: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(BLOCK_SHARD_PREFIX)) {
+        shardKeys.push(key);
+      }
+    }
+
+    for (const key of shardKeys) {
+      const pageId = key.slice(BLOCK_SHARD_PREFIX.length);
+      backfillShardFractionalIndexes(key, blockOrders.get(pageId) ?? []);
+    }
+
+    localStorage.setItem(FRACTIONAL_INDEX_BACKFILL_FLAG_KEY, "done");
+  } catch {
+    localStorage.setItem(FRACTIONAL_INDEX_BACKFILL_FLAG_KEY, "done");
   }
 }
 

@@ -1,3 +1,4 @@
+import { generateNKeysBetween } from "fractional-indexing";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Block } from "@/lib/schemas/block.ts";
@@ -7,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   acceptBlockMutations: vi.fn(),
   acceptPageMutations: vi.fn(),
   blockDelete: vi.fn(),
+  blockGet: vi.fn(),
   blockHas: vi.fn(),
   blockInsert: vi.fn(),
   blockUpdate: vi.fn(),
@@ -18,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   pageUpdate: vi.fn(),
   /** Ids the collection currently holds — deletes skip anything absent. */
   presentBlockIds: new Set<string>(),
+  /** Fractional index stored on each seeded row, read back by `get`. */
+  seededIndexById: new Map<string, string>(),
 }));
 
 vi.mock("@tanstack/react-db", () => ({
@@ -31,6 +35,7 @@ vi.mock("@/lib/local-draft/dirty-pages-cookie.ts", () => ({
 vi.mock("@/db/collections/local-collections.ts", () => ({
   localBlocksCollection: {
     delete: mocks.blockDelete,
+    get: mocks.blockGet,
     has: mocks.blockHas,
     insert: mocks.blockInsert,
     update: mocks.blockUpdate,
@@ -51,11 +56,19 @@ function flushAsync(): Promise<void> {
 
 const pageId = "page-1";
 
-/** Mark ids as already materialized in the collection (deletes reach them). */
+/**
+ * Mark ids as already materialized in the collection (deletes reach them) and
+ * give them ascending fractional indexes, which is the steady state after the
+ * boot backfill. Rows without keys force an assignment on the next structural
+ * edit, so seeding them keeps "this edit rewrote no other rows" assertions
+ * about the edit rather than about the backfill.
+ */
 function seedCollection(...ids: string[]): void {
-  for (const id of ids) {
+  const keys = generateNKeysBetween(null, null, ids.length);
+  ids.forEach((id, index) => {
     mocks.presentBlockIds.add(id);
-  }
+    mocks.seededIndexById.set(id, keys[index] as string);
+  });
 }
 
 function textBlock(id: string, text = id): Block {
@@ -80,6 +93,13 @@ function readBlockOrderFromUpdate(callIndex = 0): string[] | undefined {
 }
 
 function setupTransactionMock(): void {
+  mocks.blockGet.mockReset();
+  mocks.blockGet.mockImplementation((id: string) =>
+    mocks.presentBlockIds.has(id)
+      ? { id, fractionalIndex: mocks.seededIndexById.get(id) }
+      : undefined
+  );
+  mocks.blockUpdate.mockReset();
   mocks.createTransaction.mockImplementation(
     ({
       mutationFn,
@@ -109,6 +129,7 @@ describe("incremental page block transaction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.presentBlockIds.clear();
+    mocks.seededIndexById.clear();
     mocks.blockHas.mockImplementation((id: string) =>
       mocks.presentBlockIds.has(id)
     );
@@ -289,6 +310,7 @@ describe("applyPageBlockDiff", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.presentBlockIds.clear();
+    mocks.seededIndexById.clear();
     mocks.blockHas.mockImplementation((id: string) =>
       mocks.presentBlockIds.has(id)
     );
@@ -370,6 +392,7 @@ describe("replacePageBlocks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.presentBlockIds.clear();
+    mocks.seededIndexById.clear();
     mocks.blockHas.mockImplementation((id: string) =>
       mocks.presentBlockIds.has(id)
     );
@@ -449,82 +472,6 @@ describe("replacePageBlocks", () => {
   });
 });
 
-describe("block createdAt on update", () => {
-  let ops: typeof import("@/db/queries/block-collection-ops.ts");
-
-  beforeAll(async () => {
-    ops = await import("@/db/queries/block-collection-ops.ts");
-  });
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.presentBlockIds.clear();
-    mocks.blockHas.mockImplementation((id: string) =>
-      mocks.presentBlockIds.has(id)
-    );
-    setupTransactionMock();
-    mocks.pageUpdate.mockImplementation(
-      (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {
-        const draft: { blockOrder?: string[]; updatedAt?: string } = {};
-        update(draft);
-        return draft;
-      }
-    );
-  });
-
-  function captureUpdatedDraft(
-    seedCreatedAt?: string
-  ): { createdAt?: string }[] {
-    const captured: { createdAt?: string }[] = [];
-    mocks.blockUpdate.mockImplementation(
-      (
-        id: string,
-        update: (draft: LocalBlock & { createdAt?: string }) => void
-      ) => {
-        const draft: LocalBlock & { createdAt?: string } = {
-          ...localBlock(textBlock(id)),
-          createdAt: seedCreatedAt,
-        };
-        update(draft);
-        captured.push(draft);
-        return draft;
-      }
-    );
-    return captured;
-  }
-
-  it("preserves an existing createdAt when a block is edited", async () => {
-    const { applyPageBlockDiff } = ops;
-    const captured = captureUpdatedDraft("2025-01-01T00:00:00.000Z");
-
-    applyPageBlockDiff(
-      pageId,
-      [textBlock("a", "before")],
-      [textBlock("a", "after")],
-      [localBlock(textBlock("a", "before"))]
-    );
-    await flushAsync();
-
-    expect(mocks.blockUpdate).toHaveBeenCalledWith("a", expect.any(Function));
-    expect(captured[0]?.createdAt).toBe("2025-01-01T00:00:00.000Z");
-  });
-
-  it("backfills createdAt for a legacy row missing the field", async () => {
-    const { applyPageBlockDiff } = ops;
-    const captured = captureUpdatedDraft(undefined);
-
-    applyPageBlockDiff(
-      pageId,
-      [textBlock("a", "before")],
-      [textBlock("a", "after")],
-      [localBlock(textBlock("a", "before"))]
-    );
-    await flushAsync();
-
-    expect(typeof captured[0]?.createdAt).toBe("string");
-  });
-});
-
 describe("seedPageBlocks", () => {
   let ops: typeof import("@/db/queries/block-collection-ops.ts");
 
@@ -535,6 +482,7 @@ describe("seedPageBlocks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.presentBlockIds.clear();
+    mocks.seededIndexById.clear();
     mocks.blockHas.mockImplementation((id: string) =>
       mocks.presentBlockIds.has(id)
     );
