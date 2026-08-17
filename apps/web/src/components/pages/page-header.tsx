@@ -8,6 +8,7 @@ import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-
 import { PageBreadcrumbCurrentCrumb } from "@/components/pages/page-breadcrumb-current-crumb.tsx";
 import { PageHeaderMenu } from "@/components/pages/page-header-menu.tsx";
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
+import { PageShareControls } from "@/components/pages/share-dialog.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { SidebarTrigger } from "@/components/ui/sidebar.tsx";
 import {
@@ -158,6 +159,9 @@ export function PageHeader({
         <PageHeaderBreadcrumb pageId={pageId} pages={pages} titleSeed={seed} />
       )}
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        {/* Server/blog pages are outside page permissions — pill/Share are
+          my_access-driven, so they only ever render for synced user pages. */}
+        <PageShareControls pageId={pageId} shareEnabled={!serverPage} />
         <PageHeaderMenu
           onAfterReset={onAfterReset}
           pageId={pageId}
