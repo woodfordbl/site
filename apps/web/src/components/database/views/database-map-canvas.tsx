@@ -9,7 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { MapMarkerCard } from "@/components/database/views/database-map-tooltip.tsx";
+import {
+  MapMarkerCard,
+  MapRegionCard,
+} from "@/components/database/views/database-map-tooltip.tsx";
 import {
   Map,
   MapClusterLayer,
@@ -25,7 +28,14 @@ import type {
   MapPoint,
   MapRegion,
 } from "@/lib/databases/map-data.ts";
-import { MAP_REGION_BUCKET_COUNT } from "@/lib/databases/map-data.ts";
+import {
+  MAP_REGION_BUCKET_COUNT,
+  normalizeRegionKey,
+} from "@/lib/databases/map-data.ts";
+import {
+  buildRegionTooltipDetails,
+  regionTooltipTitle,
+} from "@/lib/databases/map-tooltip.ts";
 import { ensureLocalMaplibreWorker } from "@/lib/maps/maplibre-worker.ts";
 import type { BlockColor } from "@/lib/schemas/rich-text.ts";
 import { cn } from "@/lib/utils.ts";
@@ -264,10 +274,40 @@ export function DatabaseMapPointsCanvas({
   );
 }
 
+/**
+ * The hover payload mapcn hands `MapGeoJSON`: properties hang off `feature`,
+ * and `originalEvent.point` is the cursor in canvas pixels — which is what
+ * lets the card follow the pointer instead of sitting in a corner.
+ */
+interface RegionHoverEvent {
+  feature: { properties: Record<string, unknown> | null };
+  originalEvent: { point: { x: number; y: number } };
+}
+
+/** A region under the cursor, with where the cursor was and what to call it. */
+interface HoveredRegion {
+  flipX: boolean;
+  flipY: boolean;
+  point: { x: number; y: number };
+  region: MapRegion;
+  title: string;
+}
+
+/**
+ * Card footprint used to decide which side of the cursor it opens on. Measuring
+ * the real bounds would need a layout pass per hover; these track the card's
+ * `max-w-64` and its tallest form (title + two rows), and erring large only
+ * flips slightly earlier than strictly needed.
+ */
+const REGION_CARD_WIDTH_PX = 272;
+const REGION_CARD_HEIGHT_PX = 88;
+
 export interface DatabaseMapRegionCanvasProps
   extends DatabaseMapCanvasCommonProps {
   /** Region key → ramp bucket index (0 = palest). */
   buckets: Map<string, number>;
+  /** True when the aggregate is a row count, which the card must not repeat. */
+  isCountAggregate: boolean;
   /** GeoJSON feature property the region keys join against. */
   joinProperty: string;
   regions: MapRegion[];
@@ -286,6 +326,7 @@ export interface DatabaseMapRegionCanvasProps
 export function DatabaseMapRegionCanvas({
   buckets,
   heightClass,
+  isCountAggregate,
   joinProperty,
   regions,
   showTooltip,
@@ -295,7 +336,7 @@ export function DatabaseMapRegionCanvas({
 }: DatabaseMapRegionCanvasProps): ReactNode {
   const { colors, scopeRef } = usePaletteColors(1);
   const base = colors[0] ?? FALLBACK_ACCENT;
-  const [hovered, setHovered] = useState<MapRegion | null>(null);
+  const [hovered, setHovered] = useState<HoveredRegion | null>(null);
 
   // Plain records, not `new Map(...)`: mapcn's component is named `Map`, so
   // the global constructor is shadowed for the whole module.
@@ -339,19 +380,34 @@ export function DatabaseMapRegionCanvas({
   }, [buckets, joinProperty]);
 
   const handleHover = useCallback(
-    (event: { properties: Record<string, unknown> } | null) => {
+    (event: RegionHoverEvent | null) => {
       if (!event) {
         setHovered(null);
         return;
       }
-      const raw = event.properties[joinProperty];
-      setHovered(
-        typeof raw === "string"
-          ? (byKey[raw.trim().toUpperCase()] ?? null)
-          : null
-      );
+      const properties = event.feature.properties ?? {};
+      const raw = properties[joinProperty];
+      const region =
+        typeof raw === "string" ? byKey[normalizeRegionKey(raw)] : undefined;
+      if (!region) {
+        setHovered(null);
+        return;
+      }
+      const { point } = event.originalEvent;
+      const frame = scopeRef.current;
+      setHovered({
+        flipX: frame
+          ? point.x + REGION_CARD_WIDTH_PX > frame.clientWidth
+          : false,
+        flipY: frame
+          ? point.y + REGION_CARD_HEIGHT_PX > frame.clientHeight
+          : false,
+        point,
+        region,
+        title: regionTooltipTitle(properties, region.label),
+      });
     },
-    [byKey, joinProperty]
+    [byKey, joinProperty, scopeRef]
   );
 
   return (
@@ -373,14 +429,17 @@ export function DatabaseMapRegionCanvas({
         <MapControls />
       </Map>
       {hovered ? (
-        <div className="pointer-events-none absolute top-2 left-2 rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm">
-          <span className="font-medium text-popover-foreground">
-            {hovered.label}
-          </span>
-          <span className="ml-2 text-muted-foreground">
-            {valueLabel}: {hovered.value.toLocaleString("en-US")}
-          </span>
-        </div>
+        <MapRegionCard
+          details={buildRegionTooltipDetails(
+            hovered.region,
+            valueLabel,
+            isCountAggregate
+          )}
+          flipX={hovered.flipX}
+          flipY={hovered.flipY}
+          point={hovered.point}
+          title={hovered.title}
+        />
       ) : null}
     </MapFrame>
   );

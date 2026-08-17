@@ -23,6 +23,58 @@ import type { BlockColor } from "@/lib/schemas/rich-text.ts";
  * keep their option colors so they read as the same pills the grid shows.
  */
 
+/**
+ * Feature properties a region title prefers, most human-readable first. The
+ * bundled world countries carry all three; a caller's own GeoJSON may carry
+ * none, in which case the row-side join code names the region.
+ */
+const REGION_NAME_PROPERTIES = ["NAME", "NAME_LONG", "ADMIN"] as const;
+
+/**
+ * What a hovered region is called: the feature's own name when it has one, so
+ * the card reads "United States of America" rather than the join code "USA"
+ * that happens to be in the rows.
+ */
+export function regionTooltipTitle(
+  properties: Record<string, unknown> | null | undefined,
+  fallback: string
+): string {
+  for (const key of REGION_NAME_PROPERTIES) {
+    const value = properties?.[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.trim();
+    }
+  }
+  return fallback;
+}
+
+/**
+ * The rows under a region's title: the aggregate the view computes, plus how
+ * many rows produced it — dropped when the aggregate IS the row count, where
+ * it would print the same number twice.
+ */
+export function buildRegionTooltipDetails(
+  region: { rowCount: number; value: number },
+  valueLabel: string,
+  isCount: boolean
+): MapTooltipDetail[] {
+  const details: MapTooltipDetail[] = [
+    {
+      fieldId: "value",
+      label: valueLabel,
+      values: [{ text: region.value.toLocaleString("en-US") }],
+    },
+  ];
+  if (!isCount) {
+    details.push({
+      fieldId: "rows",
+      label: region.rowCount === 1 ? "Row" : "Rows",
+      values: [{ text: region.rowCount.toLocaleString("en-US") }],
+    });
+  }
+  return details;
+}
+
 /** One value inside a tooltip row; `color` is set for select options. */
 export interface MapTooltipValue {
   color?: BlockColor;

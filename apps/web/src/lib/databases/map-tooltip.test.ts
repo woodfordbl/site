@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMapTooltipDetails } from "@/lib/databases/map-tooltip.ts";
+import {
+  buildMapTooltipDetails,
+  buildRegionTooltipDetails,
+  regionTooltipTitle,
+} from "@/lib/databases/map-tooltip.ts";
 import type {
   DatabaseField,
   LocalDatabaseRow,
@@ -139,5 +143,58 @@ describe("buildMapTooltipDetails", () => {
     expect(
       buildMapTooltipDetails(FIELDS, row({ "f-title": "LC-39A" }), ["f-gone"])
     ).toEqual([]);
+  });
+});
+
+describe("regionTooltipTitle", () => {
+  it("prefers the feature's own name over the join code", () => {
+    expect(
+      regionTooltipTitle({ ADM0_A3: "USA", NAME: "United States" }, "USA")
+    ).toBe("United States");
+  });
+
+  it("falls back through the name properties, then to the row's code", () => {
+    expect(regionTooltipTitle({ NAME_LONG: "Republic of France" }, "FRA")).toBe(
+      "Republic of France"
+    );
+    expect(regionTooltipTitle({ ADM0_A3: "KAZ" }, "KAZ")).toBe("KAZ");
+    expect(regionTooltipTitle(null, "NZL")).toBe("NZL");
+  });
+
+  it("ignores a blank name", () => {
+    expect(regionTooltipTitle({ NAME: "   " }, "JPN")).toBe("JPN");
+  });
+});
+
+describe("buildRegionTooltipDetails", () => {
+  it("shows the aggregate alone when it is the row count", () => {
+    expect(
+      buildRegionTooltipDetails({ rowCount: 6, value: 6 }, "Count", true)
+    ).toEqual([{ fieldId: "value", label: "Count", values: [{ text: "6" }] }]);
+  });
+
+  it("adds the row count behind any other aggregate", () => {
+    expect(
+      buildRegionTooltipDetails(
+        { rowCount: 3, value: 1_234_567 },
+        "Sum of Revenue",
+        false
+      )
+    ).toEqual([
+      {
+        fieldId: "value",
+        label: "Sum of Revenue",
+        // Grouped like every other number the grid prints.
+        values: [{ text: "1,234,567" }],
+      },
+      { fieldId: "rows", label: "Rows", values: [{ text: "3" }] },
+    ]);
+  });
+
+  it("says Row, not Rows, for one", () => {
+    expect(
+      buildRegionTooltipDetails({ rowCount: 1, value: 42 }, "Average", false)[1]
+        .label
+    ).toBe("Row");
   });
 });

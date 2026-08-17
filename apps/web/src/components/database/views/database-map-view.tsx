@@ -315,6 +315,7 @@ export function DatabaseMapView({
             map.scale ?? DEFAULT_MAP_SCALE
           )}
           heightClass={MAP_HEIGHT_CLASS}
+          isCountAggregate={aggregate === "count"}
           joinProperty={resolveMapJoinProperty(map)}
           regions={regions.regions}
           showTooltip={showTooltip}
