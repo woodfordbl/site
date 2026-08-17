@@ -9,7 +9,6 @@ import {
   isMapConfigured,
   type MapRegion,
   normalizeRegionKey,
-  parseCoordinateText,
 } from "@/lib/databases/map-data.ts";
 import type {
   DatabaseField,
@@ -19,7 +18,12 @@ import type {
 const TITLE: DatabaseField = { id: "f-title", name: "Name", type: "text" };
 const LAT: DatabaseField = { id: "f-lat", name: "Latitude", type: "number" };
 const LNG: DatabaseField = { id: "f-lng", name: "Longitude", type: "number" };
-const COORD: DatabaseField = { id: "f-coord", name: "Location", type: "text" };
+const COORD: DatabaseField = {
+  id: "f-coord",
+  name: "Coordinates",
+  type: "text",
+};
+const PLACE: DatabaseField = { id: "f-place", name: "Place", type: "location" };
 const REVENUE: DatabaseField = { id: "f-rev", name: "Revenue", type: "number" };
 const COUNTRY: DatabaseField = {
   id: "f-country",
@@ -37,7 +41,7 @@ const STATUS: DatabaseField = {
   type: "select",
 };
 
-const FIELDS = [TITLE, LAT, LNG, COORD, REVENUE, COUNTRY, STATUS];
+const FIELDS = [TITLE, LAT, LNG, COORD, PLACE, REVENUE, COUNTRY, STATUS];
 
 function row(id: string, values: LocalDatabaseRow["values"]): LocalDatabaseRow {
   return {
@@ -48,30 +52,6 @@ function row(id: string, values: LocalDatabaseRow["values"]): LocalDatabaseRow {
     values,
   };
 }
-
-describe("parseCoordinateText", () => {
-  it.each([
-    ["37.7749, -122.4194", { lat: 37.7749, lng: -122.4194 }],
-    ["37.7749 -122.4194", { lat: 37.7749, lng: -122.4194 }],
-    ["  51.5, -0.12  ", { lat: 51.5, lng: -0.12 }],
-    ["0,0", { lat: 0, lng: 0 }],
-    ["-90, 180", { lat: -90, lng: 180 }],
-  ])("parses %s", (input, expected) => {
-    expect(parseCoordinateText(input)).toEqual(expected);
-  });
-
-  it.each([
-    ["", "empty"],
-    ["37.7749", "one number"],
-    ["37.7749, -122.4194, 12", "three numbers"],
-    ["San Francisco", "prose"],
-    ["91, 0", "latitude out of range"],
-    ["0, 181", "longitude out of range"],
-    ["37.7749, abc", "non-numeric half"],
-  ])("rejects %s (%s)", (input) => {
-    expect(parseCoordinateText(input)).toBeNull();
-  });
-});
 
 describe("buildMapPoints", () => {
   it("projects lat/lng number pairs and labels from the primary field", () => {
@@ -124,6 +104,49 @@ describe("buildMapPoints", () => {
       { label: "Paris", lat: 48.8566, lng: 2.3522, rowId: "r1" },
     ]);
     expect(result.skippedRowCount).toBe(1);
+  });
+
+  it("reads a location field's resolved coordinates", () => {
+    const rows = [
+      row("r1", {
+        "f-place": {
+          label: "Kourou, French Guiana",
+          lat: 5.239,
+          lng: -52.7683,
+        },
+        "f-title": "ELA-4",
+      }),
+      // An address nobody has geocoded yet: counted, never silently dropped.
+      row("r2", {
+        "f-place": { label: "221B Baker Street" },
+        "f-title": "Flat",
+      }),
+      row("r3", { "f-title": "Blank" }),
+    ];
+    const result = buildMapPoints(
+      FIELDS,
+      rows,
+      { locationFieldId: "f-place", pointMode: "location" },
+      TITLE.id
+    );
+    expect(result.points).toEqual([
+      { label: "ELA-4", lat: 5.239, lng: -52.7683, rowId: "r1" },
+    ]);
+    expect(result.skippedRowCount).toBe(2);
+  });
+
+  it("reads a location field holding a bare coordinate string", () => {
+    // What a paste or a text→location type change leaves in the cell.
+    const rows = [row("r1", { "f-place": "51.5, -0.12", "f-title": "London" })];
+    const result = buildMapPoints(
+      FIELDS,
+      rows,
+      { locationFieldId: "f-place", pointMode: "location" },
+      TITLE.id
+    );
+    expect(result.points).toEqual([
+      { label: "London", lat: 51.5, lng: -0.12, rowId: "r1" },
+    ]);
   });
 
   it("carries the select option id for the color field and falls back to Untitled", () => {
@@ -280,6 +303,23 @@ describe("isMapConfigured", () => {
     ).toBe(true);
   });
 
+  it("requires a location field in location mode, and one of that type", () => {
+    expect(isMapConfigured(FIELDS, { pointMode: "location" })).toBe(false);
+    // A stale id, or one pointing at a field of another type, is unconfigured.
+    expect(
+      isMapConfigured(FIELDS, {
+        locationFieldId: "f-title",
+        pointMode: "location",
+      })
+    ).toBe(false);
+    expect(
+      isMapConfigured(FIELDS, {
+        locationFieldId: "f-place",
+        pointMode: "location",
+      })
+    ).toBe(true);
+  });
+
   it("requires a join field for a region map", () => {
     expect(isMapConfigured(FIELDS, { mark: "region" })).toBe(false);
     expect(
@@ -289,8 +329,16 @@ describe("isMapConfigured", () => {
 });
 
 describe("guessMapConfig", () => {
-  it("pairs number fields named like latitude and longitude", () => {
+  it("prefers a location field over every derived source", () => {
     expect(guessMapConfig(FIELDS)).toEqual({
+      locationFieldId: "f-place",
+      mark: "pins",
+      pointMode: "location",
+    });
+  });
+
+  it("pairs number fields named like latitude and longitude", () => {
+    expect(guessMapConfig([TITLE, LAT, LNG, COORD, COUNTRY])).toEqual({
       latFieldId: "f-lat",
       lngFieldId: "f-lng",
       mark: "pins",

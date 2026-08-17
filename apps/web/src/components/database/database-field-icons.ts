@@ -5,6 +5,7 @@ import {
   IconHash,
   IconLink,
   IconList,
+  IconMapPin,
   IconMathFunction,
   IconRelationManyToMany,
   IconSquareCheck,
@@ -39,6 +40,7 @@ export const DATABASE_FIELD_TYPE_ICONS: Record<
   multiSelect: IconList,
   date: IconCalendar,
   url: IconLink,
+  location: IconMapPin,
   formula: IconMathFunction,
   relation: IconRelationManyToMany,
 };
@@ -107,6 +109,15 @@ export const DATABASE_FIELD_TYPE_ICON_NODES: Record<
       "path",
       {
         d: "M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463",
+      },
+    ],
+  ],
+  location: [
+    ["path", { d: "M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" }],
+    [
+      "path",
+      {
+        d: "M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0",
       },
     ],
   ],

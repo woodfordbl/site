@@ -36,6 +36,10 @@ const ogHandler = fileURLToPath(
   new URL("./routes/api/og.get.ts", import.meta.url)
 );
 
+const geocodeHandler = fileURLToPath(
+  new URL("./routes/api/geocode.get.ts", import.meta.url)
+);
+
 const unsplashSearchHandler = fileURLToPath(
   new URL("./routes/api/unsplash/search.get.ts", import.meta.url)
 );
@@ -139,6 +143,7 @@ const config = defineConfig({
       features: { websocket: !process.env.VITEST },
       handlers: [
         { route: "/api/og", method: "GET", handler: ogHandler },
+        { route: "/api/geocode", method: "GET", handler: geocodeHandler },
         {
           route: "/api/unsplash/search",
           method: "GET",

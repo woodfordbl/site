@@ -1,13 +1,11 @@
 # Maps
 
-> **Status: steps 1–4 shipped.** The `map` view type (pins / cluster / region
-> marks) and the standalone `map` block are implemented — see
-> [databases — Map view](../architecture/databases.md#map-view) and
-> [block-types — `map`](../architecture/block-types.md#map) for what the code
-> actually does. This document is kept as the design record: the reasoning
-> below is why it is shaped that way. Steps 5–6 (a `location` field type, the
-> `arc` mark, geocoding) are still open, deliberately gated on what the shipped
-> views teach.
+> **Status: steps 1–5 shipped**, plus the geocoding half of step 6. The `map`
+> view type (pins / cluster / region marks), the standalone `map` block and the
+> `location` field type are implemented; each module's `@fileoverview` documents
+> what the code actually does. This file is kept as the design record: the
+> reasoning below is why it is shaped that way. Step 6's `arc` mark is still
+> open, deliberately gated on what the shipped views teach.
 
 Geography as a first-class way to look at workspace data: a **`map` database
 view** that renders the rows a view already resolved as pins, clusters, regions
@@ -36,10 +34,10 @@ diff instead of a 205-error reformat.
 
 ## The one decision: where do coordinates come from
 
-[`databaseFieldTypeSchema`](../../src/lib/schemas/database.ts) is
+When this was written, `databaseFieldTypeSchema` was
 `text | number | checkbox | select | multiSelect | date | url | formula |
-relation`. There is no location type, and every map feature is blocked on that
-gap. Three ways out:
+relation` — no location type, and every map feature blocked on that gap. Three
+ways out:
 
 | Option | Cost | Problem |
 |---|---|---|
@@ -53,6 +51,28 @@ longitude are already sitting in two number columns. Option A reads that data on
 day one; option B makes every existing table re-key its data before it can see a
 map. Nothing in A blocks B later — a `location` field becomes one more source
 the same view config can point at.
+
+**Both shipped, in that order, and the prediction held.** A is `pointMode: "pair"`
+and `"coordinate"`; B is `pointMode: "location"`, reading
+`{ label, lat?, lng? }` off a `location` cell. The estimate above was wrong in
+one direction and right in another: the cell surface really was the bulk of the
+work (coercion, plain text, filter, sort, group, formula projection, cell
+renderer, cell editor, field icon), but it took a day rather than weeks because
+the view already existed to plug into. What B adds that A cannot is a place
+*entered as a place*: an address the geocoder resolves, or a pasted "lat, lng",
+validated at write time instead of showing up later as a missing pin.
+
+Two decisions inside B are worth recording:
+
+- **Coordinates are optional on the value.** A label exists before anything can
+  resolve it — typed offline, or with the proxy unreachable — and refusing the
+  write would lose the address. An unresolved location is honest data: the cell
+  shows a hollow pin, and the map view counts the row among the ones it cannot
+  plot, which it already did for blank coordinate cells.
+- **A bare string coerces to a label.** Pasting an address, importing a CSV
+  column, or changing a text field's type to `location` all leave a plain string
+  in the cell; reading it as an unresolved label means none of those paths throws
+  data away, and a string that parses as two numbers upgrades itself to a point.
 
 ## Idea 1 — a `map` database view (recommended)
 
@@ -187,6 +207,14 @@ current view" to freeze center and zoom. Geocoding can arrive later as an
 optional proxy alongside the Unsplash and Finnhub ones, degrading to
 coordinate entry when the key is absent.
 
+> Geocoding did arrive, with the `location` field type, and the "keyed service"
+> assumption was wrong: Nominatim needs no API key, so it never 503s for want of
+> configuration. Its usage policy is the real constraint — one identifying
+> `User-Agent` (which only a server can set) and no per-keystroke autocomplete —
+> which is why `/api/geocode` is a proxy and why the cell editor searches on
+> submit. The block's own picker still takes coordinates and map clicks; wiring
+> address search into it is a small follow-on.
+
 A third surface falls out for free once the block exists: a row page whose
 database has coordinates could render the same block above its Properties
 section.
@@ -262,6 +290,10 @@ real debugging time:
    toggle.
 4. ~~**`map` block** for standalone places~~ **Shipped**, with click-to-place
    and paste-coords.
-5. **`location` field type** (option B), once the view has proven which of
-   validation, geocoding or map-click entry people actually miss.
-6. **`arc` mark**, and optional geocoding via a Nitro proxy.
+5. ~~**`location` field type** (option B)~~ **Shipped** — with geocoding, which
+   is what the derived-coordinate views turned out to be missing: everything
+   else about a place could already be typed.
+6. **`arc` mark** — still open. Geocoding shipped with step 5 as
+   `routes/api/geocode.get.ts` (Nominatim, no API key), searched on explicit
+   submit only because Nominatim's usage policy forbids per-keystroke
+   autocomplete.

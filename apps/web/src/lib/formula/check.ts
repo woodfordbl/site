@@ -81,6 +81,7 @@ export type FormulaFieldKind =
   | "multiSelect"
   | "date"
   | "url"
+  | "location"
   | "formula"
   | "relation";
 
@@ -213,6 +214,7 @@ export function formulaPropertyValueType(
     case "text":
     case "url":
     case "select":
+    case "location":
       return TEXT_TYPE;
     default:
       return UNKNOWN_TYPE;

@@ -7,7 +7,7 @@ import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
 import type { BlockEditProps } from "@/lib/canvas/block-spec.types.ts";
-import type { MapCoordinate } from "@/lib/databases/map-data.ts";
+import type { MapCoordinate } from "@/lib/databases/location-values.ts";
 
 type MapEditProps = BlockEditProps<"map">;
 

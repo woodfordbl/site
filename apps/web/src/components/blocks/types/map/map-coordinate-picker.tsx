@@ -18,7 +18,7 @@ import {
 import {
   type MapCoordinate,
   parseCoordinateText,
-} from "@/lib/databases/map-data.ts";
+} from "@/lib/databases/location-values.ts";
 
 /**
  * @fileoverview Coordinate entry for the `map` block. There is no geocoder here on purpose:

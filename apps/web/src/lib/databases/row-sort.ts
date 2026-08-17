@@ -87,6 +87,13 @@ function compareNonEmpty(
         typeof a === "string" ? a : "",
         typeof b === "string" ? b : ""
       );
+    case "location":
+      // By label, not by distance from anywhere: a column of addresses sorts
+      // the way the reader sees it. Geographic ordering needs an origin.
+      return TEXT_COLLATOR.compare(
+        cellToPlainText(field, a),
+        cellToPlainText(field, b)
+      );
     case "formula":
       return compareFormulaValues(field, a, b);
     default:

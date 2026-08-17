@@ -21,17 +21,22 @@ export const databaseMapViewConfigSchema = z.object({
    */
   mark: z.enum(["pins", "cluster", "region"]).optional(),
   /**
-   * Where a row's point comes from. `pair` (default) reads two number
-   * fields; `coordinate` parses one text/formula field holding
-   * "lat, lng". Ignored by the `region` mark.
+   * Where a row's point comes from. `location` reads one `location` field's
+   * resolved coordinates and is what a map view guesses when the database has
+   * one; `pair` reads two number fields; `coordinate` parses one text/formula
+   * field holding "lat, lng". Absent means `pair`, which is what every view
+   * saved before the `location` field type existed meant. Ignored by the
+   * `region` mark.
    */
-  pointMode: z.enum(["pair", "coordinate"]).optional(),
+  pointMode: z.enum(["pair", "coordinate", "location"]).optional(),
   /** Latitude number field — `pointMode: "pair"`. */
   latFieldId: z.string().optional(),
   /** Longitude number field — `pointMode: "pair"`. */
   lngFieldId: z.string().optional(),
   /** Text/formula field holding "lat, lng" — `pointMode: "coordinate"`. */
   coordFieldId: z.string().optional(),
+  /** Location field — `pointMode: "location"`. */
+  locationFieldId: z.string().optional(),
   /** Marker label field; absent uses the primary (title) field. */
   labelFieldId: z.string().optional(),
   /** Select field whose option colors tint the markers. */

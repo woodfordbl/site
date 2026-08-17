@@ -46,10 +46,16 @@ export interface DatabaseRowGroup {
  * Whether a field can drive `view.groupBy`. Formula fields are excluded in
  * v1 — their values are computed at read time and have no stable stored
  * bucket key. Relation fields are excluded too: bucket labels would need
- * cross-database title resolution that this pure module can't reach.
+ * cross-database title resolution that this pure module can't reach. Location
+ * fields are excluded because every address is its own bucket; the useful
+ * geographic grouping is a `region` map view, not a one-row-per-group board.
  */
 export function isGroupableField(field: DatabaseField): boolean {
-  return field.type !== "formula" && field.type !== "relation";
+  return (
+    field.type !== "formula" &&
+    field.type !== "relation" &&
+    field.type !== "location"
+  );
 }
 
 /**

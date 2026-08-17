@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DATABASE_CHART_Y_AGGREGATES } from "./database-chart-aggregates.ts";
+import { databaseLocationValueSchema } from "./database-location.ts";
 import { databaseMapViewConfigSchema } from "./database-map-config.ts";
 import { blockColorSchema } from "./rich-text.ts";
 
@@ -26,6 +27,7 @@ export const databaseFieldTypeSchema = z.enum([
   "multiSelect",
   "date",
   "url",
+  "location",
   "formula",
   "relation",
 ]);
@@ -123,6 +125,7 @@ export const databaseFieldSchema = z.discriminatedUnion("type", [
     format: databaseDateFormatSchema.optional(),
   }),
   databaseFieldBaseSchema.extend({ type: z.literal("url") }),
+  databaseFieldBaseSchema.extend({ type: z.literal("location") }),
   databaseFieldBaseSchema.extend({
     type: z.literal("formula"),
     /**
@@ -152,13 +155,16 @@ export type DatabaseField = z.infer<typeof databaseFieldSchema>;
  * One cell value. Interpretation is field-typed: `text`/`url` → string,
  * `number` → number, `checkbox` → boolean, `select` → option id string,
  * `multiSelect` → option id array, `date` → ISO date string, `relation` →
- * target-row id array. `null` and missing keys both mean empty.
+ * target-row id array, `location` → `{ label, lat?, lng? }` (a bare string is
+ * accepted and read as an unresolved label, so pasted addresses survive a
+ * type change). `null` and missing keys both mean empty.
  */
 export const databaseCellValueSchema = z.union([
   z.string(),
   z.number(),
   z.boolean(),
   z.array(z.string()),
+  databaseLocationValueSchema,
   z.null(),
 ]);
 

@@ -1,4 +1,5 @@
 import type { FormulaOverlay } from "@/lib/databases/formula-values.ts";
+import { isLocationValue } from "@/lib/databases/location-values.ts";
 import { evaluateFormula, isVolatileFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
 import {
@@ -83,7 +84,9 @@ function overlayCellToFormulaValue(result: FormulaCellResult): FormulaValue {
   if (Array.isArray(cell)) {
     return cell.map((item): FormulaValue => item);
   }
-  return cell;
+  // Location cells reach the formula language as their label, matching how
+  // `lib/formula/row-scope.ts` projects them for non-overlay reads.
+  return isLocationValue(cell) ? cell.label : cell;
 }
 
 /** One row's overlay entry as the scope's `resolved` map (see module docs). */

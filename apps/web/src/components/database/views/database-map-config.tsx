@@ -40,6 +40,7 @@ import {
   mapCoordinateFieldCandidates,
   mapJoinFieldCandidates,
   mapLatLngFieldCandidates,
+  mapLocationFieldCandidates,
   mapValueFieldCandidates,
   resolveMapMark,
   resolveMapPointMode,
@@ -69,6 +70,7 @@ const MARK_OPTIONS: {
 ];
 
 const POINT_MODE_OPTIONS: { label: string; value: DatabaseMapPointMode }[] = [
+  { value: "location", label: "A location property" },
   { value: "pair", label: "Two number properties" },
   { value: "coordinate", label: 'One "lat, lng" property' },
 ];
@@ -208,6 +210,70 @@ function JoinPropertyInput({
   );
 }
 
+/** The field picker(s) the chosen point mode needs. */
+function PointFieldItems({
+  fields,
+  map,
+  numberFields,
+  pointMode,
+  write,
+}: {
+  fields: DatabaseField[];
+  map: DatabaseMapConfig;
+  numberFields: DatabaseField[];
+  pointMode: DatabaseMapPointMode;
+  write: WriteMapPatch;
+}): ReactNode {
+  if (pointMode === "location") {
+    return (
+      <RadioSubmenu
+        currentLabel={fieldName(fields, map.locationFieldId, "None")}
+        label="Location"
+        onValueChange={(value) => {
+          write({ locationFieldId: value });
+        }}
+        options={mapLocationFieldCandidates(fields).map(fieldOption)}
+        value={map.locationFieldId ?? NONE_VALUE}
+      />
+    );
+  }
+  if (pointMode === "coordinate") {
+    return (
+      <RadioSubmenu
+        currentLabel={fieldName(fields, map.coordFieldId, "None")}
+        label="Coordinates"
+        onValueChange={(value) => {
+          write({ coordFieldId: value });
+        }}
+        options={mapCoordinateFieldCandidates(fields).map(fieldOption)}
+        value={map.coordFieldId ?? NONE_VALUE}
+      />
+    );
+  }
+  return (
+    <>
+      <RadioSubmenu
+        currentLabel={fieldName(fields, map.latFieldId, "None")}
+        label="Latitude"
+        onValueChange={(value) => {
+          write({ latFieldId: value });
+        }}
+        options={numberFields.map(fieldOption)}
+        value={map.latFieldId ?? NONE_VALUE}
+      />
+      <RadioSubmenu
+        currentLabel={fieldName(fields, map.lngFieldId, "None")}
+        label="Longitude"
+        onValueChange={(value) => {
+          write({ lngFieldId: value });
+        }}
+        options={numberFields.map(fieldOption)}
+        value={map.lngFieldId ?? NONE_VALUE}
+      />
+    </>
+  );
+}
+
 /** Location-source rows for the point marks (pins / clusters). */
 function PointSourceItems({
   fields,
@@ -220,7 +286,6 @@ function PointSourceItems({
 }): ReactNode {
   const pointMode = resolveMapPointMode(map);
   const numberFields = mapLatLngFieldCandidates(fields);
-  const coordinateFields = mapCoordinateFieldCandidates(fields);
 
   return (
     <>
@@ -236,38 +301,13 @@ function PointSourceItems({
         options={POINT_MODE_OPTIONS}
         value={pointMode}
       />
-      {pointMode === "coordinate" ? (
-        <RadioSubmenu
-          currentLabel={fieldName(fields, map.coordFieldId, "None")}
-          label="Coordinates"
-          onValueChange={(value) => {
-            write({ coordFieldId: value });
-          }}
-          options={coordinateFields.map(fieldOption)}
-          value={map.coordFieldId ?? NONE_VALUE}
-        />
-      ) : (
-        <>
-          <RadioSubmenu
-            currentLabel={fieldName(fields, map.latFieldId, "None")}
-            label="Latitude"
-            onValueChange={(value) => {
-              write({ latFieldId: value });
-            }}
-            options={numberFields.map(fieldOption)}
-            value={map.latFieldId ?? NONE_VALUE}
-          />
-          <RadioSubmenu
-            currentLabel={fieldName(fields, map.lngFieldId, "None")}
-            label="Longitude"
-            onValueChange={(value) => {
-              write({ lngFieldId: value });
-            }}
-            options={numberFields.map(fieldOption)}
-            value={map.lngFieldId ?? NONE_VALUE}
-          />
-        </>
-      )}
+      <PointFieldItems
+        fields={fields}
+        map={map}
+        numberFields={numberFields}
+        pointMode={pointMode}
+        write={write}
+      />
       <RadioSubmenu
         currentLabel={fieldName(fields, map.labelFieldId, "Title")}
         label="Label"

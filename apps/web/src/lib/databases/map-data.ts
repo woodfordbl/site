@@ -6,6 +6,13 @@ import {
   CHART_Y_AGGREGATE_LABELS,
   chartYFieldCandidates,
 } from "@/lib/databases/chart-data.ts";
+import {
+  isValidLatitude,
+  isValidLongitude,
+  locationCoordinate,
+  type MapCoordinate,
+  parseCoordinateText,
+} from "@/lib/databases/location-values.ts";
 import { computeAggregate } from "@/lib/databases/row-aggregate.ts";
 import type {
   DatabaseAggregateFn,
@@ -19,10 +26,12 @@ import type {
  * rows onto geometry. Two shapes, one per mark family — points for
  * `pins`/`cluster`, joined+aggregated regions for `region`.
  *
- * Coordinates come from ordinary fields rather than a location field type (see
- * docs/proposals/maps.md): two number columns, or one text column holding
- * "lat, lng". Rows that yield no usable coordinate are counted, never dropped
- * silently — the view reports them.
+ * A point comes from whichever source the view names: a `location` field's
+ * resolved coordinates, two number columns, or one text column holding
+ * "lat, lng". All three stay supported — rows arrive here by CSV paste and
+ * connector sync as well as by hand, and those bring lat/lng columns, not
+ * location cells. Rows that yield no usable coordinate are counted, never
+ * dropped silently — the view reports them.
  */
 
 export type DatabaseMapConfig = NonNullable<DatabaseTableViewConfig["map"]>;
@@ -58,11 +67,6 @@ export const MAP_REGION_BUCKET_COUNT = 5;
 /** Marks that plot one point per row (as opposed to shading regions). */
 const POINT_MARKS: readonly DatabaseMapMark[] = ["pins", "cluster"];
 
-export interface MapCoordinate {
-  lat: number;
-  lng: number;
-}
-
 export interface MapPoint extends MapCoordinate {
   /** Select option id from the color field, when one is configured. */
   colorOptionId?: string;
@@ -96,14 +100,6 @@ export interface MapRegionsResult {
 /** Longitude/latitude bounding box as `[[west, south], [east, north]]`. */
 export type MapBounds = [[number, number], [number, number]];
 
-export function isValidLatitude(value: number): boolean {
-  return Number.isFinite(value) && value >= -90 && value <= 90;
-}
-
-export function isValidLongitude(value: number): boolean {
-  return Number.isFinite(value) && value >= -180 && value <= 180;
-}
-
 /** Whether this mark plots points (vs. shading joined regions). */
 export function isPointMark(mark: DatabaseMapMark): boolean {
   return POINT_MARKS.includes(mark);
@@ -131,30 +127,6 @@ export function resolveMapJoinProperty(map: DatabaseMapConfig): string {
  */
 export function normalizeRegionKey(value: string): string {
   return value.trim().replace(/\s+/g, " ").toUpperCase();
-}
-
-const COORDINATE_SEPARATOR = /[,;\s]+/;
-
-/**
- * Parse a "lat, lng" cell. Accepts comma, semicolon or whitespace separators
- * and tolerates wrapping parens/brackets. Returns `null` for anything that
- * isn't exactly two in-range numbers — a half-typed cell is not a location.
- */
-export function parseCoordinateText(text: string): MapCoordinate | null {
-  const cleaned = text.trim().replace(/^[([]|[)\]]$/g, "");
-  if (cleaned === "") {
-    return null;
-  }
-  const parts = cleaned.split(COORDINATE_SEPARATOR).filter(Boolean);
-  if (parts.length !== 2) {
-    return null;
-  }
-  const lat = Number(parts[0]);
-  const lng = Number(parts[1]);
-  if (!(isValidLatitude(lat) && isValidLongitude(lng))) {
-    return null;
-  }
-  return { lat, lng };
 }
 
 function fieldById(
@@ -190,6 +162,13 @@ export function mapCoordinateFieldCandidates(
   return fields.filter(
     (field) => field.type === "text" || field.type === "formula"
   );
+}
+
+/** Location fields, which carry their own resolved point. */
+export function mapLocationFieldCandidates(
+  fields: readonly DatabaseField[]
+): DatabaseField[] {
+  return fields.filter((field) => field.type === "location");
 }
 
 /** Fields that can carry a region code. */
@@ -239,6 +218,13 @@ export function resolveMapCoordField(
   return fieldOfType(fields, map.coordFieldId, ["text", "formula"]);
 }
 
+export function resolveMapLocationField(
+  fields: readonly DatabaseField[],
+  map: DatabaseMapConfig
+): DatabaseField | null {
+  return fieldOfType(fields, map.locationFieldId, ["location"]);
+}
+
 export function resolveMapJoinField(
   fields: readonly DatabaseField[],
   map: DatabaseMapConfig
@@ -272,10 +258,14 @@ export function isMapConfigured(
   fields: readonly DatabaseField[],
   map: DatabaseMapConfig
 ): boolean {
+  const mode = resolveMapPointMode(map);
   if (!isPointMark(resolveMapMark(map))) {
     return resolveMapJoinField(fields, map) !== null;
   }
-  if (resolveMapPointMode(map) === "coordinate") {
+  if (mode === "location") {
+    return resolveMapLocationField(fields, map) !== null;
+  }
+  if (mode === "coordinate") {
     return resolveMapCoordField(fields, map) !== null;
   }
   return (
@@ -289,7 +279,17 @@ function coordinateForRow(
   map: DatabaseMapConfig,
   row: LocalDatabaseRow
 ): MapCoordinate | null {
-  if (resolveMapPointMode(map) === "coordinate") {
+  const mode = resolveMapPointMode(map);
+  if (mode === "location") {
+    const locationField = resolveMapLocationField(fields, map);
+    if (!locationField) {
+      return null;
+    }
+    // An unresolved location (label typed, never geocoded) yields no point and
+    // lands in the view's skipped-row count, same as a blank coordinate cell.
+    return locationCoordinate(row.values[locationField.id]);
+  }
+  if (mode === "coordinate") {
     const coordField = resolveMapCoordField(fields, map);
     if (!coordField) {
       return null;
@@ -517,15 +517,25 @@ const COORDINATE_NAME = /^(coord|coords|coordinates|location|lat ?lng)$/i;
 const REGION_NAME = /^(country|country code|iso|nation|region)$/i;
 
 /**
- * Per-type default config when a map view is created: two number fields named
- * like lat/lng become a pin map, a "coordinates"-ish text field becomes a
- * coordinate pin map, a country-ish field becomes a choropleth. Otherwise an
- * unconfigured pin map, which renders its own "pick a field" empty state —
- * the same shape as the chart view's creation defaults.
+ * Per-type default config when a map view is created: a `location` field wins
+ * outright (it is the only field type that means "a place"), then two number
+ * fields named like lat/lng become a pin map, a "coordinates"-ish text field
+ * becomes a coordinate pin map, a country-ish field becomes a choropleth.
+ * Otherwise an unconfigured pin map, which renders its own "pick a field"
+ * empty state — the same shape as the chart view's creation defaults.
  */
 export function guessMapConfig(
   fields: readonly DatabaseField[]
 ): DatabaseMapConfig {
+  const locationField = mapLocationFieldCandidates(fields)[0];
+  if (locationField) {
+    return {
+      locationFieldId: locationField.id,
+      mark: "pins",
+      pointMode: "location",
+    };
+  }
+
   const numbers = mapLatLngFieldCandidates(fields);
   const latField = numbers.find((field) => LATITUDE_NAME.test(field.name));
   const lngField = numbers.find((field) => LONGITUDE_NAME.test(field.name));

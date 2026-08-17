@@ -44,9 +44,9 @@ import { cn } from "@/lib/utils.ts";
  * filter bar, sorts and search work on a map exactly as they do on the table
  * — this view only decides where each row sits.
  *
- * Coordinates come from ordinary number/text fields rather than a location
- * field type; see docs/proposals/maps.md for why that sequencing was chosen.
- * Configuration lives in the database ⋯ settings menu's "Map options" submenu.
+ * A point comes from whichever source the view names: a `location` field, two
+ * number fields, or one "lat, lng" text field. Configuration lives in the
+ * database ⋯ settings menu's "Map options" submenu.
  *
  * One view type with a `mark` switch, mirroring how `chart` handles
  * line/bar/area/pie: `pins` and `cluster` plot one point per row over the
@@ -145,6 +145,17 @@ function OffMapNotice({
   );
 }
 
+/**
+ * Why a row carries no point, in the terms of the source it was read from: in
+ * location mode a skipped row usually holds an address nothing has geocoded
+ * yet, which is a different fix from a malformed number.
+ */
+function skippedPointReason(map: DatabaseMapConfig): string {
+  return resolveMapPointMode(map) === "location"
+    ? "their location has no coordinates yet"
+    : "no valid coordinates";
+}
+
 function unconfiguredState(
   map: DatabaseMapConfig,
   mode: "view" | "edit"
@@ -161,7 +172,13 @@ function unconfiguredState(
       />
     );
   }
-  if (resolveMapPointMode(map) === "coordinate") {
+  const pointMode = resolveMapPointMode(map);
+  if (pointMode === "location") {
+    return (
+      <MapEmptyState hint={settingsHint} title="Pick a location property" />
+    );
+  }
+  if (pointMode === "coordinate") {
     return (
       <MapEmptyState
         hint={settingsHint}
@@ -248,7 +265,7 @@ export function DatabaseMapView({
     notice = (
       <OffMapNotice
         count={points.skippedRowCount}
-        reason="no valid coordinates"
+        reason={skippedPointReason(map)}
       />
     );
     if (points.points.length === 0) {

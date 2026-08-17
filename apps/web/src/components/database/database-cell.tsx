@@ -1,4 +1,5 @@
 import NumberFlow, { type Format } from "@number-flow/react";
+import { IconMapPin, IconMapPinFilled } from "@tabler/icons-react";
 import { type ReactNode, useMemo } from "react";
 
 import { urlCellHref } from "@/components/database/database-grid-helpers.ts";
@@ -13,6 +14,11 @@ import {
   numberFormatOptions,
 } from "@/lib/databases/cell-values.ts";
 import { formulaCellErrorDisplay } from "@/lib/databases/formula-values.ts";
+import {
+  isLocationValue,
+  locationCoordinate,
+  normalizeLocationValue,
+} from "@/lib/databases/location-values.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import type {
   DatabaseCellValue,
@@ -188,7 +194,9 @@ function DatabaseFormulaCellValue({
       </span>
     );
   }
-  if (value === null || value === undefined) {
+  // A formula never computes a location; a value in this shape is left over
+  // from a previous field type and reads as empty rather than "[object …]".
+  if (value === null || value === undefined || isLocationValue(value)) {
     return null;
   }
   if (typeof value === "number") {
@@ -294,6 +302,42 @@ function DatabaseNumberFlowCell({
 }
 
 /**
+ * Location cell display: a pin plus the label. An unresolved location (a label
+ * nothing has geocoded yet) shows a hollow pin and muted text — it reads as
+ * "not on a map yet" rather than looking identical to a placed one, which is
+ * the difference between a row the map plots and one it counts as skipped.
+ */
+function DatabaseLocationCellValue({
+  value,
+}: {
+  value: DatabaseCellValue;
+}): ReactNode {
+  const location = normalizeLocationValue(value);
+  if (!location) {
+    return null;
+  }
+  const placed = locationCoordinate(location) !== null;
+  return (
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 overflow-hidden">
+      {placed ? (
+        <IconMapPinFilled className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : (
+        <IconMapPin className="size-3.5 shrink-0 stroke-[1.5px] text-muted-foreground" />
+      )}
+      <span
+        className={cn(
+          CELL_VALUE_TRUNCATE_CLASS,
+          placed ? undefined : "text-muted-foreground"
+        )}
+        title={placed ? undefined : "No coordinates yet"}
+      >
+        {location.label}
+      </span>
+    </span>
+  );
+}
+
+/**
  * Number cell display. Synced number fields (a `sourceKey`, e.g. a streamed
  * Price) tick live, so their digits animate via NumberFlow; static local
  * number fields keep the plain formatted string (nothing to animate).
@@ -389,6 +433,8 @@ export function DatabaseCellValueView({
       );
     case "date":
       return <DatabaseDateCellValue field={field} now={now} value={coerced} />;
+    case "location":
+      return <DatabaseLocationCellValue value={coerced} />;
     case "relation":
       return (
         <RelationCellView

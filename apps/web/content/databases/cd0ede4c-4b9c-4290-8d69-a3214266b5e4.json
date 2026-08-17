@@ -18,16 +18,56 @@
         "type": "select",
         "icon": "tabler:IconBuildingFactory2",
         "options": [
-          { "id": "spacex", "name": "SpaceX", "color": "blue" },
-          { "id": "rocket-lab", "name": "Rocket Lab", "color": "red" },
-          { "id": "roscosmos", "name": "Roscosmos", "color": "orange" },
-          { "id": "casc", "name": "CASC", "color": "yellow" },
-          { "id": "isro", "name": "ISRO", "color": "green" },
-          { "id": "jaxa", "name": "JAXA", "color": "purple" },
-          { "id": "arianespace", "name": "Arianespace", "color": "brown" },
-          { "id": "northrop", "name": "Northrop Grumman", "color": "gray" },
-          { "id": "alaska", "name": "Alaska Aerospace", "color": "pink" },
-          { "id": "saxavord", "name": "SaxaVord", "color": "gray" }
+          {
+            "id": "spacex",
+            "name": "SpaceX",
+            "color": "blue"
+          },
+          {
+            "id": "rocket-lab",
+            "name": "Rocket Lab",
+            "color": "red"
+          },
+          {
+            "id": "roscosmos",
+            "name": "Roscosmos",
+            "color": "orange"
+          },
+          {
+            "id": "casc",
+            "name": "CASC",
+            "color": "yellow"
+          },
+          {
+            "id": "isro",
+            "name": "ISRO",
+            "color": "green"
+          },
+          {
+            "id": "jaxa",
+            "name": "JAXA",
+            "color": "purple"
+          },
+          {
+            "id": "arianespace",
+            "name": "Arianespace",
+            "color": "brown"
+          },
+          {
+            "id": "northrop",
+            "name": "Northrop Grumman",
+            "color": "gray"
+          },
+          {
+            "id": "alaska",
+            "name": "Alaska Aerospace",
+            "color": "pink"
+          },
+          {
+            "id": "saxavord",
+            "name": "SaxaVord",
+            "color": "gray"
+          }
         ]
       },
       {
@@ -36,30 +76,28 @@
         "type": "select",
         "icon": "tabler:IconCircleDot",
         "options": [
-          { "id": "active", "name": "Active", "color": "green" },
+          {
+            "id": "active",
+            "name": "Active",
+            "color": "green"
+          },
           {
             "id": "construction",
             "name": "Under construction",
             "color": "yellow"
           },
-          { "id": "retired", "name": "Retired", "color": "gray" }
+          {
+            "id": "retired",
+            "name": "Retired",
+            "color": "gray"
+          }
         ]
       },
       {
-        "id": "lat",
-        "name": "Latitude",
-        "type": "number",
-        "icon": "tabler:IconWorldLatitude",
-        "format": "plain",
-        "decimals": 4
-      },
-      {
-        "id": "lng",
-        "name": "Longitude",
-        "type": "number",
-        "icon": "tabler:IconWorldLongitude",
-        "format": "plain",
-        "decimals": 4
+        "id": "place",
+        "name": "Place",
+        "type": "location",
+        "icon": "tabler:IconMapPin"
       },
       {
         "id": "country",
@@ -80,8 +118,13 @@
         "name": "Table",
         "type": "table",
         "config": {
-          "columnWidths": { "site": 260 },
-          "calculations": { "site": "countAll" }
+          "columnWidths": {
+            "site": 240,
+            "place": 240
+          },
+          "calculations": {
+            "site": "countAll"
+          }
         }
       },
       {
@@ -92,9 +135,8 @@
         "config": {
           "map": {
             "mark": "pins",
-            "pointMode": "pair",
-            "latFieldId": "lat",
-            "lngFieldId": "lng",
+            "pointMode": "location",
+            "locationFieldId": "place",
             "colorFieldId": "operator"
           }
         }
@@ -123,8 +165,11 @@
         "site": "Cape Canaveral SLC-40",
         "operator": "spacex",
         "status": "active",
-        "lat": 28.5619,
-        "lng": -80.5772,
+        "place": {
+          "label": "Cape Canaveral, Florida",
+          "lat": 28.5619,
+          "lng": -80.5772
+        },
         "country": "USA",
         "firstLaunch": "1965-06-18"
       }
@@ -136,8 +181,11 @@
         "site": "Kennedy Space Center LC-39A",
         "operator": "spacex",
         "status": "active",
-        "lat": 28.6084,
-        "lng": -80.6043,
+        "place": {
+          "label": "Merritt Island, Florida",
+          "lat": 28.6084,
+          "lng": -80.6043
+        },
         "country": "USA",
         "firstLaunch": "1967-11-09"
       }
@@ -149,8 +197,11 @@
         "site": "Vandenberg SLC-4E",
         "operator": "spacex",
         "status": "active",
-        "lat": 34.6321,
-        "lng": -120.6106,
+        "place": {
+          "label": "Vandenberg SFB, California",
+          "lat": 34.6321,
+          "lng": -120.6106
+        },
         "country": "USA"
       }
     },
@@ -161,8 +212,11 @@
         "site": "Starbase",
         "operator": "spacex",
         "status": "active",
-        "lat": 25.997,
-        "lng": -97.1554,
+        "place": {
+          "label": "Boca Chica, Texas",
+          "lat": 25.997,
+          "lng": -97.1554
+        },
         "country": "USA",
         "firstLaunch": "2023-04-20"
       }
@@ -174,8 +228,11 @@
         "site": "Wallops Pad 0A",
         "operator": "northrop",
         "status": "active",
-        "lat": 37.8337,
-        "lng": -75.4882,
+        "place": {
+          "label": "Wallops Island, Virginia",
+          "lat": 37.8337,
+          "lng": -75.4882
+        },
         "country": "USA",
         "firstLaunch": "2013-04-21"
       }
@@ -187,8 +244,11 @@
         "site": "Pacific Spaceport Complex",
         "operator": "alaska",
         "status": "active",
-        "lat": 57.4353,
-        "lng": -152.3374,
+        "place": {
+          "label": "Narrow Cape, Kodiak Island, Alaska",
+          "lat": 57.4353,
+          "lng": -152.3374
+        },
         "country": "USA"
       }
     },
@@ -199,8 +259,11 @@
         "site": "Rocket Lab LC-1, Mahia",
         "operator": "rocket-lab",
         "status": "active",
-        "lat": -39.262,
-        "lng": 177.8649,
+        "place": {
+          "label": "Mahia Peninsula, New Zealand",
+          "lat": -39.262,
+          "lng": 177.8649
+        },
         "country": "NZL",
         "firstLaunch": "2017-05-25"
       }
@@ -212,8 +275,11 @@
         "site": "Baikonur Site 31",
         "operator": "roscosmos",
         "status": "active",
-        "lat": 45.996,
-        "lng": 63.5642,
+        "place": {
+          "label": "Baikonur Cosmodrome, Kazakhstan",
+          "lat": 45.996,
+          "lng": 63.5642
+        },
         "country": "KAZ"
       }
     },
@@ -224,8 +290,11 @@
         "site": "Jiuquan LA-4",
         "operator": "casc",
         "status": "active",
-        "lat": 40.9583,
-        "lng": 100.2917,
+        "place": {
+          "label": "Jiuquan, Gansu, China",
+          "lat": 40.9583,
+          "lng": 100.2917
+        },
         "country": "CHN",
         "firstLaunch": "1999-11-19"
       }
@@ -237,8 +306,11 @@
         "site": "Wenchang LC-101",
         "operator": "casc",
         "status": "active",
-        "lat": 19.6144,
-        "lng": 110.951,
+        "place": {
+          "label": "Wenchang, Hainan, China",
+          "lat": 19.6144,
+          "lng": 110.951
+        },
         "country": "CHN",
         "firstLaunch": "2016-06-25"
       }
@@ -250,8 +322,11 @@
         "site": "Satish Dhawan Second Launch Pad",
         "operator": "isro",
         "status": "active",
-        "lat": 13.7199,
-        "lng": 80.2304,
+        "place": {
+          "label": "Sriharikota, Andhra Pradesh, India",
+          "lat": 13.7199,
+          "lng": 80.2304
+        },
         "country": "IND",
         "firstLaunch": "2005-05-05"
       }
@@ -263,8 +338,11 @@
         "site": "Tanegashima Yoshinobu LC-1",
         "operator": "jaxa",
         "status": "active",
-        "lat": 30.4,
-        "lng": 130.97,
+        "place": {
+          "label": "Tanegashima, Kagoshima, Japan",
+          "lat": 30.4,
+          "lng": 130.97
+        },
         "country": "JPN",
         "firstLaunch": "1994-02-03"
       }
@@ -276,8 +354,11 @@
         "site": "Guiana Space Centre ELA-4",
         "operator": "arianespace",
         "status": "active",
-        "lat": 5.239,
-        "lng": -52.7683,
+        "place": {
+          "label": "Kourou, French Guiana",
+          "lat": 5.239,
+          "lng": -52.7683
+        },
         "country": "FRA",
         "firstLaunch": "2024-07-09"
       }
@@ -289,8 +370,11 @@
         "site": "SaxaVord Spaceport",
         "operator": "saxavord",
         "status": "construction",
-        "lat": 60.8226,
-        "lng": -0.8129,
+        "place": {
+          "label": "Unst, Shetland, Scotland",
+          "lat": 60.8226,
+          "lng": -0.8129
+        },
         "country": "GBR"
       }
     }
