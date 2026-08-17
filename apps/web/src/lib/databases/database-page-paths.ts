@@ -26,7 +26,14 @@ export interface ResolvedDatabasePath {
   row?: LocalDatabaseRow;
 }
 
-export function resolveDatabaseSlug(database: LocalDatabase): string {
+/**
+ * The parts of a database a path is built from. Narrower than
+ * {@link LocalDatabase} so the server can pass a shipped document's
+ * definition without reconstructing local-only bookkeeping.
+ */
+export type DatabasePathIdentity = Pick<LocalDatabase, "id" | "name" | "slug">;
+
+export function resolveDatabaseSlug(database: DatabasePathIdentity): string {
   return database.slug ?? slugifyPageSegment(database.name);
 }
 
@@ -57,7 +64,7 @@ function pathMatchesPrefix(path: string[], prefix: string[]): boolean {
 }
 
 function resolveDatabaseHost(
-  database: LocalDatabase,
+  database: DatabasePathIdentity,
   pages: readonly PageSummary[],
   blocks: readonly HostScanBlock[]
 ): PageSummary | undefined {
@@ -143,6 +150,40 @@ export function resolveDatabasePathFromSplat(
   return null;
 }
 
+/**
+ * Whether `splat` falls inside some database's own path space —
+ * `{host}/{db}` and anything under it — without resolving what it points at.
+ *
+ * This is the question the server can answer and
+ * {@link resolveDatabasePathFromSplat} cannot: rows live only in the visitor's
+ * browser, so a server render knows the hub prefix a database owns but not
+ * which row slugs exist beneath it. That is enough to decide the one thing the
+ * server has to decide — whether a slug is worth handing to the client rather
+ * than 404ing outright.
+ */
+export function isDatabasePathPrefix(
+  splat: string,
+  options: {
+    blocks: readonly HostScanBlock[];
+    databases: readonly DatabasePathIdentity[];
+    pages: readonly PageSummary[];
+  }
+): boolean {
+  const path = parsePagePath(normalizePageSlug(splat));
+
+  return options.databases.some((database) => {
+    const hubSlug = resolveDatabaseHubSlug(database, options.pages, [
+      ...options.blocks,
+    ]);
+    if (hubSlug === null) {
+      return false;
+    }
+    const hubPath = parsePagePath(hubSlug);
+    // The hub itself counts; a shorter path cannot be inside it.
+    return path.length >= hubPath.length && pathMatchesPrefix(path, hubPath);
+  });
+}
+
 export function resolveDatabasePathNavTarget(
   host: Pick<PageSummary, "routeBy">,
   slug: string
@@ -173,7 +214,7 @@ export function databaseHubNavTarget(
  * Returns `null` when the database has no resolvable host page.
  */
 export function resolveDatabaseHubSlug(
-  database: LocalDatabase,
+  database: DatabasePathIdentity,
   pages: readonly PageSummary[],
   blocks: readonly HostScanBlock[]
 ): string | null {
