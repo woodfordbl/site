@@ -150,6 +150,18 @@ describe("applyInlineFormulaValues", () => {
     // Node identity matters: a replaced text node would drop a live selection.
     expect(root.firstChild).toBe(before);
   });
+
+  it("never leaves a native title on the token", () => {
+    const root = mountField(TEXT, MARKS);
+    // A stale title (older markup, or a rehydrated field) must be cleared too.
+    tokenIn(root).setAttribute("title", '12\nprop("x")');
+    applyInlineFormulaValues(root, new Map([[8, "12"]]));
+    // `InlineFormulaTokenTooltip` owns the hint in an editable field; a native
+    // tooltip would render a second, slower copy of it underneath.
+    expect(tokenIn(root).hasAttribute("title")).toBe(false);
+    applyInlineFormulaValues(root, new Map());
+    expect(tokenIn(root).hasAttribute("title")).toBe(false);
+  });
 });
 
 describe("caret offsets", () => {

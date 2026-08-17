@@ -66,8 +66,16 @@ export function RowTemplatePreviewBody({
         title: displayTitle,
         updatedAt: row.updatedAt,
       },
+      primaryFieldId: database.primaryFieldId,
     }),
-    [database.fields, displayTitle, row.createdAt, row.updatedAt, row.values]
+    [
+      database.fields,
+      database.primaryFieldId,
+      displayTitle,
+      row.createdAt,
+      row.updatedAt,
+      row.values,
+    ]
   );
 
   const canvasRegion = (

@@ -41,6 +41,13 @@ const SHADOW_TITLE: DatabaseField = {
   type: "text",
 };
 
+/** The usual primary column — same value as the page title. */
+const NAME: DatabaseField = {
+  id: "f-name",
+  name: "Name",
+  type: "text",
+};
+
 /** Evaluate `source` against the layered inline page scope. */
 function run(
   source: string,
@@ -76,13 +83,44 @@ describe("pageFormulaFields", () => {
     ]);
   });
 
-  it("lists database fields first and drops shadowed base names", () => {
-    const fields = pageFormulaFields([SHADOW_TITLE, TAGS]);
+  it("lists base fields first, then database fields", () => {
+    const fields = pageFormulaFields([TAGS, DONE]);
     expect(fields.map((field) => field.id)).toEqual([
-      "f-title",
-      "f-tags",
+      "page:title",
       "page:createdAt",
       "page:updatedAt",
+      "f-tags",
+      "f-done",
+    ]);
+  });
+
+  it("drops the primary column, whose value is the page title", () => {
+    const fields = pageFormulaFields([NAME, TAGS], NAME.id);
+    expect(fields.map((field) => field.name)).toEqual([
+      "Title",
+      "Created at",
+      "Updated at",
+      "Tags",
+    ]);
+  });
+
+  it("keeps Title when the primary column is itself named Title", () => {
+    const fields = pageFormulaFields([SHADOW_TITLE, TAGS], SHADOW_TITLE.id);
+    expect(fields.map((field) => field.id)).toEqual([
+      "page:title",
+      "page:createdAt",
+      "page:updatedAt",
+      "f-tags",
+    ]);
+  });
+
+  it("still lets a non-primary column shadow a base name", () => {
+    const fields = pageFormulaFields([SHADOW_TITLE, TAGS], "f-other");
+    expect(fields.map((field) => field.id)).toEqual([
+      "page:createdAt",
+      "page:updatedAt",
+      "f-title",
+      "f-tags",
     ]);
   });
 });
