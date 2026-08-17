@@ -46,23 +46,9 @@ export function DatabaseEdit({
   const focusRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const hasDatabase = props.databaseId !== "";
-  const canvas = useCanvasEditorContext();
   // Gate mounting the table view: SSR safety (useLiveQuery has no server
   // snapshot) + the shipped-database seed window on first visit.
   const tableReady = useDatabaseBlockReady();
-  const database = useDatabase(props.databaseId);
-
-  // Legacy orphan: a block whose database was deleted before cascade cleanup
-  // existed. Drop it once the gate is open so we never flash a dead shell.
-  useEffect(() => {
-    if (!(tableReady && hasDatabase) || database !== undefined) {
-      return;
-    }
-    const rowId = row?.rowId;
-    if (rowId) {
-      canvas.dispatch({ type: "row.delete", rowId });
-    }
-  }, [canvas, database, hasDatabase, row?.rowId, tableReady]);
 
   const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
@@ -139,7 +125,78 @@ export function DatabaseEdit({
     );
   }
 
-  if (tableReady && database === undefined) {
+  if (!tableReady) {
+    return (
+      // biome-ignore lint/a11y/noNoninteractiveElementInteractions: composite block focus surface for structural keys
+      // biome-ignore lint/a11y/useSemanticElements: cannot be a <button>; contains interactive children
+      <div
+        aria-label="Database block"
+        className={databaseBlockWrapperClassName}
+        data-database-block=""
+        onKeyDown={handleWrapperKeyDown}
+        ref={focusRef as React.RefObject<HTMLDivElement>}
+        role="group"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
+        tabIndex={0}
+      >
+        <DatabaseBlockLoading />
+      </div>
+    );
+  }
+
+  return (
+    <LinkedDatabaseBlock
+      onChange={onChange}
+      onKeyDown={handleWrapperKeyDown}
+      props={props}
+      ref={focusRef as React.RefObject<HTMLDivElement>}
+      rowId={row?.rowId}
+    />
+  );
+}
+
+const databaseBlockWrapperClassName =
+  "outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0";
+
+/**
+ * The linked half of a `database` block. Split out so the live queries below
+ * only ever run past {@link useDatabaseBlockReady} — `useLiveQuery` has no
+ * server snapshot, and calling it during a server render throws "Missing
+ * getServerSnapshot", which aborts the whole page render and silently drops
+ * the site to a client-rendered shell. Hooks cannot be conditional, so the
+ * gate has to be a mount boundary rather than an early return.
+ */
+function LinkedDatabaseBlock({
+  onChange,
+  onKeyDown,
+  props,
+  ref,
+  rowId,
+}: {
+  onChange: DatabaseEditProps["onChange"];
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  props: DatabaseEditProps["props"];
+  ref: React.RefObject<HTMLDivElement>;
+  rowId: string | undefined;
+}) {
+  const canvas = useCanvasEditorContext();
+  const database = useDatabase(props.databaseId);
+  const droppedRowRef = useRef<string | null>(null);
+
+  // Legacy orphan: a block whose database was deleted before cascade cleanup
+  // existed. Drop it once the gate is open so we never flash a dead shell.
+  // The row keeps rendering until the delete round-trips, so this effect can
+  // re-run first — dispatch at most once per row, or the second delete hits a
+  // block the first one already removed and throws.
+  useEffect(() => {
+    if (database !== undefined || !rowId || droppedRowRef.current === rowId) {
+      return;
+    }
+    droppedRowRef.current = rowId;
+    canvas.dispatch({ type: "row.delete", rowId });
+  }, [canvas, database, rowId]);
+
+  if (database === undefined) {
     return null;
   }
 
@@ -151,27 +208,23 @@ export function DatabaseEdit({
     // biome-ignore lint/a11y/useSemanticElements: cannot be a <button>; contains interactive children
     <div
       aria-label="Database block"
-      className="outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+      className={databaseBlockWrapperClassName}
       data-database-block=""
-      onKeyDown={handleWrapperKeyDown}
-      ref={focusRef as React.RefObject<HTMLDivElement>}
+      onKeyDown={onKeyDown}
+      ref={ref}
       role="group"
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
       tabIndex={0}
     >
-      {tableReady ? (
-        <DatabaseTableView
-          canvasRowId={row?.rowId}
-          databaseId={props.databaseId}
-          hideTitle={props.hideTitle}
-          mode="edit"
-          onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
-          onViewIdChange={(viewId) => onChange({ ...props, viewId })}
-          viewId={props.viewId}
-        />
-      ) : (
-        <DatabaseBlockLoading />
-      )}
+      <DatabaseTableView
+        canvasRowId={rowId}
+        databaseId={props.databaseId}
+        hideTitle={props.hideTitle}
+        mode="edit"
+        onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+        onViewIdChange={(viewId) => onChange({ ...props, viewId })}
+        viewId={props.viewId}
+      />
     </div>
   );
 }

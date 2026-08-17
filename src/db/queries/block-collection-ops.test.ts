@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   acceptBlockMutations: vi.fn(),
   acceptPageMutations: vi.fn(),
   blockDelete: vi.fn(),
+  blockGet: vi.fn(),
   blockInsert: vi.fn(),
   blockUpdate: vi.fn(),
   commit: vi.fn(),
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   markPageDirty: vi.fn(),
   mutate: vi.fn(),
   pageUpdate: vi.fn(),
+  /** Ids the collection currently holds — deletes skip anything absent. */
+  presentBlockIds: new Set<string>(),
 }));
 
 vi.mock("@tanstack/react-db", () => ({
@@ -27,6 +30,7 @@ vi.mock("@/lib/local-draft/dirty-pages-cookie.ts", () => ({
 vi.mock("@/db/collections/local-collections.ts", () => ({
   localBlocksCollection: {
     delete: mocks.blockDelete,
+    get: mocks.blockGet,
     insert: mocks.blockInsert,
     update: mocks.blockUpdate,
     utils: { acceptMutations: mocks.acceptBlockMutations },
@@ -44,6 +48,13 @@ function flushAsync(): Promise<void> {
 }
 
 const pageId = "page-1";
+
+/** Mark ids as already materialized in the collection (deletes reach them). */
+function seedCollection(...ids: string[]): void {
+  for (const id of ids) {
+    mocks.presentBlockIds.add(id);
+  }
+}
 
 function textBlock(id: string, text = id): Block {
   return { id, type: "text", props: { text } };
@@ -95,6 +106,10 @@ describe("incremental page block transaction", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.presentBlockIds.clear();
+    mocks.blockGet.mockImplementation((id: string) =>
+      mocks.presentBlockIds.has(id) ? localBlock(textBlock(id)) : undefined
+    );
     setupTransactionMock();
     mocks.pageUpdate.mockImplementation(
       (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {
@@ -131,6 +146,7 @@ describe("incremental page block transaction", () => {
       deletePageBlocksInTx,
     } = ops;
 
+    seedCollection("a", "b", "c");
     const tx = beginPageBlockTransaction(pageId, ["a", "b", "c"]);
     deletePageBlocksInTx(pageId, ["b"], tx);
     commitPageBlockTransaction(tx);
@@ -148,6 +164,7 @@ describe("incremental page block transaction", () => {
       deletePageBlocksInTx,
     } = ops;
 
+    seedCollection("list-1", "item-a", "item-b", "tail");
     const tx = beginPageBlockTransaction(pageId, [
       "list-1",
       "item-a",
@@ -160,6 +177,26 @@ describe("incremental page block transaction", () => {
 
     expect(tx.blockOrder).toEqual(["tail"]);
     expect(mocks.blockDelete).toHaveBeenCalledTimes(3);
+  });
+
+  it("strips block order but skips the delete for unmaterialized blocks", async () => {
+    const {
+      beginPageBlockTransaction,
+      commitPageBlockTransaction,
+      deletePageBlocksInTx,
+    } = ops;
+
+    // A pristine shipped page: its blocks are in shipped JSON, not the
+    // collection. Deleting one must not call through to a key that is absent.
+    const tx = beginPageBlockTransaction(pageId, ["a", "b", "c"]);
+    deletePageBlocksInTx(pageId, ["b"], tx);
+    commitPageBlockTransaction(tx);
+    await flushAsync();
+
+    expect(tx.blockOrder).toEqual(["a", "c"]);
+    expect(mocks.blockDelete).not.toHaveBeenCalled();
+    expect(tx.deletedInTransaction.has("b")).toBe(true);
+    expect(readBlockOrderFromUpdate()).toEqual(["a", "c"]);
   });
 
   it("persists and inserts in one transaction with one commit", async () => {
@@ -216,6 +253,7 @@ describe("incremental page block transaction", () => {
       insertPageBlockAt,
     } = ops;
 
+    seedCollection("list-1", "item-a", "item-b");
     const deletedInTransaction = new Set<string>();
     const tx = beginPageBlockTransaction(
       pageId,
@@ -249,6 +287,10 @@ describe("applyPageBlockDiff", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.presentBlockIds.clear();
+    mocks.blockGet.mockImplementation((id: string) =>
+      mocks.presentBlockIds.has(id) ? localBlock(textBlock(id)) : undefined
+    );
     setupTransactionMock();
     mocks.pageUpdate.mockImplementation(
       (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {
@@ -281,6 +323,7 @@ describe("applyPageBlockDiff", () => {
 
   it("deletes only the removed block and updates block order", async () => {
     const { applyPageBlockDiff } = ops;
+    seedCollection("a", "b", "c");
     const previous = [textBlock("a"), textBlock("b"), textBlock("c")];
     const next = [textBlock("a"), textBlock("c")];
 
@@ -325,6 +368,10 @@ describe("replacePageBlocks", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.presentBlockIds.clear();
+    mocks.blockGet.mockImplementation((id: string) =>
+      mocks.presentBlockIds.has(id) ? localBlock(textBlock(id)) : undefined
+    );
     setupTransactionMock();
     mocks.pageUpdate.mockImplementation(
       (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {
@@ -410,6 +457,10 @@ describe("block createdAt on update", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.presentBlockIds.clear();
+    mocks.blockGet.mockImplementation((id: string) =>
+      mocks.presentBlockIds.has(id) ? localBlock(textBlock(id)) : undefined
+    );
     setupTransactionMock();
     mocks.pageUpdate.mockImplementation(
       (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {

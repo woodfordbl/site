@@ -12,6 +12,7 @@ import {
 } from "@tabler/icons-react";
 import {
   type MouseEvent,
+  type PointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -80,6 +81,15 @@ function ToolbarButton({
         // Keep the editor field focused (don't dismiss the keyboard).
         event.preventDefault();
       }}
+      onPointerDown={(event: PointerEvent<HTMLButtonElement>) => {
+        // Touch never fires `mousedown` before focus moves, so the handler
+        // above only guards fine pointers. Without this the button takes focus
+        // on tap, `focusout` clears `focusedRowId`, and every action that
+        // resolves its target from the focused row silently no-ops — the bar
+        // looked dead on phones. Preventing the pointer default keeps focus (and
+        // the keyboard) on the field; `click` still fires.
+        event.preventDefault();
+      }}
       size="icon"
       type="button"
       variant="outline"
@@ -118,20 +128,38 @@ export function MobileEditorToolbar() {
     isCoarsePrimaryPointer && focusedRowId !== null && pickerMode === null;
   useKeyboardToolbarAnchor(anchorRef, visible);
 
+  // Focus landing on the bar's own buttons is not "focus left the canvas" — the
+  // bar is part of the editing surface. Touch never fires `mousedown` before
+  // focus moves, so the buttons' `preventDefault` cannot be relied on to keep
+  // the caret in the field on phones; treating a toolbar-bound focus as a blur
+  // cleared `focusedRowId` before `click` ran, and every action that resolves
+  // its target from the focused row silently no-opped.
+  const focusIsInToolbar = useCallback(
+    () =>
+      document.activeElement instanceof Node &&
+      anchorRef.current?.contains(document.activeElement) === true,
+    []
+  );
+
   useEffect(() => {
-    const onFocusIn = () => setFocusedRowId(getActiveCanvasRowId());
+    const syncFocusedRow = () => {
+      if (focusIsInToolbar()) {
+        return;
+      }
+      setFocusedRowId(getActiveCanvasRowId());
+    };
     // Scrolling does not blur the field, so the bar stays put through scroll;
     // only a real blur (keyboard dismissed / focus left the canvas) hides it.
     const onFocusOut = () => {
-      requestAnimationFrame(() => setFocusedRowId(getActiveCanvasRowId()));
+      requestAnimationFrame(syncFocusedRow);
     };
-    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusin", syncFocusedRow);
     document.addEventListener("focusout", onFocusOut);
     return () => {
-      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusin", syncFocusedRow);
       document.removeEventListener("focusout", onFocusOut);
     };
-  }, []);
+  }, [focusIsInToolbar]);
 
   const resolveTargetRowId = useCallback(
     () => getActiveCanvasRowId() ?? focusedRowId,

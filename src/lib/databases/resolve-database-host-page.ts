@@ -40,10 +40,12 @@ function isDatabaseOwnedPage(page: PageSummary): boolean {
  * The database's **host page** id — the page whose blocks contain a
  * `database` block referencing this database.
  *
- * - Scans locally-edited block rows only. Pristine shipped pages keep their
- *   blocks in shipped JSON reachable through an async per-slug server fn, so
- *   they are deliberately out of scope here — every UI flow that reaches a
- *   row page has the host's blocks in the local shard.
+ * - Two sources, because a page's blocks live in one place or the other:
+ *   locally-edited block rows, plus `PageSummary.databaseIds` for pages still
+ *   pristine (their blocks are in shipped JSON, not the local shard). Local
+ *   blocks win for any page that has them — `mergePageList` drops
+ *   `databaseIds` from an overridden summary — so a database block the user
+ *   deleted locally never comes back as a host.
  * - **Database-owned pages are skipped.** A hub page embeds a linked
  *   `database` block for its own database, so it would otherwise compete for
  *   host with the real page — and win, because hub ids are UUIDs that sort
@@ -62,17 +64,22 @@ export function findDatabaseHostPageId(
   const { blocks, databaseId, pages } = options;
   const pageMap = pagesById(pages as PageSummary[]);
 
-  const hostPageIds = [
-    ...new Set(
-      blocks
-        .filter(
-          (block) =>
-            block.type === "database" &&
-            blockDatabaseId(block.props) === databaseId
-        )
-        .map((block) => block.pageId)
-    ),
-  ]
+  const candidateIds = new Set(
+    blocks
+      .filter(
+        (block) =>
+          block.type === "database" &&
+          blockDatabaseId(block.props) === databaseId
+      )
+      .map((block) => block.pageId)
+  );
+  for (const page of pages) {
+    if (page.databaseIds?.includes(databaseId)) {
+      candidateIds.add(page.id);
+    }
+  }
+
+  const hostPageIds = [...candidateIds]
     .filter((pageId) => {
       const page = pageMap.get(pageId);
       return page !== undefined && !isDatabaseOwnedPage(page);
