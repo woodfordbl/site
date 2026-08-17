@@ -20,7 +20,7 @@ import { getPool } from "../../../src/server/db.server.ts";
  * shallow diff, so concurrent editors of different keys on one document
  * (e.g. a page's `title` vs its `blockOrder`) do not clobber each other.
  *
- * Content ids are unique per workspace, not globally (migration 0005): every
+ * Content ids are unique per workspace, not globally (`src/server/schema.ts`): every
  * statement here addresses a row by `(workspace_id, id)`, and the insert's
  * `on conflict (workspace_id, id)` upserts this workspace's copy of a shipped
  * id without ever seeing another workspace's copy of the same id.

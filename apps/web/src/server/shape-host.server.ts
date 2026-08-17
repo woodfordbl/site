@@ -35,7 +35,7 @@
  * - `my_access` pseudo-shape ({@link ACCESS_TABLE}): the caller's own
  *   user_page_access rows, keyed by page id, value `{pageId, level}` (deletes
  *   carry `{pageId}`), so clients can react to their own permission changes.
- * - Content ids are unique per workspace, not globally (migration 0005), so
+ * - Content ids are unique per workspace, not globally (`src/server/schema.ts`), so
  *   every row lookup and every user_page_access subquery below is scoped by
  *   workspace AND user — a bare id would match another workspace's copy of a
  *   shipped id. Row keys ({@link rowKey}) stay bare ids because a shape is

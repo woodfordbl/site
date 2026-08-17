@@ -1,157 +1,95 @@
--- Workspace-scoped content keys: the primary key of every content table
--- becomes (workspace_id, id), and every table that references a page is
--- rekeyed to match.
+-- Functions and triggers: the part of the schema Drizzle cannot express.
+-- Applies after 0000_baseline.sql, which creates every table these attach to.
 --
--- Why content ids are workspace-scoped: shipped page content
--- (content/pages/*.json) carries FIXED ids — the home page's id is literally
--- 'home', and the other shipped pages, blocks and databases carry hard-coded
--- uuids. Every signed-in workspace seeds its own overlay copy of that content,
--- so the same id legitimately exists once per workspace: a content id names a
--- document WITHIN a workspace, never across the installation. Under the old
--- global `id primary key` only the first workspace that ever seeded could own
--- those ids — every later workspace's seed insert hit
--- `on conflict (id) do update ... where workspace_id = $2`, matched zero rows,
--- and (once ReBAC landed) was rejected with a 403 because can_access()
--- resolved the id to a page owned by a different workspace.
---
--- Invariants established here:
--- * (workspace_id, id) is the identity of a pages/blocks/databases/
---   database_rows row. `id` alone identifies nothing.
--- * page_permissions, page_ancestors and user_page_access each carry
---   workspace_id and key/reference pages by (workspace_id, id), so no row can
---   describe a page in another workspace. A page's ancestors are always in the
---   page's own workspace.
--- * Every permission function takes the workspace explicitly. Resolving a page
---   by id alone is an ACCESS-CONTROL fault, not just a lookup fault: with ids
---   shared across workspaces, one workspace's grants would otherwise decide
---   another workspace's answer.
--- * ON DELETE CASCADE is preserved end to end — deleting a workspace still
---   clears its pages and everything derived from them, deleting a page still
---   clears its grants/closure/projection rows, deleting a user still clears
---   their grants and projection rows.
--- * A page's workspace_id is immutable while it exists: its own
---   (page, page, 0) closure row references it through both composite foreign
---   keys, so an UPDATE of pages.workspace_id is rejected instead of silently
---   stranding the page's blocks, grants and closure in the old workspace.
+-- Two ordering facts are load-bearing:
+-- * Same-event triggers fire in NAME order, so `pages_rebac_1_closure` must
+--   sort before `pages_rebac_2_project`: the projection reads page_ancestors
+--   and would recompute against a stale closure otherwise.
+-- * `rebac_grant_users` takes the `page_permissions` composite row type, so it
+--   cannot be created before that table exists.
 
--- ── 1. drop the foreign keys onto pages (id) ────────────────────────────────
+-- ── shape log ───────────────────────────────────────────────────────────────
+-- Append-only per-workspace change feed. Content triggers log the whole `doc`
+-- (null on delete); the access trigger logs the affected user inside `doc`, so
+-- the shape host can filter entries to the requesting user.
 
-alter table page_permissions drop constraint page_permissions_page_id_fkey;
-alter table page_ancestors drop constraint page_ancestors_page_id_fkey;
-alter table page_ancestors drop constraint page_ancestors_ancestor_id_fkey;
-alter table user_page_access drop constraint user_page_access_page_id_fkey;
+create or replace function log_shape_change() returns trigger as $$
+declare
+  target record;
+begin
+  if tg_op = 'DELETE' then
+    target := old;
+  else
+    target := new;
+  end if;
+  insert into shape_log (tbl, workspace_id, row_id, op, txid, doc)
+  values (
+    tg_table_name,
+    target.workspace_id,
+    target.id,
+    lower(tg_op),
+    (pg_current_xact_id()::xid::text)::bigint,
+    case when tg_op = 'DELETE' then null else target.doc end
+  );
+  perform pg_notify('shape_log', target.workspace_id);
+  return null;
+end;
+$$ language plpgsql;
+--> statement-breakpoint
 
--- ── 2. content tables: primary key becomes (workspace_id, id) ───────────────
--- No standalone index on `id` is created: after this migration every server
--- query, function and foreign key addresses content rows by the full
--- (workspace_id, id) pair, which the new primary key already serves.
+create or replace function log_access_change() returns trigger as $$
+declare
+  target user_page_access;
+begin
+  if tg_op = 'DELETE' then
+    target := old;
+  else
+    target := new;
+  end if;
+  insert into shape_log (tbl, workspace_id, row_id, op, txid, doc)
+  values (
+    'user_page_access',
+    target.workspace_id,
+    target.page_id,
+    lower(tg_op),
+    (pg_current_xact_id()::xid::text)::bigint,
+    case when tg_op = 'DELETE'
+      then jsonb_build_object('userId', target.user_id, 'pageId', target.page_id)
+      else jsonb_build_object(
+        'userId', target.user_id, 'pageId', target.page_id, 'level', target.level)
+    end
+  );
+  perform pg_notify('shape_log', target.workspace_id);
+  return null;
+end;
+$$ language plpgsql;
+--> statement-breakpoint
 
-alter table pages drop constraint pages_pkey;
-alter table pages add primary key (workspace_id, id);
+create or replace function touch_updated_at() returns trigger as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$ language plpgsql;
+--> statement-breakpoint
 
-alter table blocks drop constraint blocks_pkey;
-alter table blocks add primary key (workspace_id, id);
+-- ── level ordering ──────────────────────────────────────────────────────────
 
-alter table databases drop constraint databases_pkey;
-alter table databases add primary key (workspace_id, id);
+-- Capability-level ordering: view < comment < edit < full_access.
+-- Unknown/null input ranks 0 (below every real level).
+create or replace function page_level_rank(p_level text) returns int
+language sql immutable as $$
+  select case p_level
+    when 'view' then 1
+    when 'comment' then 2
+    when 'edit' then 3
+    when 'full_access' then 4
+    else 0
+  end
+$$;
+--> statement-breakpoint
 
-alter table database_rows drop constraint database_rows_pkey;
-alter table database_rows add primary key (workspace_id, id);
-
--- ── 3. page_permissions: workspace-scoped grants ────────────────────────────
--- The backfill is exact: it runs while page ids are still globally unique, so
--- every grant resolves to exactly one page. A grant that survived with a NULL
--- workspace would mean the dropped foreign key had already been violated —
--- the SET NOT NULL below fails loudly rather than guessing.
-
-alter table page_permissions add column workspace_id text;
-
-update page_permissions pp
-set workspace_id = p.workspace_id
-from pages p
-where p.id = pp.page_id;
-
-alter table page_permissions alter column workspace_id set not null;
-
-alter table page_permissions drop constraint page_permissions_pkey;
-alter table page_permissions
-  add primary key (workspace_id, page_id, subject_type, subject_id);
-alter table page_permissions
-  add constraint page_permissions_page_fkey
-  foreign key (workspace_id, page_id) references pages (workspace_id, id)
-  on delete cascade;
-
--- ── 4. page_ancestors: workspace-scoped closure ─────────────────────────────
--- Chains that crossed a workspace boundary only ever existed because ids were
--- global (a page seeded into workspace B whose parentId resolved to workspace
--- A's copy). They are not representable under the composite key, so they are
--- deleted; the workspaces they touched are remembered so section 7 can
--- re-derive their projection with the corrected chains.
-
-alter table page_ancestors add column workspace_id text;
-
-update page_ancestors pa
-set workspace_id = p.workspace_id
-from pages p
-where p.id = pa.page_id;
-
-alter table page_ancestors alter column workspace_id set not null;
-
-create temp table _rekey_repair_ws on commit drop as
-select distinct pa.workspace_id as ws
-from page_ancestors pa
-where not exists (
-  select 1 from pages a
-  where a.id = pa.ancestor_id and a.workspace_id = pa.workspace_id
-);
-
-delete from page_ancestors pa
-where not exists (
-  select 1 from pages a
-  where a.id = pa.ancestor_id and a.workspace_id = pa.workspace_id
-);
-
-alter table page_ancestors drop constraint page_ancestors_pkey;
-alter table page_ancestors add primary key (workspace_id, page_id, ancestor_id);
-alter table page_ancestors
-  add constraint page_ancestors_page_fkey
-  foreign key (workspace_id, page_id) references pages (workspace_id, id)
-  on delete cascade;
-alter table page_ancestors
-  add constraint page_ancestors_ancestor_fkey
-  foreign key (workspace_id, ancestor_id) references pages (workspace_id, id)
-  on delete cascade;
-
--- Subtree lookups (rebac_subtree) and the ancestor-side cascade both address
--- the closure by (workspace_id, ancestor_id) now.
-drop index page_ancestors_anc_idx;
-create index page_ancestors_anc_idx
-  on page_ancestors (workspace_id, ancestor_id);
-
--- ── 5. user_page_access: workspace-scoped projection ────────────────────────
--- workspace_id was already present and always copied from the page, so the
--- new key needs no backfill. The (workspace_id, user_id) index the shape host
--- reads on every snapshot and live poll is left untouched.
-
-alter table user_page_access drop constraint user_page_access_pkey;
-alter table user_page_access add primary key (user_id, workspace_id, page_id);
-alter table user_page_access
-  add constraint user_page_access_page_fkey
-  foreign key (workspace_id, page_id) references pages (workspace_id, id)
-  on delete cascade;
-
--- ── 6. permission functions: workspace is an explicit argument ──────────────
--- Every function that used to resolve a page by id alone now takes the
--- workspace and scopes each pages/page_ancestors/page_permissions lookup by
--- (workspace_id, id). The old signatures are dropped so no caller can reach
--- the unscoped behavior.
-
-drop function if exists can_access(text, text, text);
-drop function if exists effective_level(text, text);
-drop function if exists rebac_subtree(text);
-drop function if exists rebac_rebuild_ancestors(text);
-drop function if exists rebac_recompute_access(text[], text[]);
-drop function if exists rebac_group_pages(uuid);
+-- ── effective permission ────────────────────────────────────────────────────
 
 -- Chain = ancestors of the page (self included) within p_ws, truncated at the
 -- nearest ancestor (inclusive) with inherit_permissions=false. Candidates =
@@ -215,6 +153,7 @@ language sql stable as $$
   order by page_level_rank(level) desc
   limit 1
 $$;
+--> statement-breakpoint
 
 -- True when the user's effective level on (p_ws, p_page) meets or exceeds
 -- p_level. Unknown p_level values are rejected (false), never treated as
@@ -227,6 +166,9 @@ language sql stable as $$
      and page_level_rank(effective_level(p_user, p_ws, p_page))
          >= page_level_rank(p_level)
 $$;
+--> statement-breakpoint
+
+-- ── closure maintenance ─────────────────────────────────────────────────────
 
 -- Rebuilds the ancestor rows for p_page's whole subtree after a parent
 -- change: walks the new chain upward from pages.parent_id within p_ws
@@ -282,6 +224,7 @@ begin
     do update set depth = excluded.depth;
 end;
 $$;
+--> statement-breakpoint
 
 -- Keeps page_ancestors true to pages.parent_id. On INSERT it also adopts any
 -- children created before their parent existed (out-of-order sync batches);
@@ -317,6 +260,25 @@ begin
   return null;
 end;
 $$;
+--> statement-breakpoint
+
+-- ── projection recompute ────────────────────────────────────────────────────
+
+-- All distinct member user ids of a workspace (guests included — their rows
+-- come solely from explicit grants, which effective_level handles).
+create or replace function rebac_ws_users(p_ws text) returns text[]
+language sql stable as $$
+  select coalesce(array_agg(distinct "userId"), '{}')
+  from member where "organizationId" = p_ws
+$$;
+--> statement-breakpoint
+
+-- All page ids in a workspace.
+create or replace function rebac_ws_pages(p_ws text) returns text[]
+language sql stable as $$
+  select coalesce(array_agg(id), '{}') from pages where workspace_id = p_ws
+$$;
+--> statement-breakpoint
 
 -- The page's subtree (descendants + self) within its workspace.
 create or replace function rebac_subtree(p_ws text, p_page text) returns text[]
@@ -324,6 +286,7 @@ language sql stable as $$
   select coalesce(array_agg(page_id), '{}')
   from page_ancestors where workspace_id = p_ws and ancestor_id = p_page
 $$;
+--> statement-breakpoint
 
 -- Users affected by one page_permissions row: the user itself, the group's
 -- members, or (for workspace grants) every member of the grant's workspace.
@@ -339,6 +302,7 @@ language sql stable as $$
     else '{}'::text[]
   end
 $$;
+--> statement-breakpoint
 
 -- Recomputes the (p_users × p_pages) slice of workspace p_ws's
 -- user_page_access: drops the rows that lost access and upserts the rest,
@@ -368,6 +332,7 @@ begin
     where user_page_access.level is distinct from excluded.level;
 end;
 $$;
+--> statement-breakpoint
 
 -- Recomputes one user's access across every workspace in which the group
 -- holds a grant. The workspace comes from the grant rows rather than the
@@ -392,12 +357,13 @@ begin
   end loop;
 end;
 $$;
+--> statement-breakpoint
 
 -- pages: INSERT/DELETE and permission-relevant UPDATEs fan out to the
 -- workspace's users × the page's subtree. Content-only doc updates return
--- without touching the projection. A workspace change is no longer one of the
--- cases to handle: the page's own closure row pins pages.workspace_id through
--- both composite foreign keys, so such an UPDATE is rejected outright.
+-- without touching the projection. A workspace change is not one of the cases
+-- to handle: the page's own closure row pins pages.workspace_id through both
+-- composite foreign keys, so such an UPDATE is rejected outright.
 create or replace function rebac_pages_project() returns trigger
 language plpgsql as $$
 begin
@@ -430,6 +396,7 @@ begin
   return null;
 end;
 $$;
+--> statement-breakpoint
 
 -- page_permissions: recompute the affected subjects × the page's subtree.
 create or replace function rebac_permissions_project() returns trigger
@@ -458,6 +425,7 @@ begin
   return null;
 end;
 $$;
+--> statement-breakpoint
 
 -- member: recompute that user × every page in the workspace.
 create or replace function rebac_member_project() returns trigger
@@ -481,6 +449,7 @@ begin
   return null;
 end;
 $$;
+--> statement-breakpoint
 
 -- group_members: recompute that user × the pages reachable from the group's
 -- grants, per workspace those grants live in.
@@ -498,16 +467,66 @@ begin
   return null;
 end;
 $$;
+--> statement-breakpoint
 
--- ── 7. re-derive the workspaces whose closure section 4 corrected ───────────
+-- ── triggers ────────────────────────────────────────────────────────────────
+-- The `1_`/`2_` prefixes on the pages triggers are the firing order: Postgres
+-- fires same-event triggers alphabetically, and the projection reads the
+-- closure the first one rebuilds.
 
-do $$
-declare
-  v_ws text;
-begin
-  for v_ws in select ws from _rekey_repair_ws loop
-    perform rebac_recompute_access(
-      v_ws, rebac_ws_users(v_ws), rebac_ws_pages(v_ws));
-  end loop;
-end;
-$$;
+create or replace trigger pages_shape_log
+  after insert or update or delete on pages
+  for each row execute function log_shape_change();
+--> statement-breakpoint
+create or replace trigger pages_touch
+  before update on pages
+  for each row execute function touch_updated_at();
+--> statement-breakpoint
+create or replace trigger blocks_shape_log
+  after insert or update or delete on blocks
+  for each row execute function log_shape_change();
+--> statement-breakpoint
+create or replace trigger blocks_touch
+  before update on blocks
+  for each row execute function touch_updated_at();
+--> statement-breakpoint
+create or replace trigger databases_shape_log
+  after insert or update or delete on databases
+  for each row execute function log_shape_change();
+--> statement-breakpoint
+create or replace trigger databases_touch
+  before update on databases
+  for each row execute function touch_updated_at();
+--> statement-breakpoint
+create or replace trigger database_rows_shape_log
+  after insert or update or delete on database_rows
+  for each row execute function log_shape_change();
+--> statement-breakpoint
+create or replace trigger database_rows_touch
+  before update on database_rows
+  for each row execute function touch_updated_at();
+--> statement-breakpoint
+
+create or replace trigger pages_rebac_1_closure
+  after insert or update or delete on pages
+  for each row execute function rebac_pages_closure();
+--> statement-breakpoint
+create or replace trigger pages_rebac_2_project
+  after insert or update or delete on pages
+  for each row execute function rebac_pages_project();
+--> statement-breakpoint
+create or replace trigger page_permissions_rebac_project
+  after insert or update or delete on page_permissions
+  for each row execute function rebac_permissions_project();
+--> statement-breakpoint
+create or replace trigger member_rebac_project
+  after insert or update or delete on "member"
+  for each row execute function rebac_member_project();
+--> statement-breakpoint
+create or replace trigger group_members_rebac_project
+  after insert or update or delete on group_members
+  for each row execute function rebac_group_members_project();
+--> statement-breakpoint
+create or replace trigger user_page_access_shape_log
+  after insert or update or delete on user_page_access
+  for each row execute function log_access_change();

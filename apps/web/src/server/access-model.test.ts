@@ -1,7 +1,8 @@
 /**
- * @fileoverview Integration suite for the page access model in
- * `src/server/migrations/0003_rebac.sql`, `0004_access_log.sql` and
- * `0005_workspace_scoped_ids.sql`, run against a live Postgres: the
+ * @fileoverview Integration suite for the page access model — the tables in
+ * `src/server/schema.ts` and the functions and triggers in
+ * `src/server/migrations/0001_functions_and_triggers.sql` — run against a live
+ * Postgres: the
  * `effective_level`/`can_access` pair, workspace-role baselines, explicit user
  * and group grants, inheritance down the page tree, truncation at a restricted
  * page, private visibility, the trigger-maintained `page_ancestors` closure and

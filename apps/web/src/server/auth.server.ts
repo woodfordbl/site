@@ -1,16 +1,39 @@
 /**
- * Better Auth server instance: email/password accounts plus the organization
- * plugin (workspaces + invitations). Auth tables live in the same Postgres as
- * workspace content (see src/server/migrations/0000_init.sql), so membership
- * checks in the sync endpoints are plain joins.
+ * @fileoverview Better Auth server instance: email/password accounts plus the
+ * organization plugin (workspaces + invitations). It reads and writes the
+ * tables declared in `src/server/auth-schema.ts` through the shared pool, so
+ * auth and workspace content live in one database and membership checks in the
+ * sync endpoints are plain joins.
  *
  * Signup flow: a personal organization is auto-created for every new user, and
  * new sessions default their active organization to the user's first
  * membership so the client always has a workspace to sync.
  */
 import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
-import { getPool } from "./db.server.ts";
+
+import {
+  account,
+  invitation,
+  member,
+  organization as organizationTable,
+  session,
+  user,
+  verification,
+} from "@/server/auth-schema.ts";
+import { db, getPool } from "./db.server.ts";
+
+/** Better Auth resolves its models by these keys, so the names are its API. */
+const schema = {
+  user,
+  session,
+  account,
+  verification,
+  organization: organizationTable,
+  member,
+  invitation,
+};
 
 const DEV_SECRET = "dev-only-secret-change-in-production";
 
@@ -55,7 +78,7 @@ async function firstMembershipOrg(userId: string): Promise<string | null> {
 }
 
 export const auth = betterAuth({
-  database: getPool(),
+  database: drizzleAdapter(db, { provider: "pg", schema }),
   secret: process.env.BETTER_AUTH_SECRET ?? DEV_SECRET,
   baseURL: process.env.SITE_ORIGIN ?? "http://localhost:3000",
   emailAndPassword: {

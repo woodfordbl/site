@@ -1,8 +1,8 @@
 /**
  * @fileoverview Fixtures shared by the access-model integration suites
  * (`src/server/access-model.test.ts`, `src/server/workspace-scoped-ids.test.ts`),
- * which exercise the SQL permission model in `src/server/migrations/0003_rebac.sql`,
- * `0004_access_log.sql` and `0005_workspace_scoped_ids.sql` against a live
+ * which exercise the SQL permission model
+ * (`src/server/migrations/0001_functions_and_triggers.sql`) against a live
  * Postgres.
  *
  * Contracts this module upholds, because the suites run against a developer's

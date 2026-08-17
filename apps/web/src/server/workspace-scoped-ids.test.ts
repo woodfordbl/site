@@ -1,7 +1,6 @@
 /**
  * @fileoverview Integration suite for the workspace-scoped content keys
- * established by `src/server/migrations/0005_workspace_scoped_ids.sql`, run
- * against a live Postgres.
+ * declared in `src/server/schema.ts`, run against a live Postgres.
  *
  * Shipped page content (`content/pages/*.json`) carries FIXED ids — the home
  * page's id is literally `home`, and its blocks and databases carry hard-coded

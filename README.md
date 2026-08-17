@@ -16,7 +16,7 @@ That is the whole loop for local-only mode. To run the optional sync backend:
 
 1. Start Postgres with logical replication (`wal_level=logical`) — either a local
    install (apt) or Docker via `pnpm electric:up` (see `dev/electric/`).
-2. Apply the schema: `node apps/web/scripts/db-migrate.mjs`.
+2. Apply the schema: `pnpm db:migrate`.
 
 `pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:size` must pass before
 committing. `pnpm test` includes the access-model integration suite when

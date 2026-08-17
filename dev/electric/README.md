@@ -12,7 +12,7 @@ pnpm electric:down    # stop, keep data
 pnpm electric:nuke    # stop and delete volumes
 ```
 
-Apply the schema with `node apps/web/scripts/db-migrate.mjs` (point `DATABASE_URL` at
+Apply the schema with `pnpm db:migrate` (point `DATABASE_URL` at
 `postgresql://postgres:password@localhost:54321/site`). Postgres alone is enough for
 local work: the app serves the shape protocol itself in dev, so the Electric container
 only matters when verifying against the real service.

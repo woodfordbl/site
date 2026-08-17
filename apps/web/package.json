@@ -94,6 +94,7 @@
   "scripts": {
     "dev": "pnpm sync && vite dev",
     "build": "pnpm sync && node scripts/generate-sitemap.mjs && vite build",
+    "db:migrate": "drizzle-kit migrate",
     "sync:emojibase": "node scripts/sync-emojibase-public.mjs",
     "sync:icons": "node scripts/sync-tabler-icons-public.mjs",
     "sync:maplibre": "node scripts/sync-maplibre-worker.mjs",

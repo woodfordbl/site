@@ -1,8 +1,15 @@
 /**
- * Server-side Postgres pool. Content queries (shape host, mutate endpoint) use
- * this directly with parameterized SQL; Better Auth shares the same pool via
- * its built-in adapter so auth and content mutate in one database.
+ * @fileoverview The server's single Postgres connection. One pool backs
+ * everything: the raw parameterized SQL of the shape host and the mutate
+ * endpoint reaches it through {@link getPool}, and Better Auth and the query
+ * builder reach the same pool through {@link db}, so auth and content mutate
+ * in one database and share one connection budget.
+ *
+ * Row types come from the table objects in `src/server/schema.ts` and
+ * `src/server/auth-schema.ts` at the call site — notably the `doc` columns,
+ * which are the client's zod documents verbatim.
  */
+import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 const DATABASE_URL =
@@ -17,3 +24,6 @@ export function getPool(): Pool {
   }
   return pool;
 }
+
+/** Drizzle over {@link getPool}'s pool. Not a second connection. */
+export const db = drizzle(getPool());

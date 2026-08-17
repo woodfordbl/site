@@ -84,5 +84,5 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node apps/web/scripts/db-migrate.mjs
+      - run: pnpm db:migrate
       - run: pnpm test

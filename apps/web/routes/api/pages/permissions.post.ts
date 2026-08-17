@@ -24,7 +24,7 @@ import { getPool } from "../../../src/server/db.server.ts";
  *   src/server/access-model.test.ts): the chain truncates at this page
  *   afterwards, which also drops role baselines.
  *
- * A page id only names a page together with a workspace (migration 0005), and
+ * A page id only names a page together with a workspace (`src/server/schema.ts`), and
  * the body carries no workspace, so the request is scoped to the caller's
  * active workspace — the `site-workspace` cookie the client's collections sync
  * against (src/db/collections/sync-mode.ts). That cookie selects a scope, it
@@ -35,7 +35,7 @@ import { getPool } from "../../../src/server/db.server.ts";
  * Caller must hold `full_access` on the page (workspace owners/admins pass
  * via their baseline). Every action runs in one transaction; page_permissions
  * and pages changes fire the ReBAC projection triggers, whose
- * user_page_access transitions land in shape_log (migration 0004) — that is
+ * user_page_access transitions land in shape_log (`log_access_change`) — that is
  * what makes open shapes converge live (grant inserts / synthetic deletes)
  * without any extra signalling here.
  */
