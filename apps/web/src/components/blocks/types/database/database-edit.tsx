@@ -22,6 +22,48 @@ import { tryDeleteSelectedDatabaseTableRows } from "@/lib/databases/database-tab
 type DatabaseEditProps = BlockEditProps<"database">;
 
 /**
+ * The linked branch of {@link DatabaseEdit}, split out so `useDatabase` is
+ * reached only once the block gate is open. It is a `useLiveQuery` with no
+ * server snapshot: called unconditionally from the parent it aborts the whole
+ * server render ("Missing getServerSnapshot") and reverts the page to client
+ * rendering, so every page holding a database block loses SSR.
+ */
+function LinkedDatabase({
+  canvasRowId,
+  onChange,
+  props,
+}: Pick<DatabaseEditProps, "onChange" | "props"> & { canvasRowId?: string }) {
+  const database = useDatabase(props.databaseId);
+
+  // No definition for the linked id: the database was deleted before the
+  // delete cascade existed, or a shipped page references a database with no
+  // document in `content/databases/`. Render it, never repair it — this
+  // component runs on a plain page visit, and deleting the row here wrote a
+  // local overlay that silently dropped the block from the reader's copy of a
+  // pristine shipped page. Deleting a block is the reader's call, not a side
+  // effect of looking at it.
+  if (database === undefined) {
+    return (
+      <div className="rounded-lg border border-border border-dashed px-3 py-2 text-muted-foreground text-sm">
+        This database is unavailable.
+      </div>
+    );
+  }
+
+  return (
+    <DatabaseTableView
+      canvasRowId={canvasRowId}
+      databaseId={props.databaseId}
+      hideTitle={props.hideTitle}
+      mode="edit"
+      onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+      onViewIdChange={(viewId) => onChange({ ...props, viewId })}
+      viewId={props.viewId}
+    />
+  );
+}
+
+/**
  * Editable `database` block: an unlinked block shows the shared placeholder
  * trigger opening the creation popover (media/embed source-picker
  * conventions) with New, Linked, and Synced tabs; a
@@ -48,7 +90,6 @@ export function DatabaseEdit({
   // Gate mounting the table view: SSR safety (useLiveQuery has no server
   // snapshot) + the shipped-database seed window on first visit.
   const tableReady = useDatabaseBlockReady();
-  const database = useDatabase(props.databaseId);
 
   const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
@@ -125,21 +166,6 @@ export function DatabaseEdit({
     );
   }
 
-  // A linked block whose definition is absent: the database was deleted before
-  // the delete cascade existed, or a shipped page references a database with no
-  // document in `content/databases/`. Render it, never repair it — this
-  // component runs on a plain page visit, and deleting the row here wrote a
-  // local overlay that silently dropped the block from the reader's copy of a
-  // pristine shipped page. Deleting a block is the reader's call, not a side
-  // effect of looking at it.
-  if (tableReady && database === undefined) {
-    return (
-      <div className="rounded-lg border border-border border-dashed px-3 py-2 text-muted-foreground text-sm">
-        This database is unavailable.
-      </div>
-    );
-  }
-
   return (
     // Focusable group for structural keys (cannot be a <button> — the grid
     // hosts interactive children). No focus ring: a ring around the whole
@@ -157,14 +183,10 @@ export function DatabaseEdit({
       tabIndex={0}
     >
       {tableReady ? (
-        <DatabaseTableView
+        <LinkedDatabase
           canvasRowId={row?.rowId}
-          databaseId={props.databaseId}
-          hideTitle={props.hideTitle}
-          mode="edit"
-          onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
-          onViewIdChange={(viewId) => onChange({ ...props, viewId })}
-          viewId={props.viewId}
+          onChange={onChange}
+          props={props}
         />
       ) : (
         <DatabaseBlockLoading />

@@ -1,0 +1,298 @@
+{
+  "database": {
+    "id": "cd0ede4c-4b9c-4290-8d69-a3214266b5e4",
+    "name": "Launch Sites",
+    "slug": "launch-sites",
+    "icon": "tabler:IconRocket",
+    "primaryFieldId": "site",
+    "fields": [
+      {
+        "id": "site",
+        "name": "Site",
+        "type": "text",
+        "icon": "tabler:IconRocket"
+      },
+      {
+        "id": "operator",
+        "name": "Operator",
+        "type": "select",
+        "icon": "tabler:IconBuildingFactory2",
+        "options": [
+          { "id": "spacex", "name": "SpaceX", "color": "blue" },
+          { "id": "rocket-lab", "name": "Rocket Lab", "color": "red" },
+          { "id": "roscosmos", "name": "Roscosmos", "color": "orange" },
+          { "id": "casc", "name": "CASC", "color": "yellow" },
+          { "id": "isro", "name": "ISRO", "color": "green" },
+          { "id": "jaxa", "name": "JAXA", "color": "purple" },
+          { "id": "arianespace", "name": "Arianespace", "color": "brown" },
+          { "id": "northrop", "name": "Northrop Grumman", "color": "gray" },
+          { "id": "alaska", "name": "Alaska Aerospace", "color": "pink" },
+          { "id": "saxavord", "name": "SaxaVord", "color": "gray" }
+        ]
+      },
+      {
+        "id": "status",
+        "name": "Status",
+        "type": "select",
+        "icon": "tabler:IconCircleDot",
+        "options": [
+          { "id": "active", "name": "Active", "color": "green" },
+          {
+            "id": "construction",
+            "name": "Under construction",
+            "color": "yellow"
+          },
+          { "id": "retired", "name": "Retired", "color": "gray" }
+        ]
+      },
+      {
+        "id": "lat",
+        "name": "Latitude",
+        "type": "number",
+        "icon": "tabler:IconWorldLatitude",
+        "format": "plain",
+        "decimals": 4
+      },
+      {
+        "id": "lng",
+        "name": "Longitude",
+        "type": "number",
+        "icon": "tabler:IconWorldLongitude",
+        "format": "plain",
+        "decimals": 4
+      },
+      {
+        "id": "country",
+        "name": "Country",
+        "type": "text",
+        "icon": "tabler:IconFlag"
+      },
+      {
+        "id": "firstLaunch",
+        "name": "First launch",
+        "type": "date",
+        "icon": "tabler:IconCalendar"
+      }
+    ],
+    "views": [
+      {
+        "id": "table",
+        "name": "Table",
+        "type": "table",
+        "config": {
+          "columnWidths": { "site": 260 },
+          "calculations": { "site": "countAll" }
+        }
+      },
+      {
+        "id": "map",
+        "name": "Map",
+        "type": "map",
+        "icon": "tabler:IconMapPin",
+        "config": {
+          "map": {
+            "mark": "pins",
+            "pointMode": "pair",
+            "latFieldId": "lat",
+            "lngFieldId": "lng",
+            "colorFieldId": "operator"
+          }
+        }
+      },
+      {
+        "id": "by-country",
+        "name": "By country",
+        "type": "map",
+        "icon": "tabler:IconWorld",
+        "config": {
+          "map": {
+            "mark": "region",
+            "joinFieldId": "country",
+            "joinProperty": "ADM0_A3",
+            "valueAggregate": "count"
+          }
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "id": "slc-40",
+      "order": 1,
+      "values": {
+        "site": "Cape Canaveral SLC-40",
+        "operator": "spacex",
+        "status": "active",
+        "lat": 28.5619,
+        "lng": -80.5772,
+        "country": "USA",
+        "firstLaunch": "1965-06-18"
+      }
+    },
+    {
+      "id": "lc-39a",
+      "order": 2,
+      "values": {
+        "site": "Kennedy Space Center LC-39A",
+        "operator": "spacex",
+        "status": "active",
+        "lat": 28.6084,
+        "lng": -80.6043,
+        "country": "USA",
+        "firstLaunch": "1967-11-09"
+      }
+    },
+    {
+      "id": "slc-4e",
+      "order": 3,
+      "values": {
+        "site": "Vandenberg SLC-4E",
+        "operator": "spacex",
+        "status": "active",
+        "lat": 34.6321,
+        "lng": -120.6106,
+        "country": "USA"
+      }
+    },
+    {
+      "id": "starbase",
+      "order": 4,
+      "values": {
+        "site": "Starbase",
+        "operator": "spacex",
+        "status": "active",
+        "lat": 25.997,
+        "lng": -97.1554,
+        "country": "USA",
+        "firstLaunch": "2023-04-20"
+      }
+    },
+    {
+      "id": "wallops-0a",
+      "order": 5,
+      "values": {
+        "site": "Wallops Pad 0A",
+        "operator": "northrop",
+        "status": "active",
+        "lat": 37.8337,
+        "lng": -75.4882,
+        "country": "USA",
+        "firstLaunch": "2013-04-21"
+      }
+    },
+    {
+      "id": "kodiak",
+      "order": 6,
+      "values": {
+        "site": "Pacific Spaceport Complex",
+        "operator": "alaska",
+        "status": "active",
+        "lat": 57.4353,
+        "lng": -152.3374,
+        "country": "USA"
+      }
+    },
+    {
+      "id": "mahia-lc-1",
+      "order": 7,
+      "values": {
+        "site": "Rocket Lab LC-1, Mahia",
+        "operator": "rocket-lab",
+        "status": "active",
+        "lat": -39.262,
+        "lng": 177.8649,
+        "country": "NZL",
+        "firstLaunch": "2017-05-25"
+      }
+    },
+    {
+      "id": "baikonur-31",
+      "order": 8,
+      "values": {
+        "site": "Baikonur Site 31",
+        "operator": "roscosmos",
+        "status": "active",
+        "lat": 45.996,
+        "lng": 63.5642,
+        "country": "KAZ"
+      }
+    },
+    {
+      "id": "jiuquan-la-4",
+      "order": 9,
+      "values": {
+        "site": "Jiuquan LA-4",
+        "operator": "casc",
+        "status": "active",
+        "lat": 40.9583,
+        "lng": 100.2917,
+        "country": "CHN",
+        "firstLaunch": "1999-11-19"
+      }
+    },
+    {
+      "id": "wenchang-101",
+      "order": 10,
+      "values": {
+        "site": "Wenchang LC-101",
+        "operator": "casc",
+        "status": "active",
+        "lat": 19.6144,
+        "lng": 110.951,
+        "country": "CHN",
+        "firstLaunch": "2016-06-25"
+      }
+    },
+    {
+      "id": "sriharikota-slp",
+      "order": 11,
+      "values": {
+        "site": "Satish Dhawan Second Launch Pad",
+        "operator": "isro",
+        "status": "active",
+        "lat": 13.7199,
+        "lng": 80.2304,
+        "country": "IND",
+        "firstLaunch": "2005-05-05"
+      }
+    },
+    {
+      "id": "tanegashima-y1",
+      "order": 12,
+      "values": {
+        "site": "Tanegashima Yoshinobu LC-1",
+        "operator": "jaxa",
+        "status": "active",
+        "lat": 30.4,
+        "lng": 130.97,
+        "country": "JPN",
+        "firstLaunch": "1994-02-03"
+      }
+    },
+    {
+      "id": "kourou-ela-4",
+      "order": 13,
+      "values": {
+        "site": "Guiana Space Centre ELA-4",
+        "operator": "arianespace",
+        "status": "active",
+        "lat": 5.239,
+        "lng": -52.7683,
+        "country": "FRA",
+        "firstLaunch": "2024-07-09"
+      }
+    },
+    {
+      "id": "saxavord",
+      "order": 14,
+      "values": {
+        "site": "SaxaVord Spaceport",
+        "operator": "saxavord",
+        "status": "construction",
+        "lat": 60.8226,
+        "lng": -0.8129,
+        "country": "GBR"
+      }
+    }
+  ]
+}
