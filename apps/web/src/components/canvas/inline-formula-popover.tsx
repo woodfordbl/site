@@ -331,8 +331,8 @@ export function InlineFormulaPopover() {
     [relatedDatabases]
   );
   const fields = useMemo(
-    () => pageFormulaFields(model?.databaseFields),
-    [model?.databaseFields]
+    () => pageFormulaFields(model?.databaseFields, model?.primaryFieldId),
+    [model?.databaseFields, model?.primaryFieldId]
   );
   const previewRows = useMemo(
     () =>

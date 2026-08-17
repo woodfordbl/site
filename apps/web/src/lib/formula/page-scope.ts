@@ -96,6 +96,22 @@ export function isBasePageField(name: string): boolean {
   return BY_ID.has(name) || BY_NAME.has(normalizeFormulaPropertyName(name));
 }
 
+/**
+ * Rank of a base page field in its declared order (Title, Created at, Updated
+ * at), highest first, or 0 for anything else. Lets completion lists surface
+ * the defaults ahead of a database's own columns in the same order the
+ * Properties reference list shows them.
+ */
+export function basePageFieldRank(name: string): number {
+  const index = BASE_FIELDS.findIndex(
+    (field) =>
+      field.id === name ||
+      normalizeFormulaPropertyName(field.name) ===
+        normalizeFormulaPropertyName(name)
+  );
+  return index === -1 ? 0 : BASE_FIELDS.length - index;
+}
+
 export interface CreatePageFormulaScopeOptions {
   readonly now?: () => Date;
   readonly relations?: FormulaRelationResolver;
