@@ -1,10 +1,12 @@
 import { IconDatabaseOff, IconHome } from "@tabler/icons-react";
 import { eq, useLiveQuery } from "@tanstack/react-db";
-import { Link } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useRef } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { RowPageTitleSlot } from "@/components/database/row-page/row-page-title-slot.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
 import { useRowPageWorkspaceChrome } from "@/components/database/row-page/row-properties-rail.tsx";
+import { VirtualDatabaseRowPage } from "@/components/database/row-page/virtual-database-row-page.tsx";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import { SiteShell } from "@/components/layout/site-shell.tsx";
 import { PageSidebar } from "@/components/pages/page-sidebar.tsx";
 import { PageSidebarChromeProvider } from "@/components/pages/page-sidebar-chrome.tsx";
@@ -25,6 +27,7 @@ import {
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
 import { usePageDispatch } from "@/hooks/use-page-dispatch.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { useRowTemplate } from "@/hooks/use-row-template.ts";
 import { ensureDatabaseRowPage } from "@/lib/databases/materialize-row-page.ts";
 
 export interface DatabaseRowPageProps {
@@ -60,7 +63,15 @@ export function DatabaseRowPage({
   const linkedPage = useLocalPageById(row?.pageId ?? "");
   const { pages } = useMergedPageListItems();
   const dispatch = usePageDispatch(pages);
+  const template = useRowTemplate(databaseId);
+  const { template: templateTarget } = useDatabasePathTargets(databaseId);
+  const navigate = useNavigate();
   const seededRowRef = useRef<string | null>(null);
+  // Only the reader asks for a page now. A database with a template renders
+  // its rows from it (see `virtual-database-row-page.tsx`); without one there
+  // is nothing to render, so opening still seeds a blank page as before.
+  const [customizeRequested, setCustomizeRequested] = useState(false);
+  const shouldMaterialize = template === null || customizeRequested;
 
   useEffect(() => {
     // Gate on the page actually resolving, not merely on `row.pageId` being
@@ -69,7 +80,11 @@ export function DatabaseRowPage({
     // left that row opening to a permanently blank page.
     // `ensureDatabaseRowPage` already treats an unresolvable `pageId` as
     // "create one", and `seededRowRef` still holds this to one attempt per open.
-    if (!(database && row) || linkedPage || seededRowRef.current === row.id) {
+    if (
+      !(database && row && shouldMaterialize) ||
+      linkedPage ||
+      seededRowRef.current === row.id
+    ) {
       return;
     }
 
@@ -83,7 +98,7 @@ export function DatabaseRowPage({
     }).catch(() => {
       seededRowRef.current = null;
     });
-  }, [database, dispatch, linkedPage, pages, row]);
+  }, [database, dispatch, linkedPage, pages, row, shouldMaterialize]);
 
   if (!(databasesReady && rowsReady)) {
     return <SiteShell>{null}</SiteShell>;
@@ -97,6 +112,28 @@ export function DatabaseRowPage({
     return (
       <SiteShell>
         <DatabaseRowPageWorkspace pageId={linkedPage.id} />
+      </SiteShell>
+    );
+  }
+
+  if (template && !customizeRequested) {
+    return (
+      <SiteShell>
+        <PageSidebarChromeProvider sidebar={<PageSidebar />}>
+          <VirtualDatabaseRowPage
+            database={database}
+            onCustomize={() => setCustomizeRequested(true)}
+            onEditTemplate={
+              templateTarget
+                ? () => {
+                    navigate(templateTarget);
+                  }
+                : undefined
+            }
+            row={row}
+            template={template}
+          />
+        </PageSidebarChromeProvider>
       </SiteShell>
     );
   }
