@@ -4,6 +4,7 @@ import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
 } from "@/db/collections/local-collections.ts";
+import { pushWhenSynced } from "@/db/collections/synced-mutations.ts";
 import {
   appendFieldHistory,
   type FieldHistoryAppend,
@@ -46,6 +47,9 @@ function createDatabaseTransaction(): DatabaseTransaction {
     // transaction on the first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localDatabasesCollection.utils.acceptMutations(transaction);
       localDatabaseRowsCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
