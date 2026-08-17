@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 
-import { useChartDitherFill } from "@/components/ui/chart.tsx";
-import { cn } from "@/lib/utils.ts";
+/**
+ * @fileoverview A ranked list of labelled CSS bar meters — the analytics
+ * panel's non-chart visual. Bars are `div` widths rather than a chart because
+ * each row pairs a bar with a label and a value in one text line; the palette
+ * token they fill with still comes from the enclosing `ChartPaletteScope`, so
+ * they match the charts beside them.
+ */
 
 export interface RankedBarItem {
   /** Right-aligned display value; defaults to the formatted `value`. */
@@ -28,10 +33,6 @@ export function RankedBarList({
   max,
   emptyLabel = "Nothing here yet.",
 }: RankedBarListProps) {
-  const { ref, fillStyle, enabled } = useChartDitherFill<HTMLUListElement>([
-    colorVar,
-  ]);
-
   if (items.length === 0) {
     return (
       <p className="py-6 text-center text-muted-foreground text-sm">
@@ -44,11 +45,9 @@ export function RankedBarList({
     1,
     max ?? items.reduce((peak, item) => Math.max(peak, item.value), 0)
   );
-  // Square the track + fill when dithering so they snap to the pixel grid.
-  const trackRadius = enabled ? "rounded-[1px]" : "rounded-full";
 
   return (
-    <ul className="flex flex-col gap-2.5" ref={ref}>
+    <ul className="flex flex-col gap-2.5">
       {items.map((item) => {
         const ratio = Math.max(0, Math.min(1, item.value / denominator));
         return (
@@ -66,17 +65,12 @@ export function RankedBarList({
                 {item.display ?? item.value.toLocaleString()}
               </span>
             </div>
-            <div
-              className={cn(
-                "h-1.5 w-full overflow-hidden bg-muted",
-                trackRadius
-              )}
-            >
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className={cn("h-full transition-[width]", trackRadius)}
+                className="h-full rounded-full transition-[width]"
                 style={{
+                  backgroundColor: colorVar,
                   width: `${Math.max(ratio * 100, item.value > 0 ? 2 : 0)}%`,
-                  ...fillStyle(colorVar),
                 }}
               />
             </div>

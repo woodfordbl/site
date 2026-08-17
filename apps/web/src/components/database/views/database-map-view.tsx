@@ -6,9 +6,8 @@ import {
   useMemo,
   useState,
 } from "react";
-
+import { ChartPaletteScope } from "@/components/charts/chart-frame.tsx";
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
-import { ChartPaletteScope } from "@/components/ui/chart.tsx";
 import { localBlocksCollection } from "@/db/collections/local-collections.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
 import { resolveChartPaletteId } from "@/lib/databases/chart-data.ts";

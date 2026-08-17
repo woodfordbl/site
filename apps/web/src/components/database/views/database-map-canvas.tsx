@@ -25,7 +25,6 @@ import {
   MarkerTooltip,
 } from "@/components/ui/map.tsx";
 import { MorphMotionProvider } from "@/components/ui/morph-motion.tsx";
-import { cssColorToRgb } from "@/lib/charts/dither-texture.ts";
 import type {
   MapBounds,
   MapPoint,
@@ -96,10 +95,40 @@ export interface DatabaseMapCanvasCommonProps {
 }
 
 /**
- * Resolve `var(--chart-N)` against the active palette scope. Returns
- * `rgb(r, g, b)` strings — MapLibre's style parser predates CSS Color 4 and
- * would choke on the raw `oklch()` the tokens are authored in.
+ * Read one palette token as an `rgb()` string.
+ *
+ * Charts hand `var(--chart-N)` straight to SVG and let the browser do this;
+ * MapLibre cannot, so the value has to be resolved here. Two steps, both
+ * needed: a throwaway probe inside the palette scope makes the browser
+ * substitute the variable, and a 1×1 canvas converts the result — `oklch()`,
+ * which is how the tokens are authored and what `getComputedStyle` hands back
+ * — into channels MapLibre's pre-CSS-Color-4 style parser accepts.
  */
+function computePaletteColor(scope: HTMLElement, index: number): string {
+  if (typeof document === "undefined") {
+    return FALLBACK_ACCENT;
+  }
+  const probe = document.createElement("span");
+  probe.style.color = `var(--chart-${index})`;
+  probe.style.display = "none";
+  scope.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  probe.remove();
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return FALLBACK_ACCENT;
+  }
+  context.fillStyle = computed;
+  context.fillRect(0, 0, 1, 1);
+  const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+  return `rgb(${red}, ${green}, ${blue})`;
+}
+
+/** Resolve `var(--chart-1..N)` against the active palette scope, in order. */
 function usePaletteColors(count: number): {
   colors: string[];
   scopeRef: React.RefObject<HTMLDivElement | null>;
@@ -114,10 +143,7 @@ function usePaletteColors(count: number): {
     }
     const resolved: string[] = [];
     for (let index = 1; index <= count; index += 1) {
-      const rgb = cssColorToRgb(element, `var(--chart-${index})`);
-      resolved.push(
-        rgb ? `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})` : FALLBACK_ACCENT
-      );
+      resolved.push(computePaletteColor(element, index));
     }
     setColors(resolved);
   }, [count]);

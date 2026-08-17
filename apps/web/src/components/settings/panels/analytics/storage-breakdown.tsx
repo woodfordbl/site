@@ -1,10 +1,15 @@
-import { useChartDitherFill } from "@/components/ui/chart.tsx";
 import { formatBytes, formatPercent } from "@/lib/format.ts";
 import type {
   StorageCategory,
   StorageCategoryKey,
 } from "@/lib/pages/storage-stats.ts";
-import { cn } from "@/lib/utils.ts";
+
+/**
+ * @fileoverview Storage split as one stacked CSS meter plus a legend table.
+ * Segment colors are palette tokens resolved by the enclosing
+ * `ChartPaletteScope`, so the breakdown tracks the workspace palette without
+ * being a chart.
+ */
 
 const CATEGORY_COLORS: Record<StorageCategoryKey, string> = {
   assets: "var(--chart-1)",
@@ -22,25 +27,16 @@ interface StorageBreakdownProps {
 
 export function StorageBreakdown({ categories, total }: StorageBreakdownProps) {
   const denominator = Math.max(1, total);
-  const { ref, fillStyle, enabled } = useChartDitherFill(
-    Object.values(CATEGORY_COLORS)
-  );
-  const trackRadius = enabled ? "rounded-[1px]" : "rounded-full";
 
   return (
-    <div className="flex flex-col gap-4" ref={ref}>
-      <div
-        className={cn(
-          "flex h-2.5 w-full overflow-hidden bg-muted",
-          trackRadius
-        )}
-      >
+    <div className="flex flex-col gap-4">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
         {categories.map((category) => (
           <div
             key={category.key}
             style={{
+              backgroundColor: CATEGORY_COLORS[category.key],
               width: `${(category.bytes / denominator) * 100}%`,
-              ...fillStyle(CATEGORY_COLORS[category.key]),
             }}
             title={`${category.label}: ${formatBytes(category.bytes)}`}
           />

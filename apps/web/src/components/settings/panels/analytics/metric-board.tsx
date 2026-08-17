@@ -1,241 +1,234 @@
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { type ReactNode, useMemo } from "react";
 
+import {
+  type BoardSeries,
+  type DeltaBarRow,
+  DeltaTotalBoard,
+  type TotalRow,
+} from "@/components/settings/panels/analytics/delta-total-board.tsx";
 import { RankedBarList } from "@/components/settings/panels/analytics/ranked-bar-list.tsx";
 import { StorageBreakdown } from "@/components/settings/panels/analytics/storage-breakdown.tsx";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-  useChartGradientDither,
-} from "@/components/ui/chart.tsx";
 import { formatBytes, formatNumber } from "@/lib/format.ts";
 import type { ContentTimelineDay } from "@/lib/pages/content-timeline.ts";
 import type { ActivityDayDetail } from "@/lib/pages/page-activity-analytics.ts";
 import type { PageCreationDay } from "@/lib/pages/page-lifecycle-analytics.ts";
 import type { StorageStats } from "@/lib/pages/storage-stats.ts";
 
+/**
+ * @fileoverview The analytics panel's main board: one of four metrics, each
+ * shaped as per-day activity plus the total that activity accumulates to (see
+ * `delta-total-board.tsx`), except storage — a point-in-time split with no time
+ * dimension, so it renders as meters instead.
+ *
+ * Every board reduces its own day type to the board's two tidy row shapes here,
+ * so the chart layer sees one dataset shape regardless of metric.
+ */
+
 export type BoardMetric = "edits" | "pages" | "words" | "storage";
 
-const editsConfig = {
-  content: { label: "Writing", color: "var(--chart-1)" },
-  structure: { label: "Structure", color: "var(--chart-3)" },
-  lifecycle: { label: "Page changes", color: "var(--chart-2)" },
-  activePages: { label: "Active pages", color: "var(--chart-5)" },
-} satisfies ChartConfig;
+const BOARD_HEIGHT_CLASS = "h-[260px]";
 
-const pagesConfig = {
-  created: { label: "Created", color: "var(--chart-1)" },
-  cumulative: { label: "Total pages", color: "var(--chart-5)" },
-} satisfies ChartConfig;
+/** Any analytics day: a sort key and the short axis label for it. */
+interface AnalyticsDay {
+  date: string;
+  dayKey: string;
+}
 
-const wordsConfig = {
-  wordsAdded: { label: "Words added", color: "var(--chart-1)" },
-  cumulativeWords: { label: "Total words", color: "var(--chart-5)" },
-} satisfies ChartConfig;
+/** `YYYY-MM-DD` → short axis label, for the shared date axis. */
+function dayLabelMap(
+  days: readonly AnalyticsDay[]
+): ReadonlyMap<string, string> {
+  return new Map(days.map((day) => [day.dayKey, day.date]));
+}
 
-const BOARD_HEIGHT = "h-[260px]";
+/** One bar series' rows, read off each day by key. */
+function barRows<TDay extends AnalyticsDay>(
+  days: readonly TDay[],
+  series: BoardSeries,
+  value: (day: TDay) => number
+): DeltaBarRow[] {
+  return days.map((day) => ({
+    day: day.dayKey,
+    label: series.label,
+    series: series.key,
+    value: value(day),
+  }));
+}
 
-const sharedAxes = {
-  left: { width: 32 },
-  right: { width: 40 },
-} as const;
+/** The running-total strip's rows. */
+function totalRows<TDay extends AnalyticsDay>(
+  days: readonly TDay[],
+  series: BoardSeries,
+  value: (day: TDay) => number
+): TotalRow[] {
+  return days.map((day) => ({
+    day: day.dayKey,
+    label: series.label,
+    series: series.key,
+    value: value(day),
+  }));
+}
 
 function EmptyBoard({ message }: { message: string }) {
   return (
-    <div className="flex h-[260px] items-center justify-center text-muted-foreground text-sm">
+    <div
+      className={`flex ${BOARD_HEIGHT_CLASS} items-center justify-center text-muted-foreground text-sm`}
+    >
       {message}
     </div>
   );
 }
 
-function PagesBoard({ data }: { data: PageCreationDay[] }) {
-  const dither = useChartGradientDither(pagesConfig);
+const CREATED_SERIES: BoardSeries = {
+  key: "created",
+  label: "Created",
+  token: 1,
+};
+const TOTAL_PAGES_SERIES: BoardSeries = {
+  key: "cumulative",
+  label: "Total pages",
+  token: 5,
+};
 
+const PAGES_BAR_SERIES = [CREATED_SERIES];
+
+function PagesBoard({ data }: { data: PageCreationDay[] }) {
+  const board = useMemo(
+    () => ({
+      bars: barRows(data, CREATED_SERIES, (day) => day.created),
+      dayLabels: dayLabelMap(data),
+      total: totalRows(data, TOTAL_PAGES_SERIES, (day) => day.cumulative),
+    }),
+    [data]
+  );
   return (
-    <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full ${dither.crispClassName}`}
-      config={pagesConfig}
-      ref={dither.ref}
-    >
-      <ComposedChart accessibilityLayer data={data}>
-        {dither.defs}
-        <CartesianGrid vertical={false} />
-        <XAxis
-          axisLine={false}
-          dataKey="date"
-          interval="preserveStartEnd"
-          minTickGap={24}
-          tickLine={false}
-          tickMargin={8}
-        />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          tickLine={false}
-          width={sharedAxes.left.width}
-          yAxisId="left"
-        />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          orientation="right"
-          tickLine={false}
-          width={sharedAxes.right.width}
-          yAxisId="right"
-        />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar
-          dataKey="created"
-          fill={dither.fill("created")}
-          radius={dither.barRadius ?? [4, 4, 0, 0]}
-          yAxisId="left"
-        />
-        <Line
-          dataKey="cumulative"
-          dot={false}
-          stroke="var(--color-cumulative)"
-          strokeWidth={2}
-          type={dither.lineType}
-          yAxisId="right"
-        />
-        <ChartLegend content={<ChartLegendContent />} />
-      </ComposedChart>
-    </ChartContainer>
+    <DeltaTotalBoard
+      ariaLabel="Pages created per day"
+      barSeries={PAGES_BAR_SERIES}
+      bars={board.bars}
+      dayLabels={board.dayLabels}
+      formatValue={formatNumber}
+      total={board.total}
+      totalSeries={TOTAL_PAGES_SERIES}
+    />
   );
 }
+
+const WORDS_ADDED_SERIES: BoardSeries = {
+  key: "wordsAdded",
+  label: "Words added",
+  token: 1,
+};
+const TOTAL_WORDS_SERIES: BoardSeries = {
+  key: "cumulativeWords",
+  label: "Total words",
+  token: 5,
+};
+
+const WORDS_BAR_SERIES = [WORDS_ADDED_SERIES];
 
 function WordsBoard({ data }: { data: ContentTimelineDay[] }) {
-  const dither = useChartGradientDither(wordsConfig);
-
+  const board = useMemo(
+    () => ({
+      bars: barRows(data, WORDS_ADDED_SERIES, (day) => day.wordsAdded),
+      dayLabels: dayLabelMap(data),
+      total: totalRows(data, TOTAL_WORDS_SERIES, (day) => day.cumulativeWords),
+    }),
+    [data]
+  );
   return (
-    <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full ${dither.crispClassName}`}
-      config={wordsConfig}
-      ref={dither.ref}
-    >
-      <ComposedChart accessibilityLayer data={data}>
-        {dither.defs}
-        <CartesianGrid vertical={false} />
-        <XAxis
-          axisLine={false}
-          dataKey="date"
-          interval="preserveStartEnd"
-          minTickGap={24}
-          tickLine={false}
-          tickMargin={8}
-        />
-        <YAxis
-          axisLine={false}
-          tickFormatter={(value: number) => formatNumber(value)}
-          tickLine={false}
-          width={sharedAxes.left.width}
-          yAxisId="left"
-        />
-        <YAxis
-          axisLine={false}
-          orientation="right"
-          tickFormatter={(value: number) => formatNumber(value)}
-          tickLine={false}
-          width={sharedAxes.right.width}
-          yAxisId="right"
-        />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar
-          dataKey="wordsAdded"
-          fill={dither.fill("wordsAdded")}
-          radius={dither.barRadius ?? [4, 4, 0, 0]}
-          yAxisId="left"
-        />
-        <Line
-          dataKey="cumulativeWords"
-          dot={false}
-          stroke="var(--color-cumulativeWords)"
-          strokeWidth={2}
-          type={dither.lineType}
-          yAxisId="right"
-        />
-        <ChartLegend content={<ChartLegendContent />} />
-      </ComposedChart>
-    </ChartContainer>
+    <DeltaTotalBoard
+      ariaLabel="Words added per day"
+      barSeries={WORDS_BAR_SERIES}
+      bars={board.bars}
+      dayLabels={board.dayLabels}
+      formatValue={formatNumber}
+      total={board.total}
+      totalSeries={TOTAL_WORDS_SERIES}
+    />
   );
 }
 
-function EditsBoard({ data }: { data: ActivityDayDetail[] }) {
-  const dither = useChartGradientDither(editsConfig);
+const EDIT_SERIES: readonly BoardSeries[] = [
+  { key: "content", label: "Writing", token: 1 },
+  { key: "structure", label: "Structure", token: 3 },
+  { key: "lifecycle", label: "Page changes", token: 2 },
+];
+const ACTIVE_PAGES_SERIES: BoardSeries = {
+  key: "activePages",
+  label: "Active pages",
+  token: 5,
+};
 
+/** Which edit-category count each stacked series reads off a day. */
+const EDIT_VALUES: Record<string, (day: ActivityDayDetail) => number> = {
+  content: (day) => day.content,
+  structure: (day) => day.structure,
+  lifecycle: (day) => day.lifecycle,
+};
+
+function EditsBoard({ data }: { data: ActivityDayDetail[] }) {
+  const board = useMemo(
+    () => ({
+      bars: EDIT_SERIES.flatMap((series) =>
+        barRows(data, series, EDIT_VALUES[series.key])
+      ),
+      dayLabels: dayLabelMap(data),
+      total: totalRows(data, ACTIVE_PAGES_SERIES, (day) => day.activePages),
+    }),
+    [data]
+  );
   return (
-    <ChartContainer
-      className={`aspect-auto ${BOARD_HEIGHT} w-full ${dither.crispClassName}`}
-      config={editsConfig}
-      ref={dither.ref}
-    >
-      <ComposedChart accessibilityLayer data={data}>
-        {dither.defs}
-        <CartesianGrid vertical={false} />
-        <XAxis
-          axisLine={false}
-          dataKey="date"
-          interval="preserveStartEnd"
-          minTickGap={24}
-          tickLine={false}
-          tickMargin={8}
+    <DeltaTotalBoard
+      ariaLabel="Edits per day by category"
+      barSeries={EDIT_SERIES}
+      bars={board.bars}
+      dayLabels={board.dayLabels}
+      formatValue={formatNumber}
+      total={board.total}
+      totalSeries={ACTIVE_PAGES_SERIES}
+    />
+  );
+}
+
+function StorageBoard({
+  storage,
+  storageLoading,
+}: {
+  storage: StorageStats | undefined;
+  storageLoading: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      {storage && storage.categories.length > 0 ? (
+        <StorageBreakdown
+          categories={storage.categories}
+          total={storage.totalTrackedBytes}
         />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          tickLine={false}
-          width={sharedAxes.left.width}
-          yAxisId="left"
+      ) : (
+        <EmptyBoard
+          message={
+            storageLoading ? "Measuring storage…" : "Nothing stored yet."
+          }
         />
-        <YAxis
-          allowDecimals={false}
-          axisLine={false}
-          orientation="right"
-          tickLine={false}
-          width={sharedAxes.right.width}
-          yAxisId="right"
-        />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar
-          dataKey="content"
-          fill={dither.fill("content")}
-          stackId="activity"
-          yAxisId="left"
-        />
-        <Bar
-          dataKey="structure"
-          fill={dither.fill("structure")}
-          stackId="activity"
-          yAxisId="left"
-        />
-        <Bar
-          dataKey="lifecycle"
-          fill={dither.fill("lifecycle")}
-          radius={dither.barRadius ?? [4, 4, 0, 0]}
-          stackId="activity"
-          yAxisId="left"
-        />
-        <Line
-          dataKey="activePages"
-          dot={false}
-          stroke="var(--color-activePages)"
-          strokeWidth={2}
-          type={dither.lineType}
-          yAxisId="right"
-        />
-        <ChartLegend content={<ChartLegendContent />} />
-      </ComposedChart>
-    </ChartContainer>
+      )}
+      {storage && storage.assetTypes.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          <h3 className="font-medium text-muted-foreground text-xs">
+            Media assets by type
+          </h3>
+          <RankedBarList
+            colorVar="var(--chart-1)"
+            items={storage.assetTypes.map((entry) => ({
+              key: entry.key,
+              label: `${entry.label} · ${entry.count}`,
+              value: entry.bytes,
+              display: formatBytes(entry.bytes),
+            }))}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -257,48 +250,18 @@ export function MetricBoard({
   storage,
   storageLoading,
   hasSnapshots,
-}: MetricBoardProps) {
+}: MetricBoardProps): ReactNode {
   if (metric === "storage") {
-    return (
-      <div className="flex flex-col gap-5">
-        {storage && storage.categories.length > 0 ? (
-          <StorageBreakdown
-            categories={storage.categories}
-            total={storage.totalTrackedBytes}
-          />
-        ) : (
-          <EmptyBoard
-            message={
-              storageLoading ? "Measuring storage…" : "Nothing stored yet."
-            }
-          />
-        )}
-        {storage && storage.assetTypes.length > 0 ? (
-          <div className="flex flex-col gap-3">
-            <h3 className="font-medium text-muted-foreground text-xs">
-              Media assets by type
-            </h3>
-            <RankedBarList
-              colorVar="var(--chart-1)"
-              items={storage.assetTypes.map((entry) => ({
-                key: entry.key,
-                label: `${entry.label} · ${entry.count}`,
-                value: entry.bytes,
-                display: formatBytes(entry.bytes),
-              }))}
-            />
-          </div>
-        ) : null}
-      </div>
-    );
+    return <StorageBoard storage={storage} storageLoading={storageLoading} />;
   }
 
   if (metric === "pages") {
     const hasData = pages.some((day) => day.created > 0 || day.cumulative > 0);
-    if (!hasData) {
-      return <EmptyBoard message="No pages created in this period." />;
-    }
-    return <PagesBoard data={pages} />;
+    return hasData ? (
+      <PagesBoard data={pages} />
+    ) : (
+      <EmptyBoard message="No pages created in this period." />
+    );
   }
 
   if (metric === "words") {
@@ -310,16 +273,17 @@ export function MetricBoard({
     const hasData = words.some(
       (day) => day.wordsAdded > 0 || day.cumulativeWords > 0
     );
-    if (!hasData) {
-      return <EmptyBoard message="No word activity in this period." />;
-    }
-    return <WordsBoard data={words} />;
+    return hasData ? (
+      <WordsBoard data={words} />
+    ) : (
+      <EmptyBoard message="No word activity in this period." />
+    );
   }
 
-  // metric === "edits"
   const hasData = edits.some((day) => day.total > 0);
-  if (!hasData) {
-    return <EmptyBoard message="No tracked edits in this period." />;
-  }
-  return <EditsBoard data={edits} />;
+  return hasData ? (
+    <EditsBoard data={edits} />
+  ) : (
+    <EmptyBoard message="No tracked edits in this period." />
+  );
 }

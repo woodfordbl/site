@@ -376,8 +376,22 @@ export const databaseTableViewConfigSchema = z.object({
            * their movement is visible/comparable.
            */
           scale: z.enum(["absolute", "percent"]).optional(),
-          /** Visible window in ms (e.g. 7d); absent = the default window. */
+          /**
+           * Visible window in ms (e.g. 7d); absent = the default window. Read
+           * as a preset selector rather than a literal span — the chart snaps
+           * it to the nearest offered window, and the shortest one resolves to
+           * the calendar day so far rather than a 24-hour lookback.
+           */
           windowMs: z.number().positive().optional(),
+          /**
+           * How the axis treats periods with no observations (a market closed
+           * for the weekend, a feed asleep overnight). Absent/`collapse` gives
+           * them no width, so every session is drawn at the same scale and the
+           * overnight move reads as one step. `keep` preserves real elapsed
+           * time. Closures are inferred from sample spacing, not from a market
+           * calendar.
+           */
+          sessions: z.enum(["collapse", "keep"]).optional(),
         })
         .optional(),
       /** X axis / category field. */
@@ -421,17 +435,11 @@ export const databaseTableViewConfigSchema = z.object({
       yMax: z.number().optional(),
       stacked: z.boolean().optional(),
       /**
-       * Smooth the line/area curve. Absent follows the look: on (monotone) for
-       * a plain chart, off (pixel staircase) for a dithered one. When off on a
-       * plain chart, segments are straight (linear).
+       * Smooth the line/area curve with a monotone interpolation. Absent means
+       * on; `false` draws straight segments between vertices. Ignored when
+       * `xMode` is `time` — a price series is always drawn unsmoothed.
        */
       smoothing: z.boolean().optional(),
-      /**
-       * Per-chart dither override. `inherit` (default/absent) follows the
-       * workspace "Chart dither" appearance setting; `on`/`off` force this chart
-       * dithered or plain regardless of the workspace.
-       */
-      dither: z.enum(["inherit", "on", "off"]).optional(),
     })
     .optional(),
   /** Map settings — used when `view.type` is `map`. */

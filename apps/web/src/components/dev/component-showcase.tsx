@@ -19,16 +19,7 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  // biome-ignore lint/suspicious/noDeprecatedImports: recharts still ships Cell for pie/bar fills
-  Cell,
-  Line,
-  LineChart,
-  XAxis,
-} from "recharts";
+import { ChartGallerySection } from "@/components/dev/charts/chart-gallery.tsx";
 import { MapsSection } from "@/components/dev/maps-section.tsx";
 import { Section } from "@/components/dev/showcase-section.tsx";
 import { editorFieldClassName } from "@/components/editor/editable-surface.tsx";
@@ -48,13 +39,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card.tsx";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  useChartDither,
-} from "@/components/ui/chart.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import {
   Dialog,
@@ -148,12 +132,6 @@ import {
   headingSurfaceClassName,
   headingTypographyClassNames,
 } from "@/lib/blocks/heading-typography.ts";
-import {
-  CHART_PALETTE_TOKENS,
-  CHART_PALETTES,
-  type ChartPaletteId,
-  chartPaletteIds,
-} from "@/lib/charts/chart-palettes.ts";
 import { pageTitleUnderlineClassName } from "@/lib/pages/page-link-display.ts";
 import { appToast } from "@/lib/toast/app-toast.ts";
 import { cn } from "@/lib/utils.ts";
@@ -829,252 +807,6 @@ function RadioGroupsSection() {
         </fieldset>
       </div>
     </Section>
-  );
-}
-
-const PAGE_VIEWS = [
-  { month: "Jan", desktop: 186, mobile: 80 },
-  { month: "Feb", desktop: 305, mobile: 120 },
-  { month: "Mar", desktop: 237, mobile: 98 },
-  { month: "Apr", desktop: 273, mobile: 140 },
-  { month: "May", desktop: 209, mobile: 110 },
-  { month: "Jun", desktop: 214, mobile: 125 },
-];
-
-const pageViewsConfig = {
-  desktop: {
-    label: "Desktop",
-    color: "var(--chart-1)",
-  },
-  mobile: {
-    label: "Mobile",
-    color: "var(--chart-2)",
-  },
-} satisfies ChartConfig;
-
-/** Experiment: the Page views bar chart with ordered-dither textured fills. */
-function DitheredPageViewsCard() {
-  const dither = useChartDither(pageViewsConfig, { density: "medium" });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Page views — dithered</CardTitle>
-        <CardDescription>
-          Same data, Bayer-dither textured fills
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer
-          className="aspect-auto h-[240px] w-full"
-          config={pageViewsConfig}
-          palette="colorful"
-        >
-          <BarChart accessibilityLayer data={PAGE_VIEWS}>
-            {dither.defs}
-            <CartesianGrid vertical={false} />
-            <XAxis
-              axisLine={false}
-              dataKey="month"
-              tickLine={false}
-              tickMargin={8}
-            />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="desktop" fill={dither.fill("desktop")} radius={4} />
-            <Bar dataKey="mobile" fill={dither.fill("mobile")} radius={4} />
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
-  );
-}
-
-const TRAFFIC_TREND = [
-  { month: "Jan", visitors: 1200, signups: 240 },
-  { month: "Feb", visitors: 1450, signups: 310 },
-  { month: "Mar", visitors: 1320, signups: 280 },
-  { month: "Apr", visitors: 1680, signups: 360 },
-  { month: "May", visitors: 1540, signups: 330 },
-  { month: "Jun", visitors: 1720, signups: 390 },
-];
-
-const trafficTrendConfig = {
-  visitors: {
-    label: "Visitors",
-    color: "var(--chart-3)",
-  },
-  signups: {
-    label: "Signups",
-    color: "var(--chart-4)",
-  },
-} satisfies ChartConfig;
-
-const PALETTE_PREVIEW_DATA = [
-  { slot: "1", value: 5 },
-  { slot: "2", value: 4 },
-  { slot: "3", value: 3 },
-  { slot: "4", value: 2 },
-  { slot: "5", value: 1 },
-] as const;
-
-const palettePreviewConfig = {
-  value: { label: "Series", color: "var(--chart-1)" },
-} satisfies ChartConfig;
-
-function ChartPaletteSwatchRow({ paletteId }: { paletteId: ChartPaletteId }) {
-  return (
-    <div className="flex shrink-0 gap-1.5" data-chart-palette={paletteId}>
-      {CHART_PALETTE_TOKENS.map((token) => (
-        <div
-          className="size-4 rounded-sm ring-1 ring-foreground/10"
-          key={token}
-          style={{ backgroundColor: `var(--${token})` }}
-          title={`--${token}`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ChartPalettePreviewChart({
-  paletteId,
-}: {
-  paletteId: ChartPaletteId;
-}) {
-  return (
-    <ChartContainer
-      className="aspect-auto h-16 w-full min-w-0 flex-1"
-      config={palettePreviewConfig}
-      palette={paletteId}
-    >
-      <BarChart accessibilityLayer data={[...PALETTE_PREVIEW_DATA]}>
-        <Bar dataKey="value" radius={3}>
-          {PALETTE_PREVIEW_DATA.map((entry, index) => (
-            <Cell fill={`var(--chart-${index + 1})`} key={entry.slot} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ChartContainer>
-  );
-}
-
-function ChartPaletteRow({ paletteId }: { paletteId: ChartPaletteId }) {
-  return (
-    <div
-      className="flex flex-col gap-3 rounded-lg border border-border/60 px-3 py-3 sm:flex-row sm:items-center sm:gap-4"
-      data-chart-palette={paletteId}
-    >
-      <div className="flex min-w-28 items-center gap-3 sm:shrink-0">
-        <span className="font-medium text-foreground text-sm">
-          {CHART_PALETTES[paletteId].label}
-        </span>
-        <ChartPaletteSwatchRow paletteId={paletteId} />
-      </div>
-      <ChartPalettePreviewChart paletteId={paletteId} />
-    </div>
-  );
-}
-
-function ChartPalettesGallerySection() {
-  return (
-    <Section
-      description="Mono palettes: chart-1 is the base — each step gets lighter (L↑) with a subtle chroma bump, not neon."
-      title="Chart palettes"
-    >
-      <div className="flex flex-col gap-3">
-        {chartPaletteIds().map((paletteId) => (
-          <ChartPaletteRow key={paletteId} paletteId={paletteId} />
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-function ChartsSection() {
-  return (
-    <>
-      <ChartPalettesGallerySection />
-      <Section
-        description="Recharts wrapped in ChartContainer using the default colorful palette."
-        title="Chart examples"
-      >
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Page views</CardTitle>
-              <CardDescription>
-                Desktop vs mobile traffic by month
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer
-                className="aspect-auto h-[240px] w-full"
-                config={pageViewsConfig}
-                palette="colorful"
-              >
-                <BarChart accessibilityLayer data={PAGE_VIEWS}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    axisLine={false}
-                    dataKey="month"
-                    tickLine={false}
-                    tickMargin={8}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar
-                    dataKey="desktop"
-                    fill="var(--color-desktop)"
-                    radius={4}
-                  />
-                  <Bar dataKey="mobile" fill="var(--color-mobile)" radius={4} />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-
-          <DitheredPageViewsCard />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Traffic trend</CardTitle>
-              <CardDescription>Visitors and signups over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer
-                className="aspect-auto h-[240px] w-full"
-                config={trafficTrendConfig}
-                palette="colorful"
-              >
-                <LineChart accessibilityLayer data={TRAFFIC_TREND}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    axisLine={false}
-                    dataKey="month"
-                    tickLine={false}
-                    tickMargin={8}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line
-                    dataKey="visitors"
-                    dot={false}
-                    stroke="var(--color-visitors)"
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                  <Line
-                    dataKey="signups"
-                    dot={false}
-                    stroke="var(--color-signups)"
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                </LineChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-        </div>
-      </Section>
-    </>
   );
 }
 
@@ -1921,7 +1653,7 @@ export function ComponentShowcase() {
         <Separator />
         <RadioGroupsSection />
         <Separator />
-        <ChartsSection />
+        <ChartGallerySection />
         <Separator />
         <MapsSection isDark={isDark} />
         <Separator />

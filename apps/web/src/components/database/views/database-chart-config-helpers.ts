@@ -1,7 +1,5 @@
-import {
-  CHART_COLOR_TOKEN_COUNT,
-  type DatabaseChartConfig,
-} from "@/lib/databases/chart-data.ts";
+import { CHART_COLOR_TOKEN_COUNT } from "@/lib/charts/chart-palettes.ts";
+import type { DatabaseChartConfig } from "@/lib/databases/chart-data.ts";
 import type { DatabaseView } from "@/lib/schemas/database.ts";
 
 /**
