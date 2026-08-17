@@ -77,14 +77,24 @@ export function useLocalPages(): LocalPage[] {
     return mergeLocalPageSources(previewPages, bootstrapPages);
   }
 
-  let livePages = SERVER_LOCAL_PAGES;
+  // Ready: the collection IS `site-local-pages`, so it is authoritative —
+  // about absence as much as presence. The cookie preview and the mount-time
+  // storage read exist only to cover the window before it hydrates, and
+  // merging them back in afterwards resurrected every hard-deleted page,
+  // because `mergeLocalPageSources` resolves per id and a deleted user page
+  // leaves no id behind to win with. Clearing a database's row pages then
+  // showed "Clear 1 row page…" until the next reload.
   if (collectionPages.length > 0) {
-    livePages = collectionPages;
-  } else if (readBootstrapLocalPages().length > 0) {
-    livePages = bootstrapPages;
+    return collectionPages;
   }
 
-  return mergeLocalPageSources(previewPages, bootstrapPages, livePages);
+  // Empty and ready is ambiguous: either every local page is gone, or this
+  // collection has not caught up with storage yet. Re-read rather than trust
+  // the mount-time snapshot, which cannot tell the two apart.
+  const storedPages = readBootstrapLocalPages();
+  return storedPages.length > 0
+    ? mergeLocalPageSources(previewPages, storedPages)
+    : SERVER_LOCAL_PAGES;
 }
 
 /** True while local page rows may still be repopulating after collection init/HMR. */
