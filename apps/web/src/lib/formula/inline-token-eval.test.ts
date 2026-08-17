@@ -66,11 +66,11 @@ describe("evaluateInlineTokens", () => {
     expect(result.values.get(0)).toBe("Weekly notes");
   });
 
-  it("treats thisRow as an unknown name on an ordinary page", () => {
+  it("reports thisRow as an unknown name — it is not part of the language", () => {
     const result = evaluateInlineTokens(
       [formulaTokenMark(0, "thisRow")],
       SCOPE,
-      { ...CONTEXT, thisRowInScope: false }
+      CONTEXT
     );
     expect(result.values.get(0)).toContain('Unknown name "thisRow"');
   });

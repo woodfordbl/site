@@ -18,9 +18,11 @@ import { addDays } from "date-fns/addDays";
 import { addHours } from "date-fns/addHours";
 import { addMinutes } from "date-fns/addMinutes";
 import { addMonths } from "date-fns/addMonths";
+import { addWeeks } from "date-fns/addWeeks";
 import { addYears } from "date-fns/addYears";
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { differenceInCalendarMonths } from "date-fns/differenceInCalendarMonths";
+import { differenceInCalendarWeeks } from "date-fns/differenceInCalendarWeeks";
 import { differenceInCalendarYears } from "date-fns/differenceInCalendarYears";
 import { differenceInHours } from "date-fns/differenceInHours";
 import { differenceInMinutes } from "date-fns/differenceInMinutes";
@@ -357,6 +359,32 @@ function evalAverage(
   return total / collected.numbers.length;
 }
 
+/**
+ * `toNumber` conversion: numbers pass through, booleans read 1/0, blank
+ * stays blank, and text parses as a full number (trimmed) or converts to
+ * blank — unparseable text is a data condition, not an error. Dates, lists,
+ * and rows have no numeric reading and error.
+ */
+function evalToNumber(value: FormulaValue): FormulaValue {
+  if (value === null || typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return formulaError(
+    `toNumber() expects a number, text, or boolean, got ${formulaValueTypeName(value)}`
+  );
+}
+
 function evalRound(args: readonly FormulaValue[]): FormulaValue {
   const value = args[0] as number;
   if (args.length === 1) {
@@ -568,11 +596,19 @@ function evalJoin(
   return fragments.join(sep);
 }
 
-type FormulaDateUnit = "days" | "months" | "years" | "hours" | "minutes";
+type FormulaDateUnit =
+  | "days"
+  | "weeks"
+  | "months"
+  | "years"
+  | "hours"
+  | "minutes";
 
 const DATE_UNITS = new Map<string, FormulaDateUnit>([
   ["day", "days"],
   ["days", "days"],
+  ["week", "weeks"],
+  ["weeks", "weeks"],
   ["month", "months"],
   ["months", "months"],
   ["year", "years"],
@@ -593,7 +629,7 @@ function parseUnitArg(
       : undefined;
   if (unit === undefined) {
     return formulaError(
-      `${fnName}(): unknown unit ${JSON.stringify(value)} — use "days", "months", "years", "hours", or "minutes"`
+      `${fnName}(): unknown unit ${JSON.stringify(value)} — use "days", "weeks", "months", "years", "hours", or "minutes"`
     );
   }
   return unit;
@@ -605,6 +641,7 @@ const DATE_SHIFTERS: Record<FormulaDateUnit, (date: Date, n: number) => Date> =
     hours: addHours,
     minutes: addMinutes,
     months: addMonths,
+    weeks: addWeeks,
     years: addYears,
   };
 
@@ -639,6 +676,8 @@ function evalDateDiff(
   switch (unit) {
     case "days":
       return differenceInCalendarDays(a.date, b.date);
+    case "weeks":
+      return differenceInCalendarWeeks(a.date, b.date);
     case "months":
       return differenceInCalendarMonths(a.date, b.date);
     case "years":
@@ -912,6 +951,34 @@ const LOGIC_FUNCTIONS: readonly FormulaFunctionEntry[] = [
     },
   },
   {
+    name: "ifError",
+    category: "logic",
+    description:
+      "Returns the first argument, or the fallback when evaluating it produced an error — the recovery hatch a per-row failure needs (?? catches blank, never errors).",
+    examples: ["ifError(1 / 0, 0)", 'ifError(10 / 2, "broken")'],
+    params: [
+      { lazy: true, name: "value", type: TYPE_VARIABLE_T },
+      { lazy: true, name: "fallback", type: TYPE_VARIABLE_U },
+    ],
+    returns: unionTypeOf(TYPE_VARIABLE_T, TYPE_VARIABLE_U),
+    kind: "lazy",
+    apply: (args) => {
+      const value = args[0]();
+      return isFormulaError(value) ? args[1]() : value;
+    },
+  },
+  {
+    name: "isError",
+    category: "logic",
+    description:
+      "True when evaluating the argument produces an error (division by zero, a broken reference, a failed conversion).",
+    examples: ["isError(1 / 0)", "isError(1 + 1)"],
+    params: [{ lazy: true, name: "value", type: UNKNOWN_TYPE }],
+    returns: BOOLEAN_TYPE,
+    kind: "lazy",
+    apply: (args) => isFormulaError(args[0]()),
+  },
+  {
     name: "empty",
     category: "logic",
     description:
@@ -927,6 +994,22 @@ const LOGIC_FUNCTIONS: readonly FormulaFunctionEntry[] = [
 ];
 
 const MATH_FUNCTIONS: readonly FormulaFunctionEntry[] = [
+  {
+    name: "toNumber",
+    category: "math",
+    description:
+      "Converts text to a number (blank when it doesn't read as one); true/false become 1/0, numbers pass through, blank stays blank.",
+    examples: ['toNumber("42.5")', "toNumber(true)"],
+    params: [
+      {
+        name: "value",
+        type: unionTypeOf(NUMBER_TYPE, TEXT_TYPE, BOOLEAN_TYPE, BLANK_TYPE),
+      },
+    ],
+    returns: unionTypeOf(NUMBER_TYPE, BLANK_TYPE),
+    kind: "eager",
+    apply: (args) => evalToNumber(args[0]),
+  },
   {
     name: "abs",
     category: "math",
@@ -1527,7 +1610,7 @@ const DATE_FUNCTIONS: readonly FormulaFunctionEntry[] = [
     name: "dateAdd",
     category: "date",
     description:
-      'Shifts a date by an amount of "days", "months", "years", "hours", or "minutes".',
+      'Shifts a date by an amount of "days", "weeks", "months", "years", "hours", or "minutes".',
     examples: ['dateAdd(parseDate("2026-01-01"), 10, "days")'],
     params: [
       { name: "date", type: DATE_TYPE },
@@ -1677,103 +1760,6 @@ export function formulaFunctionSignature(entry: FormulaFunctionEntry): string {
   const parts = entry.params.map(formulaParamLabel);
   return `${entry.name}(${parts.join(", ")})`;
 }
-
-/** Section an operator is listed under in the docs UI. */
-export type FormulaOperatorCategory = "arithmetic" | "comparison" | "logic";
-
-/** One documented operator row: symbol as typed, plus a one-line description. */
-export interface FormulaOperatorCatalogEntry {
-  readonly category: FormulaOperatorCategory;
-  /** One sentence, sentence case. */
-  readonly description: string;
-  /** The operator exactly as typed in an expression. */
-  readonly symbol: string;
-}
-
-/** Every formula operator, grouped for the reference list in the editor. */
-export const FORMULA_OPERATOR_CATALOG: readonly FormulaOperatorCatalogEntry[] =
-  [
-    {
-      symbol: "+",
-      description: "Adds numbers, or joins text when either side is text.",
-      category: "arithmetic",
-    },
-    {
-      symbol: "-",
-      description: "Subtracts one number from another (or negates a number).",
-      category: "arithmetic",
-    },
-    {
-      symbol: "*",
-      description: "Multiplies two numbers.",
-      category: "arithmetic",
-    },
-    {
-      symbol: "/",
-      description: "Divides one number by another.",
-      category: "arithmetic",
-    },
-    {
-      symbol: "%",
-      description: "Returns the remainder after division.",
-      category: "arithmetic",
-    },
-    {
-      symbol: "^",
-      description: "Raises a number to a power (right-associative).",
-      category: "arithmetic",
-    },
-    {
-      symbol: "==",
-      description: "True when both values are equal.",
-      category: "comparison",
-    },
-    {
-      symbol: "!=",
-      description: "True when the values are not equal.",
-      category: "comparison",
-    },
-    {
-      symbol: "<",
-      description: "True when the left value is smaller (dates compare too).",
-      category: "comparison",
-    },
-    {
-      symbol: "<=",
-      description: "True when the left value is smaller or equal.",
-      category: "comparison",
-    },
-    {
-      symbol: ">",
-      description: "True when the left value is larger (dates compare too).",
-      category: "comparison",
-    },
-    {
-      symbol: ">=",
-      description: "True when the left value is larger or equal.",
-      category: "comparison",
-    },
-    {
-      symbol: "and",
-      description: "True when both sides are true.",
-      category: "logic",
-    },
-    {
-      symbol: "or",
-      description: "True when either side is true.",
-      category: "logic",
-    },
-    {
-      symbol: "not",
-      description: "Inverts a true/false value.",
-      category: "logic",
-    },
-    {
-      symbol: "??",
-      description: "Falls back to the right side when the left is blank.",
-      category: "logic",
-    },
-  ];
 
 /**
  * Bare-identifier rule, mirroring the tokenizer's identifier syntax: names

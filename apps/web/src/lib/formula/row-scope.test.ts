@@ -103,10 +103,6 @@ describe("createFormulaRowScope name resolution", () => {
     );
   });
 
-  it("treats thisRow and thisPage as the same scope", () => {
-    expect(run("thisRow.Name")).toBe(run("thisPage.Name"));
-  });
-
   it("errors on unknown properties without throwing", () => {
     expect(errorMessage(run("thisPage.Nope"))).toBe('Unknown property "Nope"');
   });
@@ -201,15 +197,24 @@ describe("createFormulaRowScope value mapping", () => {
 
   it("maps missing and null cells to null", () => {
     expect(run("thisPage.Name", {})).toBeNull();
-    expect(run("thisPage.Done", {})).toBeNull();
     expect(run("thisPage.Amount", { "f-amount": null })).toBeNull();
     expect(run("empty(thisPage.Status)", {})).toBe(true);
   });
 
+  it("keeps checkbox and multiSelect matching their static types", () => {
+    // An unset checkbox is false and an unset multiSelect is the empty
+    // list — never blank — so the checker's boolean/list types hold on
+    // every row and `if(thisPage.Done, …)` works before the first toggle.
+    expect(run("thisPage.Done", {})).toBe(false);
+    expect(run("if(thisPage.Done, 1, 0)", {})).toBe(0);
+    expect(run("thisPage.Tags", {})).toEqual([]);
+    expect(run("length(thisPage.Tags)", {})).toBe(0);
+  });
+
   it("collapses wrong-shaped stored values to null", () => {
     expect(run("thisPage.Amount", { "f-amount": "not a number" })).toBeNull();
-    expect(run("thisPage.Done", { "f-done": "yes" })).toBeNull();
-    expect(run("thisPage.Tags", { "f-tags": "opt-x" })).toBeNull();
+    expect(run("thisPage.Done", { "f-done": "yes" })).toBe(false);
+    expect(run("thisPage.Tags", { "f-tags": "opt-x" })).toEqual([]);
   });
 
   it("supports realistic formulas over the row", () => {

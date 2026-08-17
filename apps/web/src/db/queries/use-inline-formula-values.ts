@@ -9,7 +9,6 @@ import {
   createInlinePageFormulaScope,
   type InlineFormulaPageModel,
   inlinePageFormulaCheckProperties,
-  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   evaluateInlineTokens,
@@ -140,7 +139,6 @@ export function useInlineFormulaValues(
         relatedDatabases,
         userFunctions
       ),
-      thisRowInScope: pageHasFormulaRowContext(model),
     }),
     [context, model, relatedDatabases, userFunctions]
   );

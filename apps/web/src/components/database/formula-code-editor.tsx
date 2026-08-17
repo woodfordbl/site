@@ -54,7 +54,6 @@ import {
   checkFormula,
   type FormulaCheckContext,
   formulaPropertyValueType,
-  formulaTypeBadge,
   formulaTypeFits,
   normalizeFormulaPropertyName,
 } from "@/lib/formula/check.ts";
@@ -66,13 +65,7 @@ import {
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
 import { type FormulaHoverInfo, formulaHoverAt } from "@/lib/formula/hover.ts";
-import {
-  FORMULA_PAGE_SCOPE_LABEL,
-  FORMULA_ROW_SCOPE_LABEL,
-  formulaScopeRootLabels,
-  formulaThisRowInScope,
-  parseFormula,
-} from "@/lib/formula/parse.ts";
+import { FORMULA_PAGE_SCOPE_LABEL, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalDatabaseReference,
   canonicalPropertyReference,
@@ -80,6 +73,7 @@ import {
   type FormulaRefDatabase,
   type FormulaSpanRewrite,
 } from "@/lib/formula/ref-rewrite.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import {
   BOOLEAN_TYPE,
   type FormulaType,
@@ -210,6 +204,13 @@ export interface FormulaCodeEditorHandle {
    * Offsets clamp to the doc so a stale span can never throw.
    */
   replaceRange: (from: number, to: number, text: string) => void;
+  /**
+   * Select the doc span `[from, to)`, scroll it into view, and refocus — the
+   * studio diagnostics list's tap-to-locate path ("Go ›" jumps the caret to
+   * the offending span instead of describing it as a character offset).
+   * Offsets clamp to the doc so a stale diagnostic can never throw.
+   */
+  selectRange: (from: number, to: number) => void;
 }
 
 /**
@@ -307,12 +308,9 @@ function highlightMark(kind: FormulaHighlightKind): Decoration {
   return mark;
 }
 
-function buildHighlightDecorations(
-  source: string,
-  thisRowInScope: boolean
-): DecorationSet {
+function buildHighlightDecorations(source: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  for (const span of highlightFormula(source, { thisRowInScope })) {
+  for (const span of highlightFormula(source)) {
     builder.add(span.start, span.end, highlightMark(span.kind));
   }
   return builder.finish();
@@ -404,28 +402,19 @@ const checkContextState = StateField.define<FormulaCheckContext>({
  * Whole-document re-highlight on every doc change. Fine at our scale: input
  * is capped at 10k characters (`MAX_EXPRESSION_LENGTH`) and the classifier
  * is a single linear tokenize pass, so incremental ranges aren't worth it.
- * Also rebuilds when `thisRow` enters or leaves scope so `thisRow` restyles
- * from property-root to bare name (and back).
  */
 const formulaHighlighter = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
 
     constructor(view: EditorView) {
-      this.decorations = buildHighlightDecorations(
-        view.state.doc.toString(),
-        formulaThisRowInScope(view.state.field(checkContextState))
-      );
+      this.decorations = buildHighlightDecorations(view.state.doc.toString());
     }
 
     update(update: ViewUpdate) {
-      const scopeChanged =
-        formulaThisRowInScope(update.startState.field(checkContextState)) !==
-        formulaThisRowInScope(update.state.field(checkContextState));
-      if (update.docChanged || scopeChanged) {
+      if (update.docChanged) {
         this.decorations = buildHighlightDecorations(
-          update.state.doc.toString(),
-          formulaThisRowInScope(update.state.field(checkContextState))
+          update.state.doc.toString()
         );
       }
     }
@@ -987,9 +976,7 @@ const typedReferenceCanonicalizer = ViewPlugin.fromClass(
       const { state } = this.view;
       const source = state.doc.toString();
       const rewrites = [
-        ...canonicalPropertyRewrites(source, state.field(chipFields), {
-          thisRowInScope: formulaThisRowInScope(state.field(checkContextState)),
-        }),
+        ...canonicalPropertyRewrites(source, state.field(chipFields)),
         ...canonicalDatabaseRewrites(source, state.field(chipDatabases)),
       ].filter((rewrite) => !selectionTouches(state.selection, rewrite));
       if (rewrites.length === 0) {
@@ -1052,7 +1039,7 @@ function rawDiagnosticSpans(
   if (source.trim() === "") {
     return [];
   }
-  const parsed = parseFormula(source, context);
+  const parsed = parseFormula(source);
   if (!parsed.ok) {
     const span = parseErrorSpan(source, parsed.error.position);
     return span === null ? [] : [span];
@@ -1492,19 +1479,18 @@ const IDENTIFIER_TAIL_RE = /[A-Za-z_][A-Za-z0-9_]*$/;
 const IDENTIFIER_VALID_FOR_RE = /^[A-Za-z0-9_]*$/;
 
 /**
- * A scope-root reference prefix (`thisPage.` / `thisRow.`, any casing)
- * directly before a position: completions triggered there narrow to
- * properties and replace the WHOLE reference with one canonical chip.
- * `thisRow.` is only a prefix when the host has a database row.
+ * A scope-root reference prefix (`thisPage.`, any casing) directly before a
+ * position: completions triggered there narrow to properties and replace
+ * the WHOLE reference with one canonical chip.
  */
-function scopePrefixRe(thisRowInScope: boolean): RegExp {
-  const roots = [...formulaScopeRootLabels(thisRowInScope)].join("|");
-  return new RegExp(`(?:${roots})\\s*\\.\\s*$`, "i");
-}
+const SCOPE_PREFIX_RE = new RegExp(
+  `${FORMULA_PAGE_SCOPE_LABEL}\\s*\\.\\s*$`,
+  "i"
+);
 
 /** Start of the scope-root prefix ending at `prefix`'s end, else its length. */
-function scopePrefixStart(prefix: string, thisRowInScope: boolean): number {
-  const match = scopePrefixRe(thisRowInScope).exec(prefix);
+function scopePrefixStart(prefix: string): number {
+  const match = SCOPE_PREFIX_RE.exec(prefix);
   return match === null ? prefix.length : match.index;
 }
 
@@ -1601,15 +1587,13 @@ const completionFields = new WeakMap<Completion, DatabaseField>();
  * The leading icon of each completion row (replaces CM's built-in icon
  * classes): the field-type/custom icon for properties, the database glyph
  * for database options, a function glyph for functions, and the default
- * page/document glyph for `thisPage`/`thisRow`. Completions without an
+ * page/document glyph for `thisPage`. Completions without an
  * icon (`db`, keywords, operators) return null so they left-align — no
  * reserved empty column.
  */
 function renderCompletionIcon(completion: Completion): Node | null {
   const field = completionFields.get(completion);
-  const isScopeRoot =
-    completion.label === FORMULA_PAGE_SCOPE_LABEL ||
-    completion.label === FORMULA_ROW_SCOPE_LABEL;
+  const isScopeRoot = completion.label === FORMULA_PAGE_SCOPE_LABEL;
   if (
     field === undefined &&
     completion.type !== "database" &&
@@ -1660,10 +1644,7 @@ function propertyCompletion(
 ): Completion {
   const completion: Completion = {
     apply: (view, _completion, from, to) => {
-      const start = scopePrefixStart(
-        view.state.sliceDoc(0, from),
-        formulaThisRowInScope(view.state.field(checkContextState))
-      );
+      const start = scopePrefixStart(view.state.sliceDoc(0, from));
       const insert = canonicalPropertyReference(field.id);
       applyInsert(view, { from: start, to }, insert, start + insert.length);
     },
@@ -1750,20 +1731,18 @@ function keywordCompletions(expected: FormulaType | null): Completion[] {
 }
 
 /** Display info for each scope-root completion. */
-const SCOPE_ROOT_INFO = {
+const SCOPE_ROOT_INFO: Record<string, string> = {
   thisPage: "This page's properties — picking one inserts its reference.",
-  thisRow: "This row's properties — picking one inserts its reference.",
-} as const;
+};
 
 /**
  * Scope-root references complete too — typing `thi…` lands on `thisPage.`
  * — and accepting one immediately reopens the popup, which the trailing
  * dot puts in property-only mode, so the property pick (which replaces the
- * whole reference with one canonical chip) is a keystroke away. `thisRow`
- * is offered only when the host has a database row.
+ * whole reference with one canonical chip) is a keystroke away.
  */
-function scopeRootCompletions(thisRowInScope: boolean): Completion[] {
-  return formulaScopeRootLabels(thisRowInScope).map((label) => ({
+function scopeRootCompletions(): Completion[] {
+  return [FORMULA_PAGE_SCOPE_LABEL].map((label) => ({
     apply: (
       view: EditorView,
       _completion: Completion,
@@ -1906,12 +1885,8 @@ function dbArgumentCompletions(
 }
 
 /** Is `position` inside a string or comment (no completions there)? */
-function insideStringOrComment(
-  source: string,
-  position: number,
-  thisRowInScope: boolean
-): boolean {
-  return highlightFormula(source, { thisRowInScope }).some(
+function insideStringOrComment(source: string, position: number): boolean {
+  return highlightFormula(source).some(
     (span) =>
       (span.kind === "string" || span.kind === "comment") &&
       span.start < position &&
@@ -1938,17 +1913,14 @@ function formulaCompletionSource(
   if (dbArgument !== null) {
     return dbArgument;
   }
-  const thisRowInScope = formulaThisRowInScope(
-    context.state.field(checkContextState)
-  );
   const word = context.matchBefore(IDENTIFIER_TAIL_RE);
   const from = word?.from ?? context.pos;
-  const scopeStart = scopePrefixStart(doc.slice(0, from), thisRowInScope);
+  const scopeStart = scopePrefixStart(doc.slice(0, from));
   const propertyOnly = scopeStart < from;
   if (word === null && !(context.explicit || propertyOnly)) {
     return null;
   }
-  if (insideStringOrComment(doc, context.pos, thisRowInScope)) {
+  if (insideStringOrComment(doc, context.pos)) {
     return null;
   }
   const fields = formulaPickableFields(
@@ -1979,10 +1951,7 @@ function formulaCompletionSource(
         options.push(userFunctionCompletion(def));
       }
     }
-    options.push(
-      ...keywordCompletions(expected),
-      ...scopeRootCompletions(thisRowInScope)
-    );
+    options.push(...keywordCompletions(expected), ...scopeRootCompletions());
     if (context.state.field(chipDatabases).length > 0) {
       options.push(dbRootCompletion());
     }
@@ -2500,6 +2469,20 @@ export function FormulaCodeEditor({
         view.dispatch({
           changes: { from: start, insert: text, to: end },
           selection: { anchor: start + text.length },
+        });
+        view.focus();
+      },
+      selectRange: (from, to) => {
+        const view = viewRef.current;
+        if (view === null) {
+          return;
+        }
+        const docLength = view.state.doc.length;
+        const start = Math.min(from, docLength);
+        const end = Math.min(Math.max(to, start), docLength);
+        view.dispatch({
+          selection: { anchor: start, head: end },
+          scrollIntoView: true,
         });
         view.focus();
       },

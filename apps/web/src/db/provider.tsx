@@ -10,6 +10,7 @@ import { SyncPageListLocalPreviewEffect } from "@/components/pages/sync-page-lis
 import { SyncPagesCatalogRevisionEffect } from "@/components/pages/sync-pages-catalog-revision-effect.tsx";
 import { WarmPageIconPickerCacheEffect } from "@/components/pages/warm-page-icon-picker-cache-effect.tsx";
 import { WarmShippedPagesCacheEffect } from "@/components/pages/warm-shipped-pages-cache-effect.tsx";
+import { IosInputZoomGuard } from "@/components/ui/ios-input-zoom-guard.tsx";
 import { NativeScrollbarEffect } from "@/components/ui/native-scrollbar-effect.tsx";
 import { Toaster } from "@/components/ui/sonner.tsx";
 import { TooltipProvider } from "@/components/ui/tooltip.tsx";
@@ -36,6 +37,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       <WarmShippedPagesCacheEffect />
       <PrefetchPageCanvasEditorEffect />
       <NativeScrollbarEffect />
+      <IosInputZoomGuard />
       <TooltipProvider>
         {children}
         {/* Lift the bottom offset above the 36px canvas footer lane so toasts

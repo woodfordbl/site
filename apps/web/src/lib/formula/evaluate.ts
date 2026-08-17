@@ -31,7 +31,7 @@ import {
   formulaMinArgs,
   VOLATILE_FORMULA_FUNCTION_NAMES,
 } from "@/lib/formula/catalog.ts";
-import { formulaValueToText } from "@/lib/formula/display.ts";
+import { applyFormulaConcat, applyFormulaPlus } from "@/lib/formula/concat.ts";
 import {
   resolveFormulaDatabaseRows,
   resolveFormulaRowMember,
@@ -89,32 +89,6 @@ function applyUnary(op: "-" | "not", operand: FormulaValue): FormulaValue {
     return typeof operand === "number" ? -operand : unaryError(op, operand);
   }
   return typeof operand === "boolean" ? !operand : unaryError(op, operand);
-}
-
-function applyPlus(left: FormulaValue, right: FormulaValue): FormulaValue {
-  const cannotAdd = () =>
-    formulaError(
-      `Cannot add ${formulaValueTypeName(left)} and ${formulaValueTypeName(right)}`
-    );
-  if (left === null || right === null) {
-    return cannotAdd();
-  }
-  if (typeof left === "string" || typeof right === "string") {
-    const leftText = formulaValueToText(left);
-    if (typeof leftText !== "string") {
-      return leftText;
-    }
-    const rightText = formulaValueToText(right);
-    if (typeof rightText !== "string") {
-      return rightText;
-    }
-    return leftText + rightText;
-  }
-  if (typeof left === "number" && typeof right === "number") {
-    return left + right;
-  }
-  // Includes date + number: dateAdd() exists for that.
-  return cannotAdd();
 }
 
 function applyArithmetic(
@@ -200,7 +174,9 @@ function applyBinary(
   }
   switch (op) {
     case "+":
-      return applyPlus(left, right);
+      return applyFormulaPlus(left, right);
+    case "&":
+      return applyFormulaConcat(left, right);
     case "-":
     case "*":
     case "/":

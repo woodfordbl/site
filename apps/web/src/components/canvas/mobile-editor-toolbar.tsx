@@ -7,6 +7,7 @@ import {
   IconIndentDecrease,
   IconIndentIncrease,
   IconKeyboardOff,
+  IconMathFunction,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
@@ -29,13 +30,31 @@ import { ButtonGroup } from "@/components/ui/button-group.tsx";
 import { useKeyboardToolbarAnchor } from "@/hooks/use-visual-viewport-keyboard.ts";
 import { clampBlockIndent, getBlockIndent } from "@/lib/blocks/block-indent.ts";
 import { findRowById, findRowContext } from "@/lib/blocks/block-tree.ts";
+import { getTextFromBlock } from "@/lib/blocks/create-block.ts";
+import { insertFormulaToken } from "@/lib/blocks/inline-formula.ts";
+import { getBlockMarks, withBlockRichText } from "@/lib/blocks/rich-text.ts";
 import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
 import { getActiveCanvasRowId } from "@/lib/canvas/block-selection.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import { findFocusableAdjacentRowId } from "@/lib/canvas/focusable-rows.ts";
+import {
+  getFieldSelection,
+  isRichTextField,
+} from "@/lib/editor/caret-navigation.ts";
+import { requestInlineFormulaEdit } from "@/lib/editor/inline-formula-edit-request.ts";
 import { cn } from "@/lib/utils.ts";
 
 type PickerMode = "add" | "turnInto";
+
+/**
+ * The focused rich-text field, or null when focus is elsewhere (the title, a
+ * database cell input, off-canvas). Only rich-text surfaces can hold inline
+ * formula marks, so this is the availability gate for the formula button.
+ */
+function activeRichTextField(): HTMLElement | null {
+  const active = document.activeElement;
+  return active instanceof Element && isRichTextField(active) ? active : null;
+}
 
 /** Button that runs its action without stealing focus from the editor field, so
  *  the on-screen keyboard stays open (same pattern as the slash-menu rows).
@@ -111,6 +130,9 @@ export function MobileEditorToolbar() {
   const anchorRef = useRef<HTMLDivElement>(null);
   // Row of the focused field (null when focus is on the title or off-canvas).
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
+  // Whether the focused field is a rich-text surface — the only place inline
+  // formula marks can live, so the formula button hides everywhere else.
+  const [richTextFocused, setRichTextFocused] = useState(false);
   const [pickerMode, setPickerMode] = useState<PickerMode | null>(null);
   // Captured when a picker opens, since opening it blurs the field.
   const pickerTargetRef = useRef<string | null>(null);
@@ -120,11 +142,17 @@ export function MobileEditorToolbar() {
   useKeyboardToolbarAnchor(anchorRef, visible);
 
   useEffect(() => {
-    const onFocusIn = () => setFocusedRowId(getActiveCanvasRowId());
+    const onFocusIn = () => {
+      setFocusedRowId(getActiveCanvasRowId());
+      setRichTextFocused(activeRichTextField() !== null);
+    };
     // Scrolling does not blur the field, so the bar stays put through scroll;
     // only a real blur (keyboard dismissed / focus left the canvas) hides it.
     const onFocusOut = () => {
-      requestAnimationFrame(() => setFocusedRowId(getActiveCanvasRowId()));
+      requestAnimationFrame(() => {
+        setFocusedRowId(getActiveCanvasRowId());
+        setRichTextFocused(activeRichTextField() !== null);
+      });
     };
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
@@ -203,6 +231,36 @@ export function MobileEditorToolbar() {
       findFocusableAdjacentRowId(getRows(), rowId, "up") !== null
     );
   }, [getRows, resolveTargetRowId]);
+
+  // Inserts an empty inline formula token at the caret and opens its editor —
+  // the studio drawer, via InlineFormulaPopover's edit-request listener. This
+  // is the mobile replacement for the desktop-only `#` trigger, mirroring the
+  // slash menu's formula item: token first, editor second, so cancelling
+  // leaves a token you can delete like any other character.
+  const handleInsertFormula = useCallback(() => {
+    const field = activeRichTextField();
+    const rowId = resolveTargetRowId();
+    if (!(field && rowId)) {
+      return;
+    }
+    const row = findRowById(getRows(), rowId);
+    const block = row?.effectiveBlock;
+    if (!block) {
+      return;
+    }
+    const inserted = insertFormulaToken(
+      getTextFromBlock(block),
+      getBlockMarks(block),
+      getFieldSelection(field),
+      ""
+    );
+    dispatch({
+      type: "row.update",
+      rowId,
+      block: withBlockRichText(block, inserted.text, inserted.marks),
+    });
+    requestInlineFormulaEdit(rowId, inserted.selection.start - 1);
+  }, [dispatch, getRows, resolveTargetRowId]);
 
   const handleDelete = useCallback(() => {
     const rowId = resolveTargetRowId();
@@ -310,6 +368,14 @@ export function MobileEditorToolbar() {
               >
                 <IconExchange aria-hidden />
               </ToolbarButton>
+              {richTextFocused ? (
+                <ToolbarButton
+                  label="Insert formula"
+                  onPress={handleInsertFormula}
+                >
+                  <IconMathFunction aria-hidden />
+                </ToolbarButton>
+              ) : null}
             </ButtonGroup>
             <ButtonGroup className="shrink-0">
               <ToolbarButton

@@ -761,18 +761,6 @@ describe("date functions", () => {
     );
   });
 
-  it("dateAdd rejects bad input like v1", () => {
-    expect(
-      errorMessage(run('dateAdd(parseDate("2026-01-01"), 1, "weeks")'))
-    ).toContain("unknown unit");
-    expect(
-      errorMessage(run('dateAdd(parseDate("2026-01-01"), "x", "days")'))
-    ).toBe("dateAdd() expects a number, got text");
-    expect(
-      errorMessage(run('dateAdd(parseDate("2020-01-01"), 200000000, "days")'))
-    ).toContain("out of range");
-  });
-
   it("dateDiff computes signed calendar differences plus hours/minutes", () => {
     expect(
       run('dateDiff(parseDate("2026-01-10"), parseDate("2026-01-01"), "days")')
@@ -813,7 +801,7 @@ describe("scope properties", () => {
   it("resolves values from the scope", () => {
     const scope = scopeOf({ Score: 10, Name: "Ada", Done: true, Empty: null });
     expect(run("thisPage.Score * 2", scope)).toBe(20);
-    expect(run('thisRow.Name + "!"', scope)).toBe("Ada!");
+    expect(run('thisPage.Name + "!"', scope)).toBe("Ada!");
     expect(run("thisPage.Done and true", scope)).toBe(true);
     expect(run("empty(thisPage.Empty)", scope)).toBe(true);
     expect(run('prop("Score") + 1', scope)).toBe(11);

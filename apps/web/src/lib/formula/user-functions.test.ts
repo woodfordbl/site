@@ -38,7 +38,7 @@ describe("formulaUserFunctionNameError", () => {
   });
 
   it("rejects the reference roots and evaluator special forms", () => {
-    for (const word of ["prop", "db", "thisPage", "thisrow", "let", "lets"]) {
+    for (const word of ["prop", "db", "thisPage", "let", "lets"]) {
       expect(formulaUserFunctionNameError(word)).toContain("is reserved");
     }
   });
@@ -77,7 +77,7 @@ describe("formulaUserFunctionParamsError", () => {
     );
     expect(formulaUserFunctionParamsError(["not"])).toContain("is reserved");
     expect(formulaUserFunctionParamsError(["prop"])).toContain("is reserved");
-    expect(formulaUserFunctionParamsError(["thisRow"])).toContain(
+    expect(formulaUserFunctionParamsError(["thisPage"])).toContain(
       "is reserved"
     );
   });

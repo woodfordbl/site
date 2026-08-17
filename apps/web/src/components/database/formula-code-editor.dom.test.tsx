@@ -862,7 +862,7 @@ describe("FormulaCodeEditor", () => {
       );
     });
 
-    it("shows the default page icon for thisPage and thisRow completions", async () => {
+    it("shows the default page icon for the thisPage completion", async () => {
       renderEditor();
       typeText("thi");
 
@@ -874,9 +874,6 @@ describe("FormulaCodeEditor", () => {
       expect(
         rowByLabel("thisPage")?.querySelector(".cm-formula-completion-icon svg")
       ).not.toBeNull();
-      expect(
-        rowByLabel("thisRow")?.querySelector(".cm-formula-completion-icon svg")
-      ).not.toBeNull();
     });
 
     it("completes scope roots and chains into the property list", async () => {
@@ -885,7 +882,6 @@ describe("FormulaCodeEditor", () => {
 
       const open = await waitForPopup();
       expect(optionLabels(open)).toContain("thisPage");
-      expect(optionLabels(open)).toContain("thisRow");
       await settleInteractionDelay();
 
       fireEvent.keyDown(cmContent(), { key: "Enter" });
@@ -898,23 +894,6 @@ describe("FormulaCodeEditor", () => {
       await settleInteractionDelay();
       fireEvent.keyDown(cmContent(), { key: "Enter" });
       expect(onChange).toHaveBeenLastCalledWith('prop("f-price")');
-    });
-
-    it("omits thisRow from completions when it is not in scope", async () => {
-      render(
-        <FormulaCodeEditor
-          ariaLabel="Formula expression"
-          checkContext={{ ...CHECK_CONTEXT, thisRowInScope: false }}
-          fields={FIELDS}
-          onChange={vi.fn()}
-          value=""
-        />
-      );
-      typeText("thi");
-
-      const open = await waitForPopup();
-      expect(optionLabels(open)).toContain("thisPage");
-      expect(optionLabels(open)).not.toContain("thisRow");
     });
 
     it("replaces a typed scope-root prefix along with the partial name", async () => {
@@ -1095,7 +1074,7 @@ describe("FormulaCodeEditor", () => {
       );
       expect(andRows).toHaveLength(1);
       // The surviving row is the keyword form — no signature detail, and
-      // no reserved empty icon slot (unlike thisPage/thisRow, which carry
+      // no reserved empty icon slot (unlike thisPage, which carries
       // the default page glyph).
       expect(andRows[0]?.querySelector(".cm-completionDetail")).toBeNull();
       expect(

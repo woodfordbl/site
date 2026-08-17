@@ -1,7 +1,7 @@
 import { InlinePageLink } from "@/components/editor/inline-page-link.tsx";
 import { InlineLink } from "@/components/editor/link-preview.tsx";
 import { segmentRichText } from "@/lib/blocks/rich-text.ts";
-import { inlineTokenUnderlineOffsetClassName } from "@/lib/editor/inline-token-rule.ts";
+import { inlineTokenBorderOffsetClassName } from "@/lib/editor/inline-token-rule.ts";
 import { pageLinkTitleMarks } from "@/lib/editor/rich-text-dom.ts";
 import { EMPTY_INLINE_FORMULA_LABEL } from "@/lib/formula/display.ts";
 import type { InlineMark, InlineMarkType } from "@/lib/schemas/rich-text.ts";
@@ -31,20 +31,22 @@ export const inlineMarkClassNames: Record<InlineMarkType, string> = {
    * apply at all, and the full text stays reachable on hover.
    */
   formula: cn(
-    // `overflow-clip` (not `hidden`) still truncates a long value with an
-    // ellipsis, but `overflow-clip-margin` lets the dotted underline — which
-    // sits below a `leading-none` box — bleed out instead of being clipped
-    // away with it.
-    "inline-formula-token max-w-[16rem] cursor-pointer overflow-clip text-ellipsis whitespace-nowrap align-middle [overflow-clip-margin:0.4em]",
+    "inline-formula-token max-w-[16rem] cursor-pointer overflow-clip text-ellipsis whitespace-nowrap align-middle",
     // `leading-none` + `align-middle` keeps the value optically on the block's
     // text baseline; the residual pixel is corrected with a relative nudge
     // rather than a baseline-relative `vertical-align`.
     "relative -top-px inline-block text-[length:inherit] leading-none",
-    "underline decoration-border decoration-dotted hover:decoration-muted-foreground",
-    inlineTokenUnderlineOffsetClassName,
-    // Blank results (`None`) drop the prose underline for a muted pill so the
+    // The dotted rule is a border, not `underline`: the box is `overflow-clip`
+    // to truncate long values, and a text decoration below a `leading-none`
+    // box falls outside the clip. Chromium can rescue it with
+    // `overflow-clip-margin`, but Safari never implemented that property, so
+    // on iOS the decoration was clipped away entirely. A border paints on the
+    // element's own edge — outside the clip region — in every engine.
+    "border-border border-b border-dotted hover:border-muted-foreground",
+    inlineTokenBorderOffsetClassName,
+    // Blank results (`None`) drop the prose rule for a muted pill so the
     // token stays visible and clickable when Tags / text / etc. are empty.
-    "data-[formula-empty]:rounded-md data-[formula-empty]:bg-muted data-[formula-empty]:px-1.5 data-[formula-empty]:py-0.5 data-[formula-empty]:text-muted-foreground data-[formula-empty]:no-underline data-[formula-empty]:decoration-transparent data-[formula-empty]:hover:decoration-transparent"
+    "data-[formula-empty]:rounded-md data-[formula-empty]:border-transparent data-[formula-empty]:bg-muted data-[formula-empty]:px-1.5 data-[formula-empty]:py-0.5 data-[formula-empty]:text-muted-foreground data-[formula-empty]:hover:border-transparent"
   ),
 };
 

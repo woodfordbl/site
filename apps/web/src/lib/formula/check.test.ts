@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import {
   FORMULA_FUNCTION_CATALOG,
   formulaFunctionForName,
@@ -10,10 +9,10 @@ import {
   type FormulaCheckProperty,
   type FormulaCheckResult,
   formulaPropertyValueType,
-  formulaTypeBadge,
 } from "@/lib/formula/check.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import {
   BLANK_TYPE,
   BOOLEAN_TYPE,
@@ -133,7 +132,7 @@ describe("property typing", () => {
   it("types canonical prop() and bracket references identically", () => {
     expect(typeOf('prop("f_est")', SCHEMA)).toEqual(NUMBER_TYPE);
     expect(typeOf('thisPage["Estimate"]', SCHEMA)).toEqual(NUMBER_TYPE);
-    expect(typeOf('thisRow["Tags"]', SCHEMA)).toEqual(listTypeOf(TEXT_TYPE));
+    expect(typeOf('thisPage["Tags"]', SCHEMA)).toEqual(listTypeOf(TEXT_TYPE));
   });
 
   it("types property refs as plain T, never T | blank", () => {
@@ -1011,23 +1010,9 @@ describe("bare names", () => {
     });
   });
 
-  it("reports thisRow as an unknown name when it is not a scope root", () => {
-    const parsed = parseFormula("thisRow", { thisRowInScope: false });
-    if (!parsed.ok) {
-      throw new Error(`parse failed: ${parsed.error.message}`);
-    }
-    const result = checkFormula(parsed.ast, {
-      properties: [],
-      thisRowInScope: false,
-    });
-    expect(result.diagnostics).toEqual([
-      {
-        end: "thisRow".length,
-        message: 'Unknown name "thisRow"',
-        severity: "error",
-        start: 0,
-      },
-    ]);
+  it("reports thisRow as a plain unknown name", () => {
+    // thisRow is not part of the language — it's an ordinary identifier.
+    expect(soleDiagnostic("thisRow").message).toBe('Unknown name "thisRow"');
   });
 });
 

@@ -1,10 +1,13 @@
 import { useCallback, useSyncExternalStore } from "react";
-
 import {
   localDatabaseRowsCollection,
   localDatabasesCollection,
   localFormulaFunctionsCollection,
 } from "@/db/collections/local-collections.ts";
+import {
+  applyDatabaseChangesToMirror,
+  type EngineDatabaseChange,
+} from "@/db/formula-engine-schema-change.ts";
 import type {
   FormulaCellResult,
   FormulaOverlay,
@@ -492,36 +495,21 @@ function handleRowChanges(changes: readonly EngineRowChange[]): void {
   scheduleEngineFlush(engine);
 }
 
-interface EngineDatabaseChange {
-  key: string | number;
-  type: "delete" | "insert" | "update";
-  value?: LocalDatabase;
-}
-
 /**
- * Any databases-collection change is the coarse schema path: update the
- * mirror, rebuild graph + reverse indexes (synchronously, so row events
- * later in the same burst see the new graph), and mark every changed
- * database — plus columns traversing into it — fully dirty.
+ * A databases-collection change that touches the observable schema is the
+ * coarse path: update the mirror, rebuild graph + reverse indexes
+ * (synchronously, so row events later in the same burst see the new graph),
+ * and mark every changed database — plus columns traversing into it — fully
+ * dirty. View-only record writes just refresh the mirror.
  */
 function handleDatabaseChanges(changes: readonly EngineDatabaseChange[]): void {
   const engine = state;
   if (engine === null) {
     return;
   }
-  const changedIds = new Set<string>();
-  for (const change of changes) {
-    if (change.type === "delete") {
-      const databaseId = String(change.key);
-      engine.databases.delete(databaseId);
-      changedIds.add(databaseId);
-      continue;
-    }
-    const database = change.value;
-    if (database !== undefined) {
-      engine.databases.set(database.id, database);
-      changedIds.add(database.id);
-    }
+  const changedIds = applyDatabaseChangesToMirror(engine.databases, changes);
+  if (changedIds.size === 0) {
+    return;
   }
   rebuildEngineGraph(engine);
   for (const databaseId of changedIds) {

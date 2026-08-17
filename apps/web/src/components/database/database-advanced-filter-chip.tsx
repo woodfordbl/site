@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-
 import { FormulaCodeEditorBoundary } from "@/components/database/formula-editor-panel.tsx";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -27,7 +26,6 @@ import {
   checkFormula,
   type FormulaCheckContext,
   type FormulaCheckResult,
-  formulaTypeBadge,
   formulaTypeFits,
 } from "@/lib/formula/check.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
@@ -35,6 +33,7 @@ import {
   canonicalizeExpression,
   humanizeExpression,
 } from "@/lib/formula/ref-rewrite.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import { BOOLEAN_TYPE } from "@/lib/formula/types.ts";
 import type { FormulaPreparedUserFunctions } from "@/lib/formula/values.ts";
 import type { DatabaseField, DatabaseView } from "@/lib/schemas/database.ts";

@@ -1,14 +1,11 @@
 import type { FormulaNode } from "./ast.ts";
 import { formulaNodeChildren, walkFormula } from "./ast.ts";
 import { formulaFunctionForName, formulaFunctionSignature } from "./catalog.ts";
-import {
-  checkFormula,
-  type FormulaCheckContext,
-  formulaTypeBadge,
-} from "./check.ts";
+import { checkFormula, type FormulaCheckContext } from "./check.ts";
 import { formulaValueToDisplay } from "./display.ts";
 import { evaluateFormula } from "./evaluate.ts";
 import { parseFormula } from "./parse.ts";
+import { formulaTypeBadge } from "./type-badge.ts";
 import type { FormulaScope } from "./values.ts";
 
 /**
@@ -310,7 +307,7 @@ export function formulaHoverAt(
   offset: number,
   options: FormulaHoverOptions
 ): FormulaHoverInfo | null {
-  const parsed = parseFormula(source, options.context);
+  const parsed = parseFormula(source);
   if (!parsed.ok) {
     return null;
   }

@@ -97,6 +97,10 @@
   --selection: var(--muted);
   --selection-primary: var(--muted-foreground);
   --selection-foreground: var(--foreground);
+  /* L(--sidebar) − L(--background): how far a recessed surface sits below the
+     page ground. Keep it in step with those two — it is what re-bases the
+     neutral ramp for drawers (see `[data-slot="drawer-content"]`). */
+  --surface-recess: -0.03;
   --chart-1: oklch(0.5963 0.2191 263.82);
   --chart-2: oklch(0.8489 0.1353 76.8);
   --chart-3: oklch(0.6744 0.1426 151.9);
@@ -156,6 +160,7 @@
   --selection: oklch(0.35 0.014 85);
   --selection-primary: var(--muted-foreground);
   --selection-foreground: var(--foreground);
+  --surface-recess: -0.02;
   --chart-1: oklch(0.65 0.2 263.82);
   --chart-2: oklch(0.82 0.14 76.8);
   --chart-3: oklch(0.72 0.14 151.9);
@@ -565,6 +570,34 @@
   html[data-swipe-dragging] [data-sidebar-reveal-surface].bg-sidebar,
   html[data-swipe-dragging] [data-sidebar-reveal-surface] .bg-sidebar {
     transition: none;
+  }
+
+  /* A drawer's surface is a RECESSED one (`bg-sidebar`), so every neutral
+     inside it has to make the same move or the ramp flattens against it:
+     `--muted` sits 0.04 L below the page ground but only 0.01 below a
+     drawer's, which is why tab indicators and token chips that read clearly
+     on a page nearly vanish on a drawer. Re-basing the ramp by the same delta
+     the ground moved (`--surface-recess`) restores every step at once —
+     `bg-muted`, `bg-secondary`, `hover:bg-accent` — with no drawer-specific
+     utility on any component.
+
+     Derived here on `:root` rather than inside the drawer rule for two
+     reasons: a custom property that references itself is a cycle (and so
+     invalid), and computing them once keeps a nested drawer from compounding
+     the shift a second time. */
+  :root {
+    --muted-recessed: oklch(
+      from var(--muted) calc(l + var(--surface-recess)) c h
+    );
+    --secondary-recessed: oklch(
+      from var(--secondary) calc(l + var(--surface-recess)) c h
+    );
+  }
+
+  [data-slot="drawer-content"] {
+    --muted: var(--muted-recessed);
+    --secondary: var(--secondary-recessed);
+    --accent: var(--muted-recessed);
   }
 
   /*

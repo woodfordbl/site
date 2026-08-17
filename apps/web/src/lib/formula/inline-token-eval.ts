@@ -79,7 +79,7 @@ export function evaluateInlineTokens(
 
   for (const token of tokens) {
     const source = token.expression ?? "";
-    const parsed = parseFormula(source, context);
+    const parsed = parseFormula(source);
     if (!parsed.ok) {
       // A parse error is the token's value — visible, and scoped to itself.
       values.set(

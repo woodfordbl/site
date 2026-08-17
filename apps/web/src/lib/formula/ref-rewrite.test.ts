@@ -32,21 +32,13 @@ describe("canonicalizeExpression", () => {
     });
   });
 
-  it("resolves names case-insensitively and via thisRow", () => {
-    expect(canonicalizeExpression("thisrow.price", FIELDS).text).toBe(
+  it("resolves names case-insensitively", () => {
+    expect(canonicalizeExpression("thispage.price", FIELDS).text).toBe(
       'prop("f-price")'
     );
     expect(canonicalizeExpression('THISPAGE["  price  "]', FIELDS).text).toBe(
       'prop("f-price")'
     );
-  });
-
-  it("does not rewrite thisRow as a property when it is out of scope", () => {
-    expect(
-      canonicalizeExpression("thisRow.Price", FIELDS, undefined, {
-        thisRowInScope: false,
-      }).text
-    ).toBe("thisRow.Price");
   });
 
   it("rewrites bracket references", () => {
@@ -186,7 +178,7 @@ describe("round-trips", () => {
     const cases: [string, string][] = [
       ["thispage.price * 2", "thisPage.Price * 2"],
       [
-        'thisRow["unit count"] + thisPage.PRICE',
+        'thisPage["unit count"] + thisPage.PRICE',
         'thisPage["Unit Count"] + thisPage.Price',
       ],
       ['thisPage["A \\"B\\" \\\\C"]', 'thisPage["A \\"B\\" \\\\C"]'],

@@ -169,7 +169,6 @@ const MEMBER_UNSAFE_WORDS = new Set([
   "or",
   "not",
   "thispage",
-  "thisrow",
   "prop",
 ]);
 

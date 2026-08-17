@@ -12,9 +12,7 @@
 import {
   FORMULA_DB_ROOT,
   FORMULA_PROP_ROOT,
-  formulaScopeRoots,
-  formulaThisRowInScope,
-  type ParseFormulaOptions,
+  FORMULA_SCOPE_ROOTS,
 } from "@/lib/formula/parse.ts";
 import {
   type FormulaPunct,
@@ -77,6 +75,7 @@ const WORD_LITERALS = new Set(["true", "false", "null"]);
 const OPERATOR_PUNCTS = new Set<FormulaPunct>([
   "==",
   "!=",
+  "<>",
   "<=",
   ">=",
   "&&",
@@ -89,6 +88,7 @@ const OPERATOR_PUNCTS = new Set<FormulaPunct>([
   "/",
   "%",
   "^",
+  "&",
   "<",
   ">",
   "!",
@@ -150,11 +150,10 @@ function commentEnd(source: string, start: number, limit: number): number {
 }
 
 /**
- * Classify a scope reference starting at `thisPage`/`thisRow`: one property
+ * Classify a scope reference starting at `thisPage`: one property
  * span covering the root plus its immediate `.name` or `["name"]` hop (the
  * hop is the reference; deeper members are ordinary member access). Returns
- * the next unconsumed token index. Callers only invoke this when the root
- * is in scope for the host (`thisRow` is skipped on ordinary pages).
+ * the next unconsumed token index.
  */
 function classifyScopeReference(
   tokens: readonly FormulaToken[],
@@ -185,8 +184,7 @@ function classifyScopeReference(
 function classifyIdentifier(
   tokens: readonly FormulaToken[],
   index: number,
-  spans: FormulaHighlightSpan[],
-  thisRowInScope: boolean
+  spans: FormulaHighlightSpan[]
 ): number {
   const token = tokens[index];
   if (token.type !== "identifier") {
@@ -203,7 +201,7 @@ function classifyIdentifier(
   if (WORD_OPERATORS.has(lower)) {
     return span("operator");
   }
-  if (formulaScopeRoots(thisRowInScope).has(lower)) {
+  if (FORMULA_SCOPE_ROOTS.has(lower)) {
     return classifyScopeReference(tokens, index, spans);
   }
   const [open, arg, close] = tokens.slice(index + 1, index + 4);
@@ -234,10 +232,7 @@ function classifyIdentifier(
 }
 
 /** Spans for the token stream proper (comments are handled separately). */
-function tokenSpans(
-  tokens: readonly FormulaToken[],
-  thisRowInScope: boolean
-): FormulaHighlightSpan[] {
+function tokenSpans(tokens: readonly FormulaToken[]): FormulaHighlightSpan[] {
   const spans: FormulaHighlightSpan[] = [];
   let index = 0;
   while (index < tokens.length) {
@@ -246,7 +241,7 @@ function tokenSpans(
       break;
     }
     if (token.type === "identifier") {
-      index = classifyIdentifier(tokens, index, spans, thisRowInScope);
+      index = classifyIdentifier(tokens, index, spans);
       continue;
     }
     if (token.type === "number" || token.type === "string") {
@@ -462,21 +457,13 @@ export function formulaEnclosingCallAt(
  * throws. When the source doesn't lex (unterminated string mid-keystroke),
  * the lexable prefix still highlights and the tail is classified by what it
  * started as.
- *
- * `options.thisRowInScope` matches {@link parseFormula}: omitted/`true`
- * highlights `thisRow.X` as a property reference; `false` highlights
- * `thisRow` as a bare name.
  */
-export function highlightFormula(
-  source: string,
-  options?: ParseFormulaOptions
-): FormulaHighlightSpan[] {
-  const thisRowInScope = formulaThisRowInScope(options);
+export function highlightFormula(source: string): FormulaHighlightSpan[] {
   const lexed = tokenizeFormula(source);
   if (lexed.ok) {
     return [
       ...commentSpans(source, lexed.tokens),
-      ...tokenSpans(lexed.tokens, thisRowInScope),
+      ...tokenSpans(lexed.tokens),
     ].sort((a, b) => a.start - b.start);
   }
   const { position } = lexed.error;
@@ -484,7 +471,7 @@ export function highlightFormula(
   const spans = prefix.ok
     ? [
         ...commentSpans(source.slice(0, position), prefix.tokens),
-        ...tokenSpans(prefix.tokens, thisRowInScope),
+        ...tokenSpans(prefix.tokens),
       ]
     : [];
   const tail = tailKind(source, position);

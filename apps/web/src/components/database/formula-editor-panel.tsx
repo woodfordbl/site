@@ -24,6 +24,18 @@ import type {
 } from "@/components/database/formula-code-editor.tsx";
 import { FormulaEditorAccessoryRow } from "@/components/database/formula-editor-accessory-row.tsx";
 import {
+  SheetHeader,
+  SheetLayout,
+  SheetRollupButton,
+  StatusPill,
+} from "@/components/database/formula-editor-sheet.tsx";
+import { formulaStatusLine } from "@/components/database/formula-editor-status.tsx";
+import {
+  type ReferenceListEntries,
+  StudioLayout,
+  StudioTray,
+} from "@/components/database/formula-editor-studio.tsx";
+import {
   FormulaRollupWizard,
   formulaRollupRelationFields,
 } from "@/components/database/formula-rollup-wizard.tsx";
@@ -57,24 +69,19 @@ import {
 } from "@/lib/databases/formula-values.ts";
 import {
   FORMULA_FUNCTION_CATALOG,
-  FORMULA_OPERATOR_CATALOG,
   type FormulaFunctionEntry,
-  type FormulaOperatorCatalogEntry,
   formulaFunctionSignature,
   formulaParamLabel,
   formulaPropertyReference,
 } from "@/lib/formula/catalog.ts";
-import {
-  checkFormula,
-  type FormulaCheckResult,
-  formulaTypeBadge,
-} from "@/lib/formula/check.ts";
+import { checkFormula, type FormulaCheckResult } from "@/lib/formula/check.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import {
   formulaDbIdSpans,
   formulaPropIdSpans,
 } from "@/lib/formula/highlight.ts";
+import { FORMULA_OPERATOR_CATALOG } from "@/lib/formula/operator-catalog.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalDatabaseReference,
@@ -87,6 +94,7 @@ import {
   createFormulaRowScope,
   formulaRowLabelOf,
 } from "@/lib/formula/row-scope.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import { formulaUserFunctionSignature } from "@/lib/formula/user-functions.ts";
 import type {
   FormulaPreparedUserFunction,
@@ -108,11 +116,20 @@ import { cn } from "@/lib/utils.ts";
  * Functions / Operators that insert at the caret, with a fixed-height detail
  * strip documenting the focused entry. Three arrangements via `layout`: the
  * default single-column stack (menu popup), the two-column `wide` form for
- * the desktop formula dialog (see {@link PanelLayout}), and the mobile
- * `sheet` form (see {@link SheetLayout}) — Cancel/Formula/Done header, the
- * CM6 editor even on coarse pointers, a tappable {@link StatusPill}, and the
+ * the desktop formula dialog (see {@link PanelLayout}), the mobile `sheet`
+ * form (see {@link SheetLayout}) — Cancel/Formula/Done header, the CM6 editor
+ * even on coarse pointers, a tappable {@link StatusPill}, and the
  * keyboard-anchored {@link FormulaEditorAccessoryRow} with its property /
- * function picker drawers standing in for the inline reference list.
+ * function picker drawers standing in for the inline reference list — and the
+ * full-screen `studio` form (see {@link StudioLayout}) every coarse-pointer
+ * host now escalates to.
+ *
+ * The studio is the sheet's answer to having no room: the same header, a
+ * roomier editor, the SAME plain status line the desktop layouts render
+ * (deliberately not boxed diagnostic rows or a validity pill — the editor's
+ * own wavy underlines already point at the span), and a
+ * Properties / Functions / Operators tray (see {@link StudioTray}) filling
+ * the half of the screen the keyboard takes while typing.
  *
  * The `draft` state is the CANONICAL expression (`prop("<id>")` — exactly
  * what gets stored), so parse/check/preview/save all operate on it directly.
@@ -198,7 +215,6 @@ interface SpliceGeneratedTarget {
   insertAtCaret: (text: string, caretOffset: number) => void;
   setDraft: (draft: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  thisRowInScope: boolean;
 }
 
 /**
@@ -215,14 +231,7 @@ function spliceGeneratedExpression(
   generated: string,
   target: SpliceGeneratedTarget
 ): void {
-  const {
-    codeEditorRef,
-    databases,
-    draft,
-    fields,
-    textareaRef,
-    thisRowInScope,
-  } = target;
+  const { codeEditorRef, databases, draft, fields, textareaRef } = target;
   const blank = draft.trim() === "";
   const editor = codeEditorRef.current;
   if (editor !== null) {
@@ -239,9 +248,7 @@ function spliceGeneratedExpression(
     editor.insertText(generated, generated.length);
     return;
   }
-  const display = humanizeExpression(generated, fields, databases, {
-    thisRowInScope,
-  });
+  const display = humanizeExpression(generated, fields, databases);
   if (!blank) {
     target.insertAtCaret(display, display.length);
     return;
@@ -344,45 +351,6 @@ function referenceDisplayOffset(
 }
 
 /**
- * Left half of the status row: the first parse error, else the first checker
- * diagnostic, else "✓ Valid". `null` for a blank draft. Positions are
- * 1-based indexes into what the user SEES — `displayPosition` maps each
- * canonical-draft offset past the `prop("<id>")` spans that render as short
- * labels (chips / humanized references).
- */
-function statusLine(
-  parsed: ParseFormulaResult | null,
-  checked: FormulaCheckResult | null,
-  displayPosition: (offset: number) => number
-): ReactNode {
-  if (parsed === null) {
-    return null;
-  }
-  if (!parsed.ok) {
-    return (
-      <span className="min-w-0 truncate text-destructive text-xs">
-        {parsed.error.message} (at character{" "}
-        {displayPosition(parsed.error.position) + 1})
-      </span>
-    );
-  }
-  const firstDiagnostic = checked?.diagnostics[0];
-  if (firstDiagnostic !== undefined) {
-    return (
-      <span className="min-w-0 truncate text-destructive text-xs">
-        {firstDiagnostic.message} (at character{" "}
-        {displayPosition(firstDiagnostic.start) + 1})
-      </span>
-    );
-  }
-  return (
-    <span className="min-w-0 truncate text-muted-foreground text-xs">
-      ✓ Valid
-    </span>
-  );
-}
-
-/**
  * The stack/wide status row: {@link statusLine} on the left, the checked
  * result-type badge on the right. Renders nothing for a blank draft —
  * owning that guard here keeps the panel under the complexity cap.
@@ -401,7 +369,7 @@ function StatusRow({
   }
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
-      {statusLine(parsed, checked, displayPosition)}
+      {formulaStatusLine(parsed, checked, displayPosition)}
       {checked === null ? null : (
         <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
           Type:
@@ -577,7 +545,7 @@ function FormulaPreviewLine({
         >
           <SelectTrigger
             aria-label="Preview row"
-            className="h-5 max-w-32 shrink-0 gap-1 rounded-md border-border bg-transparent px-1 text-muted-foreground text-xs hover:text-foreground md:text-xs"
+            className="h-5 pointer-coarse:h-9 max-w-32 shrink-0 gap-1 rounded-md border-border bg-transparent pointer-coarse:px-2 px-1 text-muted-foreground text-xs hover:text-foreground md:text-xs"
             onKeyDown={stopMenuKeys}
           >
             {/* Values are row ids; render the row's label instead. */}
@@ -623,10 +591,11 @@ export interface FormulaEditorPanelProps {
    * coarse pointers, a tappable status pill, and the keyboard-anchored
    * accessory row + picker drawers instead of the inline reference list.
    */
-  layout?: "popover" | "sheet" | "stack" | "wide";
+  layout?: "popover" | "sheet" | "stack" | "studio" | "wide";
   /**
-   * Sheet header's Cancel — backs out without saving (typically closes the
-   * host drawer). Only rendered in the `sheet` layout.
+   * Sheet/studio header's Cancel — backs out without saving (typically
+   * closes the host drawer). Only rendered in the `sheet` and `studio`
+   * layouts.
    */
   onCancel?: () => void;
   /**
@@ -670,13 +639,11 @@ export interface FormulaEditorPanelProps {
    */
   selfFieldId?: string;
   /**
-   * Whether `thisRow` is a scope-root synonym of `thisPage`: offered in
-   * autocomplete and parsed as a property reference. Defaults true
-   * (formula columns, filters, row pages). Inline tokens on ordinary
-   * pages pass false — `thisRow` is then a bare name
-   * (`Unknown name "thisRow"`).
+   * Header title for the sheet/studio layouts — typically the formula
+   * column's name, so the full-screen editor says what is being edited.
+   * Defaults to "Formula".
    */
-  thisRowInScope?: boolean;
+  title?: string;
   /**
    * Named user-defined functions (prepared registry —
    * `useFormulaUserFunctions()` at interactive call sites): threads into
@@ -685,15 +652,6 @@ export interface FormulaEditorPanelProps {
    * user-function calls diagnose as unknown functions.
    */
   userFunctions?: FormulaPreparedUserFunctions;
-}
-
-interface ReferenceListEntries {
-  customFunctionEntries: (FormulaPreparedUserFunction & {
-    signature: string;
-  })[];
-  functionEntries: (FormulaFunctionEntry & { signature: string })[];
-  operatorEntries: FormulaOperatorCatalogEntry[];
-  propertyFields: DatabaseField[];
 }
 
 /** The searchable Properties / Functions / Operators reference list. */
@@ -977,152 +935,6 @@ function EditorSlot({
 }
 
 /**
- * Arranges the mobile sheet's slots in one column: explicit header (Cancel /
- * "Formula" / Done — the sheet's only save affordance), editor, tappable
- * status pill, preview, then the rollup tools (button or open wizard). The
- * bottom padding clears the keyboard-anchored accessory row, which floats
- * over the sheet at the keyboard top (or the viewport bottom while the
- * keyboard is closed).
- */
-function SheetLayout({
-  editor,
-  header,
-  preview,
-  status,
-  tools,
-}: {
-  editor: ReactNode;
-  header: ReactNode;
-  preview: ReactNode;
-  status: ReactNode;
-  tools: ReactNode;
-}): ReactNode {
-  return (
-    <div className="flex w-full flex-col gap-2 p-1 pb-16">
-      {header}
-      {editor}
-      {status}
-      {preview}
-      {tools}
-    </div>
-  );
-}
-
-/**
- * The sheet's header row: Cancel backs out without saving, Done runs the
- * same save path (and the same parse-error gating) as the other layouts'
- * Save button. The title sits between them; a spacer keeps it centered when
- * the host passes no `onCancel`.
- */
-function SheetHeader({
-  doneDisabled,
-  onCancel,
-  onDone,
-}: {
-  doneDisabled: boolean;
-  onCancel: (() => void) | undefined;
-  onDone: () => void;
-}): ReactNode {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      {onCancel === undefined ? (
-        <span aria-hidden className="w-16" />
-      ) : (
-        <Button
-          className="pointer-coarse:h-10"
-          onClick={onCancel}
-          variant="ghost"
-        >
-          Cancel
-        </Button>
-      )}
-      <span className="font-medium text-foreground text-sm">Formula</span>
-      <Button
-        className="pointer-coarse:h-10"
-        disabled={doneDisabled}
-        onClick={onDone}
-      >
-        Done
-      </Button>
-    </div>
-  );
-}
-
-/**
- * The sheet's Rollup affordance: with no inline reference list to host the
- * button, a standalone one below the editor keeps the wizard reachable.
- * Renders nothing when no rollup is buildable (same gate as the other
- * layouts' Rollup button).
- */
-function SheetRollupButton({
-  available,
-  onOpen,
-}: {
-  available: boolean;
-  onOpen: () => void;
-}): ReactNode {
-  if (!available) {
-    return null;
-  }
-  return (
-    <Button
-      className="pointer-coarse:h-10 self-start"
-      onClick={onOpen}
-      variant="outline"
-    >
-      <IconSum />
-      Rollup
-    </Button>
-  );
-}
-
-/**
- * Compact tappable status for the sheet, where the full status row would
- * crowd the editor: "✓ <type>" when the draft is clean, else "N issue(s)".
- * Tapping toggles the full first-diagnostic message (the same
- * {@link statusLine} content the other layouts show inline) beneath the
- * pill, so the message never eats vertical space until asked for.
- */
-function StatusPill({
-  checked,
-  displayPosition,
-  parsed,
-}: {
-  checked: FormulaCheckResult | null;
-  displayPosition: (offset: number) => number;
-  parsed: ParseFormulaResult | null;
-}): ReactNode {
-  const [expanded, setExpanded] = useState(false);
-  if (parsed === null) {
-    return null;
-  }
-  const issueCount = parsed.ok ? (checked?.diagnostics.length ?? 0) : 1;
-  const clean = issueCount === 0;
-  return (
-    <div className="flex flex-col gap-1 px-0.5">
-      <button
-        aria-expanded={expanded}
-        className={cn(
-          "min-h-6 self-start rounded-full border px-2.5 py-0.5 text-xs",
-          clean
-            ? "border-border text-muted-foreground"
-            : "border-destructive/40 text-destructive"
-        )}
-        onClick={() => {
-          setExpanded((value) => !value);
-        }}
-        type="button"
-      >
-        {clean
-          ? `✓ ${checked === null ? "Valid" : formulaTypeBadge(checked.resultType)}`
-          : `${issueCount} issue${issueCount === 1 ? "" : "s"}`}
-      </button>
-      {expanded ? statusLine(parsed, checked, displayPosition) : null}
-    </div>
-  );
-}
-
-/**
  * The layout-dependent sizing, resolved once. Kept out of the panel body
  * because it is pure class-name arithmetic, and inlining four conditionals
  * there pushes the component past the complexity cap for no benefit.
@@ -1130,12 +942,37 @@ function StatusPill({
 function layoutClasses(
   wide: boolean,
   compact: boolean,
+  sheet: boolean,
+  studio: boolean,
   chromeless: string
 ): {
   codeEditor: string | undefined;
   reference: string | undefined;
   textarea: string | undefined;
 } {
+  if (studio) {
+    // Full-screen surface: the editor gets real multi-line room but leaves
+    // the lower half to the reference tray; type is bumped for phones
+    // (base-16px in the textarea fallback stops iOS focus auto-zoom).
+    return {
+      codeEditor:
+        "w-full text-sm [&_.cm-content]:min-h-36! [&_.cm-scroller]:max-h-[30svh]!",
+      reference: undefined,
+      textarea: "max-h-[30svh] min-h-36 text-base",
+    };
+  }
+  if (sheet) {
+    // The drawer is 88svh tall — give the editor the room the sheet
+    // escalated for (the base theme caps the scroller at 8rem), and bump
+    // the type above the desktop 12px: legible on phones, and ≥16px in the
+    // textarea fallback keeps iOS Safari from auto-zooming on focus.
+    return {
+      codeEditor:
+        "w-full text-sm [&_.cm-content]:min-h-32! [&_.cm-scroller]:max-h-[36svh]!",
+      reference: undefined,
+      textarea: cn("max-h-[36svh] min-h-32 text-base", chromeless),
+    };
+  }
   if (!wide) {
     return { codeEditor: undefined, reference: undefined, textarea: undefined };
   }
@@ -1167,7 +1004,7 @@ export function FormulaEditorPanel({
   relatedDatabases,
   relations,
   selfFieldId,
-  thisRowInScope = true,
+  title,
   userFunctions,
 }: FormulaEditorPanelProps): ReactNode {
   // `popover` is the wide form everywhere the editor chrome is concerned —
@@ -1175,6 +1012,7 @@ export function FormulaEditorPanel({
   const compact = layout === "popover";
   const wide = layout === "wide" || compact;
   const sheet = layout === "sheet";
+  const studio = layout === "studio";
   // Canonical text (`prop("<id>")` references) — the CM6 doc edits it
   // natively; the textarea path humanizes for display below.
   const [draft, setDraft] = useState(expression);
@@ -1186,11 +1024,13 @@ export function FormulaEditorPanel({
   const [previewRowId, setPreviewRowId] = useState<string | null>(null);
   /** The chip the option menu is open for; `null` while closed. */
   const [chipTap, setChipTap] = useState<FormulaChipTap | null>(null);
+  /** Sheet status pill expansion — lifted so a blocked Done can open it. */
+  const [statusExpanded, setStatusExpanded] = useState(false);
   const coarsePointer = useIsCoarsePrimaryPointer();
-  // The sheet layout mounts CM6 even on coarse pointers (its native touch
-  // caret/IME handling is the point of the sheet); everywhere else coarse
-  // pointers keep the plain textarea.
-  const usesTextarea = coarsePointer && !sheet;
+  // The sheet and studio layouts mount CM6 even on coarse pointers (its
+  // native touch caret/IME handling is the point of escalating); everywhere
+  // else coarse pointers keep the plain textarea.
+  const usesTextarea = coarsePointer && !(sheet || studio);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const codeEditorRef = useRef<FormulaCodeEditorHandle>(null);
   /**
@@ -1248,9 +1088,8 @@ export function FormulaEditorPanel({
   // round-trip to themselves), so typing never sees the text change under
   // the caret.
   const displayDraft = useMemo(
-    () =>
-      humanizeExpression(draft, fields, relatedDatabases, { thisRowInScope }),
-    [draft, fields, relatedDatabases, thisRowInScope]
+    () => humanizeExpression(draft, fields, relatedDatabases),
+    [draft, fields, relatedDatabases]
   );
 
   /**
@@ -1273,9 +1112,7 @@ export function FormulaEditorPanel({
     const nextDisplay =
       displayDraft.slice(0, start) + text + displayDraft.slice(end);
     setDraft(
-      canonicalizeExpression(nextDisplay, fields, relatedDatabases, {
-        thisRowInScope,
-      }).text
+      canonicalizeExpression(nextDisplay, fields, relatedDatabases).text
     );
     const caret = start + caretOffset;
     requestAnimationFrame(() => {
@@ -1389,23 +1226,24 @@ export function FormulaEditorPanel({
       insertAtCaret,
       setDraft,
       textareaRef,
-      thisRowInScope,
     });
   };
 
   const trimmed = draft.trim();
-  const parsed =
-    trimmed === "" ? null : parseFormula(draft, { thisRowInScope });
+  // Memoized: parseFormula on every render would also defeat the `checked`
+  // and preview memos below (a fresh `parsed` object per render), turning
+  // every render into a full parse + check + evaluate.
+  const parsed = useMemo(
+    () => (trimmed === "" ? null : parseFormula(draft)),
+    [draft, trimmed]
+  );
 
   // Static check of the parsed draft against the schema — formula fields
   // typed via the same topological pass the overlay uses; related databases
   // (when supplied) type member access on relation rows.
   const checkContext = useMemo(
-    () => ({
-      ...formulaCheckContext(fields, relatedDatabases, userFunctions),
-      thisRowInScope,
-    }),
-    [fields, relatedDatabases, thisRowInScope, userFunctions]
+    () => formulaCheckContext(fields, relatedDatabases, userFunctions),
+    [fields, relatedDatabases, userFunctions]
   );
   const checked: FormulaCheckResult | null = useMemo(
     () => (parsed?.ok ? checkFormula(parsed.ast, checkContext) : null),
@@ -1422,11 +1260,7 @@ export function FormulaEditorPanel({
     if (saveDisabled) {
       return;
     }
-    onSave(
-      canonicalizeExpression(draft, fields, relatedDatabases, {
-        thisRowInScope,
-      }).text
-    );
+    onSave(canonicalizeExpression(draft, fields, relatedDatabases).text);
   };
 
   // The picked preview row, defaulting to the first (and healing a stale
@@ -1590,7 +1424,7 @@ export function FormulaEditorPanel({
   // goes chromeless.
   const chromeless =
     "rounded-none border-0 bg-transparent focus-visible:border-transparent dark:bg-transparent";
-  const sizing = layoutClasses(wide, compact, chromeless);
+  const sizing = layoutClasses(wide, compact, sheet, studio, chromeless);
   const expressionTextarea = (
     <Textarea
       aria-label="Formula expression"
@@ -1601,9 +1435,8 @@ export function FormulaEditorPanel({
       )}
       onChange={(event) => {
         setDraft(
-          canonicalizeExpression(event.target.value, fields, relatedDatabases, {
-            thisRowInScope,
-          }).text
+          canonicalizeExpression(event.target.value, fields, relatedDatabases)
+            .text
         );
       }}
       onKeyDown={stopMenuKeys}
@@ -1753,6 +1586,58 @@ export function FormulaEditorPanel({
     </>
   );
 
+  if (studio) {
+    // Full-screen editing surface (the "studio"): every diagnostic is a
+    // tappable row that jumps the caret, and the reference tray fills the
+    // bottom half whenever the keyboard is down. The accessory row still
+    // rides the keyboard for typing-first users.
+    return (
+      <>
+        <StudioLayout
+          editor={editorSurface}
+          header={
+            <SheetHeader
+              doneDisabled={saveDisabled}
+              onCancel={onCancel}
+              onDone={save}
+              title={title}
+            />
+          }
+          preview={previewLine}
+          status={statusRow}
+          tray={
+            <StudioTray
+              entries={{
+                customFunctionEntries,
+                functionEntries,
+                operatorEntries,
+                propertyFields,
+              }}
+              onInsertAtCaret={insertAtCaret}
+              onInsertCustomFunction={insertCustomFunction}
+              onInsertFunction={insertFunctionEntry}
+              onInsertProperty={insertPropertyReference}
+              onOpenRollup={() => {
+                setRollupOpen(true);
+              }}
+              onQueryChange={setQuery}
+              query={query}
+              rollupAvailable={rollupAvailable}
+            />
+          }
+          wizard={wizard}
+        />
+        <FormulaEditorAccessoryRow
+          fields={fields}
+          onInsertAtCaret={insertAtCaret}
+          onInsertFunction={insertFunctionEntry}
+          onInsertProperty={insertPropertyReference}
+          selfFieldId={selfFieldId}
+        />
+      </>
+    );
+  }
+
   if (sheet) {
     // No search/reference list/detail strip — the accessory row's picker
     // drawers cover insertion; the Rollup button keeps the wizard reachable.
@@ -1765,6 +1650,9 @@ export function FormulaEditorPanel({
               doneDisabled={saveDisabled}
               onCancel={onCancel}
               onDone={save}
+              onDoneBlocked={() => {
+                setStatusExpanded(true);
+              }}
             />
           }
           preview={previewLine}
@@ -1772,19 +1660,20 @@ export function FormulaEditorPanel({
             <StatusPill
               checked={checked}
               displayPosition={displayPosition}
+              expanded={statusExpanded}
+              onExpandedChange={setStatusExpanded}
               parsed={parsed}
             />
           }
           tools={
-            wizard ?? (
-              <SheetRollupButton
-                available={rollupAvailable}
-                onOpen={() => {
-                  setRollupOpen(true);
-                }}
-              />
-            )
+            <SheetRollupButton
+              available={rollupAvailable}
+              onOpen={() => {
+                setRollupOpen(true);
+              }}
+            />
           }
+          wizard={wizard}
         />
         <FormulaEditorAccessoryRow
           fields={fields}

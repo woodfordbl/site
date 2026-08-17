@@ -58,9 +58,7 @@ export interface InlinePageFormulaOverlay {
 /**
  * Live `thisPage` model for inline formula tokens on the current canvas.
  * Ordinary pages carry only {@link page}; row/template pages fill
- * {@link databaseFields} / {@link cellValues}. `thisRow` is a scope root
- * only when {@link databaseFields} is non-empty — see
- * {@link pageHasFormulaRowContext}.
+ * {@link databaseFields} / {@link cellValues}.
  */
 export interface InlineFormulaPageModel {
   /**
@@ -72,19 +70,6 @@ export interface InlineFormulaPageModel {
   readonly databaseFields: readonly DatabaseField[];
   /** Base page title / timestamps every page exposes. */
   readonly page: PageFormulaSource;
-}
-
-/**
- * Whether `thisRow` is a scope-root synonym of `thisPage` for this page.
- * True on database row pages and row-template pages (they layer database
- * fields). False on ordinary pages, where `thisRow` is a bare name.
- * Formula columns / filters do not use this helper — they always have a
- * row and default `thisRowInScope` to true.
- */
-export function pageHasFormulaRowContext(
-  model: Pick<InlineFormulaPageModel, "databaseFields"> | null | undefined
-): boolean {
-  return (model?.databaseFields.length ?? 0) > 0;
 }
 
 /** Base page fields as editor columns (no database overlay). */

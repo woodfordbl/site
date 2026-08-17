@@ -27,19 +27,20 @@ import {
   type RefObject,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
 import { BlockColorSwatch } from "@/components/canvas/block-color-swatch.tsx";
 import {
+  FormulaExpressionEditor,
+  FormulaStudioDrawerItem,
+} from "@/components/database/database-column-formula-item.tsx";
+import {
   aggregateFnsForFieldType,
   calculationsWithSelection,
   columnOrderWithInsert,
   dateFormatPatch,
-  expressionPatch,
   fieldTypeChangePatch,
-  formulaPreviewRows,
   freezePrefixEndingAt,
   isFrozenExactlyAt,
   logicalColumnOrder,
@@ -72,8 +73,8 @@ import {
   isSyncedField,
 } from "@/components/database/database-grid-helpers.ts";
 import { DatabaseOptionColorMenuItems } from "@/components/database/database-option-color-menu.tsx";
-import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { FormulaFunctionManagerDialog } from "@/components/database/formula-function-manager.tsx";
+import { warmFormulaCodeEditor } from "@/components/database/preload-formula-code-editor.ts";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -119,21 +120,14 @@ import {
   updateDatabaseField,
   updateDatabaseView,
 } from "@/db/queries/database-collection-ops.ts";
-import {
-  useAllDatabases,
-  useDatabase,
-  useDatabaseRows,
-} from "@/db/queries/use-database.ts";
-import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
+import { useAllDatabases } from "@/db/queries/use-database.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   createDatabaseField,
   FIELD_TYPE_DEFS,
 } from "@/lib/databases/field-defs.ts";
-import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
 import { formulaDisplayInfo } from "@/lib/databases/formula-values.ts";
 import { isGroupableField } from "@/lib/databases/row-group.ts";
-import { canonicalizeExpression } from "@/lib/formula/ref-rewrite.ts";
 import {
   type DatabaseAggregateFn,
   type DatabaseDateFormat,
@@ -446,92 +440,6 @@ function SelectOptionsEditor({ databaseId, field }: SelectOptionsEditorProps) {
   );
 }
 
-interface FormulaExpressionEditorProps {
-  databaseId: string;
-  field: DatabaseField & { type: "formula" };
-  /** Passed through to the panel: `wide` for the dialog host, `sheet` for the coarse-pointer submenu drawer. */
-  layout?: "sheet" | "stack" | "wide";
-  /** Sheet layout's Cancel — backs out of the host without saving. */
-  onCancel?: () => void;
-  /** Opens the function manager dialog; only the wide dialog host wires it. */
-  onManageFunctions?: () => void;
-  /** Closes the host (column menu or dialog) after Save. */
-  onSaved: () => void;
-}
-
-/**
- * Formula builder inside the Edit property submenu: threads the live schema
- * and the first rows (manual/table order, capped at
- * `FORMULA_PREVIEW_ROW_LIMIT`, labeled by primary-field text) into the
- * shared `FormulaEditorPanel` so it can render the Properties section and
- * the live preview with its row picker. Mounted only while the submenu is
- * open, so the live queries here cost nothing for non-formula columns. The
- * panel emits field-id canonical text; Save writes it only when it differs
- * from the stored expression's canonical form (evaluation is read-time —
- * the overlay recomputes on write).
- */
-function FormulaExpressionEditor({
-  databaseId,
-  field,
-  layout,
-  onCancel,
-  onManageFunctions,
-  onSaved,
-}: FormulaExpressionEditorProps) {
-  const database = useDatabase(databaseId);
-  const rows = useDatabaseRows(databaseId);
-  const relatedDatabases = useAllDatabases();
-  const userFunctions = useFormulaUserFunctions();
-  const fields = database?.fields ?? [];
-  const primaryFieldId = database?.primaryFieldId;
-  const previewRows = useMemo(
-    () =>
-      formulaPreviewRows(
-        rows,
-        database?.fields.find((candidate) => candidate.id === primaryFieldId)
-      ),
-    [rows, database?.fields, primaryFieldId]
-  );
-  // Recreated whenever any database definition changes so the preview's
-  // cross-database reads track schema edits; row edits in TARGET databases
-  // while the submenu is open stay stale until reopen (non-reactive reads —
-  // accepted v1 limitation, see formula-relations.ts).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
-  const relations = useMemo(
-    () => localFormulaRelationResolver(),
-    [relatedDatabases]
-  );
-
-  return (
-    <FormulaEditorPanel
-      expression={field.expression}
-      fields={fields}
-      layout={layout}
-      onCancel={onCancel}
-      onManageFunctions={onManageFunctions}
-      onSave={(expression) => {
-        if (
-          expression !==
-          canonicalizeExpression(field.expression, fields, relatedDatabases)
-            .text
-        ) {
-          updateDatabaseField(
-            databaseId,
-            field.id,
-            expressionPatch(expression)
-          );
-        }
-        onSaved();
-      }}
-      previewRows={previewRows}
-      relatedDatabases={relatedDatabases}
-      relations={relations}
-      selfFieldId={field.id}
-      userFunctions={userFunctions}
-    />
-  );
-}
-
 interface NumberPropertyEditorProps {
   databaseId: string;
   field: DatabaseField & { type: "number" };
@@ -712,19 +620,39 @@ function EditPropertySubmenu({
   onRequestClose,
 }: EditPropertySubmenuProps) {
   const coarsePointer = useIsCoarsePrimaryPointer();
+  const isFormula = field.type === "formula";
+
+  // The open column menu is one tap away from the formula editor — warm the
+  // CM6 chunk now so the panel mounts chips on its first render instead of
+  // the fallback textarea (the same reachability rule InlineFormulaValues
+  // follows).
+  useEffect(() => {
+    if (isFormula) {
+      warmFormulaCodeEditor();
+    }
+  }, [isFormula]);
 
   if (displayOnly && field.type !== "date" && field.type !== "number") {
     return null;
   }
 
   if (field.type === "formula") {
-    // Fine pointers escalate to the wide dialog — the 360px submenu is too
-    // cramped for real formula work — when the host provides one (the column
-    // menu); dialog-less hosts (settings-menu property items) keep the
-    // in-menu stacked panel. Coarse pointers render the panel's mobile sheet
-    // form inside the submenu drawer: CM6 editor, Cancel/Done header, and
-    // the keyboard-anchored accessory row.
-    if (!coarsePointer && onOpenFormulaEditor !== undefined) {
+    // Coarse pointers always take the full-screen studio as a NESTED drawer:
+    // vaul scales the column-menu drawer back behind it, so closing the
+    // studio returns to the still-open menu instead of dumping the user back
+    // on the table. Fine pointers escalate to the wide dialog when the host
+    // provides one; dialog-less hosts (settings-menu property items) keep
+    // the in-menu stacked panel.
+    if (coarsePointer) {
+      return (
+        <FormulaStudioDrawerItem
+          databaseId={databaseId}
+          field={field}
+          onRequestClose={onRequestClose}
+        />
+      );
+    }
+    if (onOpenFormulaEditor !== undefined) {
       return (
         <DropdownMenuItem onClick={onOpenFormulaEditor}>
           <IconSettings />

@@ -95,6 +95,7 @@ const PARSE_ERROR_RE = /Unexpected end of expression/;
 // Status-row position expectations (display coordinates, not canonical).
 // Anchored on the "(at character N)" suffix only the status message carries,
 // so the live preview's own "⚠ abs() expects…" rendering never matches.
+
 const ABS_DIAG_RE = /abs\(\) expects .*\(at character \d+\)/;
 const ABS_DIAG_AT_22_RE = /abs\(\) expects .*\(at character 22\)/;
 const ABS_DIAG_AT_13_RE = /abs\(\) expects .*\(at character 13\)/;
@@ -105,7 +106,6 @@ const USER_FN_ARITY_AT_RE =
   /weightedScore\(\) expects 2 arguments, got 1.*\(at character \d+\)/;
 const USER_FN_BROKEN_AT_RE =
   /The custom function "brokenFn" has an error.*\(at character \d+\)/;
-const THIS_ROW_UNKNOWN_AT_RE = /Unknown name "thisRow".*\(at character/;
 const ROLLUP_TITLE_RE = /Rollup: /;
 
 /** Flush the panel's rAF-based focus/caret restoration (stubbed to timeouts). */
@@ -278,23 +278,6 @@ describe("FormulaEditorPanel", () => {
     expect(save.hasAttribute("disabled")).toBe(false);
     fireEvent.click(save);
     expect(onSave).toHaveBeenCalledWith("abs(-2)");
-  });
-
-  it("treats thisRow as an unknown name when it is not in scope", async () => {
-    render(
-      <FormulaEditorPanel
-        expression=""
-        fields={FIELDS}
-        onSave={vi.fn()}
-        previewRows={PREVIEW_ROWS}
-        thisRowInScope={false}
-      />
-    );
-    await flushFrames();
-
-    const textarea = screen.getByLabelText("Formula expression");
-    fireEvent.change(textarea, { target: { value: "thisRow" } });
-    expect(screen.getByText(THIS_ROW_UNKNOWN_AT_RE)).toBeDefined();
   });
 
   it("humanizes stored canonical expressions into the draft", async () => {
@@ -1032,11 +1015,13 @@ describe("FormulaEditorPanel", () => {
       fireEvent.click(done);
       expect(onSave).toHaveBeenCalledWith('prop("f-price") * 2');
 
-      // Parse errors gate Done exactly like Save in the other layouts.
+      // Parse errors gate Done exactly like Save in the other layouts —
+      // the button stays tappable (aria-disabled) so a blocked tap can
+      // explain itself, but never saves.
       await fire(() => {
         fireEvent.change(textarea, { target: { value: "1 +" } });
       });
-      expect(done.hasAttribute("disabled")).toBe(true);
+      expect(done.getAttribute("aria-disabled")).toBe("true");
       fireEvent.click(done);
       expect(onSave).toHaveBeenCalledTimes(1);
     });

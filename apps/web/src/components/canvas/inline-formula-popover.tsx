@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { useInlineFormulaPage } from "@/components/editor/inline-formula-page.tsx";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
+import { Drawer, DrawerContent } from "@/components/ui/drawer.tsx";
 import { useAllDatabases } from "@/db/queries/use-database.ts";
 import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { findRowById } from "@/lib/blocks/block-tree.ts";
@@ -16,7 +18,6 @@ import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.
 import {
   pageFormulaFields,
   pageFormulaPreviewRow,
-  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   INLINE_FORMULA_EDIT_EVENT,
@@ -39,6 +40,17 @@ import { cn } from "@/lib/utils.ts";
  * Saving rewrites only the mark's expression. The document text is untouched:
  * a token is one sentinel character whatever the formula says, so re-editing a
  * formula shifts no offsets, rebases no marks, and moves no caret.
+ *
+ * Coarse pointers get the full-screen studio drawer instead of the anchored
+ * popover, which `position: fixed` would paint under the on-screen keyboard
+ * (iOS pans the visual viewport rather than shrinking the layout viewport).
+ * Two consequences follow, both load-bearing: touch opens on `pointerup`
+ * against the token's own rect (iOS Safari maps a tap in the blank run right
+ * of a line onto that line's last inline element, and synthesizes no reliable
+ * click on a `contenteditable=false` island), and the reposition-driven
+ * dismissal below is desktop-only — on a phone `resize`/`scroll` fire when the
+ * keyboard opens, which would close the drawer the user just started typing
+ * in.
  */
 
 /** Space between the token and the panel. */
@@ -111,6 +123,40 @@ function resolveTarget(node: Node | null): PopoverTarget | null {
   };
 }
 
+/**
+ * Slop around a token's rect for touch hit-testing. Small on purpose: its job
+ * is to forgive a slightly-off fingertip, not to grow the target — iOS Safari
+ * already maps a tap in the blank run to the right of a line onto the line's
+ * LAST inline element, and a generous slop would re-create exactly the bug
+ * the rect check exists to prevent (a tap meant to place the caret after the
+ * token reading as a tap ON the token).
+ */
+const TOUCH_SLOP_PX = 4;
+
+/**
+ * The token target for a touch press, only when the touch point actually
+ * falls on the token's box (± slop). `resolveTarget` alone is not enough on
+ * touch: the browser's tap heuristics can deliver a token as `event.target`
+ * for a press that was visually nowhere near it.
+ */
+function resolveTouchTarget(event: PointerEvent): PopoverTarget | null {
+  const element =
+    event.target instanceof Element
+      ? event.target
+      : (event.target as Node | null)?.parentElement;
+  const token = element?.closest(FORMULA_TOKEN_SELECTOR);
+  if (!(token instanceof HTMLElement)) {
+    return null;
+  }
+  const rect = token.getBoundingClientRect();
+  const inside =
+    event.clientX >= rect.left - TOUCH_SLOP_PX &&
+    event.clientX <= rect.right + TOUCH_SLOP_PX &&
+    event.clientY >= rect.top - TOUCH_SLOP_PX &&
+    event.clientY <= rect.bottom + TOUCH_SLOP_PX;
+  return inside ? resolveTarget(token) : null;
+}
+
 /** The token at `offset` in `rowId`'s field, once the canvas has rendered it. */
 function targetForToken(rowId: string, offset: number): PopoverTarget | null {
   const field = document
@@ -127,6 +173,7 @@ function targetForToken(rowId: string, offset: number): PopoverTarget | null {
 
 export function InlineFormulaPopover() {
   const canvas = useCanvasEditorContext();
+  const coarsePointer = useIsCoarsePrimaryPointer();
   const model = useInlineFormulaPage();
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
@@ -143,8 +190,48 @@ export function InlineFormulaPopover() {
      * panel the menu belonged to.
      */
     let pressedInsidePanel = false;
+    /**
+     * Deadline for swallowing the tap's synthetic click after a touch open.
+     * The drawer mounts between pointerup and the click the browser then
+     * synthesizes, so that click lands on the drawer's overlay — which vaul
+     * reads as an outside click and closes the drawer it just opened.
+     */
+    let swallowClickDeadline = 0;
     const handlePointerDown = (event: PointerEvent) => {
       pressedInsidePanel = isInsidePanel(event.target as Node | null);
+      if (event.pointerType !== "mouse" && resolveTouchTarget(event)) {
+        // A touch press on a token is claimed before the browser acts on it:
+        // preventing the pointerdown default stops the field from taking
+        // focus (no keyboard flash under the drawer) and suppresses the
+        // compatibility mouse events. Scrolling is unaffected — touch panning
+        // is governed by `touch-action`, and a pan that starts here ends in
+        // `pointercancel`, so it never reaches the open below.
+        event.preventDefault();
+      }
+    };
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") {
+        return;
+      }
+      const next = resolveTouchTarget(event);
+      if (next) {
+        // Touch opens on pointerup rather than waiting for a click: iOS
+        // Safari does not reliably synthesize one for a tap on a
+        // `contenteditable=false` island inside an editable field — the tap
+        // gets consumed by selection handling, which left tokens un-tappable
+        // on phones.
+        swallowClickDeadline = performance.now() + 400;
+        setTarget(next);
+      }
+    };
+    const handleClickCapture = (event: MouseEvent) => {
+      if (performance.now() <= swallowClickDeadline) {
+        // The opening tap's synthetic click — it belongs to the gesture that
+        // opened the drawer, not to anything now under the finger.
+        swallowClickDeadline = 0;
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
     const handleClick = (event: MouseEvent) => {
       const pressedInside = pressedInsidePanel;
@@ -181,10 +268,14 @@ export function InlineFormulaPopover() {
     // click stays in bubble, where it has always been, to keep the panel
     // mounting after the canvas has finished with the press.
     document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("pointerup", handlePointerUp);
+    document.addEventListener("click", handleClickCapture, true);
     document.addEventListener("click", handleClick);
     document.addEventListener(INLINE_FORMULA_EDIT_EVENT, handleEditRequest);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("pointerup", handlePointerUp);
+      document.removeEventListener("click", handleClickCapture, true);
       document.removeEventListener("click", handleClick);
       document.removeEventListener(
         INLINE_FORMULA_EDIT_EVENT,
@@ -217,14 +308,22 @@ export function InlineFormulaPopover() {
       }
     };
     document.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("scroll", handleScroll, true);
+    // Reposition-driven dismissal is desktop-only. The mobile studio is a
+    // viewport-fixed drawer with nothing to re-anchor, and on a phone both
+    // events are on-screen-keyboard artifacts rather than the page moving:
+    // focusing the editor or the tray's search field opens the keyboard,
+    // which fires `resize` and scrolls the document — closing the drawer the
+    // moment the user started typing in it.
+    if (!coarsePointer) {
+      window.addEventListener("resize", close);
+      window.addEventListener("scroll", handleScroll, true);
+    }
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("resize", close);
       window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [target]);
+  }, [coarsePointer, target]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
   const relations = useMemo(
@@ -278,6 +377,41 @@ export function InlineFormulaPopover() {
     return null;
   }
 
+  if (coarsePointer) {
+    // Phones edit tokens in the full-screen studio drawer — the anchored
+    // desktop popover renders under the on-screen keyboard (see
+    // FormulaTokenPopover). data-slot="drawer-content" already counts as
+    // "inside the panel" for this popover's dismissal selector.
+    return (
+      <Drawer
+        onOpenChange={(open) => {
+          if (!open) {
+            setTarget(null);
+          }
+        }}
+        open
+      >
+        <DrawerContent hasTitle={false} variant="full">
+          <div className="flex min-h-0 flex-1 flex-col px-3 pt-1">
+            <FormulaEditorPanel
+              expression={target.expression}
+              fields={fields}
+              layout="studio"
+              onCancel={() => {
+                setTarget(null);
+              }}
+              onSave={handleSave}
+              previewRows={previewRows}
+              relatedDatabases={relatedDatabases}
+              relations={relations}
+              userFunctions={userFunctions}
+            />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   const placeAbove =
     target.rect.bottom + POPOVER_GAP_PX + POPOVER_HEIGHT_PX >
       window.innerHeight && target.rect.top > POPOVER_HEIGHT_PX;
@@ -325,7 +459,6 @@ export function InlineFormulaPopover() {
         previewRows={previewRows}
         relatedDatabases={relatedDatabases}
         relations={relations}
-        thisRowInScope={pageHasFormulaRowContext(model)}
         userFunctions={userFunctions}
       />
     </div>

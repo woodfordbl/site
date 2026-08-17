@@ -26,7 +26,10 @@ const LOCKED_FUNCTION_SET = [
   "or",
   "not",
   "empty",
+  "ifError",
+  "isError",
   // Math
+  "toNumber",
   "abs",
   "ceil",
   "floor",

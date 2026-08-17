@@ -45,20 +45,15 @@ describe("highlightFormula", () => {
       "operator:*",
       "number:2",
     ]);
-    expect(spansOf('thisRow["Unit Count"]')).toEqual([
-      'property:thisRow["Unit Count"]',
+    expect(spansOf('thisPage["Unit Count"]')).toEqual([
+      'property:thisPage["Unit Count"]',
     ]);
   });
 
-  it("classifies thisRow as a name when it is not a scope root", () => {
-    expect(
-      highlightFormula("thisRow", { thisRowInScope: false }).map(
-        (span) => `${span.kind}:${"thisRow".slice(span.start, span.end)}`
-      )
-    ).toEqual(["name:thisRow"]);
+  it("classifies thisRow as an ordinary name, not a scope root", () => {
     const source = "thisRow.Title";
     expect(
-      highlightFormula(source, { thisRowInScope: false }).map(
+      highlightFormula(source).map(
         (span) => `${span.kind}:${source.slice(span.start, span.end)}`
       )
     ).toEqual(["name:thisRow", "operator:.", "property:Title"]);

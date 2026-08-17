@@ -7,7 +7,6 @@ import type { FormulaRelatedDatabase } from "@/lib/databases/formula-values.ts";
 import {
   type FormulaCheckContext,
   formulaPropertyValueType,
-  formulaTypeBadge,
 } from "@/lib/formula/check.ts";
 import { humanizeExpression } from "@/lib/formula/ref-rewrite.ts";
 import {
@@ -15,6 +14,7 @@ import {
   formulaRollupAggregationsFor,
   formulaRollupExpression,
 } from "@/lib/formula/rollup-template.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import { type FormulaType, UNKNOWN_TYPE } from "@/lib/formula/types.ts";
 import type { DatabaseField } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";

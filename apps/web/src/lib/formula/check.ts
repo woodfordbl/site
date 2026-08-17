@@ -39,7 +39,6 @@ import {
   formulaMinArgs,
   formulaParamAt,
 } from "@/lib/formula/catalog.ts";
-import type { ParseFormulaOptions } from "@/lib/formula/parse.ts";
 import {
   BLANK_TYPE,
   BOOLEAN_TYPE,
@@ -111,11 +110,8 @@ export interface FormulaCheckDatabase {
   readonly properties: readonly FormulaCheckProperty[];
 }
 
-/** Schema context a formula checks against. `thisRowInScope` (from
- * {@link ParseFormulaOptions}) defaults true — database-row hosts. Ordinary
- * pages set it false so `thisRow` is a bare name, not a scope root.
- */
-export interface FormulaCheckContext extends ParseFormulaOptions {
+/** Schema context a formula checks against. */
+export interface FormulaCheckContext {
   /**
    * Databases relation members resolve against, keyed by database id.
    * Optional — without it, member access on typed rows checks
@@ -223,28 +219,6 @@ export function formulaPropertyValueType(
   }
 }
 
-/**
- * Short human label for the editor's result-type badge — "number", "text",
- * "list of numbers", "boolean", "unknown". Unions read "number or text",
- * with a blank member suppressed (`if(x, 1)` badges "number", not "number
- * or blank" — display only, `resultType` keeps the full union); the internal
- * `error` and `typevar` kinds never reach users and read "unknown".
- */
-export function formulaTypeBadge(type: FormulaType): string {
-  if (type.kind === "error" || type.kind === "typevar") {
-    return "unknown";
-  }
-  if (type.kind === "union") {
-    const visible = type.members.filter((member) => member.kind !== "blank");
-    if (visible.length > 0 && visible.length < type.members.length) {
-      const shown: FormulaType =
-        visible.length === 1 ? visible[0] : { kind: "union", members: visible };
-      return formulaTypeName(shown);
-    }
-  }
-  return formulaTypeName(type);
-}
-
 // --- module constants -------------------------------------------------------
 
 /**
@@ -256,6 +230,7 @@ export function formulaTypeBadge(type: FormulaType): string {
 const OP_LEXEME_LENGTH: Record<FormulaBinaryOp, number> = {
   "!=": 2,
   "%": 1,
+  "&": 1,
   "*": 1,
   "+": 1,
   "-": 1,
@@ -921,9 +896,32 @@ class Checker {
         return this.checkComparison(node, left, right);
       case "+":
         return this.checkPlus(node, left, right);
+      case "&":
+        return this.checkConcat(node, left, right);
       default:
         return this.checkArithmetic(node, left, right);
     }
+  }
+
+  /** Static mirror of `applyFormulaConcat`: only listy operands reject. */
+  private checkConcat(
+    node: FormulaBinaryNode,
+    left: FormulaType,
+    right: FormulaType
+  ): FormulaType {
+    let offender: FormulaType | null = null;
+    if (!formulaTypeFits(left, LENIENT_TEXT_ACCEPTS)) {
+      offender = left;
+    } else if (!formulaTypeFits(right, LENIENT_TEXT_ACCEPTS)) {
+      offender = right;
+    }
+    if (offender === null) {
+      return TEXT_TYPE;
+    }
+    return this.report(
+      `Cannot convert ${formulaTypeName(offender)} to text`,
+      opSpan(node)
+    );
   }
 
   private checkLogical(

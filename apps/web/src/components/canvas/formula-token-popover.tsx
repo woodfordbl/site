@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { FormulaEditorPanel } from "@/components/database/formula-editor-panel.tsx";
 import { useInlineFormulaPage } from "@/components/editor/inline-formula-page.tsx";
+import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
 import { useAllDatabases } from "@/db/queries/use-database.ts";
 import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
 import { useCaretTokenSession } from "@/hooks/use-caret-token-session.ts";
@@ -17,7 +18,6 @@ import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.
 import {
   pageFormulaFields,
   pageFormulaPreviewRow,
-  pageHasFormulaRowContext,
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   type CaretTokenContext,
@@ -29,17 +29,27 @@ import {
  * token (same mark as slash / `{{`) with the drafted expression, replacing
  * the `#…` run. Escape closes without insert and leaves `#` as plain text so
  * markdown `#` + Space headings still work.
+ *
+ * Desktop-only, like the typed slash command: on coarse pointers the trigger
+ * never fires — a `#` typed on a phone keyboard is far more often a hashtag
+ * or a heading than a formula, and the mobile entry points are the editor
+ * toolbar's formula button and tapping an existing token (both open the
+ * studio drawer via {@link InlineFormulaPopover}).
  */
 
 const POPOVER_WIDTH_PX = 720;
 
 export function FormulaTokenPopover(): ReactNode {
   const canvas = useCanvasEditorContext();
+  const coarsePointer = useIsCoarsePrimaryPointer();
   const model = useInlineFormulaPage();
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
 
-  const readContext = useCallback(() => readCaretTokenContext("#"), []);
+  const readContext = useCallback(
+    () => (coarsePointer ? null : readCaretTokenContext("#")),
+    [coarsePointer]
+  );
   const { anchorRect, close, context, freeze, frozen } =
     useCaretTokenSession(readContext);
 
@@ -148,7 +158,11 @@ export function FormulaTokenPopover(): ReactNode {
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [dismiss, openContext]);
 
-  if (!(openContext && anchorRect)) {
+  if (!openContext) {
+    return null;
+  }
+
+  if (!anchorRect) {
     return null;
   }
 
@@ -181,7 +195,6 @@ export function FormulaTokenPopover(): ReactNode {
         previewRows={previewRows}
         relatedDatabases={relatedDatabases}
         relations={relations}
-        thisRowInScope={pageHasFormulaRowContext(model)}
         userFunctions={userFunctions}
       />
     </div>,
