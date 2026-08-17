@@ -64,6 +64,14 @@ const authHandler = fileURLToPath(
   new URL("./routes/api/auth/all.ts", import.meta.url)
 );
 
+const shapeHandler = fileURLToPath(
+  new URL("./routes/api/sync/shape.get.ts", import.meta.url)
+);
+
+const mutateHandler = fileURLToPath(
+  new URL("./routes/api/sync/mutate.post.ts", import.meta.url)
+);
+
 /**
  * Nitro module that re-adds `continue: true` to header-only routes in the
  * generated Vercel Build Output config once the preset has written it. Without
@@ -176,6 +184,9 @@ const config = defineConfig({
         },
         // Better Auth's HTTP surface (all methods, catch-all).
         { route: "/api/auth/**", handler: authHandler },
+        // Sync engine: Electric-protocol shape reads + transactional writes.
+        { route: "/api/sync/shape", method: "GET", handler: shapeHandler },
+        { route: "/api/sync/mutate", method: "POST", handler: mutateHandler },
       ],
       // Workaround for a Nitro bug on the Vercel preset. Nitro's Vite plugin
       // auto-adds a `routeRules["/assets/**"]` cache-control header, but the
