@@ -70,6 +70,11 @@ export interface InlineFormulaPageModel {
   readonly databaseFields: readonly DatabaseField[];
   /** Base page title / timestamps every page exposes. */
   readonly page: PageFormulaSource;
+  /**
+   * The database's primary column. It holds the same value the page title
+   * does, so {@link pageFormulaFields} lists `Title` instead of both.
+   */
+  readonly primaryFieldId?: string;
 }
 
 /** Base page fields as editor columns (no database overlay). */
@@ -86,25 +91,38 @@ function basePageFormulaFields(): DatabaseField[] {
 
 /**
  * Fields the formula editor's Properties list shows for an inline token.
- * Database fields come first; base page fields whose display name collides are
- * omitted from the list (they remain reachable by `prop("page:…")` in the
- * checker/scope).
+ *
+ * Ordering is base-page fields (Title, Created at, Updated at) first, then the
+ * database's own columns — the defaults are what most prose tokens reach for,
+ * so they lead.
+ *
+ * The database's PRIMARY column is dropped: a row page's title IS its primary
+ * cell (`resolveDatabaseRowPageTitle`), so listing both offered two names for
+ * one value. `Title` is the surviving spelling. The primary column stays
+ * resolvable in the checker and scope, so formulas that already say
+ * `thisPage.Name` keep working — it just is not offered twice.
+ *
+ * A non-primary column whose display name collides with a base field still
+ * shadows it (the scope resolves that name to the column), so the base field
+ * drops out of the list; it remains reachable as `prop("page:…")`.
  */
 export function pageFormulaFields(
-  overlayFields?: readonly DatabaseField[]
+  overlayFields?: readonly DatabaseField[],
+  primaryFieldId?: string
 ): DatabaseField[] {
   const base = basePageFormulaFields();
   if (overlayFields === undefined || overlayFields.length === 0) {
     return base;
   }
+  const listed = overlayFields.filter((field) => field.id !== primaryFieldId);
   const taken = new Set(
-    overlayFields.map((field) => normalizeFormulaPropertyName(field.name))
+    listed.map((field) => normalizeFormulaPropertyName(field.name))
   );
   return [
-    ...overlayFields,
     ...base.filter(
       (field) => !taken.has(normalizeFormulaPropertyName(field.name))
     ),
+    ...listed,
   ];
 }
 

@@ -22,48 +22,6 @@ import { tryDeleteSelectedDatabaseTableRows } from "@/lib/databases/database-tab
 type DatabaseEditProps = BlockEditProps<"database">;
 
 /**
- * The linked branch of {@link DatabaseEdit}, split out so `useDatabase` is
- * reached only once the block gate is open. It is a `useLiveQuery` with no
- * server snapshot: called unconditionally from the parent it aborts the whole
- * server render ("Missing getServerSnapshot") and reverts the page to client
- * rendering, so every page holding a database block loses SSR.
- */
-function LinkedDatabase({
-  canvasRowId,
-  onChange,
-  props,
-}: Pick<DatabaseEditProps, "onChange" | "props"> & { canvasRowId?: string }) {
-  const database = useDatabase(props.databaseId);
-
-  // No definition for the linked id: the database was deleted before the
-  // delete cascade existed, or a shipped page references a database with no
-  // document in `content/databases/`. Render it, never repair it — this
-  // component runs on a plain page visit, and deleting the row here wrote a
-  // local overlay that silently dropped the block from the reader's copy of a
-  // pristine shipped page. Deleting a block is the reader's call, not a side
-  // effect of looking at it.
-  if (database === undefined) {
-    return (
-      <div className="rounded-lg border border-border border-dashed px-3 py-2 text-muted-foreground text-sm">
-        This database is unavailable.
-      </div>
-    );
-  }
-
-  return (
-    <DatabaseTableView
-      canvasRowId={canvasRowId}
-      databaseId={props.databaseId}
-      hideTitle={props.hideTitle}
-      mode="edit"
-      onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
-      onViewIdChange={(viewId) => onChange({ ...props, viewId })}
-      viewId={props.viewId}
-    />
-  );
-}
-
-/**
  * Editable `database` block: an unlinked block shows the shared placeholder
  * trigger opening the creation popover (media/embed source-picker
  * conventions) with New, Linked, and Synced tabs; a
@@ -166,6 +124,78 @@ export function DatabaseEdit({
     );
   }
 
+  if (!tableReady) {
+    return (
+      // biome-ignore lint/a11y/noNoninteractiveElementInteractions: composite block focus surface for structural keys
+      // biome-ignore lint/a11y/useSemanticElements: cannot be a <button>; contains interactive children
+      <div
+        aria-label="Database block"
+        className={databaseBlockWrapperClassName}
+        data-database-block=""
+        onKeyDown={handleWrapperKeyDown}
+        ref={focusRef as React.RefObject<HTMLDivElement>}
+        role="group"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
+        tabIndex={0}
+      >
+        <DatabaseBlockLoading />
+      </div>
+    );
+  }
+
+  return (
+    <LinkedDatabaseBlock
+      onChange={onChange}
+      onKeyDown={handleWrapperKeyDown}
+      props={props}
+      ref={focusRef as React.RefObject<HTMLDivElement>}
+      rowId={row?.rowId}
+    />
+  );
+}
+
+const databaseBlockWrapperClassName =
+  "outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0";
+
+/**
+ * The linked half of a `database` block. Split out so the live queries below
+ * only ever run past {@link useDatabaseBlockReady} — `useLiveQuery` has no
+ * server snapshot, and calling it during a server render throws "Missing
+ * getServerSnapshot", which aborts the whole page render and silently drops
+ * the site to a client-rendered shell. Hooks cannot be conditional, so the
+ * gate has to be a mount boundary rather than an early return.
+ */
+function LinkedDatabaseBlock({
+  onChange,
+  onKeyDown,
+  props,
+  ref,
+  rowId,
+}: {
+  onChange: DatabaseEditProps["onChange"];
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  props: DatabaseEditProps["props"];
+  ref: React.RefObject<HTMLDivElement>;
+  rowId: string | undefined;
+}) {
+  const database = useDatabase(props.databaseId);
+
+  // No definition for the linked id: the database was deleted before the
+  // delete cascade existed, or a shipped page references a database whose
+  // document is missing. Say so; never repair it. This component renders on an
+  // ordinary page visit, so deleting the row here wrote a local overlay that
+  // silently dropped the block from the reader's copy of a pristine shipped
+  // page — measured on 6 of 6 loads of `/` before `content/databases/` was
+  // filled in. Removing a block is the reader's call, not a side effect of
+  // looking at the page.
+  if (database === undefined) {
+    return (
+      <div className="rounded-lg border border-border border-dashed px-3 py-2 text-muted-foreground text-sm">
+        This database is unavailable.
+      </div>
+    );
+  }
+
   return (
     // Focusable group for structural keys (cannot be a <button> — the grid
     // hosts interactive children). No focus ring: a ring around the whole
@@ -174,23 +204,23 @@ export function DatabaseEdit({
     // biome-ignore lint/a11y/useSemanticElements: cannot be a <button>; contains interactive children
     <div
       aria-label="Database block"
-      className="outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0"
+      className={databaseBlockWrapperClassName}
       data-database-block=""
-      onKeyDown={handleWrapperKeyDown}
-      ref={focusRef as React.RefObject<HTMLDivElement>}
+      onKeyDown={onKeyDown}
+      ref={ref}
       role="group"
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
       tabIndex={0}
     >
-      {tableReady ? (
-        <LinkedDatabase
-          canvasRowId={row?.rowId}
-          onChange={onChange}
-          props={props}
-        />
-      ) : (
-        <DatabaseBlockLoading />
-      )}
+      <DatabaseTableView
+        canvasRowId={rowId}
+        databaseId={props.databaseId}
+        hideTitle={props.hideTitle}
+        mode="edit"
+        onHideTitleChange={(hideTitle) => onChange({ ...props, hideTitle })}
+        onViewIdChange={(viewId) => onChange({ ...props, viewId })}
+        viewId={props.viewId}
+      />
     </div>
   );
 }

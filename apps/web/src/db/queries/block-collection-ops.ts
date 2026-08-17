@@ -180,7 +180,12 @@ export function deletePageBlocksInTx(
       if (tx.deletedInTransaction.has(blockId)) {
         continue;
       }
-      localBlocksCollection.delete(blockId);
+      // A pristine shipped page's blocks live in shipped JSON, so a row can be
+      // deleted before it was ever materialized into the collection. Deleting a
+      // key that is not there throws, which would abort the whole edit.
+      if (localBlocksCollection.has(blockId)) {
+        localBlocksCollection.delete(blockId);
+      }
       tx.deletedInTransaction.add(blockId);
     }
   });
@@ -252,7 +257,11 @@ function queuePageBlockDiffMutations(
         if (tx.deletedInTransaction.has(blockId)) {
           continue;
         }
-        localBlocksCollection.delete(blockId);
+        // See `deletePageBlocksInTx`: previous blocks can predate the page's
+        // first materialization, so they may never have reached the collection.
+        if (localBlocksCollection.has(blockId)) {
+          localBlocksCollection.delete(blockId);
+        }
         tx.deletedInTransaction.add(blockId);
       }
     });

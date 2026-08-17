@@ -1,12 +1,22 @@
 import { createServerFn } from "@tanstack/react-start";
 import { hashPageBlocks } from "@/lib/content/block-hash.ts";
 import { getShippedPages } from "@/lib/content/page-store.server.ts";
+import type { Page } from "@/lib/schemas/page.ts";
 
 export interface PageSummary {
   /** `hashPageBlocks(page.blocks)` of the shipped page; absent for local-only rows. Drives global stale detection. */
   contentHash?: string;
   /** Authored creation time from shipped JSON; absent on older content. */
   createdAt?: string;
+  /**
+   * Ids of the databases this **shipped** page's blocks embed. Set only for
+   * pristine shipped pages — once a page has a local override its blocks are
+   * authoritative and this is dropped in `mergePageList`, so a database block
+   * the user deleted locally never resurrects as a host. Lets the host scan
+   * resolve a database hosted by a page nobody has edited yet, whose blocks
+   * live in shipped JSON rather than the local block collection.
+   */
+  databaseIds?: string[];
   /**
    * Present on pages materialized from a database row: excluded from the
    * sidebar tree (the database owns the sidebar entry) but resolvable
@@ -27,6 +37,16 @@ export interface PageSummary {
   updatedAt?: string;
 }
 
+function shippedDatabaseIds(blocks: Page["blocks"]): string[] {
+  const ids = new Set<string>();
+  for (const block of blocks) {
+    if (block.type === "database" && block.props.databaseId !== "") {
+      ids.add(block.props.databaseId);
+    }
+  }
+  return [...ids];
+}
+
 export const listPages = createServerFn({ method: "GET" }).handler(
   (): Promise<PageSummary[]> => {
     const pages = getShippedPages().map((page) => ({
@@ -39,6 +59,7 @@ export const listPages = createServerFn({ method: "GET" }).handler(
       createdAt: page.createdAt,
       updatedAt: page.updatedAt,
       contentHash: hashPageBlocks(page.blocks),
+      databaseIds: shippedDatabaseIds(page.blocks),
     }));
 
     return Promise.resolve(

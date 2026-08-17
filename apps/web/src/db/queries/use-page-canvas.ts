@@ -15,7 +15,10 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import { localPagesCollection } from "@/db/collections/local-collections.ts";
+import {
+  localBlocksCollection,
+  localPagesCollection,
+} from "@/db/collections/local-collections.ts";
 import {
   applyPageBlockDiff,
   beginPageBlockTransaction,
@@ -28,7 +31,7 @@ import {
   updatePageBlockInTx,
   upsertPageBlock,
 } from "@/db/queries/block-collection-ops.ts";
-import { seedLocalPageRow } from "@/db/queries/seed-local-page-row.ts";
+import { seedLocalPageMeta } from "@/db/queries/seed-local-page-meta.ts";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
 import {
   buildBlockTree,
@@ -238,35 +241,31 @@ export function usePageCanvas(
     return reconciled;
   }, [activeBlocks]);
 
-  const canPersistToCollection = hasSeededBlocks || localPage != null;
-
+  // Same trap: `existingLocalBlocks` is a render snapshot missing a row an
+  // earlier dispatch inserted this tick. Callers pick insert vs update from
+  // this, and a stale "false" inserts an id that already exists — which is why
+  // any two-dispatch flow (insert-then-convert) appeared to do nothing.
   const blockExistsInCollection = useCallback(
     (blockId: string): boolean =>
-      existingLocalBlocks.some((item) => item.id === blockId) &&
+      localBlocksCollection.has(blockId) &&
       !transactionDeletedIdsRef.current?.has(blockId),
-    [existingLocalBlocks]
+    []
   );
 
   const ensurePageMeta = useCallback(
     (blockOrder?: string[]) => {
-      // `localPage` can be stale under StrictMode double-mounted effects, so
-      // the seed helper re-checks the collection and tolerates losing the race.
-      if (localPage) {
-        return;
-      }
-      seedLocalPageRow({
+      seedLocalPageMeta({
         blockOrder,
-        metadata: {
-          icon: serverPage.icon,
-          parentId: serverPage.parentId,
-          sidebarOrder: serverPage.sidebarOrder,
-          slug: serverPage.slug,
-          title: serverPage.title,
-        },
+        blocks: serverPage.blocks,
+        hasLocalPage: localPage != null,
+        icon: serverPage.icon,
         pageId,
+        parentId: serverPage.parentId,
         serverBaselineHash,
-        serverBlocks: serverPage.blocks,
         serverMetadataBaseline,
+        sidebarOrder: serverPage.sidebarOrder,
+        slug: serverPage.slug,
+        title: serverPage.title,
       });
     },
     [
@@ -318,11 +317,8 @@ export function usePageCanvas(
           (item) => item.id === options.singleBlockId
         );
         if (block) {
-          upsertPageBlock(
-            pageId,
-            block,
-            existingLocalBlocks.some((item) => item.id === block.id)
-          );
+          // Ask the collection, never the snapshot (see above).
+          upsertPageBlock(pageId, block, blockExistsInCollection(block.id));
           getSession().updateBlock(block.id, block);
         }
         return nextBlocks;
@@ -338,6 +334,7 @@ export function usePageCanvas(
       return nextBlocks;
     },
     [
+      blockExistsInCollection,
       createBlankBlock,
       ensurePageMeta,
       existingLocalBlocks,
@@ -394,7 +391,15 @@ export function usePageCanvas(
       transactionDeletedIdsRef.current = new Set();
       inBlockTransactionRef.current = true;
 
-      if (canPersistToCollection) {
+      // Read live and once. `run()` can seed the page mid-tick, so a render
+      // snapshot would say "no" a second time and re-seed — inserting ids that
+      // already exist — and the `finally` below must match this same decision.
+      const persistsToCollection =
+        hasSeededBlocks ||
+        localPage != null ||
+        localPagesCollection.has(pageId);
+
+      if (persistsToCollection) {
         collectionTxRef.current = beginPageBlockTransaction(
           pageId,
           session.getBlockOrder(),
@@ -429,7 +434,7 @@ export function usePageCanvas(
         transactionBlocksRef.current = session.getBlocks();
       } finally {
         const pending = transactionBlocksRef.current;
-        if (pending && !canPersistToCollection) {
+        if (pending && !persistsToCollection) {
           ensurePageMeta(blockIds(pending));
           seedPageBlocks(pageId, pending);
         } else if (collectionTxRef.current) {
@@ -458,10 +463,11 @@ export function usePageCanvas(
       }
     },
     [
-      canPersistToCollection,
       createBlankBlock,
       ensurePageMeta,
       getSession,
+      hasSeededBlocks,
+      localPage,
       pageId,
     ]
   );
