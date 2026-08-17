@@ -1,0 +1,666 @@
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useHaptics } from "@/components/layout/haptics-provider.tsx";
+import { SIDEBAR_WIDTH_MOBILE, useSidebar } from "@/components/ui/sidebar.tsx";
+import { POINTER_CLICK_DRAG_THRESHOLD_PX } from "@/hooks/use-pointer-click-vs-drag.ts";
+import { cn } from "@/lib/utils.ts";
+
+/** Past this many px/ms a flick wins over distance when deciding open vs closed. */
+const VELOCITY_SNAP_PX_PER_MS = 0.5;
+/** Fallback sidebar width (18rem at a 16px root) before the layer is measured. */
+const SIDEBAR_WIDTH_FALLBACK_PX = 288;
+/** White wash opacity over the content at full open; scales with swipe progress. */
+const OVERLAY_MAX_OPACITY = 0.6;
+
+type Axis = "undecided" | "horizontal" | "vertical";
+
+interface PageSidebarSwipeRevealProps {
+  children: ReactNode;
+  sidebar: ReactNode;
+}
+
+/**
+ * Mobile inset sidebar revealed by an iOS-style swipe: the content panel slides
+ * right under the finger to expose a sidebar fixed behind it (mirroring the
+ * desktop inset look — rounded content with a left gap when open), instead of a
+ * full-bleed overlay sheet.
+ *
+ * Shares `openMobile` from {@link useSidebar} so the hamburger trigger and the
+ * left-edge swipe drive the same state. Gesture mechanics copy the
+ * pointer-capture idiom from `page-sidebar-rail.tsx`; the transform/transition
+ * idiom copies `page-sidebar-hover-reveal.tsx`. Haptics tick once via
+ * {@link useHaptics} (a no-op off coarse pointers) as a swipe crosses the snap
+ * line, and once when a backdrop tap closes; the hamburger trigger fires its
+ * own tick in-gesture (see `toggleSidebar` in `sidebar.tsx`).
+ *
+ * Three gesture surfaces share the same axis-locked drag machinery:
+ *
+ * - the **left-edge strip** (closed): eager pointer capture, `touch-action:
+ *   none` — the opening swipe.
+ * - the **content scrim** (open): eager capture, `touch-action: none` — a swipe
+ *   or tap closes.
+ * - the **sidebar panel itself** (open): `touch-action: pan-y` with *deferred*
+ *   capture — the pointer is only captured once movement locks to the
+ *   horizontal axis, so taps still reach the page rows and a vertical drag is
+ *   handed to the browser to scroll the page list natively. Horizontal intent
+ *   additionally `preventDefault`s `touchmove` (non-passive) so iOS cannot
+ *   start a late list scroll mid-drag; a click that trails a completed drag is
+ *   swallowed in the capture phase so the swipe never navigates.
+ */
+export function PageSidebarSwipeReveal({
+  children,
+  sidebar,
+}: PageSidebarSwipeRevealProps) {
+  const { openMobile, setOpenMobile } = useSidebar();
+  const haptic = useHaptics();
+
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_WIDTH_FALLBACK_PX);
+  // null = not dragging (CSS transition owns the transform); a number = live drag.
+  const [dragOffset, setDragOffset] = useState<number | null>(null);
+  // Whether to paint the fixed sidebar layer — true while revealing/open and
+  // bridged through the close slide; false once fully closed (see effect below).
+  const [isClosingReveal, setIsClosingReveal] = useState(false);
+  const wasRevealedRef = useRef(false);
+
+  // Gesture bookkeeping (refs so pointer handlers stay referentially stable).
+  const originRef = useRef<{ x: number; y: number } | null>(null);
+  const lastRef = useRef<{ x: number; t: number } | null>(null);
+  const axisRef = useRef<Axis>("undecided");
+  const didDragRef = useRef(false);
+  // The open/closed state the current gesture has last fired a haptic for, so a
+  // drag ticks once each time it crosses the snap line (and a tap ticks once on
+  // release) without ever double-firing. Reset at pointer-down to the live state.
+  const hapticStateRef = useRef(openMobile);
+  const captureElRef = useRef<HTMLElement | null>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
+  // The nav holds the actual sidebar width; the layer around it is a full-width
+  // bg-sidebar backdrop, so we measure the nav (not the layer) for the slide.
+  const navRef = useRef<HTMLDivElement>(null);
+
+  // Measure the real nav width so the drag tracks the finger 1:1 and the content
+  // slides exactly the sidebar's width.
+  useEffect(() => {
+    const node = navRef.current;
+    if (!node) {
+      return;
+    }
+    const update = () => setSidebarWidth(node.offsetWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  // Escape closes (replacing what the dropped Sheet/Dialog gave for free).
+  useEffect(() => {
+    if (!openMobile) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMobile(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openMobile, setOpenMobile]);
+
+  // Focus into the sidebar on open; restore to the prior element (the trigger)
+  // on close.
+  useEffect(() => {
+    if (openMobile) {
+      prevFocusRef.current = (document.activeElement as HTMLElement) ?? null;
+      sidebarRef.current?.focus({ preventScroll: true });
+    } else if (prevFocusRef.current) {
+      prevFocusRef.current.focus?.();
+      prevFocusRef.current = null;
+    }
+  }, [openMobile]);
+
+  // Suppress iOS Safari's left-edge "swipe back" so it doesn't fire instead of
+  // (or alongside) our open gesture. touch-action alone doesn't stop Safari's
+  // system gesture; non-passive touchstart/touchmove preventDefault on the edge
+  // strip does. Callback ref so the listeners attach/detach exactly when the
+  // strip (rendered only while closed) mounts/unmounts.
+  const edgeStripRef = useCallback((strip: HTMLDivElement | null) => {
+    if (!strip) {
+      return;
+    }
+    const prevent = (event: TouchEvent) => {
+      event.preventDefault();
+    };
+    strip.addEventListener("touchstart", prevent, { passive: false });
+    strip.addEventListener("touchmove", prevent, { passive: false });
+    return () => {
+      strip.removeEventListener("touchstart", prevent);
+      strip.removeEventListener("touchmove", prevent);
+    };
+  }, []);
+
+  // Fire one selection tick whenever the gesture's projected open/closed state
+  // flips, tracked in `hapticStateRef` so it never double-fires.
+  //
+  // Crucially this is driven from `handlePointerMove` (the drag crossing the
+  // snap line), NOT only from the release: iOS Safari's web-haptics switch
+  // trick produces feedback during the *active* drag but not from the pointerup
+  // that ends a captured-pointer drag — firing only on release is why the swipe
+  // felt dead while the (no-drag) backdrop tap and hamburger worked. A tap still
+  // ticks fine on release, and a velocity flick that lands on a state the drag
+  // never crossed gets a best-effort tick at commit.
+  const tickHapticForState = useCallback(
+    (projectedOpen: boolean) => {
+      if (projectedOpen !== hapticStateRef.current) {
+        hapticStateRef.current = projectedOpen;
+        haptic("selection");
+      }
+    },
+    [haptic]
+  );
+
+  // Commit open/closed from a gesture (swipe or backdrop tap).
+  const commitOpenFromGesture = useCallback(
+    (next: boolean) => {
+      tickHapticForState(next);
+      setDragOffset(null);
+      setOpenMobile(next);
+    },
+    [setOpenMobile, tickHapticForState]
+  );
+
+  const releaseCapture = useCallback((pointerId: number) => {
+    if (captureElRef.current?.hasPointerCapture(pointerId)) {
+      captureElRef.current.releasePointerCapture(pointerId);
+    }
+  }, []);
+
+  const endGesture = useCallback(() => {
+    originRef.current = null;
+    lastRef.current = null;
+    axisRef.current = "undecided";
+    captureElRef.current = null;
+  }, []);
+
+  // Resolve the gesture axis once movement clears the click/drag threshold.
+  const lockAxis = useCallback((dx: number, dy: number): Axis => {
+    if (Math.hypot(dx, dy) <= POINTER_CLICK_DRAG_THRESHOLD_PX) {
+      return "undecided";
+    }
+    const axis: Axis = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+    axisRef.current = axis;
+    if (axis === "horizontal") {
+      didDragRef.current = true;
+    }
+    return axis;
+  }, []);
+
+  const beginGesture = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, captureNow: boolean) => {
+      if (!event.isPrimary) {
+        return;
+      }
+      if (event.pointerType === "mouse" && event.button !== 0) {
+        return;
+      }
+      originRef.current = { x: event.clientX, y: event.clientY };
+      lastRef.current = { x: event.clientX, t: event.timeStamp };
+      axisRef.current = "undecided";
+      didDragRef.current = false;
+      hapticStateRef.current = openMobile;
+      captureElRef.current = event.currentTarget;
+      if (!captureNow) {
+        // Deferred-capture surface (the sidebar panel): leave the pointer with
+        // the row under the finger so a tap still clicks through; capture moves
+        // to the panel only when the axis locks horizontal (see
+        // handlePointerMove).
+        return;
+      }
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Capture can fail if the pointer is already gone; the gesture still
+        // works without it, and releaseCapture guards on hasPointerCapture.
+      }
+    },
+    [openMobile]
+  );
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => beginGesture(event, true),
+    [beginGesture]
+  );
+
+  const handlePanelPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => beginGesture(event, false),
+    [beginGesture]
+  );
+
+  // First significant movement decides the axis: vertical hands the gesture
+  // back to the browser (the page — or, on the pan-y panel surface, the sidebar
+  // list — scrolls natively); horizontal claims pointer capture for
+  // deferred-capture surfaces so the rest of the drag tracks the panel even
+  // when the finger leaves it (and the trailing click is retargeted away from
+  // the row under the finger).
+  const resolveAxisOnMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, dx: number, dy: number): Axis => {
+      if (axisRef.current !== "undecided") {
+        return axisRef.current;
+      }
+      const axis = lockAxis(dx, dy);
+      if (axis === "vertical") {
+        releaseCapture(event.pointerId);
+        endGesture();
+        return axis;
+      }
+      const captureEl = captureElRef.current;
+      if (
+        axis === "horizontal" &&
+        captureEl &&
+        !captureEl.hasPointerCapture(event.pointerId)
+      ) {
+        try {
+          captureEl.setPointerCapture(event.pointerId);
+        } catch {
+          // Pointer may already be gone; the drag still works uncaptured.
+        }
+      }
+      return axis;
+    },
+    [endGesture, lockAxis, releaseCapture]
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const origin = originRef.current;
+      if (!origin) {
+        return;
+      }
+
+      const dx = event.clientX - origin.x;
+      const dy = event.clientY - origin.y;
+
+      if (resolveAxisOnMove(event, dx, dy) !== "horizontal") {
+        return;
+      }
+
+      const base = openMobile ? sidebarWidth : 0;
+      const offset = Math.min(Math.max(base + dx, 0), sidebarWidth);
+      setDragOffset(offset);
+      // Tick as the drag crosses the snap line — the point that decides whether
+      // release will open or close. Firing here (mid-drag) is what makes the
+      // swipe haptic land on iOS; see `tickHapticForState`.
+      tickHapticForState(offset >= sidebarWidth / 2);
+
+      lastRef.current = { x: event.clientX, t: event.timeStamp };
+    },
+    [openMobile, resolveAxisOnMove, sidebarWidth, tickHapticForState]
+  );
+
+  const finishGesture = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, tapCloses: boolean) => {
+      const origin = originRef.current;
+      releaseCapture(event.pointerId);
+
+      if (!origin) {
+        endGesture();
+        return;
+      }
+
+      const last = lastRef.current;
+      const didDrag = didDragRef.current;
+      const liveOffset = dragOffset;
+      endGesture();
+
+      if (!didDrag) {
+        // A tap: on the open backdrop it closes; on the closed edge strip and
+        // on the open sidebar panel it does nothing (panel taps fall through to
+        // the page rows; only a swipe drives the panel).
+        if (tapCloses && openMobile) {
+          commitOpenFromGesture(false);
+        } else {
+          setDragOffset(null);
+        }
+        return;
+      }
+
+      const offset = liveOffset ?? (openMobile ? sidebarWidth : 0);
+      let velocity = 0;
+      if (last) {
+        const dt = Math.max(1, event.timeStamp - last.t);
+        velocity = (event.clientX - last.x) / dt;
+      }
+
+      let shouldOpen: boolean;
+      if (velocity > VELOCITY_SNAP_PX_PER_MS) {
+        shouldOpen = true;
+      } else if (velocity < -VELOCITY_SNAP_PX_PER_MS) {
+        shouldOpen = false;
+      } else {
+        shouldOpen = offset >= sidebarWidth / 2;
+      }
+
+      // Release capture (above) before flipping state so the CSS transition runs.
+      commitOpenFromGesture(shouldOpen);
+    },
+    [
+      commitOpenFromGesture,
+      dragOffset,
+      endGesture,
+      openMobile,
+      releaseCapture,
+      sidebarWidth,
+    ]
+  );
+
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => finishGesture(event, true),
+    [finishGesture]
+  );
+
+  const handlePanelPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => finishGesture(event, false),
+    [finishGesture]
+  );
+
+  // A completed panel drag can still synthesize a click (mouse pointers always;
+  // touch when the browser kept the tap heuristic alive). Swallow it in the
+  // capture phase so a close-swipe never doubles as a row navigation.
+  const handlePanelClickCapture = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (!didDragRef.current) {
+        return;
+      }
+      didDragRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    []
+  );
+
+  const handlePointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      releaseCapture(event.pointerId);
+      endGesture();
+      setDragOffset(null);
+    },
+    [endGesture, releaseCapture]
+  );
+
+  const gestureHandlers = {
+    onPointerCancel: handlePointerCancel,
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePointerUp,
+  };
+
+  // Same drag machinery on the open sidebar panel itself, tuned for a surface
+  // full of interactive, vertically scrollable rows: capture is deferred until
+  // the axis locks horizontal, a tap never closes, and `touch-action: pan-y`
+  // (on the layer, below) leaves vertical list scrolling to the browser.
+  const panelGestureHandlers = {
+    onClickCapture: handlePanelClickCapture,
+    onPointerCancel: handlePointerCancel,
+    onPointerDown: handlePanelPointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePanelPointerUp,
+  };
+
+  // Once a panel gesture locks horizontal, block iOS from starting a late
+  // vertical list scroll under the drag: `touch-action: pan-y` is only
+  // evaluated at gesture start, so mid-drag scroll intent needs a non-passive
+  // touchmove preventDefault. Touch events fire on the touchstart target's
+  // subtree, so this only ever sees gestures that began on the panel.
+  useEffect(() => {
+    const node = sidebarRef.current;
+    if (!node) {
+      return;
+    }
+    const onTouchMove = (event: TouchEvent) => {
+      if (axisRef.current === "horizontal") {
+        event.preventDefault();
+      }
+    };
+    node.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => node.removeEventListener("touchmove", onTouchMove);
+  }, []);
+
+  const translateX = dragOffset ?? (openMobile ? sidebarWidth : 0);
+  const isDragging = dragOffset !== null;
+  const isRevealed = translateX > 0;
+  // `isRevealed` flips to false the instant a close commits (translateX → 0 in
+  // state), while the transform keeps animating home for ~200ms. `revealActive`
+  // stays true through that close slide (bridged by `isClosingReveal`, set in the
+  // effect below) so the rounding, ring, and scrim animate out *with* the slide
+  // instead of snapping off at frame 0.
+  const revealActive = isRevealed || isClosingReveal;
+
+  // The content layer is the document-tall page; plain `border-radius` would put
+  // its corners at the document top/bottom (off-screen mid-scroll). So clip it to
+  // the visible viewport band with rounded corners via `clip-path`. The content
+  // layer stays in normal flow (so the document keeps its scroll height — going
+  // `position: fixed` collapses it and resets scrollY). Scroll is frozen during
+  // the reveal (the gesture locks to the horizontal axis; an open sidebar locks
+  // the document), so `window.scrollY` is a stable constant.
+  //
+  // CRUCIAL: the dim scrim and the ring are rounded with `border-radius`, NOT
+  // their own `clip-path`. iOS WebKit drops the corner radius of a `clip-path:
+  // inset(round)` on an *opacity-composited* layer (older Safari) — that was the
+  // square-corner artifact (the scrim's square corner punched through). The
+  // content layer's own clip-path rounds the (non-composited) page content fine.
+  let revealClipPath: string | undefined;
+  let viewportHeight: number | undefined;
+  if (revealActive && typeof window !== "undefined") {
+    const top = window.scrollY;
+    viewportHeight = window.innerHeight;
+    revealClipPath = `inset(${top}px 0px max(0px, calc(100% - ${top + viewportHeight}px)) 0px round var(--radius-3xl))`;
+  }
+
+  const overlayProgress = Math.min(translateX / sidebarWidth, 1);
+
+  // Drive the document canvas (the `<html>` color-mix in styles.css) toward the
+  // sidebar color as the sidebar is revealed. That canvas paints the safe-area
+  // insets and the overscroll, AND — once `theme-color` is out of the way (see
+  // browser-chrome-tint.ts) — is what iOS Safari samples for the chrome bands
+  // above and below the page, so the whole screen fades together with the swipe
+  // instead of the bands sitting a shade off and drawing a seam at the edges.
+  //
+  // Fed the LINEAR drag progress, not an eased curve: Safari re-samples the
+  // canvas while the drag is under the finger, so the fade only reads as a fade
+  // over the shades it can catch there. The old ease-out spent most of the drag
+  // distance within a shade or two of full sidebar; linear spreads the same
+  // change evenly and measured 8 distinct steps across an open instead of 4. The
+  // dragging flag drops the CSS transition for the same reason (styles.css).
+  //
+  // Only an OPENING drag tracks the finger. Safari does not re-sample at all
+  // once the sidebar is open — a closing drag leaves the bands on their last
+  // sampled color until the lift — so ramping down under the finger would just
+  // pull the drawer off the bands it is supposed to match. Holding at 1 keeps
+  // them together through the close; the ramp to 0 happens on commit, animated
+  // by the CSS transition, by which point the drawer has slid away.
+  const draggingOpenProgress = isDragging ? overlayProgress : 0;
+  const revealProgress = openMobile ? 1 : draggingOpenProgress;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--sidebar-reveal", String(revealProgress));
+    root.toggleAttribute("data-swipe-dragging", isDragging);
+    return () => {
+      root.style.removeProperty("--sidebar-reveal");
+      root.removeAttribute("data-swipe-dragging");
+    };
+  }, [revealProgress, isDragging]);
+
+  // While the sidebar is open the document (the mobile scroller) must not scroll
+  // behind it — keeps the fixed sidebar / safe-area layers aligned and matches a
+  // native drawer. This component only renders on narrow viewports, so locking
+  // the document scroller (`<html>`) is mobile-only; on desktop the shell is
+  // already `overflow-hidden`, making this a no-op.
+  useEffect(() => {
+    if (!openMobile) {
+      return;
+    }
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = prevOverflow;
+    };
+  }, [openMobile]);
+
+  // The sidebar layer is `position: fixed` and full viewport height. When fully
+  // closed it would stay painted behind the content — and on iOS, after a scroll,
+  // its bg-sidebar bleeds through the safe-area insets / overscroll that the
+  // scrolled (document-flow) content doesn't cover (gray strips above/below the
+  // content). So paint it only while it's actually being revealed. Bridge the
+  // ~200ms close slide via `isClosingReveal` so it doesn't pop away mid-animation.
+  useEffect(() => {
+    if (isRevealed) {
+      wasRevealedRef.current = true;
+      setIsClosingReveal(false);
+      return;
+    }
+    if (!wasRevealedRef.current) {
+      return;
+    }
+    wasRevealedRef.current = false;
+    setIsClosingReveal(true);
+    const timer = window.setTimeout(() => setIsClosingReveal(false), 240);
+    return () => window.clearTimeout(timer);
+  }, [isRevealed]);
+
+  return (
+    <div className="relative w-full bg-background max-md:overflow-x-clip md:min-h-0 md:flex-1 md:overflow-hidden">
+      {/* Sidebar layer — a FULL-WIDTH bg-sidebar backdrop fixed behind the
+          content, revealed as the content slides. Full width (not just the nav
+          width) so the sliding content always sits on bg-sidebar: any mismatch
+          between the slide distance and the nav width — or the card's rounded
+          corners — reveals bg-sidebar, never the bg-background swipe-outer. The
+          nav itself is constrained to its real width by `navRef` (which also
+          drives the slide distance). `visibility: hidden` when fully closed (not
+          display:none — keep `navRef` measurable) so the fixed bg-sidebar can't
+          bleed behind the content on iOS. */}
+      <div
+        aria-hidden={!openMobile}
+        aria-label="Sidebar"
+        aria-modal={openMobile}
+        className="z-0 flex flex-col bg-sidebar text-sidebar-foreground outline-none max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
+        // Re-derives `--sidebar` for this subtree from `--sidebar-reveal`, so the
+        // drawer surface rides the same ramp as the canvas and Safari's chrome
+        // bands instead of being revealed already-solid (see styles.css).
+        data-sidebar-reveal-surface=""
+        inert={!openMobile}
+        ref={sidebarRef}
+        role="dialog"
+        style={{
+          touchAction: "pan-y",
+          visibility: revealActive ? undefined : "hidden",
+        }}
+        tabIndex={-1}
+        {...(openMobile ? panelGestureHandlers : {})}
+      >
+        <div
+          className="flex h-full flex-col"
+          ref={navRef}
+          style={{ width: SIDEBAR_WIDTH_MOBILE }}
+        >
+          {sidebar}
+        </div>
+      </div>
+
+      {/* Content layer — slides right to reveal the sidebar; rounded inset when
+          open. Stays in normal flow (document keeps its scroll height); rounded
+          at the viewport band by `revealClipPath`. */}
+      <div
+        className={cn(
+          // Mobile: natural height (`min-h-svh`) so the document — not this
+          // layer — owns the scroll; desktop keeps `h-full` inside the fixed shell.
+          "relative z-10 w-full bg-background transition-transform duration-200 ease-[var(--ease-drawer)] will-change-transform motion-reduce:transition-none max-md:min-h-svh md:h-full",
+          isDragging && "transition-none",
+          revealActive && "max-md:overflow-x-clip md:overflow-hidden"
+        )}
+        style={{
+          transform: `translateX(${translateX}px)`,
+          clipPath: revealClipPath,
+        }}
+      >
+        <div className="w-full max-md:min-h-svh md:h-full" inert={openMobile}>
+          {children}
+        </div>
+
+        {/* Dim scrim over the content; opacity tracks swipe progress. White in
+            light mode (content recedes by washing out); near-black in dark mode
+            (a white wash reads as a jarring brighten — dark dims instead). Pinned
+            to the viewport band with `sticky top-0 height=viewport` and rounded
+            with `border-radius` (NOT clip-path): the scrim's opacity transition
+            composites it, and older iOS WebKit drops a composited layer's own
+            `clip-path` corner radius — `border-radius` is honored there (the ring
+            frame below uses the same technique and renders round on-device). */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
+          <div
+            className={cn(
+              "sticky top-0 w-full rounded-3xl bg-white transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none dark:bg-black",
+              isDragging && "transition-none",
+              openMobile ? "pointer-events-auto" : "pointer-events-none"
+            )}
+            style={{
+              height: viewportHeight,
+              opacity: overlayProgress * OVERLAY_MAX_OPACITY,
+              touchAction: "none",
+            }}
+            {...(openMobile ? gestureHandlers : {})}
+          />
+        </div>
+
+        {/* Border outline. The content layer's own `ring` would draw at the
+            document-tall box edges (off-screen); a viewport-sticky frame keeps
+            the ring at the visible card edges, rounded with `border-radius`.
+            Opacity tracks swipe progress (with a CSS transition) so it fades in/
+            out with the slide instead of snapping off when a close commits. */}
+        {revealActive ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+          >
+            <div
+              className={cn(
+                "sticky top-0 rounded-3xl ring-1 ring-border ring-inset transition-opacity duration-200 ease-[var(--ease-drawer)] motion-reduce:transition-none",
+                isDragging && "transition-none"
+              )}
+              style={{ height: viewportHeight, opacity: overlayProgress }}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {/* The top/bottom safe-area insets are tinted by the root `<html>`
+          background (styles.css): bg-background at rest, fading to sidebar with
+          the swipe. That covers the insets uniformly, so the old fixed fill bars
+          here are redundant — and being full-width with square corners at z-30,
+          they painted over the inset card's rounded corners during the reveal. */}
+
+      {/* Left-edge hit strip — captures the opening swipe while closed. */}
+      {openMobile ? null : (
+        <div
+          aria-hidden
+          // `fixed` on mobile so the opening edge-swipe zone stays pinned to the
+          // viewport's left edge at any document scroll position.
+          className="z-20 w-5 max-md:fixed max-md:inset-y-0 max-md:left-0 md:absolute md:inset-y-0 md:left-0"
+          // touch-action: none + the non-passive preventDefault effect above
+          // claim the left-edge horizontal swipe so iOS Safari's back-navigation
+          // gesture doesn't fire from this strip. ~20px wide to cover Safari's
+          // edge zone. (Android/Chrome is covered by `overscroll-behavior: none`.)
+          ref={edgeStripRef}
+          style={{ touchAction: "none" }}
+          {...gestureHandlers}
+        />
+      )}
+    </div>
+  );
+}

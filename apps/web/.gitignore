@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.nitro
+.tanstack
+.output
+.vinxi
+.vercel
+public/emojibase
+public/tabler
+public/maplibre
+public/sitemap.xml
+src/generated
+scripts/demo/shots/

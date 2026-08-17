@@ -35,3 +35,4 @@ src/generated
 /vite.harness.config.ts
 /src/__harness__/
 /__shot.mjs
+scripts/demo/shots/

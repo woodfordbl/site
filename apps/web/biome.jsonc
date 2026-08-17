@@ -1,0 +1,151 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": [
+    "ultracite/biome/core",
+    "ultracite/biome/type-aware",
+    "ultracite/biome/react",
+    "ultracite/biome/vitest"
+  ],
+  "linter": {
+    "rules": {
+      "correctness": {
+        // Biome's import resolver cannot follow pnpm-workspace symlinks
+        // (falsely flags nitro, @tanstack/*, etc.); tsgo typecheck is the
+        // authority on module resolution and runs in CI.
+        "noUnresolvedImports": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // public/ holds static and generated assets (icons, manifest, generated
+      // JSON), not hand-authored source — skip lint/format/assist for it.
+      "includes": ["public/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    },
+    {
+      // Vendored dither-kit canvas engine (MIT, Boring-Software-Inc/dither-kit)
+      // — kept close to upstream so it stays updatable; not our house style.
+      "includes": ["src/components/charts/dither-kit/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    },
+    {
+      // mapcn consumers: its public component is named `Map`, which collides
+      // with the global. Importing it under another name would diverge from
+      // the upstream docs and every future `@mapcn/*` block.
+      "includes": [
+        "src/components/dev/map-preview.tsx",
+        "src/components/database/views/database-map-canvas.tsx",
+        "src/components/blocks/types/map/map-block-canvas.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noShadowRestrictedNames": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noNoninteractiveElementInteractions": "off",
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      // mapcn registry component (`npx shadcn@latest add @mapcn/map`) — kept
+      // byte-identical to upstream so re-running the CLI stays a clean diff.
+      "includes": ["src/components/ui/map.tsx"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    },
+    {
+      "includes": ["src/components/ui/chart.tsx"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          },
+          "performance": {
+            "noNamespaceImport": "off"
+          },
+          "security": {
+            "noDangerouslySetInnerHtml": "off"
+          },
+          "style": {
+            "useConsistentTypeDefinitions": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/components/blocks/registry.ts",
+        "src/lib/canvas/reducer.ts",
+        "src/components/editor/editable-surface.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off"
+          },
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/routes/$.tsx",
+        "src/routes/db.$databaseId.tsx",
+        "src/routes/db.$databaseId_.$rowId.tsx",
+        "src/routes/db.$databaseId_.template.tsx",
+        "src/routes/p.$.tsx",
+        "src/routes/settings.$section.tsx",
+        "src/routes/settings.index.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/components/pages/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noDocumentCookie": "off"
+          }
+        }
+      }
+    }
+  ]
+}

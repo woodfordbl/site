@@ -1,0 +1,555 @@
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { DatabaseFilterBar } from "@/components/database/database-filter-bar.tsx";
+import { filterHasRelativeOperator } from "@/components/database/database-filter-helpers.ts";
+import { DatabaseMobileToolbar } from "@/components/database/database-mobile-toolbar.tsx";
+import { DatabaseTitle } from "@/components/database/database-title.tsx";
+import { DatabaseViewBody } from "@/components/database/database-view-body.tsx";
+import { DatabaseViewSwitcher } from "@/components/database/database-view-switcher.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { useFormulaOverlay } from "@/db/formula-engine.ts";
+import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
+import { useDatabase, useDatabaseRows } from "@/db/queries/use-database.ts";
+import { useFormulaUserFunctions } from "@/db/queries/use-formula-functions.ts";
+import { watchDatabaseSync } from "@/db/sync/database-sync-engine.ts";
+import {
+  advancedFilterIsVolatile,
+  applyAdvancedFilter,
+} from "@/lib/databases/advanced-row-filter.ts";
+import { buildChartData } from "@/lib/databases/chart-data.ts";
+import { recordDatabaseViewEditHistory } from "@/lib/databases/database-view-edit-history.ts";
+import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
+import { withFormulaValues } from "@/lib/databases/formula-values.ts";
+import { applyFilter } from "@/lib/databases/row-filter.ts";
+import {
+  type DatabaseRowGroup,
+  groupRowsForView,
+  resolveGroupByField,
+} from "@/lib/databases/row-group.ts";
+import { sortRowsForView } from "@/lib/databases/row-sort.ts";
+import { useLiveMarketsDerivedRows } from "@/lib/databases/use-live-markets-derived.ts";
+import {
+  resolveColumnOrder,
+  resolvePinnedFields,
+} from "@/lib/databases/view-config.ts";
+import type {
+  DatabaseField,
+  DatabaseFilterGroup,
+  DatabaseView,
+  LocalDatabaseRow,
+} from "@/lib/schemas/database.ts";
+import { cn } from "@/lib/utils.ts";
+
+/** Props contract for the database surface rendered by `database` blocks. */
+export interface DatabaseTableViewProps {
+  /**
+   * Canvas `database` block row id when this view is embedded. Forwarded to
+   * the table grid so Delete prefers selected rows over the canvas block.
+   */
+  canvasRowId?: string;
+  databaseId: string;
+  /**
+   * Full-page hosts (database hub pages): the table view flexes to the host's
+   * remaining height — rows scroll between the sticky header and the add-row
+   * strip pinned at the bottom of the screen. Embedded blocks keep their
+   * natural height (600px scroll cap).
+   */
+  fillHeight?: boolean;
+  /**
+   * Block-level "hide title" flag. Edit mode keeps the toolbar row (settings
+   * ⋯ and mobile filter/sort buttons) without the name; view mode drops the
+   * whole row.
+   */
+  hideTitle?: boolean;
+  mode: "view" | "edit";
+  /** Persists the settings menu's "Hide title" toggle onto the block. */
+  onHideTitleChange?: (hideTitle: boolean) => void;
+  /**
+   * Persists a view switch onto the hosting block (`props.viewId`) — the
+   * active view is per BLOCK, like Notion linked views. Absent in view mode
+   * (published pages can't write block props): switching falls back to
+   * ephemeral local state.
+   */
+  onViewIdChange?: (viewId: string) => void;
+  /** Block-level saved-view pick; unset or stale ids fall back to the first view. */
+  viewId?: string;
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-border border-dashed px-4 py-8 text-center text-muted-foreground text-sm">
+      <span>{message}</span>
+    </div>
+  );
+}
+
+/**
+ * Refresh cadence for clock-dependent display: `relative`-format date
+ * columns and relative filter windows.
+ */
+const DISPLAY_CLOCK_REFRESH_MS = 60_000;
+
+/** Stable empty fields identity for databases that haven't loaded yet. */
+const NO_FIELDS: DatabaseField[] = [];
+
+/** Whether any of the given (visible) date fields displays relatively. */
+function hasRelativeDateField(fields: readonly DatabaseField[]): boolean {
+  return fields.some(
+    (field) => field.type === "date" && field.format === "relative"
+  );
+}
+
+/**
+ * The visible clock behind time-dependent DISPLAY and FILTERING of stored
+ * cells: ticks every minute while any visible date column uses the
+ * `relative` format ("3 days ago" must not go stale on screen), the active
+ * view's filter contains a relative date operator (`pastDay`…`nextMonth`
+ * windows shift as time passes — `applyFilter` re-runs on the tick), OR the
+ * view's advanced filter is volatile (`advancedVolatile` — a `now()`/
+ * `today()` formula filter must re-run the same way). Volatile
+ * (`now()`/`today()`) FORMULA COLUMNS no longer tick here — the formula
+ * engine owns its own 60s pass and pushes a fresh overlay snapshot. Pauses
+ * entirely while the tab is hidden (refreshing immediately when it becomes
+ * visible again). Non-clock-dependent schemas keep the mount-time instant —
+ * their renders never read the clock.
+ */
+function useDisplayClock(
+  visibleFields: readonly DatabaseField[],
+  filter: DatabaseFilterGroup | undefined,
+  advancedVolatile: boolean
+): Date {
+  const ticking = useMemo(
+    () =>
+      hasRelativeDateField(visibleFields) ||
+      filterHasRelativeOperator(filter) ||
+      advancedVolatile,
+    [visibleFields, filter, advancedVolatile]
+  );
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!ticking) {
+      return;
+    }
+    let intervalId: number | undefined;
+    const stop = () => {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    };
+    const start = () => {
+      if (intervalId === undefined) {
+        intervalId = window.setInterval(() => {
+          setNow(new Date());
+        }, DISPLAY_CLOCK_REFRESH_MS);
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        setNow(new Date());
+        start();
+      }
+    };
+    if (!document.hidden) {
+      start();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [ticking]);
+
+  return now;
+}
+
+interface HiddenRowsNoticeProps {
+  /** Total (unfiltered) row count for the database. */
+  allRowCount: number;
+  databaseId: string;
+  /** Whether the filter chip bar already shows (hides the reveal action). */
+  filterBarVisible: boolean;
+  /** Post-hidden-filter group buckets (`null` for ungrouped views). */
+  groups: DatabaseRowGroup[] | null;
+  mode: "view" | "edit";
+  onShowFilterBar: () => void;
+  /** Filtered + sorted rows for the active view. */
+  rows: readonly LocalDatabaseRow[];
+  view: DatabaseView;
+}
+
+/**
+ * Linear-style bottom notice when view options hide rows (edit mode,
+ * table/list views): a muted count plus direct actions — reveal the filter
+ * chip bar, clear hidden options (undoable), or clear `hiddenGroupKeys`.
+ */
+function HiddenRowsNotice({
+  allRowCount,
+  databaseId,
+  filterBarVisible,
+  groups,
+  mode,
+  onShowFilterBar,
+  rows,
+  view,
+}: HiddenRowsNoticeProps): ReactNode {
+  if (mode !== "edit" || !(view.type === "table" || view.type === "list")) {
+    return null;
+  }
+  const hiddenByFilter = allRowCount - rows.length;
+  const hiddenGroupRowCount =
+    groups === null
+      ? 0
+      : rows.length -
+        groups.reduce((count, group) => count + group.rows.length, 0);
+  const total = hiddenByFilter + hiddenGroupRowCount;
+  if (total === 0) {
+    return null;
+  }
+
+  const clearHiddenViewOptions = () => {
+    recordDatabaseViewEditHistory(databaseId, view);
+    const patch: Partial<Omit<DatabaseView, "id">> = {};
+    if (hiddenByFilter > 0) {
+      // `hiddenByFilter` counts rows hidden by EITHER filter kind (`rows`
+      // arrives post-structured-and-advanced), so Clear drops both.
+      patch.filter = undefined;
+      patch.advancedFilter = undefined;
+    }
+    if (hiddenGroupRowCount > 0) {
+      patch.config = { ...view.config, hiddenGroupKeys: undefined };
+    }
+    updateDatabaseView(databaseId, view.id, patch);
+  };
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-muted-foreground/70 text-xs">
+      <span className="pl-2">
+        {total === 1 ? "1 row" : `${total} rows`} hidden by view options
+      </span>
+      {hiddenByFilter > 0 && !filterBarVisible ? (
+        <Button
+          className="h-5 px-1.5 text-muted-foreground text-xs"
+          onClick={onShowFilterBar}
+          size="xs"
+          variant="ghost"
+        >
+          Show filters
+        </Button>
+      ) : null}
+      {hiddenGroupRowCount > 0 ? (
+        <Button
+          className="h-5 px-1.5 text-muted-foreground text-xs"
+          onClick={() => {
+            updateDatabaseView(databaseId, view.id, {
+              config: { ...view.config, hiddenGroupKeys: undefined },
+            });
+          }}
+          size="xs"
+          variant="ghost"
+        >
+          Show hidden groups
+        </Button>
+      ) : null}
+      <Button
+        className="ml-auto h-5 px-1.5 text-muted-foreground text-xs"
+        onClick={clearHiddenViewOptions}
+        size="xs"
+        variant="ghost"
+      >
+        Clear
+      </Button>
+    </div>
+  );
+}
+
+/** Inline filter/sort chip bar visibility (title icons toggle the whole bar). */
+function resolveInlineFilterBarState(
+  view: DatabaseView,
+  mode: "view" | "edit",
+  filterBarVisible: boolean
+): {
+  hasFilters: boolean;
+  hasSortsOrGrouping: boolean;
+  showInlineFilterBar: boolean;
+} {
+  const hasFilters =
+    (view.filter?.conditions.length ?? 0) > 0 ||
+    view.advancedFilter !== undefined;
+  const hasSorts = (view.sorts?.length ?? 0) > 0;
+  const hasGrouping = view.groupBy !== undefined;
+  const hasSortsOrGrouping = hasSorts || hasGrouping;
+  const hasBarContent = hasFilters || hasSortsOrGrouping;
+  return {
+    hasFilters,
+    hasSortsOrGrouping,
+    showInlineFilterBar: mode === "edit" && filterBarVisible && hasBarContent,
+  };
+}
+
+/**
+ * Entry for one workspace database surface: resolves the definition and rows
+ * via live queries, resolves the ACTIVE view (`block.viewId`, falling back to
+ * the first view for unset/stale ids), applies that view's filter/sorts, and
+ * renders the per-type view body — the virtualized table grid, or the
+ * list/board/chart/map renderers — under the shared title row + view switcher.
+ */
+export function DatabaseTableView({
+  canvasRowId,
+  databaseId,
+  fillHeight = false,
+  hideTitle = false,
+  mode,
+  onHideTitleChange,
+  onViewIdChange,
+  viewId,
+}: DatabaseTableViewProps): ReactNode {
+  const database = useDatabase(databaseId);
+  const allRows = useDatabaseRows(databaseId);
+  // Ephemeral fallback for surfaces that can't persist the pick (view mode
+  // has no block-prop write path); when `onViewIdChange` exists the block
+  // prop is the single source of truth and local state stays unused.
+  const [ephemeralViewId, setEphemeralViewId] = useState<string | undefined>();
+  const [filterBarVisible, setFilterBarVisible] = useState(true);
+  const requestedViewId = onViewIdChange ? viewId : (ephemeralViewId ?? viewId);
+  const view =
+    database?.views.find((candidate) => candidate.id === requestedViewId) ??
+    database?.views[0];
+
+  const handleViewIdChange = useCallback(
+    (nextViewId: string) => {
+      setFilterBarVisible(true);
+      if (onViewIdChange) {
+        onViewIdChange(nextViewId);
+      } else {
+        setEphemeralViewId(nextViewId);
+      }
+    },
+    [onViewIdChange]
+  );
+
+  const fields = database?.fields ?? NO_FIELDS;
+
+  const columns = useMemo(
+    () => (database && view ? resolveColumnOrder(database.fields, view) : []),
+    [database, view]
+  );
+
+  const userFunctions = useFormulaUserFunctions();
+  const advancedVolatile = useMemo(
+    () => advancedFilterIsVolatile(view?.advancedFilter, userFunctions),
+    [view, userFunctions]
+  );
+  const clockNow = useDisplayClock(columns, view?.filter, advancedVolatile);
+
+  // Watch mode: while ANY view of a synced database is mounted (edit mode
+  // and published view mode alike), the sync engine polls at the connector's
+  // floor so the table changes in near-real-time on screen. Ref-counted with
+  // cleanup on unmount; a no-op for local databases.
+  const isSyncedDatabase = database?.source?.kind === "connector";
+  const isLiveMarkets =
+    database?.source?.kind === "connector" &&
+    database.source.connectorId === "live-markets";
+  useEffect(() => {
+    if (!isSyncedDatabase) {
+      return;
+    }
+    return watchDatabaseSync(databaseId);
+  }, [databaseId, isSyncedDatabase]);
+
+  // Formula overlay, engine-served: computed values merged into row COPIES
+  // so formulas ride the whole existing pipeline — filter, sort, group,
+  // Calculate row, and the grid's cells all read merged values. The overlay
+  // reference is stable per database and replaced by the engine whenever any
+  // input changes — including edits to OTHER databases this one's formulas
+  // traverse into (rollups react; the old per-view recompute couldn't see
+  // those) and the engine's own volatile 60s tick.
+  const formulaOverlay = useFormulaOverlay(databaseId);
+  const formulaRows = useMemo<LocalDatabaseRow[]>(
+    () => withFormulaValues(allRows, formulaOverlay),
+    [allRows, formulaOverlay]
+  );
+
+  // Stocks and Crypto: ensure 24h price coverage, then overlay series Change +
+  // Float × Price Market cap (after formulas so derived synced columns win).
+  const { rows: mergedRows } = useLiveMarketsDerivedRows(
+    database,
+    fields,
+    formulaRows
+  );
+
+  const rows = useMemo<LocalDatabaseRow[]>(() => {
+    if (!(database && view)) {
+      return [];
+    }
+    // `clockNow` in the deps keeps relative-window filters live: each display
+    // clock tick recomputes the filter against the fresh instant.
+    const now = () => clockNow;
+    const filtered = applyFilter(mergedRows, database.fields, view.filter, {
+      now,
+    });
+    // The advanced filter runs over the structured filter's survivors (rows
+    // must pass BOTH). Formula-field references read the engine's overlay —
+    // never re-evaluated — while relation rollups and `db()` references get
+    // a fresh resolver per compute pass (formula-relations.ts contract).
+    const advanced =
+      view.advancedFilter === undefined
+        ? filtered
+        : applyAdvancedFilter(filtered, view.advancedFilter, {
+            fields: database.fields,
+            now,
+            overlay: formulaOverlay,
+            relations: localFormulaRelationResolver({ now }),
+            userFunctions,
+          });
+    return sortRowsForView(advanced, database.fields, view);
+  }, [mergedRows, database, view, clockNow, formulaOverlay, userFunctions]);
+
+  // Row buckets for grouped TABLE views (the grid is the only consumer —
+  // list/board/chart bodies bucket their own data or render flat), built
+  // AFTER filter + sort so buckets preserve the view's row order; `null`
+  // keeps the grid ungrouped (also the fallback for stale/formula group-by
+  // fields). User-hidden buckets (`config.hiddenGroupKeys`, written by the
+  // group header context menu) drop out here — recovery lives in that menu,
+  // the Group submenu, and the hidden-rows notice. Non-table views must stay
+  // `null` or the notice would count "hidden" rows the body still renders.
+  const groups = useMemo<DatabaseRowGroup[] | null>(() => {
+    if (
+      !(
+        database &&
+        view &&
+        view.type === "table" &&
+        resolveGroupByField(database.fields, view)
+      )
+    ) {
+      return null;
+    }
+    const buckets = groupRowsForView(rows, database.fields, view);
+    const hiddenKeys = view.config.hiddenGroupKeys;
+    if (!hiddenKeys || hiddenKeys.length === 0) {
+      return buckets;
+    }
+    return buckets.filter((bucket) => !hiddenKeys.includes(bucket.key));
+  }, [database, rows, view]);
+
+  const pinnedFields = useMemo(
+    () => (database && view ? resolvePinnedFields(database.fields, view) : []),
+    [database, view]
+  );
+
+  // Chart dataset, computed once for chart views and threaded to the settings
+  // menu's "Chart" submenu (its per-series/slice color rows need the resolved
+  // series/category keys) so the config matches what the chart renders.
+  const chartData = useMemo(
+    () =>
+      database && view?.type === "chart"
+        ? buildChartData(database.fields, rows, view.config.chart ?? {})
+        : undefined,
+    [database, view, rows]
+  );
+
+  if (!database) {
+    // Cascade delete removes referencing blocks; a dangling id (legacy orphan
+    // or mid-cascade race) renders nothing rather than a dead-end empty state.
+    return null;
+  }
+  if (!view) {
+    return <EmptyState message="No views" />;
+  }
+
+  // View mode with a hidden title has no controls left, so the whole row
+  // disappears; edit mode keeps the collapsed row as the toolbar's home.
+  const showTitleRow = mode === "edit" || !hideTitle;
+
+  const { hasFilters, hasSortsOrGrouping, showInlineFilterBar } =
+    resolveInlineFilterBarState(view, mode, filterBarVisible);
+
+  return (
+    <div
+      className={cn(
+        "flex w-full min-w-0 flex-col gap-2",
+        fillHeight && "min-h-0 flex-1"
+      )}
+    >
+      {showTitleRow ? (
+        <DatabaseTitle
+          activeView={view}
+          alwaysShowTools={fillHeight}
+          chartData={chartData}
+          controls={
+            mode === "edit" ? (
+              <DatabaseMobileToolbar
+                databaseId={databaseId}
+                fields={database.fields}
+                filterBarVisible={filterBarVisible}
+                onFilterBarVisibleChange={setFilterBarVisible}
+                view={view}
+              />
+            ) : null
+          }
+          database={database}
+          hideTitle={hideTitle}
+          mode={mode}
+          onHideTitleChange={onHideTitleChange}
+          onViewIdChange={handleViewIdChange}
+          totalRowCount={allRows.length}
+          viewSwitcher={
+            <DatabaseViewSwitcher
+              activeViewId={view.id}
+              databaseId={databaseId}
+              mode={mode}
+              onViewIdChange={handleViewIdChange}
+              views={database.views}
+            />
+          }
+        />
+      ) : null}
+      {showInlineFilterBar ? (
+        <DatabaseFilterBar
+          databaseId={databaseId}
+          fields={database.fields}
+          showFilterAddTrigger={hasFilters}
+          showFilterChips={hasFilters}
+          showSortAddTrigger={hasSortsOrGrouping}
+          view={view}
+        />
+      ) : null}
+      <DatabaseViewBody
+        canvasRowId={canvasRowId}
+        clockNow={clockNow}
+        columns={columns}
+        database={database}
+        databaseId={databaseId}
+        fillHeight={fillHeight}
+        groups={groups}
+        isLiveMarkets={isLiveMarkets}
+        isSyncedDatabase={isSyncedDatabase}
+        mode={mode}
+        pinnedFields={pinnedFields}
+        rows={rows}
+        view={view}
+      />
+      <HiddenRowsNotice
+        allRowCount={allRows.length}
+        databaseId={databaseId}
+        filterBarVisible={filterBarVisible}
+        groups={groups}
+        mode={mode}
+        onShowFilterBar={() => {
+          setFilterBarVisible(true);
+        }}
+        rows={rows}
+        view={view}
+      />
+    </div>
+  );
+}
