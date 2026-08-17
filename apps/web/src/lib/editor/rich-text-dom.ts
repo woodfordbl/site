@@ -326,13 +326,11 @@ export function applyInlineFormulaValues(
     } else {
       element.removeAttribute("data-formula-empty");
     }
-    // No `title` here, for the same reason `createInlineFormulaToken` sets
-    // none: this is the EDITABLE field, where `InlineFormulaTokenTooltip`
-    // already shows the expression and what a click does. Stamping one on
-    // every value pass put a second, slower, OS-chrome copy of that hint
-    // underneath the real one. The read-only renderer
-    // (`components/editor/rich-text.tsx`) still carries a `title` — no
-    // delegated tooltip runs there, so it is the only hint a reader gets.
+    // No `title`, for the reason `createInlineFormulaToken` sets none: in an
+    // EDITABLE field `InlineFormulaTokenTooltip` owns the hint, and stamping
+    // one per value pass put a second, OS-chrome copy underneath it. The
+    // read-only renderer (`editor/rich-text.tsx`) keeps its `title` — no
+    // delegated tooltip runs there.
     element.removeAttribute("title");
   }
 }

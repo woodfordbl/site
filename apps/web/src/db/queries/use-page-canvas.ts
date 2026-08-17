@@ -31,8 +31,8 @@ import {
   updatePageBlockInTx,
   upsertPageBlock,
 } from "@/db/queries/block-collection-ops.ts";
+import { seedLocalPageMeta } from "@/db/queries/seed-local-page-meta.ts";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
-import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import {
   buildBlockTree,
   type CanvasRow,
@@ -241,26 +241,10 @@ export function usePageCanvas(
     return reconciled;
   }, [activeBlocks]);
 
-  /**
-   * Has this page been materialized into the local collections yet? Answered
-   * live rather than from the render snapshot: the first edit of a pristine
-   * shipped page seeds the page row mid-tick, and a second dispatch before
-   * React re-renders would otherwise still read "no" and seed the whole page
-   * again — an insert of ids that already exist, which throws and drops the
-   * edit.
-   */
-  const canPersistToCollection = useCallback(
-    () =>
-      hasSeededBlocks || localPage != null || localPagesCollection.has(pageId),
-    [hasSeededBlocks, localPage, pageId]
-  );
-
-  // Read the collection, not `existingLocalBlocks`: that array is a live-query
-  // render snapshot, so a row inserted by an earlier dispatch in this same tick
-  // is still missing from it. Callers use the answer to pick insert vs update —
-  // a stale "false" makes the write an insert of an id that already exists,
-  // which throws and drops the edit. That is why "add block -> Database"
-  // (mobile + / turn-into, and any two-dispatch flow) appeared to do nothing.
+  // Same trap: `existingLocalBlocks` is a render snapshot missing a row an
+  // earlier dispatch inserted this tick. Callers pick insert vs update from
+  // this, and a stale "false" inserts an id that already exists — which is why
+  // any two-dispatch flow (insert-then-convert) appeared to do nothing.
   const blockExistsInCollection = useCallback(
     (blockId: string): boolean =>
       localBlocksCollection.has(blockId) &&
@@ -270,30 +254,19 @@ export function usePageCanvas(
 
   const ensurePageMeta = useCallback(
     (blockOrder?: string[]) => {
-      // `localPage` can be stale under StrictMode double-mounted effects (two
-      // mounts both capture null and both insert — crashing a fresh profile's
-      // first visit), so also consult the collection's live state.
-      if (localPage || localPagesCollection.has(pageId)) {
-        return;
-      }
-
-      const timestamp = new Date().toISOString();
-      localPagesCollection.insert({
-        id: pageId,
-        slug: serverPage.slug,
-        title: serverPage.title,
-        icon: serverPage.icon,
-        parentId: serverPage.parentId,
-        sidebarOrder: serverPage.sidebarOrder,
+      seedLocalPageMeta({
         blockOrder,
+        blocks: serverPage.blocks,
+        hasLocalPage: localPage != null,
+        icon: serverPage.icon,
+        pageId,
+        parentId: serverPage.parentId,
         serverBaselineHash,
         serverMetadataBaseline,
-        createdAt: timestamp,
-        updatedAt: timestamp,
+        sidebarOrder: serverPage.sidebarOrder,
+        slug: serverPage.slug,
+        title: serverPage.title,
       });
-      // The seeded shard holds post-edit blocks; the conflict baseline is the
-      // pristine server content this overlay diverged from.
-      capturePageBaseline(pageId, serverPage.blocks, serverBaselineHash);
     },
     [
       localPage,
@@ -344,8 +317,7 @@ export function usePageCanvas(
           (item) => item.id === options.singleBlockId
         );
         if (block) {
-          // Same snapshot-staleness trap as `blockExistsInCollection` — ask
-          // the collection so the upsert never picks insert for a live row.
+          // Ask the collection, never the snapshot (see above).
           upsertPageBlock(pageId, block, blockExistsInCollection(block.id));
           getSession().updateBlock(block.id, block);
         }
@@ -419,9 +391,13 @@ export function usePageCanvas(
       transactionDeletedIdsRef.current = new Set();
       inBlockTransactionRef.current = true;
 
-      // Snapshot once: the `finally` branch below must match the decision made
-      // here, even though `run()` can seed the page in between.
-      const persistsToCollection = canPersistToCollection();
+      // Read live and once. `run()` can seed the page mid-tick, so a render
+      // snapshot would say "no" a second time and re-seed — inserting ids that
+      // already exist — and the `finally` below must match this same decision.
+      const persistsToCollection =
+        hasSeededBlocks ||
+        localPage != null ||
+        localPagesCollection.has(pageId);
 
       if (persistsToCollection) {
         collectionTxRef.current = beginPageBlockTransaction(
@@ -487,10 +463,11 @@ export function usePageCanvas(
       }
     },
     [
-      canPersistToCollection,
       createBlankBlock,
       ensurePageMeta,
       getSession,
+      hasSeededBlocks,
+      localPage,
       pageId,
     ]
   );
