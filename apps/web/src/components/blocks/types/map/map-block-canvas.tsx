@@ -22,6 +22,9 @@ ensureLocalMaplibreWorker();
  */
 
 export interface MapBlockCanvasProps {
+  /** Expanded state of the host frame, which is what actually morphs. */
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   /** Edit mode: clicking the map drops/moves the pin. */
   onPickCoordinate?: (coordinate: { lat: number; lng: number }) => void;
   props: MapProps;
@@ -56,6 +59,8 @@ function ClickToPlace({
 }
 
 export function MapBlockCanvas({
+  expanded,
+  onExpandedChange,
   onPickCoordinate,
   props,
   theme,
@@ -63,8 +68,16 @@ export function MapBlockCanvas({
   const markers = props.markers ?? [];
 
   return (
-    <Map center={props.center} theme={theme} zoom={props.zoom}>
-      <MapOverlayControls showFullscreen />
+    <Map
+      attributionControl={false}
+      center={props.center}
+      theme={theme}
+      zoom={props.zoom}
+    >
+      <MapOverlayControls
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
+      />
       {onPickCoordinate ? <ClickToPlace onPick={onPickCoordinate} /> : null}
       {markers.map((marker) => (
         <MapMarker

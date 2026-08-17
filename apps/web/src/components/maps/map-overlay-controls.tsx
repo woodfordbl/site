@@ -6,7 +6,7 @@ import {
   IconMinus,
   IconPlus,
 } from "@tabler/icons-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect } from "react";
 
 import { Button } from "@/components/ui/button.tsx";
 import { ButtonGroup } from "@/components/ui/button-group.tsx";
@@ -29,6 +29,7 @@ import {
  * over a map competes with the data drawn underneath it.
  *
  * Must render inside `<Map>`; it drives the camera through mapcn's `useMap`.
+ * Expanding is the host frame's job (`map-expand.tsx`) — this only asks for it.
  */
 
 /** Matches mapcn's own zoom step and easing, so the motion is unchanged. */
@@ -65,23 +66,30 @@ function ControlButton({
 }
 
 export interface MapOverlayControlsProps {
-  /** Offer fullscreen. Off for maps whose frame is already the whole point. */
-  showFullscreen?: boolean;
+  /** Current expanded state, when the host frame offers expanding. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export function MapOverlayControls({
-  showFullscreen = false,
+  expanded,
+  onExpandedChange,
 }: MapOverlayControlsProps): ReactNode {
   const { map } = useMap();
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // The document owns fullscreen state — Escape and the browser's own chrome
-  // can leave it without going through this button.
+  // The container changes size continuously while the frame morphs (and again
+  // whenever the sidebar or the window moves), and MapLibre only watches the
+  // window. Without this the canvas keeps its old size until something else
+  // triggers a resize, so an expanded map draws into a letterboxed corner.
   useEffect(() => {
-    const sync = () => setIsFullscreen(document.fullscreenElement !== null);
-    document.addEventListener("fullscreenchange", sync);
-    return () => document.removeEventListener("fullscreenchange", sync);
-  }, []);
+    const container = map?.getContainer();
+    if (!(container && typeof ResizeObserver !== "undefined")) {
+      return;
+    }
+    const observer = new ResizeObserver(() => map?.resize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [map]);
 
   const zoomBy = useCallback(
     (delta: number) => {
@@ -89,18 +97,6 @@ export function MapOverlayControls({
     },
     [map]
   );
-
-  const toggleFullscreen = useCallback(() => {
-    const container = map?.getContainer();
-    if (!container) {
-      return;
-    }
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => undefined);
-      return;
-    }
-    container.requestFullscreen().catch(() => undefined);
-  }, [map]);
 
   return (
     <TooltipProvider delay={400}>
@@ -116,12 +112,12 @@ export function MapOverlayControls({
         <ControlButton label="Zoom out" onClick={() => zoomBy(-ZOOM_STEP)}>
           <IconMinus />
         </ControlButton>
-        {showFullscreen ? (
+        {onExpandedChange ? (
           <ControlButton
-            label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            onClick={toggleFullscreen}
+            label={expanded ? "Close expanded map" : "Expand map"}
+            onClick={() => onExpandedChange(!expanded)}
           >
-            {isFullscreen ? <IconArrowsMinimize /> : <IconArrowsMaximize />}
+            {expanded ? <IconArrowsMinimize /> : <IconArrowsMaximize />}
           </ControlButton>
         ) : null}
       </ButtonGroup>

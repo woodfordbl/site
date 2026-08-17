@@ -13,6 +13,8 @@ import {
   MapMarkerCard,
   MapRegionCard,
 } from "@/components/database/views/database-map-tooltip.tsx";
+import { MapAttribution } from "@/components/maps/map-attribution.tsx";
+import { MapExpandFrame } from "@/components/maps/map-expand.tsx";
 import { MapOverlayControls } from "@/components/maps/map-overlay-controls.tsx";
 import {
   Map,
@@ -22,6 +24,7 @@ import {
   MarkerContent,
   MarkerTooltip,
 } from "@/components/ui/map.tsx";
+import { MorphMotionProvider } from "@/components/ui/morph-motion.tsx";
 import { cssColorToRgb } from "@/lib/charts/dither-texture.ts";
 import type {
   MapBounds,
@@ -125,26 +128,34 @@ function usePaletteColors(count: number): {
 function MapFrame({
   children,
   className,
+  expanded,
+  onExpandedChange,
   scopeRef,
 }: {
   children: ReactNode;
   className: string;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   scopeRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <div
-      className={cn(
-        "relative w-full overflow-hidden rounded-lg border border-border",
-        className
-      )}
-      // MapLibre reads its own drags; the page canvas must not claim them.
-      data-canvas-pointer-surface=""
-      // Reveals the overlay controls, like the page cover's toolbar.
-      data-reveal-group=""
-      ref={scopeRef}
-    >
-      {children}
-    </div>
+    <MorphMotionProvider>
+      <MapExpandFrame
+        collapsedClassName={cn("w-full", className)}
+        expanded={expanded}
+        frameProps={{
+          // MapLibre reads its own drags; the page canvas must not claim them.
+          "data-canvas-pointer-surface": "",
+          // Reveals the overlay controls, like the page cover's toolbar.
+          "data-reveal-group": "",
+        }}
+        label="Map"
+        onExpandedChange={onExpandedChange}
+        ref={scopeRef}
+      >
+        {children}
+      </MapExpandFrame>
+    </MorphMotionProvider>
   );
 }
 
@@ -204,6 +215,7 @@ export function DatabaseMapPointsCanvas({
 }: DatabaseMapPointsCanvasProps): ReactNode {
   const { colors, scopeRef } = usePaletteColors(MAP_REGION_BUCKET_COUNT);
   const accent = colors[0] ?? FALLBACK_ACCENT;
+  const [expanded, setExpanded] = useState(false);
 
   const clusterData: FeatureCollection<Point, { rowId: string }> = {
     features: points.map((point) => ({
@@ -222,9 +234,17 @@ export function DatabaseMapPointsCanvas({
   );
 
   return (
-    <MapFrame className={heightClass} scopeRef={scopeRef}>
-      <Map theme={theme} {...cameraProps(bounds)}>
-        <MapOverlayControls showFullscreen />
+    <MapFrame
+      className={heightClass}
+      expanded={expanded}
+      onExpandedChange={setExpanded}
+      scopeRef={scopeRef}
+    >
+      <Map attributionControl={false} theme={theme} {...cameraProps(bounds)}>
+        <MapOverlayControls
+          expanded={expanded}
+          onExpandedChange={setExpanded}
+        />
         {clustered ? (
           <MapClusterLayer
             clusterColors={[
@@ -272,6 +292,7 @@ export function DatabaseMapPointsCanvas({
           ))
         )}
       </Map>
+      <MapAttribution />
     </MapFrame>
   );
 }
@@ -338,6 +359,7 @@ export function DatabaseMapRegionCanvas({
 }: DatabaseMapRegionCanvasProps): ReactNode {
   const { colors, scopeRef } = usePaletteColors(1);
   const base = colors[0] ?? FALLBACK_ACCENT;
+  const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState<HoveredRegion | null>(null);
 
   // Plain records, not `new Map(...)`: mapcn's component is named `Map`, so
@@ -413,7 +435,12 @@ export function DatabaseMapRegionCanvas({
   );
 
   return (
-    <MapFrame className={heightClass} scopeRef={scopeRef}>
+    <MapFrame
+      className={heightClass}
+      expanded={expanded}
+      onExpandedChange={setExpanded}
+      scopeRef={scopeRef}
+    >
       <Map blank center={WORLD_CENTER} theme={theme} zoom={WORLD_ZOOM}>
         <MapGeoJSON
           data={sourceUrl}
@@ -428,7 +455,10 @@ export function DatabaseMapRegionCanvas({
           onHover={showTooltip ? (handleHover as never) : undefined}
           promoteId={joinProperty}
         />
-        <MapOverlayControls />
+        <MapOverlayControls
+          expanded={expanded}
+          onExpandedChange={setExpanded}
+        />
       </Map>
       {hovered ? (
         <MapRegionCard

@@ -5,6 +5,9 @@ import {
   useMapBlockPlace,
 } from "@/components/blocks/types/map/use-map-block-place.ts";
 import { useSiteAppearance } from "@/components/layout/theme-provider.tsx";
+import { MapAttribution } from "@/components/maps/map-attribution.tsx";
+import { MapExpandFrame } from "@/components/maps/map-expand.tsx";
+import { MorphMotionProvider } from "@/components/ui/morph-motion.tsx";
 import type { MapProps } from "@/lib/schemas/block-props.ts";
 import { cn } from "@/lib/utils.ts";
 
@@ -46,24 +49,32 @@ export function useMapBlockCanvas(): MapBlockCanvasModule | null {
 export function MapBlockFrame({
   children,
   className,
+  expanded = false,
+  onExpandedChange,
 }: {
   children: ReactNode;
   className?: string;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   return (
-    <div
-      className={cn(
-        "w-full overflow-hidden rounded-lg border border-border",
-        MAP_BLOCK_HEIGHT_CLASS,
-        className
-      )}
-      // MapLibre reads its own drags; the page canvas must not claim them.
-      data-canvas-pointer-surface=""
-      // Reveals the overlay controls, like the page cover's toolbar.
-      data-reveal-group=""
-    >
-      {children}
-    </div>
+    <MorphMotionProvider>
+      <MapExpandFrame
+        className={className}
+        collapsedClassName={cn("w-full", MAP_BLOCK_HEIGHT_CLASS)}
+        expanded={expanded}
+        frameProps={{
+          // MapLibre reads its own drags; the page canvas must not claim them.
+          "data-canvas-pointer-surface": "",
+          // Reveals the overlay controls, like the page cover's toolbar.
+          "data-reveal-group": "",
+        }}
+        label="Map"
+        onExpandedChange={onExpandedChange ?? (() => undefined)}
+      >
+        {children}
+      </MapExpandFrame>
+    </MorphMotionProvider>
   );
 }
 
@@ -132,6 +143,7 @@ export function MapView({ className, onPickCoordinate, props }: MapViewProps) {
   const canvas = useMapBlockCanvas();
   const place = useMapBlockPlace(props);
   const notice = mapPlaceNotice(place);
+  const [expanded, setExpanded] = useState(false);
 
   if (notice) {
     return <MapBlockNotice className={className} {...notice} />;
@@ -146,12 +158,19 @@ export function MapView({ className, onPickCoordinate, props }: MapViewProps) {
   }
 
   return (
-    <MapBlockFrame className={className}>
+    <MapBlockFrame
+      className={className}
+      expanded={expanded}
+      onExpandedChange={setExpanded}
+    >
       <canvas.MapBlockCanvas
+        expanded={expanded}
+        onExpandedChange={setExpanded}
         onPickCoordinate={onPickCoordinate}
         props={place.props}
         theme={resolvedTheme === "dark" ? "dark" : "light"}
       />
+      <MapAttribution />
     </MapBlockFrame>
   );
 }

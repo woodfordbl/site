@@ -9,15 +9,9 @@ import {
   DialogPortal,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import { MORPH_TRANSITION } from "@/components/ui/morph-motion.tsx";
 import type { NaturalMediaSize } from "@/lib/dom/object-contain-bounds.ts";
 import type { MediaKind } from "@/lib/schemas/block-props.ts";
-
-/** Shared by the inline frame and the lightbox so open/close morphs match. */
-export const mediaMorphTransition = {
-  type: "spring",
-  stiffness: 380,
-  damping: 34,
-} as const;
 
 /**
  * Chrome (close button) enters only after the morph has visually settled —
@@ -88,7 +82,7 @@ export function MediaLightbox({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       initial={{ opacity: 0, scale: 0.97 }}
-                      transition={mediaMorphTransition}
+                      transition={MORPH_TRANSITION}
                     >
                       <MediaVideoPlayer
                         className={mediaClassName}
@@ -102,7 +96,7 @@ export function MediaLightbox({
                       height={naturalSize?.height}
                       layoutId={layoutId}
                       src={displayUrl}
-                      transition={mediaMorphTransition}
+                      transition={MORPH_TRANSITION}
                       width={naturalSize?.width}
                     />
                   )}
