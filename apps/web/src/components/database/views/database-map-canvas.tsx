@@ -127,6 +127,8 @@ function MapFrame({
         "relative w-full overflow-hidden rounded-lg border border-border",
         className
       )}
+      // MapLibre reads its own drags; the page canvas must not claim them.
+      data-canvas-pointer-surface=""
       ref={scopeRef}
     >
       {children}

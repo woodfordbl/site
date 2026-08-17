@@ -8,8 +8,16 @@ import { findRowById } from "@/lib/blocks/block-tree.ts";
 import { collectCanvasRowRects } from "@/lib/canvas/resolve-drop-target.ts";
 import { resolveOverclickRowFromPointer } from "@/lib/canvas/resolve-overclick-row.ts";
 
+/**
+ * Targets that must never be read as empty space. Besides the obvious
+ * controls, `[data-canvas-pointer-surface]` opts out any embedded surface that
+ * interprets drags itself — a map pans on mousedown-drag, and this handler runs
+ * in the capture phase, so claiming the press here (preventDefault +
+ * stopPropagation) leaves the surface frozen while its wheel and click
+ * handlers, bound separately, still appear to work.
+ */
 const INTERACTIVE_SELECTOR =
-  "input, textarea, [contenteditable], button, a, [role='button'], [data-canvas-row-select], [data-canvas-row-menu]";
+  "input, textarea, [contenteditable], button, a, [role='button'], [data-canvas-row-select], [data-canvas-row-menu], [data-canvas-pointer-surface]";
 
 /** True when `target` is inside a nested canvas row (list item, column child, etc.). */
 function isNestedRowShellTarget(

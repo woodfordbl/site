@@ -48,6 +48,8 @@ export function MapBlockFrame({
         MAP_BLOCK_HEIGHT_CLASS,
         className
       )}
+      // MapLibre reads its own drags; the page canvas must not claim them.
+      data-canvas-pointer-surface=""
     >
       {children}
     </div>
