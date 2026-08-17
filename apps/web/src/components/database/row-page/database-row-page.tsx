@@ -63,7 +63,13 @@ export function DatabaseRowPage({
   const seededRowRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!(database && row) || row.pageId || seededRowRef.current === row.id) {
+    // Gate on the page actually resolving, not merely on `row.pageId` being
+    // set: a row whose materialized page is gone (deleted, or a local reset
+    // that kept the databases) keeps a dangling id, and gating on the id alone
+    // left that row opening to a permanently blank page.
+    // `ensureDatabaseRowPage` already treats an unresolvable `pageId` as
+    // "create one", and `seededRowRef` still holds this to one attempt per open.
+    if (!(database && row) || linkedPage || seededRowRef.current === row.id) {
       return;
     }
 
@@ -77,7 +83,7 @@ export function DatabaseRowPage({
     }).catch(() => {
       seededRowRef.current = null;
     });
-  }, [database, dispatch, pages, row]);
+  }, [database, dispatch, linkedPage, pages, row]);
 
   if (!(databasesReady && rowsReady)) {
     return <SiteShell>{null}</SiteShell>;
