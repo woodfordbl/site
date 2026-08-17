@@ -147,6 +147,21 @@ export function resolutionForWindow(windowMs: number): HistoryResolution {
   return presetForWindow(windowMs).resolution;
 }
 
+/**
+ * The cadence a window's backfill lands on.
+ *
+ * Closure detection needs this as a floor rather than trusting the sample
+ * spacing it can see. The field-history store keeps a far finer local capture
+ * for the last hour (15s) than the candles behind it, so a merged series
+ * carries two cadences and its *median* gap collapses onto the fine one — at
+ * which point every ordinary candle-to-candle step looks like a market
+ * closure, and an intraday chart fills with seams over an axis that has
+ * compressed away most of its own day.
+ */
+export function windowSampleSpacingMs(windowMs: number): number {
+  return resolutionSpacingMs(resolutionForWindow(windowMs));
+}
+
 /** Approximate ms per candle for a resolution (backfill spacing / dedupe). */
 export function resolutionSpacingMs(resolution: HistoryResolution): number {
   switch (resolution) {

@@ -63,6 +63,49 @@ describe("detectClosedPeriods", () => {
   it("ignores non-finite timestamps", () => {
     expect(detectClosedPeriods([Number.NaN, Number.NaN])).toEqual([]);
   });
+
+  /**
+   * One trading day of 5-minute candles with the last hour re-sampled at 15s,
+   * which is the shape the field-history store hands back for an intraday
+   * window: coarse backfill under a much finer live capture.
+   */
+  function mixedCadenceSession(): number[] {
+    const open = Date.UTC(2026, 5, 5, 13, 30);
+    const candles = Array.from(
+      { length: 66 },
+      (_unused, i) => open + i * 5 * MINUTE
+    );
+    const live = Array.from(
+      { length: 240 },
+      (_unused, i) => open + 5.5 * HOUR + i * 15_000
+    );
+    return [...candles, ...live];
+  }
+
+  it("reads a two-cadence series as closed everywhere without a spacing floor", () => {
+    // The fine tail outnumbers the coarse candles, so the median gap is 15s and
+    // every 5-minute step clears the threshold. This is the bug the floor
+    // exists for, pinned so the floor's value is visible.
+    expect(detectClosedPeriods(mixedCadenceSession()).length).toBeGreaterThan(
+      50
+    );
+  });
+
+  it("finds no closure in a two-cadence session given its coarse spacing", () => {
+    expect(
+      detectClosedPeriods(mixedCadenceSession(), { minSpacingMs: 5 * MINUTE })
+    ).toEqual([]);
+  });
+
+  it("still finds a real break once the floor is applied", () => {
+    // Same session, but an hour of the middle is missing.
+    const samples = mixedCadenceSession().filter((t) => {
+      const offset = t - Date.UTC(2026, 5, 5, 13, 30);
+      return offset < 2 * HOUR || offset > 3 * HOUR;
+    });
+    const closed = detectClosedPeriods(samples, { minSpacingMs: 5 * MINUTE });
+    expect(closed).toHaveLength(1);
+  });
 });
 
 describe("sessionTimeScale", () => {
@@ -153,6 +196,31 @@ describe("sessionTimeScale", () => {
     for (const tick of ticks) {
       expect(tick % step).toBe(0);
     }
+  });
+
+  it("ticks an intraday span in hours rather than in thirds of a day", () => {
+    // A 10-hour session asking for 8 ticks wants one every 75 minutes. Rounding
+    // that up the ladder lands on 3h and leaves 3 labels across the whole day.
+    const open = Date.UTC(2026, 5, 5, 13);
+    const intraday = sessionTimeScale([open, open + 10 * HOUR]).range([0, 100]);
+    const ticks = intraday.ticks(8);
+    expect(ticks[1] - ticks[0]).toBe(HOUR);
+    expect(ticks.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("drops to quarter-hours on a session too short for hourly ticks", () => {
+    const open = Date.UTC(2026, 5, 5, 13);
+    const short = sessionTimeScale([open, open + 2 * HOUR]).range([0, 100]);
+    expect(short.ticks(8)[1] - short.ticks(8)[0]).toBe(15 * MINUTE);
+  });
+
+  it("keeps a month-long span on daily-or-coarser ticks", () => {
+    // The finer choice must not run away at the long end: 8 ticks over 30 days
+    // is a weekly step, not a daily one.
+    const start = Date.UTC(2026, 5, 1);
+    const month = sessionTimeScale([start, start + 30 * DAY]).range([0, 100]);
+    const ticks = month.ticks(8);
+    expect(ticks[1] - ticks[0]).toBe(7 * DAY);
   });
 
   it("copies to an independent scale", () => {

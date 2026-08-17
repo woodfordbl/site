@@ -68,6 +68,8 @@ const MOVETO = /M/g;
 /** Curve commands, which only appear when the mark interpolates between samples. */
 const CURVE_COMMAND = /[CSQ]/;
 const LINETO = /L/;
+/** An axis label that reads as a clock time, e.g. `9:30 AM`. */
+const CLOCK_LABEL = /^\d{1,2}:\d{2}\s?(AM|PM)$/;
 
 const database: LocalDatabase = {
   id: "db-1",
@@ -247,6 +249,47 @@ describe("DatabaseTimeSeriesChart", () => {
       expect(d).not.toMatch(CURVE_COMMAND);
       expect(d).toMatch(LINETO);
     }
+  });
+
+  it("keeps an intraday day-window session free of seams and on a clock axis", () => {
+    // The shape the history store hands back for a day window: 5-minute candles
+    // across the session with the last half hour re-sampled at 15s. The fine
+    // tail outnumbers the candles, so nothing but the window's own resolution
+    // stops every candle step from reading as a market closure.
+    const open = Date.UTC(2026, 5, 5, 13, 30);
+    const minute = 60_000;
+    const points = [
+      ...Array.from({ length: 66 }, (_unused, index) => ({
+        t: open + index * 5 * minute,
+        v: 100 + index * 0.1,
+      })),
+      ...Array.from({ length: 120 }, (_unused, index) => ({
+        t: open + 5.5 * 60 * minute + index * 15_000,
+        v: 106 + index * 0.01,
+      })),
+    ];
+    loadResult.current = {
+      data: {
+        from: open,
+        to: points.at(-1)?.t ?? open,
+        series: [{ key: "acme", label: "ACME", points }],
+      },
+      loading: false,
+    };
+    const { container } = renderTimeSeries({
+      ...TIME_CHART,
+      timeSeries: { ...TIME_CHART.timeSeries, windowMs: DAY },
+    });
+    // No closure inside a continuously-traded session.
+    expect(
+      container.querySelectorAll('line[stroke-dasharray="3 3"]')
+    ).toHaveLength(0);
+    // And the axis reads as clock time at a usable resolution rather than
+    // labelling the whole day once.
+    const labels = [...container.querySelectorAll("text")]
+      .map((node) => node.textContent ?? "")
+      .filter((text) => CLOCK_LABEL.test(text));
+    expect(labels.length).toBeGreaterThanOrEqual(4);
   });
 
   it("keeps real elapsed time when the sessions option says to", () => {

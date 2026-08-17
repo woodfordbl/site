@@ -30,6 +30,7 @@ import {
   DEFAULT_TIME_WINDOW_MS,
   presetForWindow,
   TIME_WINDOW_PRESETS,
+  windowSampleSpacingMs,
 } from "@/lib/databases/time-series-chart-data.ts";
 import {
   type TimeSeriesChartData,
@@ -279,8 +280,14 @@ export function DatabaseTimeSeriesChart({
     // Closures are inferred from the samples themselves, so a 24/7 pair stays
     // linear and an instrument with nights and weekends compresses them out
     // without anyone naming a market calendar. `keep` opts out of the collapse
-    // and spends real width on the closed interval instead.
-    const closed = detectClosedPeriods(plotted.map((row) => row.t));
+    // and spends real width on the closed interval instead. The window's own
+    // candle spacing is the floor for what counts as a gap — without it the
+    // fine live capture at the right edge drags the median down and every
+    // candle step reads as a closure.
+    const closed = detectClosedPeriods(
+      plotted.map((row) => row.t),
+      { minSpacingMs: windowSampleSpacingMs(windowMs) }
+    );
     const time = sessionTimeAxis({
       closed: chart.timeSeries?.sessions === "keep" ? [] : closed,
       format: makeTimeFormatter(windowMs),

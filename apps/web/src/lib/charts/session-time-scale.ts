@@ -36,6 +36,19 @@ export interface ClosedPeriod {
  */
 const DEFAULT_GAP_FACTOR = 4;
 
+/** Tuning for {@link detectClosedPeriods}. */
+export interface ClosedPeriodOptions {
+  factor?: number;
+  /**
+   * Floor on the spacing a series is assumed to sample at, whatever its median
+   * says. A caller that knows its own cadence should pass it: a series carrying
+   * two cadences at once — coarse history under a much finer recent capture —
+   * has a median pulled down to the finer one, and without a floor every
+   * ordinary coarse step then reads as a closure.
+   */
+  minSpacingMs?: number;
+}
+
 /** Ascending, de-duplicated copy — the form every step below assumes. */
 function sortedUnique(values: readonly number[]): number[] {
   return [...new Set(values.filter(Number.isFinite))].sort((a, b) => a - b);
@@ -61,10 +74,13 @@ function median(sorted: readonly number[]): number {
  * that is mostly closed would decide it is never closed. Needs at least three
  * samples to have a spacing to compare against; below that it reports nothing,
  * which leaves the axis linear.
+ *
+ * The median alone is not enough when a series carries two cadences — see
+ * `options.minSpacingMs` on {@link ClosedPeriodOptions}.
  */
 export function detectClosedPeriods(
   timestamps: readonly number[],
-  options?: { factor?: number }
+  options?: ClosedPeriodOptions
 ): ClosedPeriod[] {
   const sorted = sortedUnique(timestamps);
   if (sorted.length < 3) {
@@ -74,7 +90,10 @@ export function detectClosedPeriods(
   for (let index = 1; index < sorted.length; index++) {
     gaps.push(sorted[index] - sorted[index - 1]);
   }
-  const typical = median([...gaps].sort((a, b) => a - b));
+  const typical = Math.max(
+    median([...gaps].sort((a, b) => a - b)),
+    options?.minSpacingMs ?? 0
+  );
   if (typical <= 0) {
     return [];
   }
@@ -231,10 +250,30 @@ const TICK_STEPS = [
   365 * DAY,
 ] as const;
 
-/** The smallest ladder step that yields at most `count` ticks over `span`. */
+/**
+ * The ladder step whose tick count over `span` lands closest to `count`, ties
+ * going to the coarser step.
+ *
+ * Rounding the ideal spacing *up* to a ladder step — the obvious rule — reads
+ * fine until the ideal falls just above a rung: ten hours asking for eight
+ * ticks wants one every 75 minutes, rounds to three hours, and leaves three
+ * labels across a whole trading day. Choosing by resulting count keeps the
+ * axis at a resolution someone can actually read a time off, which for an
+ * intraday window means hours, or quarter-hours on a short one.
+ */
 function tickStep(span: number, count: number): number {
-  const target = span / Math.max(1, count);
-  return TICK_STEPS.find((step) => step >= target) ?? TICK_STEPS.at(-1) ?? DAY;
+  const wanted = Math.max(1, count);
+  let best = TICK_STEPS.at(-1) ?? DAY;
+  let bestMiss = Number.POSITIVE_INFINITY;
+  for (const step of TICK_STEPS) {
+    const miss = Math.abs(span / step - wanted);
+    // `<=`, walking fine → coarse, so a tie hands the axis to the coarser step.
+    if (miss <= bestMiss) {
+      bestMiss = miss;
+      best = step;
+    }
+  }
+  return best;
 }
 
 /**
