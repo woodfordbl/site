@@ -284,6 +284,46 @@
     --chart-5: oklch(0.8 0.017 85);
   }
 
+  /*
+   * TanStack Charts reads its tooltip surface from these custom properties
+   * (falling back to system colors when unset), and mounts the tooltip inside
+   * the chart host — so mapping them on the frame is all the theming a chart
+   * tooltip needs. Keep in step with the popover surface: chart tooltips are
+   * data readouts, not hints, and should match menus and dialogs.
+   */
+  [data-slot="chart"] {
+    --ts-chart-tooltip-background: var(--popover);
+    --ts-chart-tooltip-color: var(--popover-foreground);
+    --ts-chart-tooltip-border: 1px solid var(--border);
+    --ts-chart-tooltip-border-radius: var(--radius);
+    --ts-chart-tooltip-shadow: 0 10px 30px -10px oklch(0 0 0 / 0.3);
+    --ts-chart-tooltip-padding: 0.375rem 0.625rem;
+    --ts-chart-tooltip-font: 500 0.75rem / 1.35 inherit;
+    /* Focus rings and dot centers punch through to the page, not to Canvas. */
+    --ts-chart-focus-fill: var(--background);
+    /* Tick labels paint in `currentColor`; axis ink is muted, not body text. */
+    color: var(--muted-foreground);
+  }
+
+  /*
+   * The renderer paints guides at a fixed low opacity over the theme's `grid`
+   * and `foreground` colors, tuned for a `currentColor` default. Our tokens are
+   * already the right weight, so take the opacity back and let `--border` and
+   * `--muted-foreground` land at full strength — otherwise the grid disappears
+   * against a light page. Presentation attributes lose to these rules.
+   */
+  [data-slot="chart"] .ts-chart__grid {
+    stroke-opacity: 1;
+  }
+
+  [data-slot="chart"] .ts-chart__axes text {
+    fill-opacity: 1;
+  }
+
+  [data-slot="chart"] .ts-chart__axes line {
+    stroke-opacity: 0.6;
+  }
+
   /* Collapsed hover peek: match main inset card tokens, not site-shell sidebar gutter. */
   [data-page-sidebar-hover-panel] {
     --sidebar: var(--background);

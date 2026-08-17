@@ -1,9 +1,7 @@
 import { z } from "zod";
 
 import {
-  CHART_DITHER_MODES,
   CHART_PALETTE_IDS,
-  defaultChartDitherMode,
   defaultChartPaletteId,
 } from "@/lib/charts/chart-palettes.ts";
 import {
@@ -20,8 +18,6 @@ export const themePreferenceSchema = z.enum(["light", "dark", "system"]);
 export type ThemePreference = z.infer<typeof themePreferenceSchema>;
 
 export const chartPaletteSchema = z.enum(CHART_PALETTE_IDS);
-
-export const chartDitherModeSchema = z.enum(CHART_DITHER_MODES);
 
 /** Syntax theme shared by code blocks, inline code, and the formula editor. */
 export const codeThemeSchema = z.enum(CODE_THEME_IDS);
@@ -43,8 +39,6 @@ export const siteAppearanceSchema = z.object({
   textScale: pageTextScaleSchema.default(DEFAULT_PAGE_TEXT_SCALE),
   /** Default color palette for charts across the workspace. */
   chartPalette: chartPaletteSchema.default(defaultChartPaletteId),
-  /** Whether charts render with a dither texture (off / on / dark mode only). */
-  chartDither: chartDitherModeSchema.default(defaultChartDitherMode),
   /** Tooltip surface: popover-matched (`normal`) or opposite of page chrome (`inverted`). */
   tooltipStyle: tooltipStyleSchema.default(DEFAULT_TOOLTIP_STYLE),
   /**
@@ -63,7 +57,6 @@ export const DEFAULT_SITE_APPEARANCE: SiteAppearance = {
   theme: DEFAULT_THEME_PREFERENCE,
   textScale: DEFAULT_PAGE_TEXT_SCALE,
   chartPalette: defaultChartPaletteId,
-  chartDither: defaultChartDitherMode,
   tooltipStyle: DEFAULT_TOOLTIP_STYLE,
   codeTheme: DEFAULT_CODE_THEME_ID,
 };

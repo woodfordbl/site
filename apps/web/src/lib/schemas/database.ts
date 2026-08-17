@@ -424,17 +424,10 @@ export const databaseTableViewConfigSchema = z.object({
       yMax: z.number().optional(),
       stacked: z.boolean().optional(),
       /**
-       * Smooth the line/area curve. Absent follows the look: on (monotone) for
-       * a plain chart, off (pixel staircase) for a dithered one. When off on a
-       * plain chart, segments are straight (linear).
+       * Smooth the line/area curve with a monotone interpolation. Absent means
+       * on; `false` draws straight segments between vertices.
        */
       smoothing: z.boolean().optional(),
-      /**
-       * Per-chart dither override. `inherit` (default/absent) follows the
-       * workspace "Chart dither" appearance setting; `on`/`off` force this chart
-       * dithered or plain regardless of the workspace.
-       */
-      dither: z.enum(["inherit", "on", "off"]).optional(),
     })
     .optional(),
 });

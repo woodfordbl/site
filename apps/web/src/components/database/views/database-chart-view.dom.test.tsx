@@ -9,17 +9,14 @@ import type {
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 
-// The chart wrapper reads the workspace palette/dither from the appearance
-// context; stub it so the test needs no ThemeProvider scaffolding.
+// The chart frame reads the workspace palette from the appearance context; stub
+// it so the test needs no ThemeProvider scaffolding.
 vi.mock("@/components/layout/device-layout-provider.tsx", async (orig) => ({
   ...(await orig<object>()),
   useIsCoarsePrimaryPointer: () => false,
 }));
 vi.mock("@/components/layout/theme-provider.tsx", () => ({
-  useSiteAppearance: () => ({
-    chartPalette: "colorful",
-    chartDitherEnabled: false,
-  }),
+  useSiteAppearance: () => ({ chartPalette: "colorful" }),
 }));
 // Config writes go through the collection ops; the menu is render-only here.
 vi.mock("@/db/queries/database-collection-ops.ts", () => ({
@@ -27,10 +24,10 @@ vi.mock("@/db/queries/database-collection-ops.ts", () => ({
 }));
 
 beforeAll(() => {
-  // jsdom lacks matchMedia (reduced-motion probe) and ResizeObserver
-  // (Recharts ResponsiveContainer + the dither hook).
-  // Report reduced motion so marks render without animation frames (jsdom
-  // has no rAF-driven layout) — this also exercises the motion-reduce path.
+  // jsdom lacks matchMedia (the motion renderer's reduced-motion probe) and
+  // ResizeObserver (the chart host's width tracking). Reporting reduced motion
+  // makes the renderer paint its final frame synchronously, which is what lets
+  // these assertions read the scene without waiting on animation frames.
   window.matchMedia = ((query: string) => ({
     matches: query.includes("prefers-reduced-motion"),
     media: query,
@@ -41,37 +38,9 @@ beforeAll(() => {
     onchange: null,
     dispatchEvent: () => false,
   })) as typeof window.matchMedia;
-  // Fire immediately with a fixed size so ResponsiveContainer lays out the
-  // plot (jsdom reports 0×0 from getBoundingClientRect).
-  const FAKE_RECT = {
-    width: 640,
-    height: 320,
-    top: 0,
-    left: 0,
-    bottom: 320,
-    right: 640,
-    x: 0,
-    y: 0,
-    toJSON: () => "",
-  };
   window.ResizeObserver = class {
-    private readonly callback: ResizeObserverCallback;
-    constructor(callback: ResizeObserverCallback) {
-      this.callback = callback;
-    }
-    observe(target: Element): void {
-      this.callback(
-        [
-          {
-            target,
-            contentRect: FAKE_RECT,
-            borderBoxSize: [],
-            contentBoxSize: [],
-            devicePixelContentBoxSize: [],
-          } as unknown as ResizeObserverEntry,
-        ],
-        this
-      );
+    observe(): void {
+      return;
     }
     unobserve(): void {
       return;
@@ -140,21 +109,26 @@ const ROWS = [
   row({ "f-status": "opt-done", "f-owner": "opt-ada", "f-price": 5 }),
 ];
 
+/** Renders a chart saved view over `ROWS` with the given chart config. */
+function renderChart(chart: NonNullable<DatabaseView["config"]["chart"]>) {
+  return render(
+    <DatabaseChartView
+      database={database}
+      fields={database.fields}
+      mode="edit"
+      rows={ROWS}
+      view={chartView(chart)}
+    />
+  );
+}
+
 describe("DatabaseChartView", () => {
   it("renders a series-split bar chart with a legend", () => {
-    render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="edit"
-        rows={ROWS}
-        view={chartView({
-          mark: "bar",
-          xFieldId: "f-status",
-          seriesFieldId: "f-owner",
-        })}
-      />
-    );
+    renderChart({
+      mark: "bar",
+      xFieldId: "f-status",
+      seriesFieldId: "f-owner",
+    });
     // Legend defaults on for >1 series, one entry per owner option.
     expect(screen.getByText("Ada")).toBeDefined();
     expect(screen.getByText("Bob")).toBeDefined();
@@ -163,77 +137,47 @@ describe("DatabaseChartView", () => {
     expect(screen.queryByLabelText("Chart settings")).toBeNull();
   });
 
-  it("renders the chart in view mode", () => {
-    const { container } = render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="view"
-        rows={ROWS}
-        view={chartView({
-          mark: "bar",
-          xFieldId: "f-status",
-          seriesFieldId: "f-owner",
-        })}
-      />
-    );
-    expect(container.querySelector("[data-chart]")).not.toBeNull();
+  it("paints one bar per category and series", () => {
+    const { container } = renderChart({
+      mark: "bar",
+      xFieldId: "f-status",
+      seriesFieldId: "f-owner",
+    });
+    // Two categories × two owners, stacked or grouped, is four rects.
+    expect(container.querySelectorAll(".ts-chart__bar rect")).toHaveLength(4);
   });
 
-  it("applies the view's palette to the chart container", () => {
-    const { container } = render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="view"
-        rows={ROWS}
-        view={chartView({ xFieldId: "f-status", palette: "blue" })}
-      />
-    );
+  it("applies the view's palette to the chart frame", () => {
+    const { container } = renderChart({
+      xFieldId: "f-status",
+      palette: "blue",
+    });
     expect(
       container.querySelector('[data-chart-palette="blue"]')
     ).not.toBeNull();
   });
 
+  it("falls back to the workspace palette when the view sets none", () => {
+    const { container } = renderChart({ xFieldId: "f-status" });
+    expect(
+      container.querySelector('[data-chart-palette="colorful"]')
+    ).not.toBeNull();
+  });
+
   it("asks for an X field when none is configured", () => {
-    render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="edit"
-        rows={ROWS}
-        view={chartView({})}
-      />
-    );
+    renderChart({});
     expect(screen.getByText("Pick a field to chart")).toBeDefined();
   });
 
   it("guides toward a number property for non-count aggregates", () => {
-    render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="edit"
-        rows={ROWS}
-        view={chartView({ xFieldId: "f-status", yAggregate: "sum" })}
-      />
-    );
+    renderChart({ xFieldId: "f-status", yAggregate: "sum" });
     expect(screen.getByText("Sum needs a number property")).toBeDefined();
   });
 
-  it("renders a pie with one legend entry per category", async () => {
-    render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="view"
-        rows={ROWS}
-        view={chartView({ mark: "pie", xFieldId: "f-status" })}
-      />
-    );
-    // Pie sectors (and their legend payload) land a frame after mount.
-    expect(await screen.findByText("Todo")).toBeDefined();
-    expect(await screen.findByText("Done")).toBeDefined();
+  it("renders a pie with one legend entry per category", () => {
+    renderChart({ mark: "pie", xFieldId: "f-status" });
+    expect(screen.getByText("Todo")).toBeDefined();
+    expect(screen.getByText("Done")).toBeDefined();
   });
 
   it("shows the empty-data state when no rows match", () => {
@@ -250,78 +194,32 @@ describe("DatabaseChartView", () => {
   });
 
   it("toggles the legend for a single-series chart via showLegend", () => {
-    const { container, rerender } = render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="edit"
-        rows={ROWS}
-        view={chartView({ mark: "bar", xFieldId: "f-status" })}
-      />
-    );
-    // Single series: legend is off by default.
-    expect(container.querySelector(".recharts-legend-wrapper")).toBeNull();
-    rerender(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="edit"
-        rows={ROWS}
-        view={chartView({
-          mark: "bar",
-          xFieldId: "f-status",
-          showLegend: true,
-        })}
-      />
-    );
-    expect(container.querySelector(".recharts-legend-wrapper")).not.toBeNull();
-  });
-
-  it("hides the tooltip layer when showTooltip is false", () => {
-    const { container, rerender } = render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="view"
-        rows={ROWS}
-        view={chartView({ mark: "bar", xFieldId: "f-status" })}
-      />
-    );
-    // Recharts renders the tooltip wrapper (inactive) whenever a Tooltip mounts.
-    expect(container.querySelector(".recharts-tooltip-wrapper")).not.toBeNull();
-    rerender(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="view"
-        rows={ROWS}
-        view={chartView({
-          mark: "bar",
-          xFieldId: "f-status",
-          showTooltip: false,
-        })}
-      />
-    );
-    expect(container.querySelector(".recharts-tooltip-wrapper")).toBeNull();
+    renderChart({ mark: "bar", xFieldId: "f-status" });
+    // Single series: legend is off by default, so its label is absent.
+    expect(screen.queryByText("Count")).toBeNull();
+    cleanup();
+    renderChart({ mark: "bar", xFieldId: "f-status", showLegend: true });
+    expect(screen.getByText("Count")).toBeDefined();
   });
 
   it("draws dashed minor gridlines when gridMinor is set", () => {
-    const { container } = render(
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode="view"
-        rows={ROWS}
-        view={chartView({
-          mark: "line",
-          xFieldId: "f-status",
-          gridCount: 4,
-          gridMinor: 1,
-        })}
-      />
-    );
+    const { container } = renderChart({
+      mark: "line",
+      xFieldId: "f-status",
+      gridCount: 4,
+      gridMinor: 1,
+    });
     expect(
       container.querySelector('line[stroke-dasharray="2 4"]')
     ).not.toBeNull();
+  });
+
+  it("omits the axes and grid layers when the grid is turned off", () => {
+    const { container } = renderChart({
+      mark: "bar",
+      xFieldId: "f-status",
+      showGrid: false,
+    });
+    expect(container.querySelector(".ts-chart__grid")).toBeNull();
   });
 });

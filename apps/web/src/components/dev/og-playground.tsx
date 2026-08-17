@@ -39,7 +39,7 @@ const PRESETS: { content: CardContent; label: string }[] = [
   },
   {
     label: "Short + no desc",
-    content: { title: "Dither charts", desc: "", icon: "📈" },
+    content: { title: "Chart palettes", desc: "", icon: "📈" },
   },
   {
     label: "Home default",

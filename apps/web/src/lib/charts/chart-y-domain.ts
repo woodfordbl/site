@@ -1,9 +1,8 @@
-import { scaleLinear } from "d3-scale";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
 
 /**
- * Shared Y-axis auto-domain so the Recharts (normal) and dither-kit (dithered)
- * renderers always agree on the same bounds. The rule keys off what the values
- * represent, not just their range:
+ * Shared Y-axis auto-domain for every value axis in the app. The rule keys off
+ * what the values represent, not just their range:
  *
  * - **Zero-based** aggregates (count / sum) and stacked charts anchor the floor
  *   at 0 — bars/areas grow from a true baseline.
@@ -13,8 +12,8 @@ import { scaleLinear } from "d3-scale";
  *   against 0.
  *
  * Explicit `yMin` / `yMax` always win for the side they set; the other side is
- * still auto-fit. Bounds are nice-rounded (via d3) so ticks land on round
- * values and there is a little headroom above the peak.
+ * still auto-fit. Bounds are nice-rounded so ticks land on round values and
+ * there is a little headroom above the peak.
  */
 export interface AutoYDomainOptions {
   /** Target tick count used for nice-rounding (default 4). */

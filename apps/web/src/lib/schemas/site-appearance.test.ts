@@ -14,7 +14,6 @@ describe("site appearance tooltipStyle", () => {
         theme: "light",
         textScale: "default",
         chartPalette: DEFAULT_SITE_APPEARANCE.chartPalette,
-        chartDither: DEFAULT_SITE_APPEARANCE.chartDither,
       })
     );
 
