@@ -72,6 +72,10 @@ const mutateHandler = fileURLToPath(
   new URL("./routes/api/sync/mutate.post.ts", import.meta.url)
 );
 
+const pagePermissionsHandler = fileURLToPath(
+  new URL("./routes/api/pages/permissions.post.ts", import.meta.url)
+);
+
 /**
  * Nitro module that re-adds `continue: true` to header-only routes in the
  * generated Vercel Build Output config once the preset has written it. Without
@@ -187,6 +191,12 @@ const config = defineConfig({
         // Sync engine: Electric-protocol shape reads + transactional writes.
         { route: "/api/sync/shape", method: "GET", handler: shapeHandler },
         { route: "/api/sync/mutate", method: "POST", handler: mutateHandler },
+        // ReBAC share-dialog actions (grants, visibility, inheritance).
+        {
+          route: "/api/pages/permissions",
+          method: "POST",
+          handler: pagePermissionsHandler,
+        },
       ],
       // Workaround for a Nitro bug on the Vercel preset. Nitro's Vite plugin
       // auto-adds a `routeRules["/assets/**"]` cache-control header, but the
