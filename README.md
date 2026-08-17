@@ -18,11 +18,9 @@ That is the whole loop for local-only mode. To run the optional sync backend:
    install (apt) or Docker via `pnpm electric:up` (see `dev/electric/`).
 2. Apply the schema: `node apps/web/scripts/db-migrate.mjs`.
 
-Verify sync with `node apps/web/scripts/sync-e2e-check.mjs` (headless end-to-end check) or
-`node apps/web/scripts/demo/two-browser-sync.mjs` (two live browsers editing one page).
-
 `pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:size` must pass before
-committing.
+committing. `pnpm test` includes the access-model integration suite when
+`DATABASE_URL` points at a migrated Postgres, and skips it otherwise.
 
 ## Documentation
 

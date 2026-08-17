@@ -109,8 +109,7 @@
     "sync": "node scripts/sync-emojibase-public.mjs && node scripts/sync-tabler-icons-public.mjs && node scripts/sync-maplibre-worker.mjs",
     "electric:up": "docker compose -f ../../dev/electric/docker-compose.yaml up -d --wait",
     "electric:down": "docker compose -f ../../dev/electric/docker-compose.yaml down",
-    "electric:nuke": "docker compose -f ../../dev/electric/docker-compose.yaml down -v",
-    "electric:smoke": "node scripts/electric-smoke.mjs"
+    "electric:nuke": "docker compose -f ../../dev/electric/docker-compose.yaml down -v"
   },
   "type": "module",
   "private": true,
