@@ -67,11 +67,10 @@ export function DatabaseRowPage({
   const { template: templateTarget } = useDatabasePathTargets(databaseId);
   const navigate = useNavigate();
   const seededRowRef = useRef<string | null>(null);
-  // Only the reader asks for a page now. A database with a template renders
-  // its rows from it (see `virtual-database-row-page.tsx`); without one there
-  // is nothing to render, so opening still seeds a blank page as before.
+  // Only the reader asks for a page now. Every row renders from the template
+  // until then (see `virtual-database-row-page.tsx`) — including rows of a
+  // database with no template, whose shared body is simply blank.
   const [customizeRequested, setCustomizeRequested] = useState(false);
-  const shouldMaterialize = template === null || customizeRequested;
 
   useEffect(() => {
     // Gate on the page actually resolving, not merely on `row.pageId` being
@@ -81,7 +80,7 @@ export function DatabaseRowPage({
     // `ensureDatabaseRowPage` already treats an unresolvable `pageId` as
     // "create one", and `seededRowRef` still holds this to one attempt per open.
     if (
-      !(database && row && shouldMaterialize) ||
+      !(database && row && customizeRequested) ||
       linkedPage ||
       seededRowRef.current === row.id
     ) {
@@ -98,7 +97,7 @@ export function DatabaseRowPage({
     }).catch(() => {
       seededRowRef.current = null;
     });
-  }, [database, dispatch, linkedPage, pages, row, shouldMaterialize]);
+  }, [customizeRequested, database, dispatch, linkedPage, pages, row]);
 
   if (!(databasesReady && rowsReady)) {
     return <SiteShell>{null}</SiteShell>;
@@ -116,7 +115,7 @@ export function DatabaseRowPage({
     );
   }
 
-  if (template && !customizeRequested) {
+  if (!customizeRequested) {
     return (
       <SiteShell>
         <PageSidebarChromeProvider sidebar={<PageSidebar />}>

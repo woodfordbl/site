@@ -27,17 +27,22 @@ beforeAll(() => {
 
 /** Top level so the rule about regex literals in scopes stays satisfied. */
 const TEMPLATE_SENTENCE = /renders the Launch Sites template/;
+const NO_TEMPLATE_SENTENCE = /Rows in Launch Sites share one body/;
 
 afterEach(() => {
   cleanup();
 });
 
-function renderDialog(overrides?: { onEditTemplate?: () => void }) {
+function renderDialog(overrides?: {
+  hasTemplate?: boolean;
+  onEditTemplate?: () => void;
+}) {
   const onCustomize = vi.fn();
   const onOpenChange = vi.fn();
   render(
     <CustomizeRowPageDialog
       databaseName="Launch Sites"
+      hasTemplate={overrides?.hasTemplate ?? true}
       onCustomize={onCustomize}
       onEditTemplate={overrides?.onEditTemplate}
       onOpenChange={onOpenChange}
@@ -81,5 +86,15 @@ describe("CustomizeRowPageDialog", () => {
     expect(
       screen.queryByRole("button", { name: "Edit template instead" })
     ).toBeNull();
+  });
+
+  it("does not claim a template is being left behind when there is none", () => {
+    renderDialog({ hasTemplate: false, onEditTemplate: vi.fn() });
+
+    expect(screen.queryByText(TEMPLATE_SENTENCE)).toBeNull();
+    expect(screen.getByText(NO_TEMPLATE_SENTENCE)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Create a template" })
+    ).toBeTruthy();
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import { IconFileText, IconPencil } from "@tabler/icons-react";
+import { IconDots, IconFileText, IconPencil } from "@tabler/icons-react";
+import type React from "react";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { CanvasBlocksReadOnly } from "@/components/canvas/page-canvas-server.tsx";
@@ -22,6 +23,12 @@ import {
 import { usePageSidebarChrome } from "@/components/pages/page-sidebar-chrome.tsx";
 import { PageSidebarRail } from "@/components/pages/page-sidebar-rail.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
 import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
 import { localFormulaRelationResolver } from "@/lib/databases/formula-relations.ts";
@@ -49,67 +56,55 @@ import {
  *
  * So a row with no page of its own renders here: its own icon, name and
  * properties (those live on the row and stay editable), above the template's
- * blocks evaluated for this row and shown read-only. Nothing is written.
- * Asking to edit the body is what materializes the page, through
- * {@link CustomizeRowPageDialog} so the trade is stated before it is made.
+ * blocks evaluated for this row and shown read-only. Nothing is written —
+ * including for a database with no template at all, whose rows get the same
+ * blank body a fresh page would have had.
+ *
+ * Clicking into the body is what asks for a page of its own, and
+ * {@link CustomizeRowPageDialog} answers before anything is written. There is
+ * no banner saying the page is read-only: a line of chrome above every row
+ * page, explaining a state most readers never act on, costs more than the one
+ * surprising click it would save.
  *
  * Rows that already have a page keep it; this surface never appears for them.
  */
+
+/**
+ * Anything a reader could be clicking *at* rather than clicking *into*: links
+ * and buttons in the template's own content, and surfaces that read their own
+ * gestures (a map's pan and zoom). Following a link should follow the link.
+ */
+const INTERACTIVE_SELECTOR =
+  "input, textarea, [contenteditable], button, a, [role='button'], [data-canvas-pointer-surface]";
+
+/** The row's own editable metadata, which is never a request to edit the body. */
+const ROW_HEADER_SELECTOR = "[data-row-page-header]";
 
 /** Blocks are already instantiated, so tokens print — but bound blocks still resolve live. */
 function useTemplateBody(
   database: LocalDatabase,
   row: LocalDatabaseRow,
-  template: RowTemplateSnapshot
+  template: RowTemplateSnapshot | null
 ) {
+  const templateBlocks = template?.blocks;
+
   return useMemo(
     () =>
-      instantiateTemplateBlocks(template.blocks, database.fields, row.values, {
+      instantiateTemplateBlocks(templateBlocks, database.fields, row.values, {
         now: () => new Date(),
         relations: localFormulaRelationResolver(),
       }),
-    [database.fields, row.values, template.blocks]
+    [database.fields, row.values, templateBlocks]
   );
 }
 
-/**
- * The line that says this page is not its own. Sits between the properties and
- * the body, where the body begins: it explains what follows, and it is the
- * only place the two ways to edit are offered.
- */
-function TemplateFollowNotice({
-  databaseName,
-  onCustomize,
-  onEditTemplate,
-}: {
-  databaseName: string;
-  onCustomize: () => void;
-  onEditTemplate?: () => void;
-}): ReactNode {
-  return (
-    <div className="hover-reveal-group flex flex-wrap items-center gap-x-2 gap-y-1 pt-6 text-muted-foreground text-xs">
-      <span>Follows the {databaseName} template.</span>
-      <Button
-        className="h-6 px-2 text-xs"
-        onClick={onCustomize}
-        size="sm"
-        variant="ghost"
-      >
-        <IconPencil />
-        Edit this page
-      </Button>
-      {onEditTemplate ? (
-        <Button
-          className="h-6 px-2 text-xs"
-          onClick={onEditTemplate}
-          size="sm"
-          variant="ghost"
-        >
-          <IconFileText />
-          Edit template
-        </Button>
-      ) : null}
-    </div>
+/** Whether `target` is a click into the body rather than at something in it. */
+function isEditIntent(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return !(
+    target.closest(INTERACTIVE_SELECTOR) || target.closest(ROW_HEADER_SELECTOR)
   );
 }
 
@@ -120,7 +115,8 @@ export interface VirtualDatabaseRowPageProps {
   /** Absent when the template editor is unreachable (no host page yet). */
   onEditTemplate?: () => void;
   row: LocalDatabaseRow;
-  template: RowTemplateSnapshot;
+  /** Null when the database has no custom template — the body is then blank. */
+  template: RowTemplateSnapshot | null;
 }
 
 export function VirtualDatabaseRowPage({
@@ -140,15 +136,32 @@ export function VirtualDatabaseRowPage({
   const inlineFormulaModel = useRowFormulaModel(database, row);
   const blocks = useTemplateBody(database, row, template);
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
-  const displayIcon = resolveDatabaseRowIcon(row, template.icon);
+  const displayIcon = resolveDatabaseRowIcon(row, template?.icon);
+
+  const requestEdit = (event: React.SyntheticEvent) => {
+    if (!isEditIntent(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    setCustomizeOpen(true);
+  };
 
   const canvasRegion = (
+    // The body is the affordance: clicking where you would start typing is
+    // what asks for a page, and the dialog answers before anything is written.
+    // It cannot be a <button> — it contains the row's own editable title and
+    // properties — and it is a shortcut, not the only route: the header's ⋯
+    // menu carries the same action for keyboard and screen-reader users.
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: click-to-edit shortcut over read-only blocks
+    // biome-ignore lint/a11y/noStaticElementInteractions: cannot take a role — it wraps the row's own title input
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the header menu is the keyboard path
     <div
       {...pageContentTypographyProps({
-        font: resolvePageFont(template.font),
-        textScale: template.textScale,
+        font: resolvePageFont(template?.font),
+        textScale: template?.textScale,
       })}
       className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
+      onClick={requestEdit}
     >
       <InlineFormulaPageProvider
         modelOverride={inlineFormulaModel}
@@ -157,17 +170,17 @@ export function VirtualDatabaseRowPage({
       >
         <CanvasBlocksReadOnly
           blocks={blocks}
-          fullWidth={resolvePageFullWidth(template.fullWidth)}
+          fullWidth={resolvePageFullWidth(template?.fullWidth)}
           isNarrowViewport={isNarrowViewport}
           // `view` mode, not `edit`: read-only markup with no contentEditable,
           // so a click into the body cannot start an edit the row cannot keep.
           mode="view"
           pageId={row.id}
           titleSlot={
-            <>
+            <div data-row-page-header="">
               <RowPageTitleSection
                 database={database}
-                icon={template.icon}
+                icon={template?.icon}
                 propertiesExtra={
                   <RowPropertiesOptionsMenu
                     className="hover-reveal"
@@ -177,12 +190,7 @@ export function VirtualDatabaseRowPage({
                 row={row}
                 showProperties={!chrome.panelMode}
               />
-              <TemplateFollowNotice
-                databaseName={database.name}
-                onCustomize={() => setCustomizeOpen(true)}
-                onEditTemplate={onEditTemplate}
-              />
-            </>
+            </div>
           }
           topLevelBlockAlign={chrome.topLevelBlockAlign}
         />
@@ -205,6 +213,38 @@ export function VirtualDatabaseRowPage({
               icon={displayIcon}
               title={displayTitle}
             />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                nativeButton
+                render={
+                  <Button
+                    aria-label="Page settings and actions"
+                    className="ml-auto shrink-0 text-muted-foreground"
+                    size="icon-sm"
+                    type="button"
+                    variant="ghost"
+                  />
+                }
+              >
+                <IconDots aria-hidden />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setCustomizeOpen(true);
+                  }}
+                >
+                  <IconPencil />
+                  Edit this page
+                </DropdownMenuItem>
+                {onEditTemplate ? (
+                  <DropdownMenuItem onClick={onEditTemplate}>
+                    <IconFileText />
+                    Edit template
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </header>
           {chrome.contentWrapper
             ? chrome.contentWrapper(canvasRegion)
@@ -213,6 +253,7 @@ export function VirtualDatabaseRowPage({
       </div>
       <CustomizeRowPageDialog
         databaseName={database.name}
+        hasTemplate={template !== null}
         onCustomize={() => {
           setCustomizeOpen(false);
           onCustomize();

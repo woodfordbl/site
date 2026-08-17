@@ -29,6 +29,8 @@ import {
 export interface CustomizeRowPageDialogProps {
   /** Named so the dialog says which template is about to be left behind. */
   databaseName: string;
+  /** False when the database has no template — nothing is being left behind. */
+  hasTemplate: boolean;
   onCustomize: () => void;
   onEditTemplate?: () => void;
   onOpenChange: (open: boolean) => void;
@@ -37,6 +39,7 @@ export interface CustomizeRowPageDialogProps {
 
 export function CustomizeRowPageDialog({
   databaseName,
+  hasTemplate,
   onEditTemplate,
   onOpenChange,
   onCustomize,
@@ -48,18 +51,16 @@ export function CustomizeRowPageDialog({
         <DialogHeader>
           <DialogTitle>Give this row a page of its own?</DialogTitle>
           <DialogDescription>
-            This page currently renders the {databaseName} template, so every
-            change to the template reaches it. Editing it copies the template
-            once and stops following it — later template changes will skip this
-            row until you clear it again. Each customized row is stored as its
-            own page, so a database with many of them gets heavier to load.
+            {hasTemplate
+              ? `This page renders the ${databaseName} template, so every change to the template reaches it. Editing copies the template once and stops following it — later template changes will skip this row until you reset it. Each customized row is stored as its own page, so a database with many of them gets heavier to load.`
+              : `Rows in ${databaseName} share one body, so nothing is stored for this page yet. Editing gives this row a page of its own, stored separately — a database with many of them gets heavier to load. Editing the template instead changes every row at once.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="sm:justify-between">
           {onEditTemplate ? (
             <Button onClick={onEditTemplate} variant="ghost">
               <IconFileText />
-              Edit template instead
+              {hasTemplate ? "Edit template instead" : "Create a template"}
             </Button>
           ) : (
             <span />
