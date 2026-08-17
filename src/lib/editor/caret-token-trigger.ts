@@ -1,5 +1,5 @@
 /**
- * Pure helpers for canvas caret triggers (`@` mentions, `#` formulas): read
+ * Pure helpers for canvas caret triggers (`@` mentions, `$` formulas): read
  * the active rich-text field's unclosed trigger run from the serialized model
  * (not a single DOM text node), anchor a popover under the caret, and replace
  * that run. Deliberately outside the slash-menu pipeline.
@@ -15,7 +15,15 @@ import { setRichTextSelection } from "@/lib/editor/rich-text-dom.ts";
 /** Query longer than this can't be a token-in-progress — stop offering. */
 export const CARET_TOKEN_MAX_QUERY_LENGTH = 40;
 
-/** Collapsed caret run for a single-character trigger (`@` / `#`). */
+/**
+ * Character that opens the inline formula builder. `$` reads as "a value goes
+ * here" and, unlike `#`, never competes with the markdown heading shortcut.
+ * It is still an ordinary character everywhere the trigger does not apply —
+ * see `formulaTriggerAllowedInBlock`.
+ */
+export const FORMULA_TRIGGER_CHAR = "$";
+
+/** Collapsed caret run for a single-character trigger (`@` / `$`). */
 export interface CaretTokenContext {
   /** Caret / end of the typed query in model offsets. */
   end: number;
@@ -32,7 +40,7 @@ const WHITESPACE_RE = /\s/;
 
 /**
  * True when `index` is the start of the text or the prior character is
- * whitespace — `@`/`#` mid-word (e.g. email) stay plain text.
+ * whitespace — `@`/`$` mid-word (e.g. email, `US$5`) stay plain text.
  */
 function isTriggerBoundary(text: string, index: number): boolean {
   if (index <= 0) {
@@ -100,7 +108,7 @@ export function readCaretAnchorRect(): DOMRect | null {
 
 /**
  * Select the trigger run in the field so a subsequent DOM insert replaces
- * `@query` / `#…`.
+ * `@query` / `$…`.
  */
 export function selectCaretTokenRange(context: CaretTokenContext): boolean {
   if (!document.contains(context.field)) {
@@ -109,6 +117,24 @@ export function selectCaretTokenRange(context: CaretTokenContext): boolean {
   context.field.focus();
   setRichTextSelection(context.field, {
     start: context.start,
+    end: context.end,
+  });
+  return true;
+}
+
+/**
+ * Put a collapsed caret back at the end of the trigger run, leaving the typed
+ * characters untouched. Dismissing a caret popover has to land here: the
+ * popover took focus when it opened, so without this the field is left blurred
+ * and the run cannot simply be typed over as the ordinary text it now is.
+ */
+export function restoreCaretAfterToken(context: CaretTokenContext): boolean {
+  if (!document.contains(context.field)) {
+    return false;
+  }
+  context.field.focus();
+  setRichTextSelection(context.field, {
+    start: context.end,
     end: context.end,
   });
   return true;

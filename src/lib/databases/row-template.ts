@@ -34,7 +34,7 @@ const IDENTIFIER_SAFE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * Canonical `{{ … }}` token referencing a field by name: the dot form for
  * identifier-safe names, the quoted bracket form (`thisPage["Start date"]`)
  * otherwise. Shared by the template copy-token affordance so authored
- * mustache tokens always parse. Canvas `#` inserts live inline formula marks
+ * mustache tokens always parse. Canvas `$` inserts live inline formula marks
  * instead (see FormulaTokenPopover).
  */
 export function rowPropertyToken(fieldName: string): string {
