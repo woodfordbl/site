@@ -89,6 +89,7 @@
     "build": "pnpm sync && node scripts/generate-sitemap.mjs && vite build",
     "sync:emojibase": "node scripts/sync-emojibase-public.mjs",
     "sync:icons": "node scripts/sync-tabler-icons-public.mjs",
+    "sync:maplibre": "node scripts/sync-maplibre-worker.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "ultracite check",
@@ -97,7 +98,7 @@
     "typecheck:tsc": "node scripts/sync-tabler-icons-public.mjs && tsc --noEmit",
     "check": "node scripts/sync-tabler-icons-public.mjs && ultracite check",
     "fix": "ultracite fix",
-    "sync": "node scripts/sync-emojibase-public.mjs && node scripts/sync-tabler-icons-public.mjs"
+    "sync": "node scripts/sync-emojibase-public.mjs && node scripts/sync-tabler-icons-public.mjs && node scripts/sync-maplibre-worker.mjs"
   },
   "type": "module",
   "private": true,

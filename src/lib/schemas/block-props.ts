@@ -150,6 +150,27 @@ export const databasePropsSchema = z.object({
   hideTitle: z.boolean().optional(),
 });
 
+/**
+ * `map` block props: a standalone place on a page — not database-backed. Data
+ * maps come from a `database` block pointed at a map view instead; this is the
+ * "here is where that is" block.
+ */
+export const mapPropsSchema = z.object({
+  /** Camera center as [longitude, latitude]. */
+  center: z.tuple([z.number(), z.number()]),
+  zoom: z.number().min(0).max(22),
+  /** Pins drawn on the map. Empty/absent means the block is a placeholder. */
+  markers: z
+    .array(
+      z.object({
+        lng: z.number(),
+        lat: z.number(),
+        label: z.string().optional(),
+      })
+    )
+    .optional(),
+});
+
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
 export const embedPropsSchema = z.object({
   url: z.string(),
@@ -182,6 +203,8 @@ export type MediaSource = z.infer<typeof mediaSourceSchema>;
 export type MediaProps = z.infer<typeof mediaPropsSchema>;
 export type DatabaseProps = z.infer<typeof databasePropsSchema>;
 export type EmbedProps = z.infer<typeof embedPropsSchema>;
+export type MapProps = z.infer<typeof mapPropsSchema>;
+export type MapMarkerProps = NonNullable<MapProps["markers"]>[number];
 export type TableProps = z.infer<typeof tablePropsSchema>;
 export type TableRowProps = z.infer<typeof tableRowPropsSchema>;
 export type TableCellProps = z.infer<typeof tableCellPropsSchema>;

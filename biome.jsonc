@@ -27,7 +27,11 @@
       // mapcn consumers: its public component is named `Map`, which collides
       // with the global. Importing it under another name would diverge from
       // the upstream docs and every future `@mapcn/*` block.
-      "includes": ["src/components/dev/map-preview.tsx"],
+      "includes": [
+        "src/components/dev/map-preview.tsx",
+        "src/components/database/views/database-map-canvas.tsx",
+        "src/components/blocks/types/map/map-block-canvas.tsx"
+      ],
       "linter": {
         "rules": {
           "suspicious": {

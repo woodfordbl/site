@@ -14,6 +14,7 @@ import {
   IconLink,
   IconList,
   IconListNumbers,
+  IconMapPin,
   IconPhoto,
   IconSeparator,
   IconTable,
@@ -33,6 +34,8 @@ import { EmbedEdit } from "@/components/blocks/types/embed/embed-edit.tsx";
 import { EmbedView } from "@/components/blocks/types/embed/embed-view.tsx";
 import { HeadingEdit } from "@/components/blocks/types/heading/heading-edit.tsx";
 import { HeadingView } from "@/components/blocks/types/heading/heading-view.tsx";
+import { MapEdit } from "@/components/blocks/types/map/map-edit.tsx";
+import { MapView } from "@/components/blocks/types/map/map-view.tsx";
 import { MediaEdit } from "@/components/blocks/types/media/media-edit.tsx";
 import { MediaView } from "@/components/blocks/types/media/media-view.tsx";
 import { PageLinkEdit } from "@/components/blocks/types/page-link/page-link-edit.tsx";
@@ -315,6 +318,19 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     },
     View: EmbedView,
     Edit: EmbedEdit,
+  },
+  map: {
+    type: "map",
+    label: "Map",
+    slashAliases: ["map", "location", "place", "geo"],
+    icon: IconMapPin,
+    createDefault: () => createEmptyBlock("map"),
+    behavior: {
+      editStrategy: "inline-custom",
+      capabilities: INLINE_CUSTOM_CAPABILITIES,
+    },
+    View: MapView,
+    Edit: MapEdit,
   },
   database: {
     type: "database",

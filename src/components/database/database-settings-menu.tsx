@@ -13,6 +13,7 @@ import {
   IconLayoutKanban,
   IconLayoutList,
   IconListDetails,
+  IconMapPin,
   IconPencil,
   IconRefresh,
   IconRestore,
@@ -49,6 +50,7 @@ import {
 } from "@/components/database/use-list-reorder.ts";
 import { BoardOptionsItems } from "@/components/database/views/database-board-config.tsx";
 import { ChartOptionsItems } from "@/components/database/views/database-chart-config.tsx";
+import { MapOptionsItems } from "@/components/database/views/database-map-config.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -1181,6 +1183,75 @@ const EMPTY_CHART_DATA: ChartData = {
   series: [],
 };
 
+/**
+ * Per-view-type options submenu (Board / Chart / Map). Extracted from
+ * `DatabaseSettingsMenu` so the menu body stays one flat list of rows rather
+ * than a growing chain of type conditionals — every new view type adds a case
+ * here, not another branch in the menu.
+ */
+function ViewTypeOptionsSubmenu({
+  chartData,
+  database,
+  view,
+}: {
+  chartData?: ChartData;
+  database: LocalDatabase;
+  view: DatabaseView | undefined;
+}): ReactNode {
+  if (!view) {
+    return null;
+  }
+  if (view.type === "board") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconLayoutKanban />
+          Board options
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-64 min-w-64">
+          <BoardOptionsItems database={database} view={view} />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+  if (view.type === "chart") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconChartBar />
+          Chart options
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-64 min-w-64">
+          <ChartOptionsItems
+            data={chartData ?? EMPTY_CHART_DATA}
+            database={database}
+            fields={database.fields}
+            view={view}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+  if (view.type === "map") {
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <IconMapPin />
+          Map options
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="w-64 min-w-64">
+          <MapOptionsItems
+            database={database}
+            fields={database.fields}
+            view={view}
+          />
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
+  }
+  return null;
+}
+
 export function DatabaseSettingsMenu({
   activeView,
   chartData,
@@ -1312,33 +1383,11 @@ export function DatabaseSettingsMenu({
         {view && (view.type === "table" || view.type === "list") ? (
           <GroupSubmenu database={database} view={view} />
         ) : null}
-        {view && view.type === "board" ? (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <IconLayoutKanban />
-              Board options
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-64 min-w-64">
-              <BoardOptionsItems database={database} view={view} />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
-        {view && view.type === "chart" ? (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <IconChartBar />
-              Chart options
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-64 min-w-64">
-              <ChartOptionsItems
-                data={chartData ?? EMPTY_CHART_DATA}
-                database={database}
-                fields={database.fields}
-                view={view}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
+        <ViewTypeOptionsSubmenu
+          chartData={chartData}
+          database={database}
+          view={view}
+        />
         {onHideTitleChange ? (
           <DropdownMenuSwitchItem
             checked={hideTitle}

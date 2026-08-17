@@ -15,6 +15,7 @@ import { DatabaseViewSwitcher } from "@/components/database/database-view-switch
 import { DatabaseBoardView } from "@/components/database/views/database-board-view.tsx";
 import { DatabaseChartView } from "@/components/database/views/database-chart-view.tsx";
 import { DatabaseListView } from "@/components/database/views/database-list-view.tsx";
+import { DatabaseMapView } from "@/components/database/views/database-map-view.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { useFormulaOverlay } from "@/db/formula-engine.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
@@ -353,6 +354,17 @@ function DatabaseViewBody({
       />
     );
   }
+  if (view.type === "map") {
+    return (
+      <DatabaseMapView
+        database={database}
+        fields={database.fields}
+        mode={mode}
+        rows={rows}
+        view={view}
+      />
+    );
+  }
   if (view.type === "chart") {
     return (
       <DatabaseChartView
@@ -391,7 +403,7 @@ function DatabaseViewBody({
  * via live queries, resolves the ACTIVE view (`block.viewId`, falling back to
  * the first view for unset/stale ids), applies that view's filter/sorts, and
  * renders the per-type view body — the virtualized table grid, or the
- * list/board/chart renderers — under the shared title row + view switcher.
+ * list/board/chart/map renderers — under the shared title row + view switcher.
  */
 export function DatabaseTableView({
   canvasRowId,

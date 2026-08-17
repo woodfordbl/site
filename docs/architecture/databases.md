@@ -386,6 +386,76 @@ config control on any view. The menu adapts to the active `view.type`:
   views and threads it through `DatabaseTitle` → `DatabaseSettingsMenu` (`chartData`
   prop). Writes shallow-merge into `config.chart` / `config.board` via
   `updateDatabaseView` (JSON round-trip drops `undefined` keys).
+- **Map options** ([`database-map-config.tsx`](../../src/components/database/views/database-map-config.tsx),
+  `MapOptionsItems`): mark (**Pins** / **Clusters** / **Regions**), then the
+  mark-appropriate source rows — point marks get **Location from** (`pointMode`:
+  two number properties, or one `"lat, lng"` text/formula property), the
+  lat/lng or coordinate pickers, **Label** (defaults to the primary field) and
+  **Color by** (a select field, whose option colors tint the markers); the
+  region mark gets **Region code** (`joinFieldId`), a **feature property** text
+  input (`joinProperty`, default `ADM0_A3`), **Value** (the shared
+  `DATABASE_CHART_Y_AGGREGATES` taxonomy) plus its property, and **Scale**
+  (`linear` / `quantile`). Both share **Palette** and **Show tooltip**. Writes
+  shallow-merge into `config.map` through `mapConfigPatch`.
+
+The three per-type submenus render through one `ViewTypeOptionsSubmenu` switch
+rather than a chain of conditionals in the menu body — a new view type adds a
+case there, not another branch inline.
+
+## Map view
+
+[`database-map-view.tsx`](../../src/components/database/views/database-map-view.tsx)
+renders `view.config.map` over the same `{ database, view, fields, rows, mode }`
+contract every saved view gets — rows arrive filtered, sorted and
+formula-merged, so filters, sorts and the filter bar work on a map with no
+map-specific code.
+
+**Where coordinates come from.** There is no `location` field type (see
+[the proposal](../proposals/maps.md) for the sequencing argument): a map reads
+ordinary fields, named per view. Point marks take either two `number` fields
+(`pointMode: "pair"`, the default) or one `text`/`formula` field holding
+`"lat, lng"` (`pointMode: "coordinate"`). The region mark joins a
+`select`/`text`/`formula` field to a GeoJSON feature property.
+
+**Marks.** One view type with a `mark` switch, mirroring how `chart` handles
+line/bar/area/pie:
+
+| Mark | Basemap | Geometry |
+|------|---------|----------|
+| `pins` (default) | tiled | one `MapMarker` per row; select-option colors tint the dots |
+| `cluster` | tiled | the same points through `MapClusterLayer` for dense data |
+| `region` | `blank` | bundled country polygons, shaded by an aggregate |
+
+**Pure projection.** [`map-data.ts`](../../src/lib/databases/map-data.ts) is
+React-free and holds everything testable: coordinate parsing (two in-range
+numbers or nothing — a half-typed cell is not a location), the region join and
+its aggregate (reusing `computeAggregate` and the chart Y taxonomy), ramp
+bucketing (`linear` / `quantile`), bounds, and `guessMapConfig` for
+`defaultViewConfig`. Rows that resolve to no geometry are **counted, not
+dropped** — the view prints "N rows are not on the map", because a map quietly
+showing 40 of 60 rows lies about the data.
+
+**Choropleth color.** One base color stepped by *opacity*, not by hue:
+`--chart-1..5` is a categorical ramp in the colorful palette, so five hues would
+read as five unrelated categories rather than more-and-less. The base resolves
+through `cssColorToRgb` inside a `ChartPaletteScope`, because MapLibre's style
+parser predates CSS Color 4 and cannot read the raw `oklch()` tokens.
+
+**Region source.** `public/geo/world-countries-110m.geojson` — Natural Earth
+1:110m, 177 features trimmed to six properties (269 KB raw / 97 KB gzipped),
+vendored rather than hotlinked so it works offline and adds no CDN dependency.
+Join on **`ADM0_A3`, not `ISO_A3`**: Natural Earth stores `-99` in `ISO_A3` for
+France, Norway, Kosovo, N. Cyprus and Somaliland, while `ADM0_A3` is unique
+across all 177. Both sides of the join normalize (upper-case, trimmed,
+whitespace-collapsed; `upcase` in the MapLibre expression).
+
+**Client-only canvas.** `maplibre-gl` touches browser globals at import time and
+costs ~275 KB gzipped, so
+[`database-map-canvas.tsx`](../../src/components/database/views/database-map-canvas.tsx)
+is reached through a dynamic `import()` from a `useEffect` — never a static
+import — keeping it out of the server graph and out of every page without a map.
+The same module calls `ensureLocalMaplibreWorker()`; see
+[Block integration](#block-integration) for why.
 
 ## Connector sync
 
@@ -815,8 +885,8 @@ formula-aware typed filter operators (relations, rollups — wizard included —
 reactive cross-database recompute, formula→formula references, and
 boolean-formula ADVANCED filters shipped with
 the v2 engine — see [formula-language](./formula-language.md)),
-gallery view (multi-view switching, `viewId` threading, and list/board/chart views
-shipped — see [Table view](#table-view)), workspace backup inclusion, SQLite scale tier, keyboard
+gallery view (multi-view switching, `viewId` threading, and list/board/chart/map views
+shipped — see [Table view](#table-view) and [Map view](#map-view)), workspace backup inclusion, SQLite scale tier, keyboard
 Tab-into-cell entry, on-screen-keyboard layout testing. Connector sync: realtime/push
 connectors, the follower-tab watch nudge (cross-tab "poll faster" ping to the leader),
 the server proxy route, and a `/settings` Connections panel.

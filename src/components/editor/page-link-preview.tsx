@@ -4,6 +4,7 @@ import {
   IconDatabase,
   IconFileAlert,
   IconLink,
+  IconMapPin,
   IconPhoto,
   IconTable,
   IconVideo,
@@ -280,6 +281,8 @@ function PreviewLine({ line }: { line: PageLinkPreviewLine }) {
       );
     case "embed":
       return <PreviewChipLine icon={<IconWorld />} label={line.text} />;
+    case "map":
+      return <PreviewChipLine icon={<IconMapPin />} label={line.text} />;
     case "table":
       return <PreviewTableLine columns={line.columns} />;
     case "database":

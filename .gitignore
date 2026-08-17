@@ -25,6 +25,7 @@ todos.json
 .vercel
 public/emojibase
 public/tabler
+public/maplibre
 public/sitemap.xml
 src/generated
 /.tmp-chrome-debug*/

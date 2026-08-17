@@ -147,6 +147,12 @@ export const BLOCK_DEFS: { [K in BlockType]: BlockDef<K> } = {
     defaultProps: () => ({ url: "" }),
     isEmpty: (block) => isBlank(block.props.url),
   },
+  map: {
+    // Zoom 1 over the prime meridian: a recognisable world view, and clearly
+    // "not placed yet" without needing a separate placeholder flag.
+    defaultProps: () => ({ center: [0, 20] as [number, number], zoom: 1 }),
+    isEmpty: (block) => (block.props.markers?.length ?? 0) === 0,
+  },
   database: {
     // Leaf reference to a workspace database entity; rows never live in the
     // block tree. Empty until the placeholder flow links a database.

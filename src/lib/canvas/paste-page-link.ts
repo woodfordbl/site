@@ -39,6 +39,7 @@ function isConvertibleEmptyLeaf(type: BlockType): boolean {
     case "tab":
     case "media":
     case "embed":
+    case "map":
     case "database":
     case "table":
     case "tableRow":
@@ -74,6 +75,7 @@ function isPageLinkPasteSkipped(type: BlockType): boolean {
     case "tab":
     case "media":
     case "embed":
+    case "map":
     case "database":
     case "list":
     case "checklist":

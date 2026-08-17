@@ -67,4 +67,33 @@ Special cases when needed: gutter alignment / shell spacing in [`src/lib/blocks/
 
 No changes to `block-renderer.tsx`, `block-tree-node.tsx`, `create-block.ts`, or `is-block-empty.ts` for leaf blocks.
 
+TypeScript will point you at the rest: `BlockType` is exhaustively switched in
+[`block-text.ts`](../../src/lib/pages/block-text.ts),
+[`page-word-count.ts`](../../src/lib/pages/page-word-count.ts),
+[`paste-page-link.ts`](../../src/lib/canvas/paste-page-link.ts) and
+[`page-link-preview-model.ts`](../../src/lib/pages/page-link-preview-model.ts),
+and keyed in `BLOCK_TYPE_LABELS` ([`content-stats.ts`](../../src/lib/pages/content-stats.ts)).
+A new type fails to compile until each has an answer — adding a preview line
+kind also needs a renderer arm in
+[`page-link-preview.tsx`](../../src/components/editor/page-link-preview.tsx).
+
+### `map`
+
+A standalone place on a page — a leaf block with
+`{ center, zoom, markers }` ([`block-props.ts`](../../src/lib/schemas/block-props.ts)),
+`editStrategy: "inline-custom"`, slash `/map`. **Database-backed maps are not
+this block**: the `database` block already carries `{ databaseId, viewId }`, so
+a map *view* covers that case (see [databases](./databases.md#map-view)).
+
+Empty state is an `embed`-style `PlaceholderTrigger` → popover taking
+`"lat, lng"`; once placed, clicking the map moves the pin. There is **no
+geocoder** — the app has no backend, and address search would mean a keyed
+third-party service that 503s without its key — so paste-coords and
+click-to-place are the two ways in, and both work offline. Placing recenters at
+zoom 11; moving a pin on an already-placed map keeps the reader's camera.
+
+Like the map view, the MapLibre canvas
+([`map-block-canvas.tsx`](../../src/components/blocks/types/map/map-block-canvas.tsx))
+loads through a dynamic `import()` so it stays out of the server graph.
+
 Local block rows are stored per page in `localBlocksCollection` — see [local-first-persistence](./local-first-persistence.md) and [block-model](./block-model.md).

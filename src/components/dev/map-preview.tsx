@@ -8,6 +8,9 @@
  * the canvas editor.
  */
 import { Map, MapControls, MapGeoJSON } from "@/components/ui/map.tsx";
+import { ensureLocalMaplibreWorker } from "@/lib/maps/maplibre-worker.ts";
+
+ensureLocalMaplibreWorker();
 
 type MapPreviewTheme = "light" | "dark";
 

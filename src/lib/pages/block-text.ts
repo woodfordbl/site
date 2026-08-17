@@ -61,6 +61,7 @@ function rawBlockText(block: Block): string {
     case "table":
     case "tableRow":
     case "database":
+    case "map":
       return "";
     default: {
       const neverBlock: never = block;

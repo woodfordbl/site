@@ -1,5 +1,14 @@
 # Maps
 
+> **Status: steps 1–4 shipped.** The `map` view type (pins / cluster / region
+> marks) and the standalone `map` block are implemented — see
+> [databases — Map view](../architecture/databases.md#map-view) and
+> [block-types — `map`](../architecture/block-types.md#map) for what the code
+> actually does. This document is kept as the design record: the reasoning
+> below is why it is shaped that way. Steps 5–6 (a `location` field type, the
+> `arc` mark, geocoding) are still open, deliberately gated on what the shipped
+> views teach.
+
 Geography as a first-class way to look at workspace data: a **`map` database
 view** that renders the rows a view already resolved as pins, clusters, regions
 or arcs, and a small **`map` block** for putting a single place on a page.
@@ -224,16 +233,35 @@ Kosovo, N. Cyprus and Somaliland, while `ADM0_A3` is unique across all 177.)
 CSS already restyles `.maplibregl-ctrl-attrib` onto our tokens — it must not be
 hidden to make a block look cleaner.
 
+## What shipping it changed
+
+Three things the design above did not anticipate, recorded because they cost
+real debugging time:
+
+- **MapLibre's worker was pointed at unpkg.com** by the registry component.
+  MapLibre parses GeoJSON *in the worker*, so with unpkg unreachable the style
+  never finishes loading and every GeoJSON layer renders nothing — while DOM
+  markers keep working, which makes it look like a data bug. Fixed by copying
+  the worker into `public/maplibre/` (`scripts/sync-maplibre-worker.mjs`); a
+  Vite `?url` import is not enough, because the worker entry imports a sibling
+  chunk that `?url` does not emit.
+- **A sequential ramp cannot come from `--chart-1..5`.** Those tokens are
+  categorical in the colorful palette. The choropleth uses one base color
+  stepped by opacity instead.
+- **`Map` is the name of the mapcn component**, so inside any module that
+  imports it `new Map()` resolves to a React component rather than the global.
+  Region lookups use plain records.
+
 ## Sequencing
 
-1. **`map` view, `pins` mark, option A coordinates.** The whole view-type
-   scaffold plus `map-data.ts`. Filters and sorts come free. This is the
-   smallest change that makes maps real.
-2. **`region` mark** with vendored country GeoJSON and the shared chart
-   palette + aggregate enum. Highest visual payoff per line of code.
-3. **`cluster` mark** — one component swap behind a config toggle, once row
-   counts justify it.
-4. **`map` block** for standalone places, with click-to-place and paste-coords.
+1. ~~**`map` view, `pins` mark, option A coordinates.**~~ **Shipped.** The
+   view-type scaffold plus `map-data.ts`. Filters and sorts came free.
+2. ~~**`region` mark**~~ **Shipped**, with vendored country GeoJSON and the
+   shared aggregate enum. Highest visual payoff per line of code, as expected.
+3. ~~**`cluster` mark**~~ **Shipped** — one component swap behind the mark
+   toggle.
+4. ~~**`map` block** for standalone places~~ **Shipped**, with click-to-place
+   and paste-coords.
 5. **`location` field type** (option B), once the view has proven which of
    validation, geocoding or map-click entry people actually miss.
 6. **`arc` mark**, and optional geocoding via a Nitro proxy.

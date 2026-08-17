@@ -51,7 +51,13 @@ import { createDragChannel } from "@/lib/dnd/drag-channel.ts";
 import type { DatabaseView, DatabaseViewType } from "@/lib/schemas/database.ts";
 import { cn } from "@/lib/utils.ts";
 
-const VIEW_TYPES: DatabaseViewType[] = ["table", "list", "board", "chart"];
+const VIEW_TYPES: DatabaseViewType[] = [
+  "table",
+  "list",
+  "board",
+  "chart",
+  "map",
+];
 
 /** Attribute carrying the view id on draggable edit-mode tabs. */
 export const DATABASE_VIEW_TAB_DRAG_ATTRIBUTE = "data-database-view-tab-id";
