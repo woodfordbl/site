@@ -21,11 +21,13 @@ import {
 } from "@/lib/databases/page-formula-fields.ts";
 import {
   type CaretTokenContext,
+  FORMULA_TRIGGER_CHAR,
   readCaretTokenContext,
+  restoreCaretAfterToken,
 } from "@/lib/editor/caret-token-trigger.ts";
 
 /**
- * `#`-triggered formula builder for the canvas. Inserts an inline formula
+ * `$`-triggered formula builder for the canvas. Inserts an inline formula
  * token (same mark as slash / `{{`) with the drafted expression, replacing
  * the `#…` run. Escape closes without insert and leaves `#` as plain text so
  * markdown `#` + Space headings still work.
@@ -39,6 +41,9 @@ import {
 
 const POPOVER_WIDTH_PX = 720;
 
+/** Block type the `$` trigger is offered in; everywhere else `$` is literal. */
+const FORMULA_TRIGGER_BLOCK_TYPE = "text";
+
 export function FormulaTokenPopover(): ReactNode {
   const canvas = useCanvasEditorContext();
   const coarsePointer = useIsCoarsePrimaryPointer();
@@ -46,10 +51,23 @@ export function FormulaTokenPopover(): ReactNode {
   const relatedDatabases = useAllDatabases();
   const userFunctions = useFormulaUserFunctions();
 
-  const readContext = useCallback(
-    () => (coarsePointer ? null : readCaretTokenContext("#")),
-    [coarsePointer]
-  );
+  const { getRows } = canvas;
+  const readContext = useCallback(() => {
+    if (coarsePointer) {
+      return null;
+    }
+    const context = readCaretTokenContext(FORMULA_TRIGGER_CHAR);
+    if (context === null) {
+      return null;
+    }
+    const rowId = context.field
+      .closest("[data-canvas-row-id]")
+      ?.getAttribute("data-canvas-row-id");
+    const row = rowId ? findRowById(getRows(), rowId) : undefined;
+    return row?.effectiveBlock.type === FORMULA_TRIGGER_BLOCK_TYPE
+      ? context
+      : null;
+  }, [coarsePointer, getRows]);
   const { anchorRect, close, context, freeze, frozen } =
     useCaretTokenSession(readContext);
 
@@ -66,10 +84,24 @@ export function FormulaTokenPopover(): ReactNode {
 
   const openContext = frozenContextRef.current ?? context;
 
-  const dismiss = useCallback(() => {
+  /** End the session without touching the field (the run is being replaced). */
+  const clearSession = useCallback(() => {
     frozenContextRef.current = null;
     close();
   }, [close]);
+
+  /**
+   * Cancel: the typed `$…` stays exactly as typed, so hand the caret back to
+   * the end of it. Without this the popover's focus grab strands the caret on
+   * `<body>` and the run cannot be continued or deleted by typing.
+   */
+  const dismiss = useCallback(() => {
+    const dismissed = frozenContextRef.current;
+    clearSession();
+    if (dismissed) {
+      restoreCaretAfterToken(dismissed);
+    }
+  }, [clearSession]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: relatedDatabases is the invalidation signal, not an input
   const relations = useMemo(
@@ -77,8 +109,8 @@ export function FormulaTokenPopover(): ReactNode {
     [relatedDatabases]
   );
   const fields = useMemo(
-    () => pageFormulaFields(model?.databaseFields),
-    [model?.databaseFields]
+    () => pageFormulaFields(model?.databaseFields, model?.primaryFieldId),
+    [model?.databaseFields, model?.primaryFieldId]
   );
   const previewRows = useMemo(
     () =>
@@ -120,9 +152,11 @@ export function FormulaTokenPopover(): ReactNode {
         rowId,
         block: withBlockRichText(block, inserted.text, inserted.marks),
       });
-      dismiss();
+      // The run is gone (replaced by the token), so the cancel-path caret
+      // restore would land on a stale offset — end the session plainly.
+      clearSession();
     },
-    [canvas, dismiss]
+    [canvas, clearSession, dismiss]
   );
 
   useEffect(() => {

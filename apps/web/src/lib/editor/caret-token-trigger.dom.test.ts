@@ -1,7 +1,11 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readCaretTokenContext } from "@/lib/editor/caret-token-trigger.ts";
+import {
+  FORMULA_TRIGGER_CHAR,
+  readCaretTokenContext,
+  restoreCaretAfterToken,
+} from "@/lib/editor/caret-token-trigger.ts";
 import {
   richTextToHtml,
   setRichTextSelection,
@@ -45,18 +49,54 @@ describe("readCaretTokenContext", () => {
     expect(readCaretTokenContext("@")).toBeNull();
   });
 
-  it("reads a # formula trigger", () => {
-    mountField("x #", 3);
-    expect(readCaretTokenContext("#")).toMatchObject({
-      trigger: "#",
+  it("reads a $ formula trigger", () => {
+    mountField("x $", 3);
+    expect(readCaretTokenContext(FORMULA_TRIGGER_CHAR)).toMatchObject({
+      trigger: "$",
       query: "",
       start: 2,
       end: 3,
     });
   });
 
+  it("leaves $ mid-word literal, so prices stay text", () => {
+    mountField("US$5", 4);
+    expect(readCaretTokenContext(FORMULA_TRIGGER_CHAR)).toBeNull();
+  });
+
   it("rejects whitespace inside the query", () => {
     mountField("@a b", 4);
     expect(readCaretTokenContext("@")).toBeNull();
+  });
+});
+
+describe("restoreCaretAfterToken", () => {
+  it("returns focus and a collapsed caret to the end of the run", () => {
+    const field = mountField("x $rate", 7);
+    const context = readCaretTokenContext(FORMULA_TRIGGER_CHAR);
+    if (context === null) {
+      throw new Error("Test setup: $rate should read as a trigger run");
+    }
+    // The popover blurs the field while it is open.
+    field.blur();
+
+    expect(restoreCaretAfterToken(context)).toBe(true);
+    const selection = document.getSelection();
+    expect(selection?.isCollapsed).toBe(true);
+    // Caret sits after the typed run, so typing continues the plain text.
+    expect(readCaretTokenContext(FORMULA_TRIGGER_CHAR)).toMatchObject({
+      end: 7,
+      query: "rate",
+    });
+  });
+
+  it("is a no-op once the field has left the document", () => {
+    const field = mountField("x $", 3);
+    const context = readCaretTokenContext(FORMULA_TRIGGER_CHAR);
+    if (context === null) {
+      throw new Error("Test setup: $ should read as a trigger run");
+    }
+    field.remove();
+    expect(restoreCaretAfterToken(context)).toBe(false);
   });
 });
