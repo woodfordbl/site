@@ -67,8 +67,8 @@ describe("buildMapPoints", () => {
     );
     expect(result.skippedRowCount).toBe(0);
     expect(result.points).toEqual([
-      { label: "HQ", lat: 37.77, lng: -122.41, rowId: "r1" },
-      { label: "Depot", lat: 51.5, lng: -0.12, rowId: "r2" },
+      { details: [], label: "HQ", lat: 37.77, lng: -122.41, rowId: "r1" },
+      { details: [], label: "Depot", lat: 51.5, lng: -0.12, rowId: "r2" },
     ]);
   });
 
@@ -101,7 +101,7 @@ describe("buildMapPoints", () => {
       TITLE.id
     );
     expect(result.points).toEqual([
-      { label: "Paris", lat: 48.8566, lng: 2.3522, rowId: "r1" },
+      { details: [], label: "Paris", lat: 48.8566, lng: 2.3522, rowId: "r1" },
     ]);
     expect(result.skippedRowCount).toBe(1);
   });
@@ -130,7 +130,7 @@ describe("buildMapPoints", () => {
       TITLE.id
     );
     expect(result.points).toEqual([
-      { label: "ELA-4", lat: 5.239, lng: -52.7683, rowId: "r1" },
+      { details: [], label: "ELA-4", lat: 5.239, lng: -52.7683, rowId: "r1" },
     ]);
     expect(result.skippedRowCount).toBe(2);
   });
@@ -145,8 +145,52 @@ describe("buildMapPoints", () => {
       TITLE.id
     );
     expect(result.points).toEqual([
-      { label: "London", lat: 51.5, lng: -0.12, rowId: "r1" },
+      { details: [], label: "London", lat: 51.5, lng: -0.12, rowId: "r1" },
     ]);
+  });
+
+  it("carries the tooltip properties the view asked for", () => {
+    const rows = [
+      row("r1", {
+        "f-lat": 1,
+        "f-lng": 2,
+        "f-status": "opt-open",
+        "f-title": "HQ",
+      }),
+    ];
+    const [point] = buildMapPoints(
+      FIELDS,
+      rows,
+      {
+        latFieldId: "f-lat",
+        lngFieldId: "f-lng",
+        tooltipFieldIds: ["f-status"],
+      },
+      TITLE.id
+    ).points;
+
+    expect(point.details).toEqual([
+      {
+        fieldId: "f-status",
+        label: "Status",
+        values: [{ color: "green", text: "Open" }],
+      },
+    ]);
+  });
+
+  it("carries the row's own glyph for the tooltip header", () => {
+    const rows = [
+      { ...row("r1", { "f-lat": 1, "f-lng": 2 }), icon: "tabler:IconRocket" },
+    ];
+
+    expect(
+      buildMapPoints(
+        FIELDS,
+        rows,
+        { latFieldId: "f-lat", lngFieldId: "f-lng" },
+        TITLE.id
+      ).points[0].icon
+    ).toBe("tabler:IconRocket");
   });
 
   it("carries the select option id for the color field and falls back to Untitled", () => {
@@ -281,8 +325,8 @@ describe("boundsForPoints", () => {
   it("returns the bounding box of the points", () => {
     expect(
       boundsForPoints([
-        { label: "a", lat: 10, lng: -20, rowId: "r1" },
-        { label: "b", lat: -5, lng: 30, rowId: "r2" },
+        { details: [], label: "a", lat: 10, lng: -20, rowId: "r1" },
+        { details: [], label: "b", lat: -5, lng: 30, rowId: "r2" },
       ])
     ).toEqual([
       [-20, -5],

@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-
+import { MapMarkerCard } from "@/components/database/views/database-map-tooltip.tsx";
 import {
   Map,
   MapClusterLayer,
@@ -136,6 +136,14 @@ function MapFrame({
   );
 }
 
+/**
+ * Neutralizes mapcn's built-in tooltip chip (dark fill, inverted text, its own
+ * padding and shadow) so {@link MapMarkerCard} is the only surface; the
+ * wrapper's fade-in animation is kept.
+ */
+const MARKER_TOOLTIP_RESET_CLASS =
+  "border-0 bg-transparent p-0 text-popover-foreground shadow-none";
+
 export interface DatabaseMapPointsCanvasProps
   extends DatabaseMapCanvasCommonProps {
   /** Bounding box of the points, used when no viewport is saved. */
@@ -146,6 +154,8 @@ export interface DatabaseMapPointsCanvasProps
   /** Select option id → palette color, for tinting markers. */
   optionColors: Record<string, BlockColor | undefined>;
   points: MapPoint[];
+  /** Row glyph in the tooltip header, matching the grid's page-icon toggle. */
+  showTooltipIcon: boolean;
 }
 
 /** Padding around a fitted bounding box, in pixels. */
@@ -177,6 +187,7 @@ export function DatabaseMapPointsCanvas({
   optionColors,
   points,
   showTooltip,
+  showTooltipIcon,
   theme,
 }: DatabaseMapPointsCanvasProps): ReactNode {
   const { colors, scopeRef } = usePaletteColors(MAP_REGION_BUCKET_COUNT);
@@ -236,8 +247,13 @@ export function DatabaseMapPointsCanvas({
                 />
               </MarkerContent>
               {showTooltip ? (
-                <MarkerTooltip className="rounded-md border border-border bg-popover px-2 py-1 font-medium text-popover-foreground text-xs shadow-sm">
-                  {point.label}
+                <MarkerTooltip className={MARKER_TOOLTIP_RESET_CLASS}>
+                  <MapMarkerCard
+                    details={point.details}
+                    icon={point.icon}
+                    label={point.label}
+                    showIcon={showTooltipIcon}
+                  />
                 </MarkerTooltip>
               ) : null}
             </MapMarker>

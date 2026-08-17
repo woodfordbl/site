@@ -137,7 +137,8 @@
             "mark": "pins",
             "pointMode": "location",
             "locationFieldId": "place",
-            "colorFieldId": "operator"
+            "colorFieldId": "operator",
+            "tooltipFieldIds": ["operator", "status", "firstLaunch"]
           }
         }
       },

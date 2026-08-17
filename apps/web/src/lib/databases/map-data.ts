@@ -6,6 +6,7 @@ import {
   CHART_Y_AGGREGATE_LABELS,
   chartYFieldCandidates,
 } from "@/lib/databases/chart-data.ts";
+import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import {
   isValidLatitude,
   isValidLongitude,
@@ -13,6 +14,10 @@ import {
   type MapCoordinate,
   parseCoordinateText,
 } from "@/lib/databases/location-values.ts";
+import {
+  buildMapTooltipDetails,
+  type MapTooltipDetail,
+} from "@/lib/databases/map-tooltip.ts";
 import { computeAggregate } from "@/lib/databases/row-aggregate.ts";
 import type {
   DatabaseAggregateFn,
@@ -70,6 +75,10 @@ const POINT_MARKS: readonly DatabaseMapMark[] = ["pins", "cluster"];
 export interface MapPoint extends MapCoordinate {
   /** Select option id from the color field, when one is configured. */
   colorOptionId?: string;
+  /** Property rows for the tooltip; empty unless the view asks for some. */
+  details: MapTooltipDetail[];
+  /** Row glyph (per-row override, else the row template's), when it has one. */
+  icon?: string;
   label: string;
   rowId: string;
 }
@@ -343,11 +352,16 @@ export function buildMapPoints(
     const optionId = colorField
       ? coerceCellValue(colorField, row.values[colorField.id])
       : null;
+    // Resolved here, shown or not by the view's `showTooltipIcon`: the canvas
+    // renders the same default glyph the grid does when a row has none.
+    const icon = resolveDatabaseRowIcon(row);
     points.push({
       ...coordinate,
       ...(typeof optionId === "string" && optionId !== ""
         ? { colorOptionId: optionId }
         : {}),
+      ...(icon ? { icon } : {}),
+      details: buildMapTooltipDetails(fields, row, map.tooltipFieldIds),
       label: label === "" ? "Untitled" : label,
       rowId: row.id,
     });

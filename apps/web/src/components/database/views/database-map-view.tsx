@@ -285,6 +285,7 @@ export function DatabaseMapView({
           optionColors={optionColors}
           points={points.points}
           showTooltip={showTooltip}
+          showTooltipIcon={map.showTooltipIcon !== false}
           theme={theme}
         />
       );

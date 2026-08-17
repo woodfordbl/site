@@ -274,6 +274,68 @@ function PointFieldItems({
   );
 }
 
+/**
+ * Marker-tooltip rows: what the hover card shows besides its title. Mirrors a
+ * board card's properties list — a switch per property, plus the row icon —
+ * and only appears while tooltips are on, since nothing below it applies
+ * otherwise.
+ */
+function TooltipItems({
+  fields,
+  map,
+  write,
+}: {
+  fields: DatabaseField[];
+  map: DatabaseMapConfig;
+  write: WriteMapPatch;
+}): ReactNode {
+  const selected = map.tooltipFieldIds ?? [];
+
+  return (
+    <>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <span className="shrink-0">Tooltip properties</span>
+          <span className="min-w-0 flex-1 truncate pl-3 text-right text-muted-foreground text-xs">
+            {selected.length === 0 ? "None" : selected.length}
+          </span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          {fields.map((field) => {
+            const FieldIcon = resolveFieldIcon(field);
+            return (
+              <DropdownMenuSwitchItem
+                checked={selected.includes(field.id)}
+                key={field.id}
+                onCheckedChange={(checked) => {
+                  // Toggling appends, so the list keeps the order they were
+                  // added in — a menu of switches has no way to reorder.
+                  write({
+                    tooltipFieldIds: checked
+                      ? [...selected, field.id]
+                      : selected.filter((id) => id !== field.id),
+                  });
+                }}
+              >
+                <FieldIcon className="size-4 shrink-0 stroke-[1.5px]" />
+                <span className="min-w-0 flex-1 truncate">{field.name}</span>
+              </DropdownMenuSwitchItem>
+            );
+          })}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuSwitchItem
+        checked={map.showTooltipIcon !== false}
+        onCheckedChange={(checked) => {
+          write({ showTooltipIcon: checked });
+        }}
+      >
+        Tooltip icon
+      </DropdownMenuSwitchItem>
+    </>
+  );
+}
+
 /** Location-source rows for the point marks (pins / clusters). */
 function PointSourceItems({
   fields,
@@ -424,6 +486,7 @@ export function MapOptionsItems({
   const map = view.config.map ?? {};
   const mark = resolveMapMark(map);
   const palette = resolveChartPaletteId(map.palette);
+  const showTooltip = map.showTooltip ?? true;
 
   const write: WriteMapPatch = (patch) => {
     updateDatabaseView(database.id, view.id, mapConfigPatch(view, patch));
@@ -468,13 +531,18 @@ export function MapOptionsItems({
         value={map.palette ?? NONE_VALUE}
       />
       <DropdownMenuSwitchItem
-        checked={map.showTooltip ?? true}
+        checked={showTooltip}
         onCheckedChange={(checked) => {
           write({ showTooltip: checked });
         }}
       >
         Show tooltip
       </DropdownMenuSwitchItem>
+      {/* Only `pins` draws marker cards: clusters aggregate rows into bubbles
+          and regions have their own aggregate readout. */}
+      {showTooltip && mark === "pins" ? (
+        <TooltipItems fields={fields} map={map} write={write} />
+      ) : null}
     </>
   );
 }

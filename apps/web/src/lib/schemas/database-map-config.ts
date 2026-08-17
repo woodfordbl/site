@@ -62,4 +62,13 @@ export const databaseMapViewConfigSchema = z.object({
   palette: z.string().optional(),
   /** Hover tooltip on markers/regions (absent = on). */
   showTooltip: z.boolean().optional(),
+  /**
+   * Properties listed under the tooltip title, in the order they were added
+   * (a menu of switches has no drag handle to reorder with). Absent = none:
+   * a tooltip shows the title alone unless someone asks for more, the same
+   * default a board card starts from.
+   */
+  tooltipFieldIds: z.array(z.string()).optional(),
+  /** Row icon before the tooltip title; absent = shown, like grid rows. */
+  showTooltipIcon: z.boolean().optional(),
 });
