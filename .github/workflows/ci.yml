@@ -9,15 +9,18 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# pnpm comes from corepack, which ships with Node and reads the pinned
+# `packageManager` field, rather than from `pnpm/action-setup`. Every job
+# downloaded that action's archive independently, so one push made four
+# codeload requests for the same tarball and jobs failed setup on 429/502
+# before they reached a checkout. Corepack fetches nothing.
 jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -30,9 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -45,9 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -60,9 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.22.0
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
