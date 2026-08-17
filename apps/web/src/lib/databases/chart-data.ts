@@ -1,6 +1,9 @@
 import {
+  asChartColorToken,
   CHART_PALETTE_IDS,
+  type ChartColorToken,
   type ChartPaletteId,
+  chartSeriesToken,
 } from "@/lib/charts/chart-palettes.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import { computeAggregate } from "@/lib/databases/row-aggregate.ts";
@@ -51,16 +54,13 @@ export const CHART_Y_AGGREGATE_LABELS: Record<DatabaseChartYAggregate, string> =
     max: "Max",
   };
 
-/** Number of `--chart-N` color tokens a palette provides. */
-export const CHART_COLOR_TOKEN_COUNT = 5;
-
 /** Series key used when no series field splits the chart. */
 export const CHART_SINGLE_SERIES_KEY = "value";
 
 /** One chart series: a value per category, in category order. */
 export interface ChartDataSeries {
-  /** Chart token index 1-5 from `colorOverrides`; absent = cycle by position. */
-  color?: number;
+  /** Palette token from `colorOverrides`; absent = cycle by position. */
+  color?: ChartColorToken;
   /**
    * Stable series key — the series field's bucket key (`groupKeyForRow`), or
    * `CHART_SINGLE_SERIES_KEY` for the unsplit series. `colorOverrides` keys
@@ -165,31 +165,25 @@ export function resolveChartPaletteId(
 }
 
 /**
- * A series/slice color override validated to a chart token index (integer
- * 1-5); anything else reads as "no override".
+ * A series/slice color override narrowed to a palette token; a stored value
+ * outside 1-5 (or absent) reads as "no override".
  */
 export function chartColorOverride(
   chart: DatabaseChartConfig,
   key: string
-): number | undefined {
-  const raw = chart.colorOverrides?.[key];
-  return typeof raw === "number" &&
-    Number.isInteger(raw) &&
-    raw >= 1 &&
-    raw <= CHART_COLOR_TOKEN_COUNT
-    ? raw
-    : undefined;
+): ChartColorToken | undefined {
+  return asChartColorToken(chart.colorOverrides?.[key]);
 }
 
 /**
- * Effective `--chart-N` token index for a series/slice at `position`:
- * its validated override, else cycling 1→5 by position.
+ * Effective palette token for a series/slice at `position`: its validated
+ * override, else cycling 1→5 by position.
  */
 export function chartTokenIndex(
-  color: number | undefined,
+  color: ChartColorToken | undefined,
   position: number
-): number {
-  return color ?? (position % CHART_COLOR_TOKEN_COUNT) + 1;
+): ChartColorToken {
+  return color ?? chartSeriesToken(position);
 }
 
 /** Display label for the unsplit series ("Count", "Sum of Price", …). */

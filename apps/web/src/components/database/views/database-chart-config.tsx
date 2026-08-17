@@ -5,13 +5,12 @@ import {
   IconChartPie,
 } from "@tabler/icons-react";
 import type { ComponentType, KeyboardEvent, ReactNode } from "react";
-
+import { ChartPaletteScope } from "@/components/charts/chart-frame.tsx";
 import { resolveFieldIcon } from "@/components/database/database-field-icons.ts";
 import {
   chartConfigPatch,
   cycledColorOverrides,
 } from "@/components/database/views/database-chart-config-helpers.ts";
-import { ChartPaletteScope } from "@/components/ui/chart.tsx";
 import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -422,19 +421,6 @@ const Y_FORMAT_OPTIONS: RadioSubmenuOption[] = [
   { value: "percent", label: "Percent" },
 ];
 
-/** Per-chart dither override choices. */
-const DITHER_OPTIONS: RadioSubmenuOption[] = [
-  { value: "inherit", label: "Inherit" },
-  { value: "on", label: "On" },
-  { value: "off", label: "Off" },
-];
-
-const DITHER_LABEL: Record<string, string> = {
-  inherit: "Inherit",
-  on: "On",
-  off: "Off",
-};
-
 /**
  * Stacking only means something with 2+ overlaid series on a bar/area mark;
  * it's hidden for single-series, line, pie, and the time axis (not stackable).
@@ -496,15 +482,6 @@ function ChartToggleItems({
       >
         Tooltip
       </DropdownMenuSwitchItem>
-      <RadioSubmenu
-        currentLabel={DITHER_LABEL[chart.dither ?? "inherit"]}
-        label="Dither"
-        onValueChange={(value) => {
-          write({ dither: value as ChartViewConfig["dither"] });
-        }}
-        options={DITHER_OPTIONS}
-        value={chart.dither ?? "inherit"}
-      />
       {canStack ? (
         <DropdownMenuSwitchItem
           checked={chart.stacked === true}
@@ -517,7 +494,7 @@ function ChartToggleItems({
       ) : null}
       {mark === "line" || mark === "area" ? (
         <DropdownMenuSwitchItem
-          checked={chart.smoothing === true}
+          checked={chart.smoothing !== false}
           onCheckedChange={(next) => {
             write({ smoothing: next });
           }}
@@ -641,6 +618,7 @@ function TimeAxisOptions({
   const currentWindow = presetForWindow(currentWindowMs);
   const currentWindowId = currentWindow.id;
   const currentScale = chart.timeSeries?.scale ?? "absolute";
+  const currentSessions = chart.timeSeries?.sessions ?? "collapse";
   const fieldName = (fieldId: string | undefined): string =>
     fields.find((field) => field.id === fieldId)?.name ?? "None";
 
@@ -699,6 +677,27 @@ function TimeAxisOptions({
           { value: "percent", label: "% change" },
         ]}
         value={currentScale}
+      />
+      <RadioSubmenu
+        currentLabel={currentSessions === "keep" ? "Real time" : "Skip closed"}
+        label="Closed periods"
+        onValueChange={(value) => {
+          const fieldId = chart.timeSeries?.fieldId ?? firstTimeFieldId;
+          if (fieldId) {
+            write({
+              timeSeries: {
+                ...chart.timeSeries,
+                fieldId,
+                sessions: value === "keep" ? "keep" : "collapse",
+              },
+            });
+          }
+        }}
+        options={[
+          { value: "collapse", label: "Skip closed" },
+          { value: "keep", label: "Real time" },
+        ]}
+        value={currentSessions}
       />
     </>
   );

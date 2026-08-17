@@ -29,10 +29,7 @@ import {
   resolveTheme,
 } from "@/lib/appearance/resolve-theme.ts";
 import { writeSiteAppearanceToDocument } from "@/lib/appearance/site-appearance-cookie.ts";
-import type {
-  ChartDitherMode,
-  ChartPaletteId,
-} from "@/lib/charts/chart-palettes.ts";
+import type { ChartPaletteId } from "@/lib/charts/chart-palettes.ts";
 import type { CodeThemeId } from "@/lib/code/code-themes.ts";
 import { setCodeTheme as setCodeThemeRuntime } from "@/lib/code/highlighter.ts";
 import type { PageTextScale } from "@/lib/schemas/page-settings.ts";
@@ -44,14 +41,10 @@ import type {
 } from "@/lib/schemas/site-appearance.ts";
 
 interface ThemeContextValue {
-  chartDither: ChartDitherMode;
-  /** Resolved from `chartDither` + the active theme: should charts dither right now? */
-  chartDitherEnabled: boolean;
   chartPalette: ChartPaletteId;
   /** Syntax theme shared by code blocks, inline code, and the formula editor. */
   codeTheme: CodeThemeId;
   resolvedTheme: ResolvedTheme;
-  setChartDither: (chartDither: ChartDitherMode) => void;
   setChartPalette: (chartPalette: ChartPaletteId) => void;
   setCodeTheme: (codeTheme: CodeThemeId) => void;
   setTextScale: (textScale: PageTextScale) => void;
@@ -74,10 +67,6 @@ function applyTextScale(textScale: PageTextScale): void {
 
 function applyChartPalette(chartPalette: ChartPaletteId): void {
   document.documentElement.dataset.chartPalette = chartPalette;
-}
-
-function applyChartDither(chartDither: ChartDitherMode): void {
-  document.documentElement.dataset.chartDither = chartDither;
 }
 
 function applyCodeTheme(codeThemeId: CodeThemeId): void {
@@ -104,9 +93,6 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   const [chartPalette, setChartPaletteState] = useState<ChartPaletteId>(
     initialHints.appearance.chartPalette
   );
-  const [chartDither, setChartDitherState] = useState<ChartDitherMode>(
-    initialHints.appearance.chartDither
-  );
   const [tooltipStyle, setTooltipStyleState] = useState<TooltipStyle>(
     initialHints.appearance.tooltipStyle
   );
@@ -124,20 +110,15 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     [prefersDark, theme]
   );
 
-  const chartDitherEnabled =
-    chartDither === "on" ||
-    (chartDither === "dark" && resolvedTheme === "dark");
-
   const appearanceSnapshot = useMemo<SiteAppearance>(
     () => ({
       theme,
       textScale,
       chartPalette,
-      chartDither,
       tooltipStyle,
       codeTheme: codeThemeId,
     }),
-    [theme, textScale, chartPalette, chartDither, tooltipStyle, codeThemeId]
+    [theme, textScale, chartPalette, tooltipStyle, codeThemeId]
   );
 
   useEffect(() => {
@@ -161,10 +142,6 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
   useEffect(() => {
     applyChartPalette(chartPalette);
   }, [chartPalette]);
-
-  useEffect(() => {
-    applyChartDither(chartDither);
-  }, [chartDither]);
 
   // Loads the pair into Shiki and publishes the formula editor's token
   // variables. Async and non-blocking: until it resolves, code surfaces keep
@@ -224,17 +201,6 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
     [appearanceSnapshot]
   );
 
-  const setChartDither = useCallback(
-    (nextChartDither: ChartDitherMode) => {
-      setChartDitherState(nextChartDither);
-      writeSiteAppearanceToDocument({
-        ...appearanceSnapshot,
-        chartDither: nextChartDither,
-      });
-    },
-    [appearanceSnapshot]
-  );
-
   const setTooltipStyle = useCallback(
     (nextTooltipStyle: TooltipStyle) => {
       setTooltipStyleState(nextTooltipStyle);
@@ -259,12 +225,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      chartDither,
-      chartDitherEnabled,
       chartPalette,
       codeTheme: codeThemeId,
       resolvedTheme,
-      setChartDither,
       setChartPalette,
       setCodeTheme,
       setTextScale,
@@ -275,12 +238,9 @@ export function ThemeProvider({ children, initialHints }: ThemeProviderProps) {
       tooltipStyle,
     }),
     [
-      chartDither,
-      chartDitherEnabled,
       chartPalette,
       codeThemeId,
       resolvedTheme,
-      setChartDither,
       setChartPalette,
       setCodeTheme,
       setTextScale,
@@ -312,25 +272,18 @@ export function useSiteAppearance(): ThemeContextValue {
 
 /** Persists appearance preferences cookie after client changes. */
 export function SyncSiteAppearanceCookieEffect() {
-  const {
-    chartDither,
-    chartPalette,
-    codeTheme,
-    textScale,
-    theme,
-    tooltipStyle,
-  } = useSiteAppearance();
+  const { chartPalette, codeTheme, textScale, theme, tooltipStyle } =
+    useSiteAppearance();
 
   useEffect(() => {
     writeSiteAppearanceToDocument({
       theme,
       textScale,
       chartPalette,
-      chartDither,
       tooltipStyle,
       codeTheme,
     });
-  }, [chartDither, chartPalette, codeTheme, textScale, theme, tooltipStyle]);
+  }, [chartPalette, codeTheme, textScale, theme, tooltipStyle]);
 
   return null;
 }

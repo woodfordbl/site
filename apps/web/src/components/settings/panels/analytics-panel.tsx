@@ -8,7 +8,7 @@ import {
   IconPencil,
 } from "@tabler/icons-react";
 import { useCallback, useMemo, useState } from "react";
-
+import { ChartPaletteScope } from "@/components/charts/chart-frame.tsx";
 import { AnalyticsHeatmapSection } from "@/components/settings/panels/analytics/analytics-heatmap-section.tsx";
 import { AnalyticsSection } from "@/components/settings/panels/analytics/analytics-section.tsx";
 import {
@@ -25,7 +25,6 @@ import { StorageBreakdown } from "@/components/settings/panels/analytics/storage
 import { WordCloud } from "@/components/settings/panels/analytics/word-cloud.tsx";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
-import { ChartPaletteScope } from "@/components/ui/chart.tsx";
 import {
   Empty,
   EmptyDescription,

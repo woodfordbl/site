@@ -381,6 +381,15 @@ export const databaseTableViewConfigSchema = z.object({
           scale: z.enum(["absolute", "percent"]).optional(),
           /** Visible window in ms (e.g. 7d); absent = the default window. */
           windowMs: z.number().positive().optional(),
+          /**
+           * How the axis treats periods with no observations (a market closed
+           * for the weekend, a feed asleep overnight). Absent/`collapse` gives
+           * them no width, so every session is drawn at the same scale and a
+           * flat segment cannot be mistaken for a price that held. `keep`
+           * preserves real elapsed time. Closures are inferred from sample
+           * spacing, not from a market calendar.
+           */
+          sessions: z.enum(["collapse", "keep"]).optional(),
         })
         .optional(),
       /** X axis / category field. */
@@ -424,17 +433,10 @@ export const databaseTableViewConfigSchema = z.object({
       yMax: z.number().optional(),
       stacked: z.boolean().optional(),
       /**
-       * Smooth the line/area curve. Absent follows the look: on (monotone) for
-       * a plain chart, off (pixel staircase) for a dithered one. When off on a
-       * plain chart, segments are straight (linear).
+       * Smooth the line/area curve with a monotone interpolation. Absent means
+       * on; `false` draws straight segments between vertices.
        */
       smoothing: z.boolean().optional(),
-      /**
-       * Per-chart dither override. `inherit` (default/absent) follows the
-       * workspace "Chart dither" appearance setting; `on`/`off` force this chart
-       * dithered or plain regardless of the workspace.
-       */
-      dither: z.enum(["inherit", "on", "off"]).optional(),
     })
     .optional(),
 });

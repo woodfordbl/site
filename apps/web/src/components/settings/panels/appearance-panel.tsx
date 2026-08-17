@@ -12,11 +12,9 @@ import {
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell.tsx";
 import { getSettingsSection } from "@/components/settings/site-settings-sections.ts";
 import {
-  CHART_DITHER_MODE_LABELS,
-  CHART_DITHER_MODES,
   CHART_PALETTE_IDS,
   CHART_PALETTES,
-  type ChartDitherMode,
+  CHART_SERIES_COLOR_VARS,
   type ChartPaletteId,
 } from "@/lib/charts/chart-palettes.ts";
 import {
@@ -47,14 +45,6 @@ const TOOLTIP_STYLE_OPTIONS: Array<{ label: string; value: TooltipStyle }> = [
   { value: "inverted", label: "Inverted" },
 ];
 
-const PALETTE_SWATCH_TOKENS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-];
-
 const CODE_THEME_OPTIONS: Array<{ label: string; value: CodeThemeId }> =
   CODE_THEME_IDS.map((id) => ({ value: id, label: CODE_THEMES[id].label }));
 
@@ -62,7 +52,7 @@ const CODE_THEME_OPTIONS: Array<{ label: string; value: CodeThemeId }> =
 function PaletteSwatch({ palette }: { palette: ChartPaletteId }) {
   return (
     <div className="flex items-center gap-1" data-chart-palette={palette}>
-      {PALETTE_SWATCH_TOKENS.map((token) => (
+      {CHART_SERIES_COLOR_VARS.map((token) => (
         <span
           className="size-3.5 rounded-full ring-1 ring-foreground/10"
           key={token}
@@ -83,18 +73,10 @@ const CHART_PALETTE_OPTIONS: Array<{
   leading: <PaletteSwatch palette={id} />,
 }));
 
-const CHART_DITHER_OPTIONS: Array<{ label: string; value: ChartDitherMode }> =
-  CHART_DITHER_MODES.map((value) => ({
-    value,
-    label: CHART_DITHER_MODE_LABELS[value],
-  }));
-
 export function AppearancePanel() {
   const {
-    chartDither,
     chartPalette,
     codeTheme,
-    setChartDither,
     setChartPalette,
     setCodeTheme,
     setTextScale,
@@ -163,17 +145,6 @@ export function AppearancePanel() {
             }
             description="Default color palette for analytics charts across the workspace."
             title="Palette"
-          />
-          <SettingsItemField
-            action={
-              <SettingsItemSelect
-                onValueChange={setChartDither}
-                options={CHART_DITHER_OPTIONS}
-                value={chartDither}
-              />
-            }
-            description="Render charts with a dithered texture. Dark mode only applies it when the dark theme is active."
-            title="Dither"
           />
         </SettingsItemCard>
       </section>
