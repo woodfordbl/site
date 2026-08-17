@@ -135,10 +135,21 @@ interface MapViewProps {
   className?: string;
   /** Edit mode: clicking the map drops/moves the pin. */
   onPickCoordinate?: (coordinate: { lat: number; lng: number }) => void;
+  /**
+   * Corner chrome drawn over whatever the block renders — the bound block's
+   * address + ⋯ menu. Passed in rather than rendered here so it also covers
+   * the notice states, where unbinding is the only way forward.
+   */
+  overlay?: ReactNode;
   props: MapProps;
 }
 
-export function MapView({ className, onPickCoordinate, props }: MapViewProps) {
+export function MapView({
+  className,
+  onPickCoordinate,
+  overlay,
+  props,
+}: MapViewProps) {
   const { resolvedTheme } = useSiteAppearance();
   const canvas = useMapBlockCanvas();
   const place = useMapBlockPlace(props);
@@ -146,13 +157,18 @@ export function MapView({ className, onPickCoordinate, props }: MapViewProps) {
   const [expanded, setExpanded] = useState(false);
 
   if (notice) {
-    return <MapBlockNotice className={className} {...notice} />;
+    return (
+      <div className="relative">
+        <MapBlockNotice className={className} {...notice} />
+        {overlay}
+      </div>
+    );
   }
 
   if (!canvas || place.kind !== "map") {
     return (
       <MapBlockFrame className={cn("bg-muted/40", className)}>
-        {null}
+        {overlay}
       </MapBlockFrame>
     );
   }
@@ -170,6 +186,7 @@ export function MapView({ className, onPickCoordinate, props }: MapViewProps) {
         props={place.props}
         theme={resolvedTheme === "dark" ? "dark" : "light"}
       />
+      {overlay}
       <MapAttribution />
     </MapBlockFrame>
   );

@@ -48,6 +48,35 @@ export type MapBlockPlace =
   | { kind: "empty" };
 
 /**
+ * One line naming what a bound block is showing — the place's own address
+ * wherever there is one, and otherwise the state the binding is in. The
+ * property's name is only the fallback: which property supplies the address is
+ * a detail of the setup, not what the reader is looking at.
+ */
+export function mapPlaceAddress(
+  place: MapBlockPlace,
+  fieldName: string | undefined
+): string {
+  if (place.kind === "map") {
+    return (
+      place.props.markers?.[0]?.label ?? fieldName ?? "This row's location"
+    );
+  }
+  if (place.kind === "unresolved") {
+    return place.label;
+  }
+  if (place.kind === "no-value") {
+    return fieldName ? `No ${fieldName} yet` : "No location yet";
+  }
+  if (place.kind === "unavailable") {
+    return place.reason === "not-a-row"
+      ? "Not a database row"
+      : "Property removed";
+  }
+  return "No location yet";
+}
+
+/**
  * What to render for `props`. Unbound blocks pass through unchanged, so the
  * binding is purely additive: nothing about a hand-pinned map changes.
  */

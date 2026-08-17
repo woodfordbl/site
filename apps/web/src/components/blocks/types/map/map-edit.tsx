@@ -2,12 +2,13 @@ import { IconMapPin } from "@tabler/icons-react";
 import { useCallback, useRef, useState } from "react";
 
 import { MapCoordinatePicker } from "@/components/blocks/types/map/map-coordinate-picker.tsx";
+import { MapPlaceOverlay } from "@/components/blocks/types/map/map-place-overlay.tsx";
 import { MapView } from "@/components/blocks/types/map/map-view.tsx";
 import {
+  mapPlaceAddress,
   useMapBlockLocationFields,
   useMapBlockPlace,
 } from "@/components/blocks/types/map/use-map-block-place.ts";
-import { Button } from "@/components/ui/button.tsx";
 import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
 import { useAutoFocus } from "@/hooks/use-auto-focus.ts";
 import { useInlineCustomBlockKeys } from "@/hooks/use-inline-custom-block-keys.ts";
@@ -126,46 +127,32 @@ export function MapEdit({
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the block itself is the keyboard target
       tabIndex={0}
     >
-      {props.locationFieldId ? (
-        <FollowedPropertyBar
-          name={followedField?.name}
-          onStopFollowing={() => {
-            // Unbinding leaves the block a placeholder rather than resurrecting
-            // a stale pin: the row's place was the point of following it.
-            onChange({ ...props, locationFieldId: undefined, markers: [] });
-          }}
-        />
-      ) : null}
       <MapView
         onPickCoordinate={props.locationFieldId ? undefined : handlePickFromMap}
+        overlay={
+          props.locationFieldId ? (
+            <MapPlaceOverlay
+              label={mapPlaceAddress(place, followedField?.name)}
+              locationFields={locationFields}
+              onFollowField={(fieldId) => {
+                onChange({ ...props, locationFieldId: fieldId });
+              }}
+              onStopFollowing={() => {
+                // Unbinding leaves the block a placeholder rather than
+                // resurrecting a stale pin: the row's place was the point of
+                // following it.
+                onChange({
+                  ...props,
+                  locationFieldId: undefined,
+                  markers: [],
+                });
+              }}
+              selectedFieldId={props.locationFieldId}
+            />
+          ) : null
+        }
         props={props}
       />
-    </div>
-  );
-}
-
-/** Edit-mode header for a bound block: what it follows, and how to stop. */
-function FollowedPropertyBar({
-  name,
-  onStopFollowing,
-}: {
-  name: string | undefined;
-  onStopFollowing: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 pb-1 text-muted-foreground text-xs">
-      <IconMapPin className="size-3.5 shrink-0 stroke-[1.5px]" />
-      <span className="min-w-0 truncate">
-        Following {name ?? "a deleted property"}
-      </span>
-      <Button
-        className="ml-auto h-6 px-2 text-xs"
-        onClick={onStopFollowing}
-        size="sm"
-        variant="ghost"
-      >
-        Stop following
-      </Button>
     </div>
   );
 }

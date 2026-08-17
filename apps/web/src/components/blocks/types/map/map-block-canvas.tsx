@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect } from "react";
 
 import { MapOverlayControls } from "@/components/maps/map-overlay-controls.tsx";
+import { MapRecenter } from "@/components/maps/map-recenter.tsx";
 import {
   Map,
   MapMarker,
@@ -78,6 +79,7 @@ export function MapBlockCanvas({
         expanded={expanded}
         onExpandedChange={onExpandedChange}
       />
+      <MapRecenter center={props.center} />
       {onPickCoordinate ? <ClickToPlace onPick={onPickCoordinate} /> : null}
       {markers.map((marker) => (
         <MapMarker
