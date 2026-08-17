@@ -767,12 +767,13 @@ The bulk **Clear row pages** action remains destructive —
 delete materialized `databaseRowSource` pages and clear the matching links so
 the next open re-seeds via `ensureDatabaseRowPage`. Authors can leave
 the body blank or insert `{{ thisPage.Field }}` property tokens (copy from a
-property row), type `#` for the formula builder under the caret (Save inserts an
-inline formula token whose Properties list includes the database's fields plus
-base page fields — Title / Created at / Updated at — via
+property row), type `$` in a plain text block for the formula builder under the
+caret (Save inserts an inline formula token whose Properties list leads with the
+base page fields — Title / Created at / Updated at — then the database's own
+columns, minus the primary column, whose value already *is* the page title, via
 [`page-formula-fields.ts`](../../src/lib/databases/page-formula-fields.ts);
 `thisRow` is a synonym of `thisPage` here and appears in autocomplete, unlike
-ordinary pages; Escape leaves `#` so markdown headings still work), or type
+ordinary pages; Escape leaves `$` as plain text), or type
 `@` to mention a page inline. Live inline tokens on the template and on seeded
 row pages evaluate against the same layered `thisPage` scope (template preview
 uses `rowDefaults`; row pages use the open row's values). Mustache `{{ … }}`
