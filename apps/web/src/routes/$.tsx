@@ -61,7 +61,16 @@ export const Route = createFileRoute("/$")({
       const localPagePreview = await loadPageListLocalPreview();
       const mayHaveLocalPage =
         hasAnyLocalDrafts(dirtyPageIds) || localPagePreview.length > 0;
-      if (!mayHaveLocalPage) {
+      // In the browser, hand the slug to the client resolver regardless: a
+      // database's hub / row / template paths are built from data that only
+      // exists in localStorage, and shipped databases seed there without ever
+      // writing a draft cookie. Deciding here 404'd every one of those paths
+      // for a visitor who had not yet edited anything — including the row
+      // template editor, which is reachable no other way.
+      // `PendingSlugPageClient` still throws `notFound()` once the local
+      // collections have settled and nothing matches, so a genuinely missing
+      // page is still a 404; only the server render answers early.
+      if (!(mayHaveLocalPage || typeof window !== "undefined")) {
         throw notFound();
       }
       return { kind: "pending" as const, slug };
