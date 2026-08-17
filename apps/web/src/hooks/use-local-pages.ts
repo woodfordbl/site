@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { localPagesCollection } from "@/db/collections/local-collections.ts";
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
+import { isSyncedMode } from "@/db/collections/sync-mode.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
 import { mergeLocalPageSources } from "@/lib/pages/merge-local-page-sources.ts";
 import { localPagesFromPreviewEntries } from "@/lib/pages/page-list-local-preview-cookie.ts";
@@ -75,6 +76,14 @@ export function useLocalPages(): LocalPage[] {
 
   if (!isReady) {
     return mergeLocalPageSources(previewPages, bootstrapPages);
+  }
+
+  // Synced mode: the shape stream is the whole truth, emptiness included — a
+  // workspace whose access was just revoked legitimately has no pages, and the
+  // localStorage re-read below is an anonymous-mode heuristic that would
+  // resurrect this browser's local content inside a synced session.
+  if (isSyncedMode()) {
+    return collectionPages;
   }
 
   // Ready: the collection IS `site-local-pages`, so it is authoritative —
