@@ -69,6 +69,10 @@ export const databaseMapViewConfigSchema = z.object({
    * default a board card starts from.
    */
   tooltipFieldIds: z.array(z.string()).optional(),
-  /** Row icon before the tooltip title; absent = shown, like grid rows. */
+  /**
+   * Row icon before the tooltip title; absent = shown, like grid rows. Surfaced
+   * as "Page icon" in Map options, matching the grid's own "Page icons" toggle
+   * — it is the same glyph, in a different place.
+   */
   showTooltipIcon: z.boolean().optional(),
 });

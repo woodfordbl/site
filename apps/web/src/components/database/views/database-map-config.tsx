@@ -330,7 +330,7 @@ function TooltipItems({
           write({ showTooltipIcon: checked });
         }}
       >
-        Tooltip icon
+        Page icon
       </DropdownMenuSwitchItem>
     </>
   );
@@ -340,14 +340,17 @@ function TooltipItems({
 function PointSourceItems({
   fields,
   map,
+  primaryFieldId,
   write,
 }: {
   fields: DatabaseField[];
   map: DatabaseMapConfig;
+  primaryFieldId: string;
   write: WriteMapPatch;
 }): ReactNode {
   const pointMode = resolveMapPointMode(map);
   const numberFields = mapLatLngFieldCandidates(fields);
+  const primaryField = fields.find((field) => field.id === primaryFieldId);
 
   return (
     <>
@@ -377,7 +380,13 @@ function PointSourceItems({
           write({ labelFieldId: value === NONE_VALUE ? undefined : value });
         }}
         options={[
-          { value: NONE_VALUE, label: "Title" },
+          {
+            value: NONE_VALUE,
+            label: "Title",
+            // The row it stands for: whichever field is the primary one, with
+            // that field's own glyph rather than a stand-in.
+            leading: primaryField ? fieldOption(primaryField).leading : null,
+          },
           ...fields.map(fieldOption),
         ]}
         value={map.labelFieldId ?? NONE_VALUE}
@@ -509,7 +518,12 @@ export function MapOptionsItems({
       </DropdownMenuRadioGroup>
       <DropdownMenuSeparator />
       {isPointMark(mark) ? (
-        <PointSourceItems fields={fields} map={map} write={write} />
+        <PointSourceItems
+          fields={fields}
+          map={map}
+          primaryFieldId={database.primaryFieldId}
+          write={write}
+        />
       ) : (
         <RegionSourceItems fields={fields} map={map} write={write} />
       )}
