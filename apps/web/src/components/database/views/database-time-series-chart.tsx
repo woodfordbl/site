@@ -10,7 +10,6 @@ import {
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import { chartSeriesToken } from "@/lib/charts/chart-palettes.ts";
 import {
-  CHART_SMOOTH_CURVE,
   CHART_STREAM_MOTION,
   CHART_THEME,
   type ChartSeriesColor,
@@ -21,10 +20,7 @@ import {
   sessionTimeAxis,
 } from "@/lib/charts/chart-spec.ts";
 import { resolveAutoYDomain } from "@/lib/charts/chart-y-domain.ts";
-import {
-  detectClosedPeriods,
-  withClosedPeriodGaps,
-} from "@/lib/charts/session-time-scale.ts";
+import { detectClosedPeriods } from "@/lib/charts/session-time-scale.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   type DatabaseChartConfig,
@@ -34,6 +30,7 @@ import {
   DEFAULT_TIME_WINDOW_MS,
   presetForWindow,
   TIME_WINDOW_PRESETS,
+  windowSampleSpacingMs,
 } from "@/lib/databases/time-series-chart-data.ts";
 import {
   type TimeSeriesChartData,
@@ -57,6 +54,15 @@ import { cn } from "@/lib/utils.ts";
  * ticks and inverts correctly across every window the control offers. The tick
  * formatter is what makes the axis read as time, and it follows the window —
  * clock times within a day, dates within a month, months beyond that.
+ *
+ * Two properties of the drawn path are deliberate and load-bearing for a price
+ * series. It is **unsmoothed**: every vertex is an observation and every
+ * segment is a straight line between two of them, so nothing on screen is
+ * interpolated shape. And it is **unbroken** across a market closure: the axis
+ * collapses the closed interval to no width, so Friday's close and Monday's
+ * open sit adjacent and the overnight move reads as the single step it is,
+ * rather than as a series of disconnected daily fragments. The dashed seam
+ * marks are what keep that honest — they state where elapsed time was removed.
  */
 
 const DAY_MS = 86_400_000;
@@ -101,8 +107,7 @@ interface TimeSeriesRow {
   label: string;
   series: string;
   t: number;
-  /** `null` marks unobserved time, which the mark renders as a gap. */
-  v: number | null;
+  v: number;
 }
 
 /**
@@ -229,7 +234,11 @@ export function DatabaseTimeSeriesChart({
   view,
 }: DatabaseTimeSeriesChartProps): ReactNode {
   const fieldId = chart.timeSeries?.fieldId;
-  const windowMs = chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS;
+  // Snapped to a preset so a view saved against a window the control no longer
+  // offers still highlights — and formats — as the nearest one it does.
+  const windowMs = presetForWindow(
+    chart.timeSeries?.windowMs ?? DEFAULT_TIME_WINDOW_MS
+  ).windowMs;
   const percent = chart.timeSeries?.scale === "percent";
   const mark = chart.mark === "area" ? "area" : "line";
   const yField = fields.find((field) => field.id === fieldId) ?? null;
@@ -270,12 +279,15 @@ export function DatabaseTimeSeriesChart({
     const plotted = timeSeriesRows(data, percent);
     // Closures are inferred from the samples themselves, so a 24/7 pair stays
     // linear and an instrument with nights and weekends compresses them out
-    // without anyone naming a market calendar.
-    // Closures are inferred from the samples themselves, so a 24/7 pair stays
-    // linear and an instrument with nights and weekends compresses them out
     // without anyone naming a market calendar. `keep` opts out of the collapse
-    // but still breaks the line, because the interpolation is wrong either way.
-    const closed = detectClosedPeriods(plotted.map((row) => row.t));
+    // and spends real width on the closed interval instead. The window's own
+    // candle spacing is the floor for what counts as a gap — without it the
+    // fine live capture at the right edge drags the median down and every
+    // candle step reads as a closure.
+    const closed = detectClosedPeriods(
+      plotted.map((row) => row.t),
+      { minSpacingMs: windowSampleSpacingMs(windowMs) }
+    );
     const time = sessionTimeAxis({
       closed: chart.timeSeries?.sessions === "keep" ? [] : closed,
       format: makeTimeFormatter(windowMs),
@@ -283,13 +295,9 @@ export function DatabaseTimeSeriesChart({
       samples: plotted.map((row) => row.t),
       title: chart.xAxisTitle,
     });
-    // Break each series across its closures. Narrowing a closed period is not
-    // enough on its own — a curve drawn through it still reads as observed data,
-    // whatever width it has.
-    const marked = withClosedPeriodGaps(plotted, closed);
     const yDomain = resolveAutoYDomain({
       tickCount: chart.gridCount ?? 4,
-      values: plotted.flatMap((row) => (row.v === null ? [] : [row.v])),
+      values: plotted.map((row) => row.v),
       yMax: chart.yMax,
       yMin: chart.yMin,
       // Prices and levels: zoom to the data band rather than anchoring at zero.
@@ -301,7 +309,6 @@ export function DatabaseTimeSeriesChart({
       z: "series",
       color: "series",
     } as const;
-    const curve = chart.smoothing === false ? undefined : CHART_SMOOTH_CURVE;
     // Keyed points plus rolling path motion are what make a live series animate
     // as the window advancing rather than as every sample changing value.
     const streaming = {
@@ -318,18 +325,20 @@ export function DatabaseTimeSeriesChart({
             stroke: "var(--border)",
             strokeDasharray: "3 3",
           }),
+          // No `curve`: straight segments between observations. A monotone
+          // spline through prices invents intermediate shape the market never
+          // printed, and on a collapsed closure it would bow the overnight
+          // step into something that looks like trading.
           mark === "area"
-            ? areaY(marked, {
+            ? areaY(plotted, {
                 ...channels,
                 ...streaming,
-                curve,
                 fillOpacity: 0.25,
                 strokeWidth: 2,
               })
-            : lineY(marked, {
+            : lineY(plotted, {
                 ...channels,
                 ...streaming,
-                curve,
                 strokeWidth: 2,
               }),
         ],
