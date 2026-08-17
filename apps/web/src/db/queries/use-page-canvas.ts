@@ -28,8 +28,8 @@ import {
   updatePageBlockInTx,
   upsertPageBlock,
 } from "@/db/queries/block-collection-ops.ts";
+import { seedLocalPageRow } from "@/db/queries/seed-local-page-row.ts";
 import { usePageBlocks } from "@/db/queries/use-page-blocks.ts";
-import { capturePageBaseline } from "@/db/snapshots/page-baseline-store.ts";
 import {
   buildBlockTree,
   type CanvasRow,
@@ -249,30 +249,25 @@ export function usePageCanvas(
 
   const ensurePageMeta = useCallback(
     (blockOrder?: string[]) => {
-      // `localPage` can be stale under StrictMode double-mounted effects (two
-      // mounts both capture null and both insert — crashing a fresh profile's
-      // first visit), so also consult the collection's live state.
-      if (localPage || localPagesCollection.has(pageId)) {
+      // `localPage` can be stale under StrictMode double-mounted effects, so
+      // the seed helper re-checks the collection and tolerates losing the race.
+      if (localPage) {
         return;
       }
-
-      const timestamp = new Date().toISOString();
-      localPagesCollection.insert({
-        id: pageId,
-        slug: serverPage.slug,
-        title: serverPage.title,
-        icon: serverPage.icon,
-        parentId: serverPage.parentId,
-        sidebarOrder: serverPage.sidebarOrder,
+      seedLocalPageRow({
         blockOrder,
+        metadata: {
+          icon: serverPage.icon,
+          parentId: serverPage.parentId,
+          sidebarOrder: serverPage.sidebarOrder,
+          slug: serverPage.slug,
+          title: serverPage.title,
+        },
+        pageId,
         serverBaselineHash,
+        serverBlocks: serverPage.blocks,
         serverMetadataBaseline,
-        createdAt: timestamp,
-        updatedAt: timestamp,
       });
-      // The seeded shard holds post-edit blocks; the conflict baseline is the
-      // pristine server content this overlay diverged from.
-      capturePageBaseline(pageId, serverPage.blocks, serverBaselineHash);
     },
     [
       localPage,

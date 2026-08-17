@@ -1,11 +1,10 @@
 import { IconDatabase } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import {
   DatabaseBlockLoading,
   useDatabaseBlockReady,
 } from "@/components/blocks/types/database/database-block-gate.tsx";
-import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { DatabaseCreatePanel } from "@/components/database/database-create-panel.tsx";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
@@ -46,23 +45,10 @@ export function DatabaseEdit({
   const focusRef = useRef<HTMLButtonElement | HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const hasDatabase = props.databaseId !== "";
-  const canvas = useCanvasEditorContext();
   // Gate mounting the table view: SSR safety (useLiveQuery has no server
   // snapshot) + the shipped-database seed window on first visit.
   const tableReady = useDatabaseBlockReady();
   const database = useDatabase(props.databaseId);
-
-  // Legacy orphan: a block whose database was deleted before cascade cleanup
-  // existed. Drop it once the gate is open so we never flash a dead shell.
-  useEffect(() => {
-    if (!(tableReady && hasDatabase) || database !== undefined) {
-      return;
-    }
-    const rowId = row?.rowId;
-    if (rowId) {
-      canvas.dispatch({ type: "row.delete", rowId });
-    }
-  }, [canvas, database, hasDatabase, row?.rowId, tableReady]);
 
   const applyAutoFocus = useCallback(() => {
     focusRef.current?.focus();
@@ -139,8 +125,19 @@ export function DatabaseEdit({
     );
   }
 
+  // A linked block whose definition is absent: the database was deleted before
+  // the delete cascade existed, or a shipped page references a database with no
+  // document in `content/databases/`. Render it, never repair it — this
+  // component runs on a plain page visit, and deleting the row here wrote a
+  // local overlay that silently dropped the block from the reader's copy of a
+  // pristine shipped page. Deleting a block is the reader's call, not a side
+  // effect of looking at it.
   if (tableReady && database === undefined) {
-    return null;
+    return (
+      <div className="rounded-lg border border-border border-dashed px-3 py-2 text-muted-foreground text-sm">
+        This database is unavailable.
+      </div>
+    );
   }
 
   return (
