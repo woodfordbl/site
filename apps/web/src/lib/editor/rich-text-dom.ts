@@ -326,13 +326,12 @@ export function applyInlineFormulaValues(
     } else {
       element.removeAttribute("data-formula-empty");
     }
-    // The value may be truncated on screen, so the tooltip carries it in full
-    // alongside the expression that produced it.
-    const expression = (element as HTMLElement).dataset.expression ?? "";
-    const title = values.has(at) ? `${next}\n${expression}` : expression;
-    if (element.getAttribute("title") !== title) {
-      element.setAttribute("title", title);
-    }
+    // No `title`, for the reason `createInlineFormulaToken` sets none: in an
+    // EDITABLE field `InlineFormulaTokenTooltip` owns the hint, and stamping
+    // one per value pass put a second, OS-chrome copy underneath it. The
+    // read-only renderer (`editor/rich-text.tsx`) keeps its `title` — no
+    // delegated tooltip runs there.
+    element.removeAttribute("title");
   }
 }
 
