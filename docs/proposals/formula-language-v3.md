@@ -1,8 +1,9 @@
 # Formula Language v3 — a more natural language, richer types, engine economics, and a Numbers-class mobile editor
 
 Status: proposal (August 2026). A critical re-examination of the shipped v2
-system ([formula-language-v2](./formula-language-v2.md), architecture in
-[formula-language.md](../architecture/formula-language.md)) across four axes:
+system ([formula-language-v2](./formula-language-v2.md); the architecture
+notes that used to live under `docs/architecture/` are now JSDoc in
+`apps/web/src/lib/formula/` and the editor components) across four axes:
 language naturalness, the type/property surface, the calculation engine's
 implementation economics, and the mobile editing experience. Items marked
 **[shipped]** landed with this proposal's first PR; everything else is ranked

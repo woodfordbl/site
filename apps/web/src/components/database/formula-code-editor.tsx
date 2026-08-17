@@ -54,7 +54,6 @@ import {
   checkFormula,
   type FormulaCheckContext,
   formulaPropertyValueType,
-  formulaTypeBadge,
   formulaTypeFits,
   normalizeFormulaPropertyName,
 } from "@/lib/formula/check.ts";
@@ -74,6 +73,7 @@ import {
   type FormulaRefDatabase,
   type FormulaSpanRewrite,
 } from "@/lib/formula/ref-rewrite.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import {
   BOOLEAN_TYPE,
   type FormulaType,

@@ -1,5 +1,4 @@
 import {
-  IconChevronDown,
   IconMathFunction,
   IconPlus,
   IconSearch,
@@ -25,6 +24,18 @@ import type {
 } from "@/components/database/formula-code-editor.tsx";
 import { FormulaEditorAccessoryRow } from "@/components/database/formula-editor-accessory-row.tsx";
 import {
+  SheetHeader,
+  SheetLayout,
+  SheetRollupButton,
+  StatusPill,
+} from "@/components/database/formula-editor-sheet.tsx";
+import { formulaStatusLine } from "@/components/database/formula-editor-status.tsx";
+import {
+  type ReferenceListEntries,
+  StudioLayout,
+  StudioTray,
+} from "@/components/database/formula-editor-studio.tsx";
+import {
   FormulaRollupWizard,
   formulaRollupRelationFields,
 } from "@/components/database/formula-rollup-wizard.tsx";
@@ -33,7 +44,6 @@ import {
   preloadFormulaCodeEditor,
 } from "@/components/database/preload-formula-code-editor.ts";
 import { useIsCoarsePrimaryPointer } from "@/components/layout/device-layout-provider.tsx";
-import { useHaptics } from "@/components/layout/haptics-provider.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { TokenChip } from "@/components/ui/chip.tsx";
 import {
@@ -50,7 +60,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select.tsx";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import {
   computeFormulaRowValues,
@@ -60,24 +69,19 @@ import {
 } from "@/lib/databases/formula-values.ts";
 import {
   FORMULA_FUNCTION_CATALOG,
-  FORMULA_OPERATOR_CATALOG,
   type FormulaFunctionEntry,
-  type FormulaOperatorCatalogEntry,
   formulaFunctionSignature,
   formulaParamLabel,
   formulaPropertyReference,
 } from "@/lib/formula/catalog.ts";
-import {
-  checkFormula,
-  type FormulaCheckResult,
-  formulaTypeBadge,
-} from "@/lib/formula/check.ts";
+import { checkFormula, type FormulaCheckResult } from "@/lib/formula/check.ts";
 import { formulaValueToDisplay } from "@/lib/formula/display.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import {
   formulaDbIdSpans,
   formulaPropIdSpans,
 } from "@/lib/formula/highlight.ts";
+import { FORMULA_OPERATOR_CATALOG } from "@/lib/formula/operator-catalog.ts";
 import { type ParseFormulaResult, parseFormula } from "@/lib/formula/parse.ts";
 import {
   canonicalDatabaseReference,
@@ -90,6 +94,7 @@ import {
   createFormulaRowScope,
   formulaRowLabelOf,
 } from "@/lib/formula/row-scope.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import { formulaUserFunctionSignature } from "@/lib/formula/user-functions.ts";
 import type {
   FormulaPreparedUserFunction,
@@ -111,11 +116,20 @@ import { cn } from "@/lib/utils.ts";
  * Functions / Operators that insert at the caret, with a fixed-height detail
  * strip documenting the focused entry. Three arrangements via `layout`: the
  * default single-column stack (menu popup), the two-column `wide` form for
- * the desktop formula dialog (see {@link PanelLayout}), and the mobile
- * `sheet` form (see {@link SheetLayout}) — Cancel/Formula/Done header, the
- * CM6 editor even on coarse pointers, a tappable {@link StatusPill}, and the
+ * the desktop formula dialog (see {@link PanelLayout}), the mobile `sheet`
+ * form (see {@link SheetLayout}) — Cancel/Formula/Done header, the CM6 editor
+ * even on coarse pointers, a tappable {@link StatusPill}, and the
  * keyboard-anchored {@link FormulaEditorAccessoryRow} with its property /
- * function picker drawers standing in for the inline reference list.
+ * function picker drawers standing in for the inline reference list — and the
+ * full-screen `studio` form (see {@link StudioLayout}) every coarse-pointer
+ * host now escalates to.
+ *
+ * The studio is the sheet's answer to having no room: the same header, a
+ * roomier editor, the SAME plain status line the desktop layouts render
+ * (deliberately not boxed diagnostic rows or a validity pill — the editor's
+ * own wavy underlines already point at the span), and a
+ * Properties / Functions / Operators tray (see {@link StudioTray}) filling
+ * the half of the screen the keyboard takes while typing.
  *
  * The `draft` state is the CANONICAL expression (`prop("<id>")` — exactly
  * what gets stored), so parse/check/preview/save all operate on it directly.
@@ -337,45 +351,6 @@ function referenceDisplayOffset(
 }
 
 /**
- * Left half of the status row: the first parse error, else the first checker
- * diagnostic, else "✓ Valid". `null` for a blank draft. Positions are
- * 1-based indexes into what the user SEES — `displayPosition` maps each
- * canonical-draft offset past the `prop("<id>")` spans that render as short
- * labels (chips / humanized references).
- */
-function statusLine(
-  parsed: ParseFormulaResult | null,
-  checked: FormulaCheckResult | null,
-  displayPosition: (offset: number) => number
-): ReactNode {
-  if (parsed === null) {
-    return null;
-  }
-  if (!parsed.ok) {
-    return (
-      <span className="min-w-0 truncate text-destructive text-xs">
-        {parsed.error.message} (at character{" "}
-        {displayPosition(parsed.error.position) + 1})
-      </span>
-    );
-  }
-  const firstDiagnostic = checked?.diagnostics[0];
-  if (firstDiagnostic !== undefined) {
-    return (
-      <span className="min-w-0 truncate text-destructive text-xs">
-        {firstDiagnostic.message} (at character{" "}
-        {displayPosition(firstDiagnostic.start) + 1})
-      </span>
-    );
-  }
-  return (
-    <span className="min-w-0 truncate text-muted-foreground text-xs">
-      ✓ Valid
-    </span>
-  );
-}
-
-/**
  * The stack/wide status row: {@link statusLine} on the left, the checked
  * result-type badge on the right. Renders nothing for a blank draft —
  * owning that guard here keeps the panel under the complexity cap.
@@ -394,7 +369,7 @@ function StatusRow({
   }
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
-      {statusLine(parsed, checked, displayPosition)}
+      {formulaStatusLine(parsed, checked, displayPosition)}
       {checked === null ? null : (
         <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
           Type:
@@ -679,15 +654,6 @@ export interface FormulaEditorPanelProps {
   userFunctions?: FormulaPreparedUserFunctions;
 }
 
-interface ReferenceListEntries {
-  customFunctionEntries: (FormulaPreparedUserFunction & {
-    signature: string;
-  })[];
-  functionEntries: (FormulaFunctionEntry & { signature: string })[];
-  operatorEntries: FormulaOperatorCatalogEntry[];
-  propertyFields: DatabaseField[];
-}
-
 /** The searchable Properties / Functions / Operators reference list. */
 function ReferenceList({
   className,
@@ -965,473 +931,6 @@ function EditorSlot({
         {save}
       </InputGroupAddon>
     </InputGroup>
-  );
-}
-
-/**
- * Arranges the mobile sheet's slots in one column: explicit header (Cancel /
- * "Formula" / Done — the sheet's only save affordance), editor, tappable
- * status pill, preview, then the rollup tools (button or open wizard). The
- * bottom padding clears the keyboard-anchored accessory row, which floats
- * over the sheet at the keyboard top (or the viewport bottom while the
- * keyboard is closed).
- */
-function SheetLayout({
-  editor,
-  header,
-  preview,
-  status,
-  tools,
-  wizard,
-}: {
-  editor: ReactNode;
-  header: ReactNode;
-  preview: ReactNode;
-  status: ReactNode;
-  tools: ReactNode;
-  /** The open rollup wizard; non-null, it replaces the tools slot. */
-  wizard: ReactNode | null;
-}): ReactNode {
-  return (
-    <div className="flex w-full flex-col gap-2 p-1 pb-16">
-      {header}
-      {editor}
-      {status}
-      {preview}
-      {wizard ?? tools}
-    </div>
-  );
-}
-
-/**
- * The sheet's header row: Cancel backs out without saving, Done runs the
- * same save path (and the same parse-error gating) as the other layouts'
- * Save button. The title sits between them; a spacer keeps it centered when
- * the host passes no `onCancel`.
- */
-function SheetHeader({
-  doneDisabled,
-  onCancel,
-  onDone,
-  onDoneBlocked,
-  title = "Formula",
-}: {
-  doneDisabled: boolean;
-  onCancel: (() => void) | undefined;
-  onDone: () => void;
-  /**
-   * Tapping Done while invalid: explain instead of a dead button. Optional —
-   * the studio's always-visible status line already explains itself, so only
-   * the sheet (whose pill collapses the message) needs the expansion hook.
-   */
-  onDoneBlocked?: () => void;
-  title?: string;
-}): ReactNode {
-  const haptic = useHaptics();
-  return (
-    <div className="flex items-center justify-between gap-2">
-      {onCancel === undefined ? (
-        <span aria-hidden className="w-16" />
-      ) : (
-        <Button
-          className="pointer-coarse:h-10"
-          onClick={onCancel}
-          variant="ghost"
-        >
-          Cancel
-        </Button>
-      )}
-      <span className="min-w-0 truncate px-1 font-medium text-foreground text-sm">
-        {title}
-      </span>
-      <Button
-        aria-disabled={doneDisabled}
-        className={cn("pointer-coarse:h-10", doneDisabled && "opacity-50")}
-        onClick={() => {
-          // Stay tappable while invalid: a silent dead button reads as a
-          // broken sheet on touch. The boundary haptic plus the expanded
-          // status pill say WHY Done won't fire.
-          if (doneDisabled) {
-            haptic("disabled");
-            onDoneBlocked?.();
-            return;
-          }
-          onDone();
-        }}
-      >
-        Done
-      </Button>
-    </div>
-  );
-}
-
-/**
- * The sheet's Rollup affordance: with no inline reference list to host the
- * button, a standalone one below the editor keeps the wizard reachable.
- * Renders nothing when no rollup is buildable (same gate as the other
- * layouts' Rollup button).
- */
-function SheetRollupButton({
-  available,
-  onOpen,
-}: {
-  available: boolean;
-  onOpen: () => void;
-}): ReactNode {
-  if (!available) {
-    return null;
-  }
-  return (
-    <Button
-      className="pointer-coarse:h-10 self-start"
-      onClick={onOpen}
-      variant="outline"
-    >
-      <IconSum />
-      Rollup
-    </Button>
-  );
-}
-
-type StudioTrayTab = "functions" | "operators" | "properties";
-
-const STUDIO_TABS: readonly { key: StudioTrayTab; label: string }[] = [
-  { key: "properties", label: "Properties" },
-  { key: "functions", label: "Functions" },
-  { key: "operators", label: "Operators" },
-];
-
-/** Shared row chrome for the studio tray lists (44px touch targets). */
-const studioRowClassName =
-  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm outline-none pointer-coarse:min-h-11 hover:bg-accent hover:text-accent-foreground";
-
-/**
- * The studio's bottom half: a segmented Properties / Functions / Operators
- * browser with search — the desktop reference list reborn as a tall,
- * touch-first tray that occupies the space the keyboard takes while typing.
- * Function rows expand in place (chevron) to show the description and a
- * runnable example BEFORE inserting; row taps insert at the caret through
- * the same paths every other surface uses.
- */
-function StudioTray({
-  entries,
-  onInsertAtCaret,
-  onInsertCustomFunction,
-  onInsertFunction,
-  onInsertProperty,
-  onOpenRollup,
-  onQueryChange,
-  query,
-  rollupAvailable,
-}: {
-  entries: ReferenceListEntries;
-  onInsertAtCaret: (text: string, caretOffset: number) => void;
-  onInsertCustomFunction: (def: FormulaPreparedUserFunction) => void;
-  onInsertFunction: (entry: FormulaFunctionEntry) => void;
-  onInsertProperty: (propertyField: DatabaseField) => void;
-  onOpenRollup: () => void;
-  onQueryChange: (query: string) => void;
-  query: string;
-  rollupAvailable: boolean;
-}): ReactNode {
-  const [tab, setTab] = useState<StudioTrayTab>("properties");
-  /** Which function row's docs are expanded; keyed by (custom?)+name. */
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const {
-    customFunctionEntries,
-    functionEntries,
-    operatorEntries,
-    propertyFields,
-  } = entries;
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center gap-1.5">
-        {/* The app-wide tabs (indicator variant, same as the view switcher) —
-            not a bespoke segmented control. */}
-        <Tabs
-          className="min-w-0 flex-1"
-          onValueChange={(value) => {
-            setTab(value as StudioTrayTab);
-          }}
-          value={tab}
-        >
-          <TabsList className="pointer-coarse:h-9 w-full" variant="indicator">
-            {STUDIO_TABS.map((candidate) => (
-              <TabsTrigger key={candidate.key} value={candidate.key}>
-                {candidate.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        {rollupAvailable ? (
-          <Button
-            className="pointer-coarse:h-9 shrink-0"
-            onClick={onOpenRollup}
-            variant="outline"
-          >
-            <IconSum />
-            Rollup
-          </Button>
-        ) : null}
-      </div>
-      <InputGroup className="h-9 shrink-0">
-        <InputGroupAddon align="inline-start">
-          <InputGroupText>
-            <IconSearch />
-          </InputGroupText>
-        </InputGroupAddon>
-        <InputGroupInput
-          aria-label={`Search ${tab}`}
-          autoComplete="off"
-          onChange={(event) => {
-            onQueryChange(event.target.value);
-          }}
-          onKeyDown={stopMenuKeys}
-          placeholder={`Search ${tab}…`}
-          value={query}
-        />
-      </InputGroup>
-      <ScrollArea className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex flex-col">
-          {tab === "properties"
-            ? propertyFields.map((propertyField) => {
-                const FieldIcon = resolveFieldIcon(propertyField);
-                return (
-                  <button
-                    className={studioRowClassName}
-                    key={propertyField.id}
-                    onClick={() => {
-                      onInsertProperty(propertyField);
-                    }}
-                    type="button"
-                  >
-                    <FieldIcon className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate">
-                      {propertyField.name}
-                    </span>
-                    <span className="shrink-0 text-muted-foreground text-xs">
-                      {propertyField.type}
-                    </span>
-                  </button>
-                );
-              })
-            : null}
-          {tab === "functions" ? (
-            <>
-              {functionEntries.map((entry) => (
-                <StudioFunctionRow
-                  description={entry.description}
-                  example={entry.examples[0]}
-                  expanded={expandedKey === entry.name}
-                  key={entry.name}
-                  name={entry.name}
-                  onInsert={() => {
-                    onInsertFunction(entry);
-                  }}
-                  onToggleExpanded={() => {
-                    setExpandedKey((current) =>
-                      current === entry.name ? null : entry.name
-                    );
-                  }}
-                  signature={entry.signature}
-                />
-              ))}
-              {customFunctionEntries.map((def) => (
-                <StudioFunctionRow
-                  description={def.description ?? "Custom function."}
-                  expanded={expandedKey === `custom:${def.name}`}
-                  key={`custom:${def.name}`}
-                  name={def.name}
-                  onInsert={() => {
-                    onInsertCustomFunction(def);
-                  }}
-                  onToggleExpanded={() => {
-                    setExpandedKey((current) =>
-                      current === `custom:${def.name}`
-                        ? null
-                        : `custom:${def.name}`
-                    );
-                  }}
-                  signature={def.signature}
-                />
-              ))}
-            </>
-          ) : null}
-          {tab === "operators"
-            ? operatorEntries.map((entry) => (
-                <button
-                  className={studioRowClassName}
-                  key={entry.symbol}
-                  onClick={() => {
-                    // Same insert shape as the desktop reference list: the
-                    // operator with breathing room, caret after it.
-                    onInsertAtCaret(
-                      ` ${entry.symbol} `,
-                      entry.symbol.length + 2
-                    );
-                  }}
-                  type="button"
-                >
-                  <span className="w-8 shrink-0 font-mono text-foreground">
-                    {entry.symbol}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
-                    {entry.description}
-                  </span>
-                </button>
-              ))
-            : null}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
-
-/**
- * One function row in the studio tray: tap inserts (placeholder snippet on
- * CM6), the trailing chevron expands the docs in place — description plus
- * the first runnable example — so mobile finally sees what desktop's detail
- * strip shows.
- */
-function StudioFunctionRow({
-  description,
-  example,
-  expanded,
-  name,
-  onInsert,
-  onToggleExpanded,
-  signature,
-}: {
-  description: string;
-  example?: string;
-  expanded: boolean;
-  name: string;
-  onInsert: () => void;
-  onToggleExpanded: () => void;
-  signature: string;
-}): ReactNode {
-  return (
-    <div className="flex flex-col">
-      <div className="flex items-center">
-        <button
-          className={cn(studioRowClassName, "flex-1")}
-          onClick={onInsert}
-          type="button"
-        >
-          <IconMathFunction className="size-4 shrink-0 stroke-[1.5px] text-muted-foreground" />
-          <span className="shrink-0 font-medium">{name}</span>
-          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
-            {signature.slice(name.length)}
-          </span>
-        </button>
-        <button
-          aria-expanded={expanded}
-          aria-label={`${name} details`}
-          className="flex h-9 pointer-coarse:h-11 pointer-coarse:w-11 w-9 shrink-0 items-center justify-center text-muted-foreground"
-          onClick={onToggleExpanded}
-          type="button"
-        >
-          <IconChevronDown
-            className={cn(
-              "size-4 stroke-[1.5px] transition-transform",
-              expanded && "rotate-180"
-            )}
-          />
-        </button>
-      </div>
-      {expanded ? (
-        <div className="flex flex-col gap-1 px-3 pb-2.5 pl-9.5">
-          <span className="text-muted-foreground text-xs">{description}</span>
-          {example === undefined ? null : (
-            <code className="font-mono text-foreground text-xs">{example}</code>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Arranges the full-screen studio's slots in one column: header (Cancel /
- * column name / Done), the roomy editor, the status line + preview (the same
- * plain red-text diagnostics the desktop layouts show — no boxed rows, no
- * validity pill), then the reference tray filling everything below (the open
- * rollup wizard swaps in for the tray). The bottom padding clears the
- * keyboard-anchored accessory row parked at the viewport bottom.
- */
-function StudioLayout({
-  editor,
-  header,
-  preview,
-  status,
-  tray,
-  wizard,
-}: {
-  editor: ReactNode;
-  header: ReactNode;
-  preview: ReactNode;
-  status: ReactNode;
-  tray: ReactNode;
-  /** The open rollup wizard; non-null, it replaces the tray slot. */
-  wizard: ReactNode | null;
-}): ReactNode {
-  return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-2 p-1 pb-14">
-      {header}
-      {editor}
-      {status}
-      {preview}
-      {wizard ?? tray}
-    </div>
-  );
-}
-
-/**
- * Compact tappable status for the sheet, where the full status row would
- * crowd the editor: "✓ <type>" when the draft is clean, else "N issue(s)".
- * Tapping toggles the full first-diagnostic message (the same
- * {@link statusLine} content the other layouts show inline) beneath the
- * pill, so the message never eats vertical space until asked for.
- */
-function StatusPill({
-  checked,
-  displayPosition,
-  expanded,
-  onExpandedChange,
-  parsed,
-}: {
-  checked: FormulaCheckResult | null;
-  displayPosition: (offset: number) => number;
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-  parsed: ParseFormulaResult | null;
-}): ReactNode {
-  if (parsed === null) {
-    return null;
-  }
-  const issueCount = parsed.ok ? (checked?.diagnostics.length ?? 0) : 1;
-  const clean = issueCount === 0;
-  return (
-    <div className="flex flex-col gap-1 px-0.5">
-      <button
-        aria-expanded={expanded}
-        className={cn(
-          "min-h-6 pointer-coarse:min-h-9 self-start rounded-full border pointer-coarse:px-3 px-2.5 py-0.5 text-xs",
-          clean
-            ? "border-border text-muted-foreground"
-            : "border-destructive/40 text-destructive"
-        )}
-        onClick={() => {
-          onExpandedChange(!expanded);
-        }}
-        type="button"
-      >
-        {clean
-          ? `✓ ${checked === null ? "Valid" : formulaTypeBadge(checked.resultType)}`
-          : `${issueCount} issue${issueCount === 1 ? "" : "s"}`}
-      </button>
-      {expanded ? statusLine(parsed, checked, displayPosition) : null}
-    </div>
   );
 }
 

@@ -219,28 +219,6 @@ export function formulaPropertyValueType(
   }
 }
 
-/**
- * Short human label for the editor's result-type badge — "number", "text",
- * "list of numbers", "boolean", "unknown". Unions read "number or text",
- * with a blank member suppressed (`if(x, 1)` badges "number", not "number
- * or blank" — display only, `resultType` keeps the full union); the internal
- * `error` and `typevar` kinds never reach users and read "unknown".
- */
-export function formulaTypeBadge(type: FormulaType): string {
-  if (type.kind === "error" || type.kind === "typevar") {
-    return "unknown";
-  }
-  if (type.kind === "union") {
-    const visible = type.members.filter((member) => member.kind !== "blank");
-    if (visible.length > 0 && visible.length < type.members.length) {
-      const shown: FormulaType =
-        visible.length === 1 ? visible[0] : { kind: "union", members: visible };
-      return formulaTypeName(shown);
-    }
-  }
-  return formulaTypeName(type);
-}
-
 // --- module constants -------------------------------------------------------
 
 /**
@@ -925,11 +903,7 @@ class Checker {
     }
   }
 
-  /**
-   * Mirror the runtime `&`: both sides coerce through `formulaValueToText`
-   * (text, number, boolean, date, blank — blank reads as ""), so the only
-   * rejects are values with no text form (lists, rows).
-   */
+  /** Static mirror of `applyFormulaConcat`: only listy operands reject. */
   private checkConcat(
     node: FormulaBinaryNode,
     left: FormulaType,

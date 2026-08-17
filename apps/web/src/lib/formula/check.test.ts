@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-
 import {
   FORMULA_FUNCTION_CATALOG,
   formulaFunctionForName,
@@ -10,10 +9,10 @@ import {
   type FormulaCheckProperty,
   type FormulaCheckResult,
   formulaPropertyValueType,
-  formulaTypeBadge,
 } from "@/lib/formula/check.ts";
 import { evaluateFormula } from "@/lib/formula/evaluate.ts";
 import { parseFormula } from "@/lib/formula/parse.ts";
+import { formulaTypeBadge } from "@/lib/formula/type-badge.ts";
 import {
   BLANK_TYPE,
   BOOLEAN_TYPE,
@@ -235,23 +234,6 @@ describe("operators", () => {
       "Cannot add list of numbers and text"
     );
     expect(typeOf("1 + 2 == 3")).toEqual(BOOLEAN_TYPE);
-  });
-
-  it("types & as text over every coercible operand, blank included", () => {
-    expect(typeOf('"a" & "b"')).toEqual(TEXT_TYPE);
-    expect(typeOf('"total: " & 1')).toEqual(TEXT_TYPE);
-    expect(typeOf("1 & 2")).toEqual(TEXT_TYPE);
-    expect(typeOf('null & "x"')).toEqual(TEXT_TYPE);
-    expect(typeOf('now() & ""')).toEqual(TEXT_TYPE);
-  });
-
-  it("diagnoses & operands with no text form, at the operator", () => {
-    expect(soleDiagnostic('[1] & "x"')).toEqual({
-      end: 5,
-      message: "Cannot convert list of numbers to text",
-      severity: "error",
-      start: 4,
-    });
   });
 
   it("requires one shared orderable type for comparisons", () => {

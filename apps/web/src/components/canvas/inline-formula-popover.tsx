@@ -40,6 +40,17 @@ import { cn } from "@/lib/utils.ts";
  * Saving rewrites only the mark's expression. The document text is untouched:
  * a token is one sentinel character whatever the formula says, so re-editing a
  * formula shifts no offsets, rebases no marks, and moves no caret.
+ *
+ * Coarse pointers get the full-screen studio drawer instead of the anchored
+ * popover, which `position: fixed` would paint under the on-screen keyboard
+ * (iOS pans the visual viewport rather than shrinking the layout viewport).
+ * Two consequences follow, both load-bearing: touch opens on `pointerup`
+ * against the token's own rect (iOS Safari maps a tap in the blank run right
+ * of a line onto that line's last inline element, and synthesizes no reliable
+ * click on a `contenteditable=false` island), and the reposition-driven
+ * dismissal below is desktop-only — on a phone `resize`/`scroll` fire when the
+ * keyboard opens, which would close the drawer the user just started typing
+ * in.
  */
 
 /** Space between the token and the panel. */
