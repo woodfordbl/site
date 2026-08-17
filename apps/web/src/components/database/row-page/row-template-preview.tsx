@@ -28,7 +28,10 @@ import type {
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
-import { resolvePageFont } from "@/lib/schemas/page-settings.ts";
+import {
+  resolvePageFont,
+  resolvePageFullWidth,
+} from "@/lib/schemas/page-settings.ts";
 
 /**
  * Mixed editor for one template-backed row: icon, name, and properties write
@@ -82,12 +85,14 @@ export function RowTemplatePreviewBody({
     <div
       {...pageContentTypographyProps({
         font: resolvePageFont(template?.font),
-        textScale: undefined,
+        textScale: template?.textScale,
       })}
       className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
     >
       <PageCanvas
-        fullWidth={false}
+        // A preview that ignored the template's layout would misreport what a
+        // row page opens as — these are the same settings the row inherits.
+        fullWidth={resolvePageFullWidth(template?.fullWidth)}
         inlineFormulaModel={inlineFormulaModel}
         isNarrowViewport={isNarrowViewport}
         pageHasLocalDraft={true}
