@@ -48,8 +48,8 @@ describe("ChartGallerySection", () => {
   it("renders every gallery chart as an SVG scene", () => {
     const { container } = render(<ChartGallerySection />);
     const charts = container.querySelectorAll("svg.ts-chart");
-    // One per gallery entry — 13 Cartesian variants plus 5 polar.
-    expect(charts).toHaveLength(18);
+    // One per gallery entry: 13 Cartesian variants, 5 polar, 2 time-axis.
+    expect(charts).toHaveLength(20);
     for (const chart of charts) {
       expect(chart.getAttribute("aria-label")).toBeTruthy();
     }
@@ -66,6 +66,7 @@ describe("ChartGallerySection", () => {
       "Pie · donut",
       "Radar",
       "Radial bars",
+      "Time · closed periods skipped",
     ]) {
       expect(screen.getByText(title)).toBeDefined();
     }

@@ -618,6 +618,7 @@ function TimeAxisOptions({
   const currentWindow = presetForWindow(currentWindowMs);
   const currentWindowId = currentWindow.id;
   const currentScale = chart.timeSeries?.scale ?? "absolute";
+  const currentSessions = chart.timeSeries?.sessions ?? "collapse";
   const fieldName = (fieldId: string | undefined): string =>
     fields.find((field) => field.id === fieldId)?.name ?? "None";
 
@@ -676,6 +677,27 @@ function TimeAxisOptions({
           { value: "percent", label: "% change" },
         ]}
         value={currentScale}
+      />
+      <RadioSubmenu
+        currentLabel={currentSessions === "keep" ? "Real time" : "Skip closed"}
+        label="Closed periods"
+        onValueChange={(value) => {
+          const fieldId = chart.timeSeries?.fieldId ?? firstTimeFieldId;
+          if (fieldId) {
+            write({
+              timeSeries: {
+                ...chart.timeSeries,
+                fieldId,
+                sessions: value === "keep" ? "keep" : "collapse",
+              },
+            });
+          }
+        }}
+        options={[
+          { value: "collapse", label: "Skip closed" },
+          { value: "keep", label: "Real time" },
+        ]}
+        value={currentSessions}
       />
     </>
   );

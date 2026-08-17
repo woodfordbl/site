@@ -115,6 +115,40 @@ export const RADAR_MONTHS: readonly string[] = MONTHS;
 /** Upper bound for the radar's radial scale, with headroom above the peak. */
 export const RADAR_MAX = 340;
 
+/** One observed sample in the session-axis fixture. */
+export interface SessionRow {
+  series: string;
+  /** Epoch milliseconds. */
+  t: number;
+  /** `null` marks unobserved time, which the mark renders as a gap. */
+  v: number | null;
+}
+
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
+/** Friday 09:00 UTC — the fixture's first observation. */
+const SESSION_START = Date.UTC(2026, 5, 5, 9);
+
+/** Eight hourly samples starting `offset` after the fixture's first. */
+function tradingSession(offset: number, base: number): SessionRow[] {
+  return Array.from({ length: 8 }, (_unused, index) => ({
+    series: "desktop",
+    t: SESSION_START + offset + index * HOUR,
+    v: base + Math.round(Math.sin(index / 2) * 18),
+  }));
+}
+
+/**
+ * Two trading days with the weekend absent — the shape a live equity feed has,
+ * and what the session axis exists to handle. Crypto would have no gap here, so
+ * the same axis leaves it linear.
+ */
+export const SESSION_ROWS: readonly SessionRow[] = [
+  ...tradingSession(0, 180),
+  ...tradingSession(3 * DAY, 205),
+];
+
 /** Plain grouped formatting — every gallery chart reads counts, not currency. */
 const COUNT_FORMATTER = new Intl.NumberFormat("en-US");
 

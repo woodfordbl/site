@@ -1,4 +1,4 @@
-import { areaY, defineChart, lineY } from "@tanstack/charts";
+import { areaY, defineChart, lineY, ruleX } from "@tanstack/charts";
 import { type ReactNode, useCallback, useMemo } from "react";
 
 import { ChartFrame } from "@/components/charts/chart-frame.tsx";
@@ -11,15 +11,20 @@ import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
 import { chartSeriesToken } from "@/lib/charts/chart-palettes.ts";
 import {
   CHART_SMOOTH_CURVE,
+  CHART_STREAM_MOTION,
   CHART_THEME,
   type ChartSeriesColor,
   chartColorOptions,
   chartMargin,
   numberValueAxis,
   seriesTooltip,
-  timeValueAxis,
+  sessionTimeAxis,
 } from "@/lib/charts/chart-spec.ts";
 import { resolveAutoYDomain } from "@/lib/charts/chart-y-domain.ts";
+import {
+  detectClosedPeriods,
+  withClosedPeriodGaps,
+} from "@/lib/charts/session-time-scale.ts";
 import { formatCellValue } from "@/lib/databases/cell-values.ts";
 import {
   type DatabaseChartConfig,
@@ -96,7 +101,8 @@ interface TimeSeriesRow {
   label: string;
   series: string;
   t: number;
-  v: number;
+  /** `null` marks unobserved time, which the mark renders as a gap. */
+  v: number | null;
 }
 
 /**
@@ -262,9 +268,28 @@ export function DatabaseTimeSeriesChart({
 
   const definition = useMemo(() => {
     const plotted = timeSeriesRows(data, percent);
+    // Closures are inferred from the samples themselves, so a 24/7 pair stays
+    // linear and an instrument with nights and weekends compresses them out
+    // without anyone naming a market calendar.
+    // Closures are inferred from the samples themselves, so a 24/7 pair stays
+    // linear and an instrument with nights and weekends compresses them out
+    // without anyone naming a market calendar. `keep` opts out of the collapse
+    // but still breaks the line, because the interpolation is wrong either way.
+    const closed = detectClosedPeriods(plotted.map((row) => row.t));
+    const time = sessionTimeAxis({
+      closed: chart.timeSeries?.sessions === "keep" ? [] : closed,
+      format: makeTimeFormatter(windowMs),
+      grid: chart.gridVertical === true,
+      samples: plotted.map((row) => row.t),
+      title: chart.xAxisTitle,
+    });
+    // Break each series across its closures. Narrowing a closed period is not
+    // enough on its own — a curve drawn through it still reads as observed data,
+    // whatever width it has.
+    const marked = withClosedPeriodGaps(plotted, closed);
     const yDomain = resolveAutoYDomain({
       tickCount: chart.gridCount ?? 4,
-      values: plotted.map((row) => row.v),
+      values: plotted.flatMap((row) => (row.v === null ? [] : [row.v])),
       yMax: chart.yMax,
       yMin: chart.yMin,
       // Prices and levels: zoom to the data band rather than anchoring at zero.
@@ -277,26 +302,38 @@ export function DatabaseTimeSeriesChart({
       color: "series",
     } as const;
     const curve = chart.smoothing === false ? undefined : CHART_SMOOTH_CURVE;
+    // Keyed points plus rolling path motion are what make a live series animate
+    // as the window advancing rather than as every sample changing value.
+    const streaming = {
+      key: (row: TimeSeriesRow) => `${row.series}:${row.t}`,
+      motion: CHART_STREAM_MOTION,
+    } as const;
     return defineChart(
       {
         marks: [
+          // A seam wherever the axis removed time, so the compression is stated
+          // rather than hidden. Rules own no chart points, so they stay out of
+          // focus and the tooltip.
+          ruleX(time.breaks, {
+            stroke: "var(--border)",
+            strokeDasharray: "3 3",
+          }),
           mark === "area"
-            ? areaY(plotted, {
+            ? areaY(marked, {
                 ...channels,
+                ...streaming,
                 curve,
                 fillOpacity: 0.25,
                 strokeWidth: 2,
               })
-            : lineY(plotted, { ...channels, curve, strokeWidth: 2 }),
+            : lineY(marked, {
+                ...channels,
+                ...streaming,
+                curve,
+                strokeWidth: 2,
+              }),
         ],
-        x: {
-          ...timeValueAxis({
-            domain: data ? [data.from, data.to] : undefined,
-            format: makeTimeFormatter(windowMs),
-            title: chart.xAxisTitle,
-          }),
-          grid: chart.gridVertical === true,
-        },
+        x: time.axis,
         y: numberValueAxis({
           domain: [yDomain.min, yDomain.max],
           format: formatValue,

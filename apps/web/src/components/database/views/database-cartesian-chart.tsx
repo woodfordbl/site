@@ -69,16 +69,20 @@ function cartesianMark(
     stacked: boolean;
   }
 ) {
+  // Every mark carries the same point identity. That is what lets a mark
+  // animate an update instead of a redraw when the underlying rows change —
+  // a synced database, a formula recompute, a filter edit. No chart opts into
+  // "live"; keyed points make any data change animate correctly.
   const channels = {
     x: "category",
     y: "value",
     z: "series",
     color: "series",
+    key: (row: DatabaseChartSeriesRow) => `${row.category}:${row.series}`,
   } as const;
   if (mark === "bar") {
     return barY(rows, {
       ...channels,
-      key: (row: DatabaseChartSeriesRow) => `${row.category}:${row.series}`,
       // Grouped bars sit side by side inside each band; stacked bars share one.
       layout: options.stacked
         ? stack({ order: options.order })
@@ -87,6 +91,8 @@ function cartesianMark(
     });
   }
   const curve = options.smoothing ? CHART_SMOOTH_CURVE : undefined;
+  // No rolling path motion here: a categorical X domain does not shift, so an
+  // update is a morph in place, which is the library default.
   if (mark === "line") {
     return lineY(rows, { ...channels, curve, strokeWidth: 2 });
   }

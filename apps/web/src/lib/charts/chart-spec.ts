@@ -4,6 +4,7 @@ import type {
   ChartCurve,
   ChartKey,
   ChartMargin,
+  ChartMotionDefinition,
   ChartPoint,
   ChartTheme,
   ChartTooltipOptions,
@@ -22,6 +23,10 @@ import {
   type ChartColorToken,
   chartSeriesColor,
 } from "@/lib/charts/chart-palettes.ts";
+import {
+  type ClosedPeriod,
+  sessionTimeScale,
+} from "@/lib/charts/session-time-scale.ts";
 
 /**
  * @fileoverview The site's chart grammar: the pieces of a `defineChart` spec
@@ -256,6 +261,89 @@ export function minorGridValues(
     }
   }
   return values;
+}
+
+/**
+ * Path motion for a mark whose data streams: a new sample arriving shifts the
+ * path sideways instead of re-morphing every vertex.
+ *
+ * There is no "live mode" anywhere in the chart layer, and there should not be.
+ * A chart re-renders when its data changes like any other React subtree, and the
+ * motion renderer diffs the two scenes — so a polling loop, a websocket, and a
+ * one-shot fetch all animate through the same path. What makes a *streaming*
+ * chart read correctly is only this: keyed points, so identity survives the
+ * update, plus a rolling path so an append reads as the window advancing rather
+ * than as every point moving at once. Without a key, appending one sample looks
+ * like every sample changed value.
+ *
+ * `fallback: "morph"` covers the updates that are not a clean shift — a series
+ * appearing, the window jumping, a backfill landing — so this is safe to hand to
+ * any line or area, not just a streaming one.
+ */
+export const CHART_STREAM_MOTION: ChartMotionDefinition = {
+  path: { update: "rolling", x: "shift", y: "reproject", fallback: "morph" },
+};
+
+export interface SessionTimeAxisOptions {
+  /**
+   * Intervals to give no width. Empty leaves the axis linear, so a caller never
+   * branches on whether its data has closures — it passes what it detected
+   * (`detectClosedPeriods`) or nothing to keep real elapsed time.
+   */
+  closed: readonly ClosedPeriod[];
+  format: (value: number) => string;
+  grid?: boolean;
+  /** Every plotted timestamp; the axis domain spans them. */
+  samples: readonly number[];
+  title?: string | undefined;
+}
+
+export interface SessionTimeAxis {
+  axis: ChartAxisOptions<number>;
+  /**
+   * Timestamps where the axis removed time. A chart should mark each one — a
+   * compressed axis that hides its compression misstates elapsed time.
+   */
+  breaks: readonly number[];
+}
+
+/**
+ * A time axis that gives width only to observed time, plus the seams where it
+ * took width away.
+ *
+ * Pass the same `closed` intervals to `withClosedPeriodGaps` so the marks break
+ * where the axis compresses. The two are complementary and neither is
+ * sufficient alone: compression fixes the wasted width, the break fixes the
+ * interpolation that would otherwise read as data.
+ */
+export function sessionTimeAxis(
+  options: SessionTimeAxisOptions
+): SessionTimeAxis {
+  const observed = options.samples.filter(Number.isFinite);
+  const domain: readonly [number, number] = [
+    Math.min(...observed),
+    Math.max(...observed),
+  ];
+  if (observed.length < 2 || domain[0] === domain[1]) {
+    return {
+      axis: timeValueAxis({ format: options.format, title: options.title }),
+      breaks: [],
+    };
+  }
+  const scale = sessionTimeScale(domain, options.closed).domain(domain);
+  return {
+    axis: {
+      scale,
+      grid: options.grid ?? false,
+      axis: {
+        line: false,
+        label: options.title,
+        ticks: { size: 0, padding: 8, format: options.format },
+        tickLabels: { thin: true },
+      },
+    },
+    breaks: scale.breaks(),
+  };
 }
 
 export interface SeriesTooltipOptions<

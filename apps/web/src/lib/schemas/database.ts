@@ -381,6 +381,15 @@ export const databaseTableViewConfigSchema = z.object({
           scale: z.enum(["absolute", "percent"]).optional(),
           /** Visible window in ms (e.g. 7d); absent = the default window. */
           windowMs: z.number().positive().optional(),
+          /**
+           * How the axis treats periods with no observations (a market closed
+           * for the weekend, a feed asleep overnight). Absent/`collapse` gives
+           * them no width, so every session is drawn at the same scale and a
+           * flat segment cannot be mistaken for a price that held. `keep`
+           * preserves real elapsed time. Closures are inferred from sample
+           * spacing, not from a market calendar.
+           */
+          sessions: z.enum(["collapse", "keep"]).optional(),
         })
         .optional(),
       /** X axis / category field. */

@@ -159,6 +159,130 @@ describe("DatabaseTimeSeriesChart", () => {
     expect(screen.getByText("7D")).toBeDefined();
   });
 
+  it("collapses closed periods and marks each seam", () => {
+    // Hourly samples across a Friday and the following Monday: the weekend has
+    // no observations, so the axis should spend no width on it.
+    const friday = Date.UTC(2026, 5, 5, 9);
+    const hour = 3_600_000;
+    const day = 24 * hour;
+    const session = (offset: number) =>
+      Array.from({ length: 8 }, (_unused, index) => ({
+        t: friday + offset + index * hour,
+        v: 100 + index,
+      }));
+    loadResult.current = {
+      data: {
+        from: friday,
+        to: friday + 3 * day + 7 * hour,
+        series: [
+          {
+            key: "acme",
+            label: "ACME",
+            points: [...session(0), ...session(3 * day)],
+          },
+        ],
+      },
+      loading: false,
+    };
+    const { container } = renderTimeSeries(TIME_CHART);
+    // One dashed seam where the weekend was removed.
+    const seams = container.querySelectorAll('line[stroke-dasharray="3 3"]');
+    expect(seams).toHaveLength(1);
+    // Both sessions are eight hourly samples, so the seam sits mid-plot rather
+    // than two-sevenths of the way across a real week.
+    const seam = Number(seams[0].getAttribute("x1"));
+    const surface = container.querySelector("svg.ts-chart");
+    const width = Number(surface?.getAttribute("viewBox")?.split(" ")[2]);
+    expect(seam / width).toBeGreaterThan(0.4);
+    expect(seam / width).toBeLessThan(0.6);
+  });
+
+  it("keeps real elapsed time when the sessions option says to", () => {
+    const friday = Date.UTC(2026, 5, 5, 9);
+    const hour = 3_600_000;
+    const day = 24 * hour;
+    const session = (offset: number) =>
+      Array.from({ length: 8 }, (_unused, index) => ({
+        t: friday + offset + index * hour,
+        v: 100 + index,
+      }));
+    loadResult.current = {
+      data: {
+        from: friday,
+        to: friday + 3 * day + 7 * hour,
+        series: [
+          {
+            key: "acme",
+            label: "ACME",
+            points: [...session(0), ...session(3 * day)],
+          },
+        ],
+      },
+      loading: false,
+    };
+    const { container } = renderTimeSeries({
+      ...TIME_CHART,
+      timeSeries: { ...TIME_CHART.timeSeries, sessions: "keep" },
+    });
+    // Nothing was collapsed, so there is no seam to draw.
+    expect(
+      container.querySelectorAll('line[stroke-dasharray="3 3"]')
+    ).toHaveLength(0);
+  });
+
+  it("leaves a 24/7 series on a plain linear axis", () => {
+    loadResult.current = { data: LOADED, loading: false };
+    const { container } = renderTimeSeries(TIME_CHART);
+    // Evenly-spaced samples have no closures, so nothing is compressed.
+    expect(
+      container.querySelectorAll('line[stroke-dasharray="3 3"]')
+    ).toHaveLength(0);
+  });
+
+  it("animates a new sample as an update rather than a remount", () => {
+    loadResult.current = { data: LOADED, loading: false };
+    const { container, rerender } = render(
+      <DatabaseTimeSeriesChart
+        chart={TIME_CHART}
+        database={database}
+        fields={database.fields}
+        mode="edit"
+        rows={[]}
+        view={timeView(TIME_CHART)}
+      />
+    );
+    const before = container.querySelector("svg.ts-chart");
+    // A live tick: one more sample on each series.
+    loadResult.current = {
+      data: {
+        ...LOADED,
+        to: LOADED.to + DAY,
+        series: LOADED.series.map((entry) => ({
+          ...entry,
+          points: [
+            ...entry.points,
+            { t: LOADED.to + DAY, v: entry.points.at(-1)?.v ?? 0 },
+          ],
+        })),
+      },
+      loading: false,
+    };
+    rerender(
+      <DatabaseTimeSeriesChart
+        chart={TIME_CHART}
+        database={database}
+        fields={database.fields}
+        mode="edit"
+        rows={[]}
+        view={timeView(TIME_CHART)}
+      />
+    );
+    // The same SVG element is still there — the renderer patched the scene in
+    // place, which is what lets the motion driver animate between them.
+    expect(container.querySelector("svg.ts-chart")).toBe(before);
+    expect(container.querySelectorAll(".ts-chart__line path")).toHaveLength(2);
+  });
+
   it("rescales both series onto one axis for the percent scale", () => {
     loadResult.current = { data: LOADED, loading: false };
     const { container } = renderTimeSeries({

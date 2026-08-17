@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 
 import { CARTESIAN_GALLERY } from "@/components/dev/charts/gallery-cartesian.tsx";
 import { POLAR_GALLERY } from "@/components/dev/charts/gallery-polar.tsx";
+import { TIME_GALLERY } from "@/components/dev/charts/gallery-time.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Card,
@@ -34,8 +35,12 @@ import { cn } from "@/lib/utils.ts";
  * instead, for judging the ramps against each other rather than one at a time.
  */
 
-/** Every gallery entry, Cartesian marks first, then polar. */
-const GALLERY_ENTRIES = [...CARTESIAN_GALLERY, ...POLAR_GALLERY];
+/** Every gallery entry: Cartesian marks, then polar, then the time-axis pair. */
+const GALLERY_ENTRIES = [
+  ...CARTESIAN_GALLERY,
+  ...POLAR_GALLERY,
+  ...TIME_GALLERY,
+];
 
 /** The five palette tokens as swatches, resolved by the enclosing scope. */
 function PaletteSwatchRow(): ReactNode {
