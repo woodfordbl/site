@@ -32,6 +32,15 @@ const DEPLOY_ENV = process.env.VERCEL_ENV || "development";
 // dead weight.
 const DEV_ROUTES_ENABLED = DEPLOY_ENV !== "production";
 
+// The devtools plugin injects a client that holds an SSE console pipe open for
+// the life of the tab. A signed-in dev session already parks one long-poll per
+// live shape (pages, blocks, databases, database_rows, my_access), and browsers
+// allow ~6 connections per origin over HTTP/1.1 — so the pipe takes the last
+// slot and the next module request never gets one, leaving a blank page that
+// never finishes booting. Off by default for that reason; VITE_DEVTOOLS=1
+// restores it, which is safe for anonymous local-mode work (no shapes).
+const DEVTOOLS_ENABLED = process.env.VITE_DEVTOOLS === "1";
+
 const ogHandler = fileURLToPath(
   new URL("./routes/api/og.get.ts", import.meta.url)
 );
@@ -146,7 +155,7 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
-    devtools(),
+    ...(DEVTOOLS_ENABLED ? [devtools()] : []),
     // Register the dynamic OG endpoint as an explicit Nitro route so it is
     // bundled into the Vercel function output (filesystem scanning of root
     // `routes/` isn't wired in this TanStack Start dev integration).

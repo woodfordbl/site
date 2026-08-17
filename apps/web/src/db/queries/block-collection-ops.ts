@@ -277,9 +277,12 @@ export function deletePageBlocksInTx(
       if (tx.deletedInTransaction.has(blockId)) {
         continue;
       }
-      // A pristine shipped page's blocks live in shipped JSON, so a row can be
-      // deleted before it was ever materialized into the collection. Deleting a
-      // key that is not there throws, which would abort the whole edit.
+      // A pristine shipped page's blocks live in shipped JSON, and a synced
+      // workspace streams only what its shapes cover, so a row can be deleted
+      // before it was ever materialized into the collection. Deleting a key
+      // that is not there throws, which would abort the whole edit. The id
+      // still counts as deleted in this transaction: a later re-insert of it
+      // must insert rather than update.
       if (localBlocksCollection.has(blockId)) {
         localBlocksCollection.delete(blockId);
       }
@@ -482,7 +485,12 @@ export function upsertPageBlock(
 }
 
 export function deletePageBlocks(blockIds: string[]): void {
-  if (blockIds.length === 0) {
+  // Only rows the collection actually holds: `delete` throws on an unknown
+  // key, and callers may name blocks a synced workspace never streamed.
+  const storedIds = blockIds.filter((blockId) =>
+    localBlocksCollection.has(blockId)
+  );
+  if (storedIds.length === 0) {
     return;
   }
 
@@ -499,7 +507,7 @@ export function deletePageBlocks(blockIds: string[]): void {
   });
 
   tx.mutate(() => {
-    for (const blockId of blockIds) {
+    for (const blockId of storedIds) {
       localBlocksCollection.delete(blockId);
     }
   });

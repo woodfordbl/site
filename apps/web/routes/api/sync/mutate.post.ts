@@ -20,6 +20,11 @@ import { getPool } from "../../../src/server/db.server.ts";
  * shallow diff, so concurrent editors of different keys on one document
  * (e.g. a page's `title` vs its `blockOrder`) do not clobber each other.
  *
+ * Content ids are unique per workspace, not globally (migration 0005): every
+ * statement here addresses a row by `(workspace_id, id)`, and the insert's
+ * `on conflict (workspace_id, id)` upserts this workspace's copy of a shipped
+ * id without ever seeing another workspace's copy of the same id.
+ *
  * ReBAC enforcement (per mutation, inside the transaction, before applying —
  * so an earlier mutation in the batch, e.g. a page insert, is visible to a
  * later check, e.g. its blocks): pages/blocks writes require `can_access` on
@@ -97,11 +102,13 @@ class ForbiddenMutation extends Error {
 async function canAccess(
   client: import("pg").PoolClient,
   userId: string,
+  workspaceId: string,
   pageId: string,
   level: "edit" | "full_access"
 ): Promise<boolean> {
-  const result = await client.query("select can_access($1, $2, $3) as ok", [
+  const result = await client.query("select can_access($1, $2, $3, $4) as ok", [
     userId,
+    workspaceId,
     pageId,
     level,
   ]);
@@ -115,7 +122,7 @@ async function requirePagesAccess(
   mutation: Mutation
 ): Promise<void> {
   const exists = await client.query(
-    "select 1 from pages where id = $1 and workspace_id = $2",
+    "select 1 from pages where workspace_id = $2 and id = $1",
     [mutation.id, workspaceId]
   );
   if (exists.rowCount === 0) {
@@ -127,14 +134,14 @@ async function requirePagesAccess(
     const parent = mutation.doc?.parentId;
     if (
       typeof parent === "string" &&
-      !(await canAccess(client, userId, parent, "edit"))
+      !(await canAccess(client, userId, workspaceId, parent, "edit"))
     ) {
       throw new ForbiddenMutation(mutation.table, mutation.id);
     }
     return;
   }
   const needed = mutation.op === "delete" ? "full_access" : "edit";
-  if (!(await canAccess(client, userId, mutation.id, needed))) {
+  if (!(await canAccess(client, userId, workspaceId, mutation.id, needed))) {
     throw new ForbiddenMutation(mutation.table, mutation.id);
   }
 }
@@ -146,7 +153,7 @@ async function requireBlocksAccess(
   mutation: Mutation
 ): Promise<void> {
   const existing = await client.query(
-    "select page_id from blocks where id = $1 and workspace_id = $2",
+    "select page_id from blocks where workspace_id = $2 and id = $1",
     [mutation.id, workspaceId]
   );
   const pageId =
@@ -155,7 +162,7 @@ async function requireBlocksAccess(
   if (!pageId) {
     return; // Applies to zero rows; converges via the logMiss path.
   }
-  if (!(await canAccess(client, userId, pageId, "edit"))) {
+  if (!(await canAccess(client, userId, workspaceId, pageId, "edit"))) {
     throw new ForbiddenMutation(mutation.table, mutation.id);
   }
 }
@@ -216,8 +223,7 @@ async function applyMutation(
       : [id, workspaceId, doc];
     await client.query(
       `insert into ${table} (${columns}) values (${placeholders})
-       on conflict (id) do update set doc = excluded.doc
-         where ${table}.workspace_id = $2`,
+       on conflict (workspace_id, id) do update set doc = excluded.doc`,
       values
     );
     return;
@@ -226,11 +232,11 @@ async function applyMutation(
     op === "update"
       ? await client.query(
           `update ${table} set doc = doc || $3::jsonb
-             where id = $1 and workspace_id = $2`,
+             where workspace_id = $2 and id = $1`,
           [id, workspaceId, JSON.stringify(mutation.doc)]
         )
       : await client.query(
-          `delete from ${table} where id = $1 and workspace_id = $2`,
+          `delete from ${table} where workspace_id = $2 and id = $1`,
           [id, workspaceId]
         );
   if (result.rowCount === 0) {
