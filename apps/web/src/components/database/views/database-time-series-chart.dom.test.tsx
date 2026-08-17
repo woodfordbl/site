@@ -63,6 +63,12 @@ afterEach(() => {
 const DAY = 86_400_000;
 const START = Date.UTC(2026, 5, 1);
 
+/** Subpath starts — one per unbroken run of a line. */
+const MOVETO = /M/g;
+/** Curve commands, which only appear when the mark interpolates between samples. */
+const CURVE_COMMAND = /[CSQ]/;
+const LINETO = /L/;
+
 const database: LocalDatabase = {
   id: "db-1",
   name: "Holdings",
@@ -195,6 +201,52 @@ describe("DatabaseTimeSeriesChart", () => {
     const width = Number(surface?.getAttribute("viewBox")?.split(" ")[2]);
     expect(seam / width).toBeGreaterThan(0.4);
     expect(seam / width).toBeLessThan(0.6);
+  });
+
+  it("draws one unbroken path across a closure", () => {
+    const friday = Date.UTC(2026, 5, 5, 9);
+    const hour = 3_600_000;
+    const day = 24 * hour;
+    const session = (offset: number) =>
+      Array.from({ length: 8 }, (_unused, index) => ({
+        t: friday + offset + index * hour,
+        v: 100 + index,
+      }));
+    loadResult.current = {
+      data: {
+        from: friday,
+        to: friday + 3 * day + 7 * hour,
+        series: [
+          {
+            key: "acme",
+            label: "ACME",
+            points: [...session(0), ...session(3 * day)],
+          },
+        ],
+      },
+      loading: false,
+    };
+    const { container } = renderTimeSeries(TIME_CHART);
+    // The weekend is collapsed to no width, so Friday's close and Monday's open
+    // are adjacent vertices of a single path — the overnight move reads as one
+    // step rather than as two disconnected daily fragments.
+    const paths = container.querySelectorAll(".ts-chart__line path");
+    expect(paths).toHaveLength(1);
+    // A broken line is still one <path>, so count the subpaths: an unbroken one
+    // has a single moveto.
+    const d = paths[0].getAttribute("d") ?? "";
+    expect(d.match(MOVETO)).toHaveLength(1);
+  });
+
+  it("draws straight segments between observations, never a spline", () => {
+    loadResult.current = { data: LOADED, loading: false };
+    const { container } = renderTimeSeries(TIME_CHART);
+    for (const path of container.querySelectorAll(".ts-chart__line path")) {
+      const d = path.getAttribute("d") ?? "";
+      // Curve commands (C/S/Q) would mean interpolated shape between samples.
+      expect(d).not.toMatch(CURVE_COMMAND);
+      expect(d).toMatch(LINETO);
+    }
   });
 
   it("keeps real elapsed time when the sessions option says to", () => {

@@ -492,7 +492,8 @@ function ChartToggleItems({
           Stacked
         </DropdownMenuSwitchItem>
       ) : null}
-      {mark === "line" || mark === "area" ? (
+      {/* Time-axis charts plot observations only, so smoothing is not offered. */}
+      {chart.xMode !== "time" && (mark === "line" || mark === "area") ? (
         <DropdownMenuSwitchItem
           checked={chart.smoothing !== false}
           onCheckedChange={(next) => {

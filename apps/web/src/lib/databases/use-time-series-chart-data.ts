@@ -10,7 +10,10 @@ import { ensureSeriesCoverageMany } from "@/lib/databases/ensure-series-coverage
 import {
   clipToWindow,
   DEFAULT_TIME_WINDOW_MS,
+  presetForWindow,
   resolutionForWindow,
+  windowDisplayRange,
+  windowFetchRange,
 } from "@/lib/databases/time-series-chart-data.ts";
 import type {
   DatabaseField,
@@ -23,6 +26,12 @@ import type {
  * {@link ensureSeriesCoverageMany} (shared with live-markets derived Change),
  * then clips to the visible window. Re-reads on a short interval so live ticks
  * extend the right edge without re-hitting the network when coverage is warm.
+ *
+ * The fetch range and the visible range are not the same thing — the day
+ * window reaches further back than it shows so it can fall back to the last
+ * session that traded (see `time-series-chart-data.ts`). The extra coverage is
+ * fetched, then clipped away by {@link clipLinesToDisplay} before the chart
+ * ever sees it.
  */
 
 /** One symbol's line: stable key + display label + covered points. */
@@ -59,6 +68,27 @@ function rowMetaSignature(meta: readonly RowMeta[]): string {
   return meta
     .map((entry) => `${entry.externalId}\u0000${entry.label}`)
     .join("\u0001");
+}
+
+/**
+ * Narrow already-fetched lines to the window the chart shows. The day window
+ * covers more than it displays, and the visible left edge depends on the
+ * timestamps that came back, so this can only run once the data is in hand.
+ */
+function clipLinesToDisplay(
+  lines: readonly TimeSeriesLine[],
+  windowMs: number,
+  now: number
+): TimeSeriesLine[] {
+  const range = windowDisplayRange(
+    windowMs,
+    lines.flatMap((line) => line.points.map((point) => point.t)),
+    now
+  );
+  return lines.map((line) => ({
+    ...line,
+    points: clipToWindow(line.points, range.from, range.to),
+  }));
 }
 
 async function loadSeriesLines(args: {
@@ -131,7 +161,12 @@ export function useTimeSeriesChartData(
   fieldId: string | undefined,
   windowMs: number | undefined
 ): UseTimeSeriesResult {
-  const effectiveWindow = windowMs ?? DEFAULT_TIME_WINDOW_MS;
+  // Snap to a preset rather than trusting the stored number: a view saved
+  // against a window the control no longer offers still resolves to the
+  // nearest one it does.
+  const effectiveWindow = presetForWindow(
+    windowMs ?? DEFAULT_TIME_WINDOW_MS
+  ).windowMs;
   const resolution = resolutionForWindow(effectiveWindow);
 
   const tickedRowMeta = useMemo<RowMeta[]>(() => {
@@ -189,18 +224,19 @@ export function useTimeSeriesChartData(
       if (!fieldId) {
         return [];
       }
-      const to = Date.now();
-      const from = to - effectiveWindow;
-      return await loadSeriesLines({
+      const now = Date.now();
+      const range = windowFetchRange(effectiveWindow, now);
+      const lines = await loadSeriesLines({
         databaseId,
         fieldId,
-        from,
-        to,
+        from: range.from,
+        to: range.to,
         resolution,
         rowMeta,
         connectorId,
         connectorConfig,
       });
+      return clipLinesToDisplay(lines, effectiveWindow, now);
     },
   });
 
@@ -228,13 +264,13 @@ export function useTimeSeriesChartData(
       if (cancelled || !fieldId) {
         return;
       }
-      const refreshTo = Date.now();
-      const refreshFrom = refreshTo - effectiveWindow;
+      const now = Date.now();
+      const range = windowFetchRange(effectiveWindow, now);
       loadSeriesLines({
         databaseId,
         fieldId,
-        from: refreshFrom,
-        to: refreshTo,
+        from: range.from,
+        to: range.to,
         resolution,
         rowMeta,
         connectorId,
@@ -242,7 +278,7 @@ export function useTimeSeriesChartData(
       })
         .then((series) => {
           if (!cancelled) {
-            setLiveSeries(series);
+            setLiveSeries(clipLinesToDisplay(series, effectiveWindow, now));
           }
         })
         .catch(() => undefined);
@@ -268,11 +304,16 @@ export function useTimeSeriesChartData(
     if (!fieldId || liveSeries === null) {
       return null;
     }
-    const to = Date.now();
+    const now = Date.now();
+    const range = windowDisplayRange(
+      effectiveWindow,
+      liveSeries.flatMap((line) => line.points.map((point) => point.t)),
+      now
+    );
     return {
       series: liveSeries,
-      from: to - effectiveWindow,
-      to,
+      from: range.from,
+      to: range.to,
     };
   }, [fieldId, liveSeries, effectiveWindow]);
 

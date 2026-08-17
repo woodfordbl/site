@@ -1,18 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
 import {
   clipToWindow,
   DEFAULT_TIME_WINDOW_MS,
+  isDayWindow,
   presetForWindow,
   resolutionForWindow,
-  stitchBucketMs,
-  stitchSeries,
+  windowDisplayRange,
+  windowFetchRange,
 } from "@/lib/databases/time-series-chart-data.ts";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
+
+/** Local midnight of the day containing `t` — the day window's left edge. */
+function midnight(t: number): number {
+  const date = new Date(t);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
 
 describe("presetForWindow / resolutionForWindow", () => {
   it("maps standard windows to their expected resolution", () => {
@@ -25,72 +32,72 @@ describe("presetForWindow / resolutionForWindow", () => {
   it("snaps an odd window to the nearest preset", () => {
     expect(presetForWindow(6 * DAY_MS).id).toBe("7D");
     expect(presetForWindow(DEFAULT_TIME_WINDOW_MS).id).toBe("7D");
-    expect(presetForWindow(15 * MINUTE_MS).id).toBe("LIVE");
+  });
+
+  it("resolves a window shorter than any preset to the day", () => {
+    // Views saved against the retired 15-minute "Live" window land here.
+    expect(presetForWindow(15 * MINUTE_MS).id).toBe("1D");
+    expect(isDayWindow(15 * MINUTE_MS)).toBe(true);
   });
 });
 
-describe("stitchBucketMs", () => {
-  it("buckets short live windows at the fine capture cadence, not the candle resolution", () => {
-    // 15m window backfills at 1m candles, but live ticks must survive: bucket
-    // collapses to the 15s local-capture cadence.
-    expect(stitchBucketMs(15 * MINUTE_MS)).toBe(15_000);
-    expect(stitchBucketMs(HOUR_MS)).toBe(15_000);
+describe("windowFetchRange", () => {
+  const now = new Date(2026, 5, 3, 14, 37).getTime();
+
+  it("is a plain lookback for every window but the day", () => {
+    expect(windowFetchRange(7 * DAY_MS, now)).toEqual({
+      from: now - 7 * DAY_MS,
+      to: now,
+    });
   });
 
-  it("buckets long windows at their candle resolution", () => {
-    expect(stitchBucketMs(DAY_MS)).toBe(5 * MINUTE_MS);
-    expect(stitchBucketMs(7 * DAY_MS)).toBe(HOUR_MS);
+  it("reaches back past today so the day window has a session to fall back to", () => {
+    const range = windowFetchRange(DAY_MS, now);
+    expect(range.to).toBe(now);
+    expect(range.from).toBe(midnight(now) - 5 * DAY_MS);
   });
 });
 
-describe("stitchSeries", () => {
-  const bucketMs = HOUR_MS;
+describe("windowDisplayRange", () => {
+  const now = new Date(2026, 5, 3, 14, 37).getTime();
+  const today = midnight(now);
 
-  it("returns empty for two empty inputs", () => {
-    expect(stitchSeries([], [], bucketMs)).toEqual([]);
+  it("shows the calendar day so far, not a 24-hour lookback", () => {
+    const timestamps = [today - 3 * HOUR_MS, today + HOUR_MS, now - MINUTE_MS];
+    expect(windowDisplayRange(DAY_MS, timestamps, now)).toEqual({
+      from: today,
+      to: now,
+    });
   });
 
-  it("lets finer local capture win the overlap with backfill", () => {
-    const now = 100 * HOUR_MS;
-    const backfill: FieldHistoryPoint[] = [];
-    for (let i = 10; i >= 1; i--) {
-      backfill.push({ t: now - i * HOUR_MS, v: 100 });
-    }
-    // Local starts 3h ago, finer, different value.
-    const local: FieldHistoryPoint[] = [
-      { t: now - 3 * HOUR_MS + MINUTE_MS, v: 200 },
-      { t: now - MINUTE_MS, v: 201 },
-    ];
-    const stitched = stitchSeries(backfill, local, bucketMs);
-    // No backfill (v=100) point should survive at/after the earliest local t.
-    const earliestLocal = local[0].t;
-    expect(
-      stitched.filter((p) => p.t >= earliestLocal && p.v === 100)
-    ).toHaveLength(0);
-    // The newest point is local.
-    expect(stitched.at(-1)?.v).toBe(201);
-    // Ascending.
-    for (let i = 1; i < stitched.length; i++) {
-      expect(stitched[i].t).toBeGreaterThanOrEqual(stitched[i - 1].t);
-    }
+  it("falls back to the last session when today has no observations", () => {
+    // Two prior trading days, seven hourly samples each, then nothing today.
+    const session = (dayOffset: number) =>
+      Array.from(
+        { length: 7 },
+        (_unused, index) =>
+          today - dayOffset * DAY_MS + 9 * HOUR_MS + index * HOUR_MS
+      );
+    const timestamps = [...session(2), ...session(1)];
+    const range = windowDisplayRange(DAY_MS, timestamps, now);
+    // The most recent session's own opening sample, not midnight and not the
+    // earlier day.
+    expect(range.from).toBe(today - DAY_MS + 9 * HOUR_MS);
+    expect(range.to).toBe(now);
   });
 
-  it("keeps backfill when there is no local capture", () => {
-    const backfill = [
-      { t: 1 * HOUR_MS, v: 10 },
-      { t: 2 * HOUR_MS, v: 11 },
-    ];
-    expect(stitchSeries(backfill, [], bucketMs)).toEqual(backfill);
+  it("still starts at midnight when there is nothing to fall back to", () => {
+    expect(windowDisplayRange(DAY_MS, [], now)).toEqual({
+      from: today,
+      to: now,
+    });
   });
 
-  it("collapses multiple points in one bucket to the newest", () => {
-    const local = [
-      { t: 5 * HOUR_MS + 1000, v: 1 },
-      { t: 5 * HOUR_MS + 2000, v: 2 },
-      { t: 5 * HOUR_MS + 3000, v: 3 },
-    ];
-    const stitched = stitchSeries([], local, bucketMs);
-    expect(stitched).toEqual([{ t: 5 * HOUR_MS + 3000, v: 3 }]);
+  it("ignores the covered timestamps for a lookback window", () => {
+    expect(windowDisplayRange(30 * DAY_MS, [today], now)).toEqual({
+      from: now - 30 * DAY_MS,
+      to: now,
+    });
   });
 });
 

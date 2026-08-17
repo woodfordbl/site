@@ -1,11 +1,21 @@
 import type { FieldHistoryPoint } from "@/db/history/field-history-types.ts";
+import { detectClosedPeriods } from "@/lib/charts/session-time-scale.ts";
 import type { HistoryResolution } from "@/lib/connectors/types.ts";
 
 /**
  * Pure helpers for time-axis charts: window presets, resolution selection, and
- * display clip helpers. Historical backfill + local capture are merged into the
- * field-history store by {@link ensureSeriesCoverageMany} (shared with live-markets
- * derived Change); this module stays IO-free.
+ * the fetch/display ranges a window resolves to. Historical backfill + local
+ * capture are merged into the field-history store by
+ * {@link ensureSeriesCoverageMany} (shared with live-markets derived Change);
+ * this module stays IO-free.
+ *
+ * Every window but the shortest is a plain lookback from "now". The day window
+ * is not: it is the *calendar day so far*, so an intraday chart reads as the
+ * trend of today's session rather than as a 24-hour tail sliced through
+ * yesterday afternoon. See {@link windowFetchRange} and
+ * {@link windowDisplayRange} — the two differ because the day window has to
+ * fetch past its own left edge to have a session to fall back to when today
+ * has no observations yet (a weekend, a holiday, pre-market).
  */
 
 const MINUTE_MS = 60_000;
@@ -21,14 +31,22 @@ export interface TimeWindowPreset {
   windowMs: number;
 }
 
-/** Live window: the last 15 minutes, seeded by 1m candles and then extended by
- * the forward-only local capture as ticks arrive. */
-const LIVE_WINDOW_MS = 15 * MINUTE_MS;
+/**
+ * The preset whose range is a calendar day rather than a lookback.
+ * {@link windowFetchRange} and {@link windowDisplayRange} branch on it.
+ */
+const DAY_WINDOW_ID = "1D";
 
-/** Window control options, shortest → longest. `Live` scrolls in real time. */
+/**
+ * Window control options, shortest → longest. The day window's `5m` resolution
+ * matches the field-history store's own hourly tier (`HISTORY_TIERS`), which
+ * coarsens anything over an hour old to one point per five minutes — asking a
+ * provider for finer candles would buy detail the store immediately discards.
+ * Inside that last hour the store keeps its 15s capture, so the right edge
+ * still advances with live ticks.
+ */
 export const TIME_WINDOW_PRESETS: readonly TimeWindowPreset[] = [
-  { id: "LIVE", label: "Live", windowMs: LIVE_WINDOW_MS, resolution: "1m" },
-  { id: "1D", label: "1D", windowMs: DAY_MS, resolution: "5m" },
+  { id: DAY_WINDOW_ID, label: "1D", windowMs: DAY_MS, resolution: "5m" },
   { id: "7D", label: "7D", windowMs: 7 * DAY_MS, resolution: "1h" },
   { id: "30D", label: "30D", windowMs: 30 * DAY_MS, resolution: "4h" },
   { id: "1Y", label: "1Y", windowMs: 365 * DAY_MS, resolution: "1d" },
@@ -37,24 +55,77 @@ export const TIME_WINDOW_PRESETS: readonly TimeWindowPreset[] = [
 /** Default visible window when a chart hasn't chosen one (7 days). */
 export const DEFAULT_TIME_WINDOW_MS = 7 * DAY_MS;
 
-/** The finest cadence the local field-history capture retains (its recent
- * tier). Live/short windows dedupe at this bucket so real-time ticks aren't
- * collapsed into the coarser backfill resolution. */
-const LIVE_CAPTURE_BUCKET_MS = 15_000;
+/**
+ * How far before today the day window still fetches. Nothing of it is shown
+ * while today has observations; it exists so a chart opened over a weekend, a
+ * holiday, or before the opening bell can fall back to the most recent session
+ * instead of rendering empty. Five days clears a long weekend.
+ */
+const DAY_WINDOW_BACKSTOP_MS = 5 * DAY_MS;
+
+/** A resolved `[from, to]` range in epoch milliseconds. */
+export interface TimeWindowRange {
+  from: number;
+  to: number;
+}
+
+/** True when `windowMs` selects the calendar-day preset. */
+export function isDayWindow(windowMs: number): boolean {
+  return presetForWindow(windowMs).id === DAY_WINDOW_ID;
+}
+
+/** Local midnight at or before `now`. */
+function startOfLocalDay(now: number): number {
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
 
 /**
- * Display dedupe bucket for a window's stitched series. Long windows bucket at
- * the backfill candle resolution (bounds point count); short "live" windows
- * (≤ 1h) bucket at the fine local-capture cadence instead, so the sub-minute
- * ticks that make the chart *move* survive the merge rather than collapsing to
- * one point per candle.
+ * Where the visible day starts, given every timestamp the series cover.
+ *
+ * Today, whenever today has an observation. Otherwise the most recent session
+ * present — the run of samples after the last inferred closure — so a chart
+ * opened outside market hours shows the last day that traded rather than an
+ * empty plot.
  */
-export function stitchBucketMs(windowMs: number): number {
-  const resolutionMs = resolutionSpacingMs(resolutionForWindow(windowMs));
-  if (windowMs <= HOUR_MS) {
-    return Math.min(resolutionMs, LIVE_CAPTURE_BUCKET_MS);
+function dayWindowStart(timestamps: readonly number[], now: number): number {
+  const today = startOfLocalDay(now);
+  if (timestamps.length === 0 || timestamps.some((t) => t >= today)) {
+    return today;
   }
-  return resolutionMs;
+  const lastClosure = detectClosedPeriods(timestamps).at(-1);
+  return lastClosure?.to ?? Math.min(...timestamps);
+}
+
+/**
+ * Range to backfill and read for `windowMs` at `now`. Wider than the visible
+ * range for the day window only, by {@link DAY_WINDOW_BACKSTOP_MS}.
+ */
+export function windowFetchRange(
+  windowMs: number,
+  now: number
+): TimeWindowRange {
+  if (isDayWindow(windowMs)) {
+    return { from: startOfLocalDay(now) - DAY_WINDOW_BACKSTOP_MS, to: now };
+  }
+  return { from: now - windowMs, to: now };
+}
+
+/**
+ * Visible range for `windowMs` at `now`, given the timestamps actually
+ * covered. Identical to {@link windowFetchRange} except for the day window,
+ * which starts at today's midnight (or the last session that has data).
+ */
+export function windowDisplayRange(
+  windowMs: number,
+  timestamps: readonly number[],
+  now: number
+): TimeWindowRange {
+  if (isDayWindow(windowMs)) {
+    return { from: dayWindowStart(timestamps, now), to: now };
+  }
+  return { from: now - windowMs, to: now };
 }
 
 /** Nearest preset for a window (for resolution + control highlighting). */
@@ -92,36 +163,6 @@ export function resolutionSpacingMs(resolution: HistoryResolution): number {
     default:
       return DAY_MS;
   }
-}
-
-/**
- * Stitch provider backfill under local capture, finest-fidelity-wins:
- * backfill points are clipped to strictly before the earliest local point (so
- * finer local data owns the overlap), then concatenated with local, sorted,
- * and deduped so only the newest value survives per time bucket. Both inputs
- * may be empty. Result ascends by `t`.
- */
-export function stitchSeries(
-  backfill: readonly FieldHistoryPoint[],
-  local: readonly FieldHistoryPoint[],
-  bucketMs: number
-): FieldHistoryPoint[] {
-  const earliestLocal =
-    local.length > 0 ? local[0].t : Number.POSITIVE_INFINITY;
-  const clippedBackfill = backfill.filter((point) => point.t < earliestLocal);
-  const merged = [...clippedBackfill, ...local].sort((a, b) => a.t - b.t);
-
-  if (merged.length === 0) {
-    return [];
-  }
-
-  // Collapse to one point per bucket (newest wins), preserving ascending order.
-  const width = Math.max(1, bucketMs);
-  const byBucket = new Map<number, FieldHistoryPoint>();
-  for (const point of merged) {
-    byBucket.set(Math.floor(point.t / width), point);
-  }
-  return [...byBucket.values()].sort((a, b) => a.t - b.t);
 }
 
 /** Clip a stitched series to the visible `[from, to]` window. */
