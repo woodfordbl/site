@@ -1,6 +1,8 @@
 # Maps
 
-> **Status: steps 1–5 shipped**, plus the geocoding half of step 6. The `map`
+> **Status: steps 1–5 shipped**, plus the geocoding half of step 6, marker
+> tooltips that show the properties a view picks, and a block that can follow a
+> row's location property. The `map`
 > view type (pins / cluster / region marks), the standalone `map` block and the
 > `location` field type are implemented; each module's `@fileoverview` documents
 > what the code actually does. This file is kept as the design record: the
@@ -289,7 +291,10 @@ real debugging time:
 3. ~~**`cluster` mark**~~ **Shipped** — one component swap behind the mark
    toggle.
 4. ~~**`map` block** for standalone places~~ **Shipped**, with click-to-place
-   and paste-coords.
+   and paste-coords — and, once the `location` field existed, the ability to
+   **follow a row property**: a block on a row template resolves the host row's
+   place through the same `thisPage` scope inline formula tokens read, so one
+   block gives every row page its own map.
 5. ~~**`location` field type** (option B)~~ **Shipped** — with geocoding, which
    is what the derived-coordinate views turned out to be missing: everything
    else about a place could already be typed.

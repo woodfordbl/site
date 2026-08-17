@@ -151,9 +151,15 @@ export const databasePropsSchema = z.object({
 });
 
 /**
- * `map` block props: a standalone place on a page — not database-backed. Data
- * maps come from a `database` block pointed at a map view instead; this is the
- * "here is where that is" block.
+ * `map` block props: one place on a page. Data maps come from a `database`
+ * block pointed at a map view instead; this is the "here is where that is"
+ * block.
+ *
+ * The place is either pinned into the block (`markers`) or read from the host
+ * page's row (`locationFieldId`) when that page is a database row or a row
+ * template — the same `thisPage` scope inline formulas resolve against. A
+ * bound block on a template renders each row's own location, so one block
+ * gives every row page its map.
  */
 export const mapPropsSchema = z.object({
   /** Camera center as [longitude, latitude]. */
@@ -169,6 +175,13 @@ export const mapPropsSchema = z.object({
       })
     )
     .optional(),
+  /**
+   * `location` property of the host row this map follows. Set = the pin and
+   * the camera come from the row, and `markers` is ignored; the stored `zoom`
+   * still frames it, since the point differs per row but the framing should
+   * not.
+   */
+  locationFieldId: z.string().optional(),
 });
 
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
