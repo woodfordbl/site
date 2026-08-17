@@ -66,6 +66,7 @@ import {
   highlightFormula,
 } from "@/lib/formula/highlight.ts";
 import { type FormulaHoverInfo, formulaHoverAt } from "@/lib/formula/hover.ts";
+import { basePageFieldRank } from "@/lib/formula/page-scope.ts";
 import {
   FORMULA_PAGE_SCOPE_LABEL,
   FORMULA_ROW_SCOPE_LABEL,
@@ -1667,7 +1668,10 @@ function propertyCompletion(
       const insert = canonicalPropertyReference(field.id);
       applyInsert(view, { from: start, to }, insert, start + insert.length);
     },
-    boost: PROPERTY_BASE_BOOST + typeMatchBoost(valueType, expected),
+    boost:
+      PROPERTY_BASE_BOOST +
+      typeMatchBoost(valueType, expected) +
+      basePageFieldRank(field.id),
     detail: formulaTypeBadge(valueType),
     label: field.name,
     type: "property",

@@ -123,8 +123,9 @@ export function InlineFormulaPageProvider({
       page,
       databaseFields,
       cellValues,
+      primaryFieldId: database?.primaryFieldId,
     }),
-    [cellValues, databaseFields, page]
+    [cellValues, database?.primaryFieldId, databaseFields, page]
   );
   const value = modelOverride ?? inferredValue;
 
