@@ -2,9 +2,9 @@
 
 import { type ReactNode, useEffect } from "react";
 
+import { MapOverlayControls } from "@/components/maps/map-overlay-controls.tsx";
 import {
   Map,
-  MapControls,
   MapMarker,
   MarkerContent,
   MarkerTooltip,
@@ -64,7 +64,7 @@ export function MapBlockCanvas({
 
   return (
     <Map center={props.center} theme={theme} zoom={props.zoom}>
-      <MapControls showFullscreen />
+      <MapOverlayControls showFullscreen />
       {onPickCoordinate ? <ClickToPlace onPick={onPickCoordinate} /> : null}
       {markers.map((marker) => (
         <MapMarker

@@ -13,10 +13,10 @@ import {
   MapMarkerCard,
   MapRegionCard,
 } from "@/components/database/views/database-map-tooltip.tsx";
+import { MapOverlayControls } from "@/components/maps/map-overlay-controls.tsx";
 import {
   Map,
   MapClusterLayer,
-  MapControls,
   MapGeoJSON,
   MapMarker,
   MarkerContent,
@@ -139,6 +139,8 @@ function MapFrame({
       )}
       // MapLibre reads its own drags; the page canvas must not claim them.
       data-canvas-pointer-surface=""
+      // Reveals the overlay controls, like the page cover's toolbar.
+      data-reveal-group=""
       ref={scopeRef}
     >
       {children}
@@ -222,7 +224,7 @@ export function DatabaseMapPointsCanvas({
   return (
     <MapFrame className={heightClass} scopeRef={scopeRef}>
       <Map theme={theme} {...cameraProps(bounds)}>
-        <MapControls showFullscreen />
+        <MapOverlayControls showFullscreen />
         {clustered ? (
           <MapClusterLayer
             clusterColors={[
@@ -426,7 +428,7 @@ export function DatabaseMapRegionCanvas({
           onHover={showTooltip ? (handleHover as never) : undefined}
           promoteId={joinProperty}
         />
-        <MapControls />
+        <MapOverlayControls />
       </Map>
       {hovered ? (
         <MapRegionCard

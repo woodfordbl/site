@@ -59,6 +59,8 @@ export function MapBlockFrame({
       )}
       // MapLibre reads its own drags; the page canvas must not claim them.
       data-canvas-pointer-surface=""
+      // Reveals the overlay controls, like the page cover's toolbar.
+      data-reveal-group=""
     >
       {children}
     </div>
