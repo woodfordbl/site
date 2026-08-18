@@ -7,7 +7,7 @@ import {
 } from "@/db/collections/local-collections.ts";
 import { readBlockShardForPage } from "@/db/collections/read-block-shard.ts";
 import { readLocalStorageCollection } from "@/db/collections/read-local-storage-sync.ts";
-import { orderBlocksByIds } from "@/lib/blocks/order-blocks.ts";
+import { sortByFractionalIndex } from "@/lib/blocks/fractional-order.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 import {
   blocksFromLocalBlocks,
@@ -76,8 +76,14 @@ export function usePageBlocks(pageId: string): UsePageBlocksResult {
   }, [bootstrapBlocks, liveLocalBlocks, localBlocksReady]);
 
   const blocks = useMemo(() => {
-    const raw = blocksFromLocalBlocks(existingLocalBlocks);
-    return orderBlocksByIds(raw, localPage?.blockOrder);
+    // Durable order is the rows' fractional indexes; the legacy `blockOrder`
+    // mirror places un-migrated rows (and keeps shipped seeds rendering
+    // identically).
+    const ordered = sortByFractionalIndex(
+      existingLocalBlocks,
+      localPage?.blockOrder
+    );
+    return blocksFromLocalBlocks(ordered);
   }, [existingLocalBlocks, localPage?.blockOrder]);
 
   const hasSeededBlocks = blocks.length > 0 || liveLocalBlocks.length > 0;

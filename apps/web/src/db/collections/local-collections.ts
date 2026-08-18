@@ -39,6 +39,7 @@ import {
 } from "@/db/collections/database-sharded-row-storage.ts";
 import {
   backfillBlockCreatedAt,
+  backfillBlockFractionalIndexes,
   backfillPageCreatedAt,
   migrateCalloutsToContainers,
   migrateLocalStorageToV2,
@@ -353,6 +354,9 @@ function startLocalCollectionsSync(): void {
     // After shards exist (post-V2), fold legacy leaf callouts into the
     // container model so their text survives the schema strip on read.
     migrateCalloutsToContainers();
+    // After callout children exist so they get keys too: assign the durable
+    // per-block fractional indexes in each page's legacy blockOrder.
+    backfillBlockFractionalIndexes();
     reconcileDirtyPagesCookie();
   }
   localPagesCollection.startSyncImmediate();

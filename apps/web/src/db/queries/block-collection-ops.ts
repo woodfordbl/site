@@ -1,20 +1,23 @@
 /**
  * @fileoverview Block persistence ops for canvas structural edits.
  *
- * Invariant: `localPagesCollection.blockOrder` is the document order — reads
- * must apply it before building the row tree and must never rely on
- * localStorage/collection enumeration order. Every structural edit writes the
- * full next order *in the same transaction* as the block-row mutations
- * (`patchBlockOrder` alongside inserts/deletes), so order can never drift
- * from the block shard. The hot path is one `PageBlockTransaction` per
- * reducer dispatch committed by `commitPageBlockTransaction`;
- * `applyPageBlockDiff` covers bulk edits (paste, columns). Order-changing
- * commits bump page `updatedAt` but never `createdAt`.
+ * Ordering: the durable document order is each block row's `fractionalIndex`
+ * (see `src/lib/blocks/fractional-order.ts`) — every structural edit computes
+ * the affected rows' new keys via `assignFractionalIndexes` against the
+ * transaction's previous order and writes them on the rows in the same
+ * transaction. `localPagesCollection.blockOrder` is still dual-written as the
+ * legacy mirror (the read fallback for pre-migration rows and shipped seeds);
+ * it must stay byte-equal to the fractional order until its removal step
+ * lands. The hot path is one `PageBlockTransaction` per reducer dispatch
+ * committed by `commitPageBlockTransaction`; `applyPageBlockDiff` covers bulk
+ * edits (paste, columns). Order-changing commits bump page `updatedAt` but
+ * never `createdAt`.
  *
  * `deletedInTransaction` tracks rows already deleted in the open transaction
  * so a re-insert of the same id uses collection `insert`, not `update`.
  */
 import { createTransaction } from "@tanstack/react-db";
+import { generateNKeysBetween } from "fractional-indexing";
 
 import {
   localBlocksCollection,
@@ -23,6 +26,7 @@ import {
 import { isSyncedMode } from "@/db/collections/sync-mode.ts";
 import { pushWhenSynced } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
+import { assignFractionalIndexes } from "@/lib/blocks/fractional-order.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
 import type { Block } from "@/lib/schemas/block.ts";
@@ -79,6 +83,13 @@ export interface ReplacePageBlocksOptions {
 export interface PageBlockTransaction {
   blockOrder: string[];
   deletedInTransaction: Set<string>;
+  /**
+   * Current fractional index of every block in `blockOrder` (undefined for
+   * legacy rows), kept in lockstep with `blockOrder` so consecutive ops in
+   * one transaction assign keys against in-flight state. Entries for ids
+   * whose rows are not yet inserted are picked up by the pending insert.
+   */
+  fractionalIndexById: Map<string, string | undefined>;
   inner: {
     mutate: (callback: () => void) => void;
     commit: () => Promise<unknown>;
@@ -114,9 +125,80 @@ export function beginPageBlockTransaction(
     pageId,
     blockOrder: [...blockOrder],
     deletedInTransaction: deletedInTransaction ?? new Set(),
+    fractionalIndexById: new Map(
+      blockOrder.map((id) => [
+        id,
+        localBlocksCollection.get(id)?.fractionalIndex,
+      ])
+    ),
     timestamp: nowIso(),
     inner: createPageBlockTransactionInner(),
   };
+}
+
+/**
+ * Advance the transaction to `nextOrder`: computes the fractional-index
+ * assignments the transition requires, folds them into the tx state, and
+ * returns them for row writes.
+ */
+function advanceTxOrder(
+  tx: PageBlockTransaction,
+  nextOrder: string[]
+): Map<string, string> {
+  const assigned = assignFractionalIndexes(
+    tx.blockOrder,
+    tx.fractionalIndexById,
+    nextOrder
+  );
+  tx.blockOrder = [...nextOrder];
+
+  const nextIds = new Set(nextOrder);
+  for (const id of [...tx.fractionalIndexById.keys()]) {
+    if (!nextIds.has(id)) {
+      tx.fractionalIndexById.delete(id);
+    }
+  }
+  for (const [id, key] of assigned) {
+    tx.fractionalIndexById.set(id, key);
+  }
+  return assigned;
+}
+
+/**
+ * Write newly assigned indexes onto existing rows. Rows not yet in the
+ * collection are skipped — their pending insert reads the key from
+ * `tx.fractionalIndexById`. Must run inside `tx.inner.mutate`.
+ */
+function writeAssignedIndexes(
+  assigned: Map<string, string>,
+  tx: PageBlockTransaction
+): void {
+  for (const [blockId, fractionalIndex] of assigned) {
+    if (
+      tx.deletedInTransaction.has(blockId) ||
+      !localBlocksCollection.has(blockId)
+    ) {
+      continue;
+    }
+    localBlocksCollection.update(blockId, (draft) => {
+      draft.fractionalIndex = fractionalIndex;
+      draft.updatedAt = tx.timestamp;
+    });
+  }
+}
+
+/** LocalBlock for a tx write, carrying the tx's fractional index when one is assigned. */
+function localBlockForTx(
+  block: Block,
+  pageId: string,
+  tx: PageBlockTransaction
+): LocalBlock {
+  const localBlock = toLocalBlock(block, pageId, tx.timestamp);
+  const fractionalIndex = tx.fractionalIndexById.get(block.id);
+  if (fractionalIndex !== undefined) {
+    localBlock.fractionalIndex = fractionalIndex;
+  }
+  return localBlock;
 }
 
 export function commitPageBlockTransaction(tx: PageBlockTransaction): void {
@@ -128,12 +210,13 @@ export function patchBlockOrder(
   blockOrder: string[],
   tx: PageBlockTransaction
 ): void {
-  tx.blockOrder = [...blockOrder];
+  const assigned = advanceTxOrder(tx, blockOrder);
   tx.inner.mutate(() => {
     localPagesCollection.update(pageId, (draft) => {
       draft.blockOrder = blockOrder;
       draft.updatedAt = tx.timestamp;
     });
+    writeAssignedIndexes(assigned, tx);
   });
 }
 
@@ -143,7 +226,7 @@ function insertPageBlockRow(
   tx: PageBlockTransaction
 ): void {
   tx.inner.mutate(() => {
-    localBlocksCollection.insert(toLocalBlock(block, pageId, tx.timestamp));
+    localBlocksCollection.insert(localBlockForTx(block, pageId, tx));
     tx.deletedInTransaction.delete(block.id);
   });
 }
@@ -156,14 +239,15 @@ export function insertPageBlockAt(
 ): void {
   const nextOrder = [...tx.blockOrder];
   nextOrder.splice(orderIndex, 0, block.id);
-  tx.blockOrder = nextOrder;
+  const assigned = advanceTxOrder(tx, nextOrder);
 
   tx.inner.mutate(() => {
     localPagesCollection.update(pageId, (draft) => {
       draft.blockOrder = nextOrder;
       draft.updatedAt = tx.timestamp;
     });
-    localBlocksCollection.insert(toLocalBlock(block, pageId, tx.timestamp));
+    writeAssignedIndexes(assigned, tx);
+    localBlocksCollection.insert(localBlockForTx(block, pageId, tx));
     tx.deletedInTransaction.delete(block.id);
   });
 }
@@ -179,7 +263,9 @@ export function deletePageBlocksInTx(
 
   const removeIds = new Set(blockIds);
   const nextOrder = tx.blockOrder.filter((id) => !removeIds.has(id));
-  tx.blockOrder = nextOrder;
+  // Survivors keep their keys; assignments only appear when stored keys were
+  // inconsistent and the shrink exposes it.
+  const assigned = advanceTxOrder(tx, nextOrder);
 
   tx.inner.mutate(() => {
     localPagesCollection.update(pageId, (draft) => {
@@ -199,6 +285,7 @@ export function deletePageBlocksInTx(
       }
       tx.deletedInTransaction.add(blockId);
     }
+    writeAssignedIndexes(assigned, tx);
   });
 }
 
@@ -209,7 +296,7 @@ export function updatePageBlockInTx(
   tx: PageBlockTransaction
 ): void {
   const useInsert = !exists || tx.deletedInTransaction.has(block.id);
-  const localBlock = toLocalBlock(block, pageId, tx.timestamp);
+  const localBlock = localBlockForTx(block, pageId, tx);
 
   tx.inner.mutate(() => {
     if (useInsert) {
@@ -328,6 +415,11 @@ export function replacePageBlocks(
 
   const tx = createPageBlockTransactionInner();
   const blockOrder = blocks.map((block) => block.id);
+  const assignedIndexes = assignFractionalIndexes(
+    existing.map((item) => item.id),
+    new Map(existing.map((item) => [item.id, item.fractionalIndex])),
+    blockOrder
+  );
 
   tx.mutate(() => {
     localPagesCollection.update(pageId, (draft) => {
@@ -344,6 +436,10 @@ export function replacePageBlocks(
 
     for (const block of blocks) {
       const localBlock = toLocalBlock(block, pageId, timestamp);
+      const fractionalIndex = assignedIndexes.get(block.id);
+      if (fractionalIndex !== undefined) {
+        localBlock.fractionalIndex = fractionalIndex;
+      }
       const found = existingById.get(block.id);
       const useInsert = !found || deletedInTransaction?.has(block.id);
 
@@ -442,8 +538,10 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
     },
   });
 
+  const seedIndexes = generateNKeysBetween(null, null, blocks.length);
+
   tx.mutate(() => {
-    for (const block of blocks) {
+    for (const [index, block] of blocks.entries()) {
       // Idempotent: StrictMode double-mounted effects can trigger the lazy
       // seed twice before the first pass's rows are visible to the second's
       // captured state — a duplicate insert would crash a fresh profile's
@@ -451,7 +549,9 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
       if (localBlocksCollection.has(block.id)) {
         continue;
       }
-      localBlocksCollection.insert(toLocalBlock(block, pageId, timestamp));
+      const localBlock = toLocalBlock(block, pageId, timestamp);
+      localBlock.fractionalIndex = seedIndexes[index];
+      localBlocksCollection.insert(localBlock);
     }
 
     // Every caller inserts the page row first; a missing one means the seed is
