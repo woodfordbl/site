@@ -15,7 +15,7 @@ describe("clonePageBlocks", () => {
       {
         id: "b",
         type: "text",
-        backgroundColor: "blue_background",
+        backgroundColor: "blue",
         props: { text: "body" },
       },
       { id: "c", type: "text", props: { text: "tail" } },
@@ -29,7 +29,7 @@ describe("clonePageBlocks", () => {
       "text",
     ]);
     expect(cloned[0]?.color).toBe("red");
-    expect(cloned[1]?.backgroundColor).toBe("blue_background");
+    expect(cloned[1]?.backgroundColor).toBe("blue");
   });
 
   it("remaps parentId within the cloned set", () => {
