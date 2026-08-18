@@ -6,48 +6,21 @@ import {
 } from "@/lib/blocks/create-block.ts";
 import type { SlashMenuItem } from "@/lib/canvas/block-spec.types.ts";
 import type { CanvasCommand } from "@/lib/canvas/commands.ts";
-import type { MarkdownShortcutMatch } from "@/lib/canvas/markdown-shortcuts.ts";
+import {
+  type MarkdownShortcutMatch,
+  markdownShortcutMatchesItem,
+} from "@/lib/canvas/markdown-shortcuts.ts";
 
 export function markdownMatchToSlashItem(
   match: MarkdownShortcutMatch
 ): SlashMenuItem {
-  const items = getSlashMenuItems();
-
-  if (match.kind === "heading") {
-    const item = items.find(
-      (entry) => entry.id === "heading" && entry.headingLevel === match.level
-    );
-    if (!item) {
-      throw new Error(
-        `Missing slash menu item for heading level ${match.level}`
-      );
-    }
-    return item;
-  }
-
-  if (match.kind === "list") {
-    const item = items.find(
-      (entry) => entry.id === "list" && entry.listVariant === match.variant
-    );
-    if (!item) {
-      throw new Error(
-        `Missing slash menu item for list variant ${match.variant}`
-      );
-    }
-    return item;
-  }
-
-  if (match.kind === "checklist") {
-    const item = items.find((entry) => entry.id === "checklist");
-    if (!item) {
-      throw new Error("Missing slash menu item for checklist");
-    }
-    return item;
-  }
-
-  const item = items.find((entry) => entry.id === "divider");
+  const item = getSlashMenuItems().find((entry) =>
+    markdownShortcutMatchesItem(match, entry)
+  );
   if (!item) {
-    throw new Error("Missing slash menu item for divider");
+    throw new Error(
+      `Missing slash menu item for markdown shortcut ${JSON.stringify(match)}`
+    );
   }
   return item;
 }
