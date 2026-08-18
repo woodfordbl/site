@@ -4,6 +4,7 @@ import {
   localDatabasesCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
+import { pushWhenSynced } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { resolveDatabaseSlug } from "@/lib/databases/database-page-paths.ts";
 import { replacePageSlugPrefix } from "@/lib/pages/build-page-tree.ts";
@@ -23,6 +24,9 @@ function createPagesAndDatabasesTransaction() {
   return createTransaction({
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localDatabasesCollection.utils.acceptMutations(transaction);
       localPagesCollection.utils.acceptMutations(transaction);
       await Promise.resolve();

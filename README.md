@@ -2,19 +2,8 @@
 
 Personal site of [Blake Woodford](https://linkedin.com/in/blakewoodford), built as a
 local-first workspace platform: a TanStack Start app whose TanStack DB collections
-persist to localStorage/IndexedDB, layered over shipped blog content that renders
-from build-time JSON.
-
-## Repository layout
-
-pnpm workspace monorepo:
-
-- `apps/web` — the TanStack Start application (routes, editor, collections,
-  Nitro API handlers, scripts).
-- `packages/` — reserved for shared packages as they materialize.
-- `docs/proposals/` — active design plans (sync engine, file mirror, platform
-  architecture).
-- `dev/` — local development infrastructure.
+boot in one of two modes — anonymous visitors get localStorage-backed collections,
+signed-in users (Better Auth workspaces) get Electric-protocol sync against Postgres.
 
 ## Running it
 
@@ -23,15 +12,42 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:size` are the
-commit gates (root scripts delegate into `apps/web`).
+That is the whole loop for local-only mode. To run the optional sync backend:
 
-## Architecture in brief
+1. Start Postgres with logical replication (`wal_level=logical`) — either a local
+   install (apt) or Docker via `pnpm electric:up` (see `dev/electric/`).
+2. Apply the schema: `node apps/web/scripts/db-migrate.mjs`.
 
-TanStack Start + Nitro on Vercel. The canvas editor is a custom command-bus
-design (UI → commands → reducer → effects → TanStack DB transactions); pages
-and blocks are flat, id-keyed rows; shipped content renders server-side and is
-lazily seeded into local collections on first edit. Documentation lives in the
-code as Google-style JSDoc (see `AGENTS.md` for the standard); start from the
-`@fileoverview` blocks in `apps/web/src/db/collections/` and
-`apps/web/src/lib/canvas/`.
+Verify sync with `node apps/web/scripts/sync-e2e-check.mjs` (headless end-to-end check) or
+`node apps/web/scripts/demo/two-browser-sync.mjs` (two live browsers editing one page).
+
+`pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:size` must pass before
+committing.
+
+## Documentation
+
+Docs live in the code as JSDoc — start at `AGENTS.md` for the standard.
+`docs/proposals/` holds active design plans; there is no other markdown tree.
+
+## Architecture
+
+TanStack Start + TanStack Router on Nitro; ShadCN on Base UI, Tabler icons,
+Tailwind v4; TanStack DB for the reactive client store; Zod schemas in
+`src/lib/schemas/`; server pages are JSON in `content/pages/` bundled at build
+time. Capabilities nest: Pages → Canvas (block rows, commands, editor) → Blocks.
+
+| Layer | Path |
+| ----- | ---- |
+| UI primitives | `src/components/ui/` |
+| Layout | `src/components/layout/` |
+| Blocks / Canvas / Pages | `src/components/{blocks,canvas,pages}/` |
+| Routes | `src/routes/` (API routes in `routes/api/`, registered in `vite.config.ts`) |
+| Data | `src/db/` (collections + reactive `use-*` queries) |
+| Core logic | `src/lib/canvas/`, `src/lib/pages/` (pure, no React) |
+
+Request flow: a route loader loads the server page JSON (or the client resolves a
+user page from its collection), `buildBlockTree` shapes it, and
+`PageWorkspace → PageCanvas → BlockTreeNode` renders it. Edits dispatch a
+`CanvasCommand` through the canvas reducer, which plans effects applied to the
+TanStack DB collections — persisted per mode to localStorage shards or synced
+via Electric.

@@ -4,6 +4,7 @@ import {
   localBlocksCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
+import { pushWhenSynced } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import {
   beginPageBlockTransaction,
@@ -124,6 +125,9 @@ export function syncHubPageMetadataFromDatabase(
   const tx = createTransaction({
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localPagesCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },

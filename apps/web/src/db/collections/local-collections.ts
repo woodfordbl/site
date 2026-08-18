@@ -15,13 +15,17 @@
  * all rely on (see src/lib/pages/resolve-page-state.ts). User-created pages
  * insert on `page.create` with one empty text block.
  *
- * Boot work below runs once per page load: storage migrations, dirty-cookie
- * reconcile, and formula-ref canonicalization. Cross-tab sync rides `storage`
- * events on the metadata key and block shard keys. Idle boot work
- * (orphan-asset sweep, snapshot purge) is scheduled here, off the critical
- * path.
+ * Boot fork (sync-mode.ts): the mode is fixed once per page load. Anonymous
+ * mode uses localStorage collections plus the local-only boot work below
+ * (storage migrations, dirty-cookie reconcile, formula-ref canonicalization).
+ * Signed-in mode swaps in Electric-backed collections with identical
+ * ids/schemas/keys that boot straight from the shape stream, so every import
+ * site is oblivious. Cross-tab sync in local mode rides `storage` events on
+ * the metadata key and block shard keys. Idle boot work (orphan-asset sweep,
+ * snapshot purge) is scheduled here, off the critical path.
  */
 import { BTreeIndex } from "@tanstack/db";
+import { electricCollectionOptions } from "@tanstack/electric-db-collection";
 import {
   createCollection,
   localStorageCollectionOptions,
@@ -56,6 +60,35 @@ import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
 import { localFormulaFunctionSchema } from "@/lib/schemas/local-formula-function.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
+import { registerSyncedReader } from "./read-local-storage-sync.ts";
+import { isSyncedMode, syncContext } from "./sync-mode.ts";
+import { syncedWriteHandlers } from "./synced-mutations.ts";
+
+/**
+ * Electric-backed variant of a content collection (signed-in mode). Same id,
+ * same schema, same key — every import site is oblivious to the swap. Reads
+ * stream from the workspace-scoped shape (auth-proxied; see
+ * routes/api/sync/shape.get.ts); writes post to /api/sync/mutate and hold
+ * optimistic state until the txid returns on the stream.
+ */
+function electricContentOptions<
+  Schema extends
+    | typeof localPageSchema
+    | typeof localBlockSchema
+    | typeof localDatabaseSchema
+    | typeof localDatabaseRowSchema,
+>(id: string, table: string, schema: Schema) {
+  return electricCollectionOptions({
+    id,
+    schema,
+    getKey: (item: { id: string }) => item.id,
+    shapeOptions: {
+      url: `${window.location.origin}/api/sync/shape`,
+      params: { table, ws: syncContext.workspaceId ?? "" },
+    },
+    ...syncedWriteHandlers(),
+  });
+}
 
 function getHotData(): Record<string, unknown> {
   if (!import.meta.hot) {
@@ -93,7 +126,16 @@ type PagesCollection = ReturnType<typeof createLocalPagesCollection>;
 
 export const localPagesCollection = getOrCreateHotCollection(
   "localPagesCollection",
-  (): PagesCollection => createLocalPagesCollection()
+  (): PagesCollection =>
+    isSyncedMode()
+      ? // Same row type and key; the localStorage-only utils surface
+        // (acceptMutations) is unused in synced mode — the ops layer's
+        // transactions push through /api/sync/mutate instead (see
+        // synced-mutations.ts), so the assertion is safe at every call site.
+        (createCollection(
+          electricContentOptions("local-pages", "pages", localPageSchema)
+        ) as unknown as PagesCollection)
+      : createLocalPagesCollection()
 );
 
 function createLocalBlocksCollection() {
@@ -127,7 +169,12 @@ type BlocksCollection = ReturnType<typeof createLocalBlocksCollection>;
 
 export const localBlocksCollection = getOrCreateHotCollection(
   "localBlocksCollection",
-  (): BlocksCollection => createLocalBlocksCollection()
+  (): BlocksCollection =>
+    isSyncedMode()
+      ? (createCollection(
+          electricContentOptions("local-blocks", "blocks", localBlockSchema)
+        ) as unknown as BlocksCollection)
+      : createLocalBlocksCollection()
 );
 
 /**
@@ -203,7 +250,16 @@ type DatabasesCollection = ReturnType<typeof createLocalDatabasesCollection>;
 
 export const localDatabasesCollection = getOrCreateHotCollection(
   "localDatabasesCollection",
-  (): DatabasesCollection => createLocalDatabasesCollection()
+  (): DatabasesCollection =>
+    isSyncedMode()
+      ? (createCollection(
+          electricContentOptions(
+            "local-databases",
+            "databases",
+            localDatabaseSchema
+          )
+        ) as unknown as DatabasesCollection)
+      : createLocalDatabasesCollection()
 );
 
 /**
@@ -249,7 +305,20 @@ type DatabaseRowsCollection = ReturnType<
 
 export const localDatabaseRowsCollection = getOrCreateHotCollection(
   "localDatabaseRowsCollection",
-  (): DatabaseRowsCollection => createLocalDatabaseRowsCollection()
+  (): DatabaseRowsCollection => {
+    if (isSyncedMode()) {
+      const synced = createCollection(
+        electricContentOptions(
+          "local-database-rows",
+          "database_rows",
+          localDatabaseRowSchema
+        )
+      ) as unknown as DatabaseRowsCollection;
+      synced.createIndex((row) => row.databaseId, { indexType: BTreeIndex });
+      return synced;
+    }
+    return createLocalDatabaseRowsCollection();
+  }
 );
 
 /** Reclaim orphaned media blobs once per boot, off the critical path. */
@@ -274,13 +343,18 @@ function startLocalCollectionsSync(): void {
     return;
   }
 
-  backfillPageCreatedAt();
-  backfillBlockCreatedAt();
-  migrateLocalStorageToV2();
-  // After shards exist (post-V2), fold legacy leaf callouts into the
-  // container model so their text survives the schema strip on read.
-  migrateCalloutsToContainers();
-  reconcileDirtyPagesCookie();
+  if (!isSyncedMode()) {
+    // localStorage migrations and the SSR dirty-cookie only exist in
+    // anonymous local mode; synced collections boot straight from the shape
+    // stream.
+    backfillPageCreatedAt();
+    backfillBlockCreatedAt();
+    migrateLocalStorageToV2();
+    // After shards exist (post-V2), fold legacy leaf callouts into the
+    // container model so their text survives the schema strip on read.
+    migrateCalloutsToContainers();
+    reconcileDirtyPagesCookie();
+  }
   localPagesCollection.startSyncImmediate();
   localBlocksCollection.startSyncImmediate();
   localKeybindingsCollection.startSyncImmediate();
@@ -288,29 +362,34 @@ function startLocalCollectionsSync(): void {
   localFormulaFunctionsCollection.startSyncImmediate();
   localDatabasesCollection.startSyncImmediate();
   localDatabaseRowsCollection.startSyncImmediate();
-  // Canonicalize stored formula references (name → field id) now that the
-  // databases collection is live. The writer is injected to keep the module
-  // graph acyclic; direct collection updates persist like any other
-  // localStorage-collection write. (Local-mode-only: synced workspaces were
-  // born on the v2 formula language.)
-  migrateFormulaExpressionsToIdRefs(
-    localDatabasesCollection.toArray,
-    (databaseId, fieldId, expression) => {
-      localDatabasesCollection.update(databaseId, (draft) => {
-        draft.fields = draft.fields.map((field) =>
-          field.id === fieldId
-            ? // The migration only ever targets formula fields, so the
-              // merged object stays a valid union member.
-              ({ ...field, expression } as DatabaseField)
-            : field
-        );
-        draft.updatedAt = new Date().toISOString();
-      });
-    }
-  );
+  if (!isSyncedMode()) {
+    // Canonicalize stored formula references (name → field id) now that the
+    // databases collection is live. The writer is injected to keep the module
+    // graph acyclic; direct collection updates persist like any other
+    // localStorage-collection write. (Local-mode-only: synced workspaces were
+    // born on the v2 formula language.)
+    migrateFormulaExpressionsToIdRefs(
+      localDatabasesCollection.toArray,
+      (databaseId, fieldId, expression) => {
+        localDatabasesCollection.update(databaseId, (draft) => {
+          draft.fields = draft.fields.map((field) =>
+            field.id === fieldId
+              ? // The migration only ever targets formula fields, so the
+                // merged object stays a valid union member.
+                ({ ...field, expression } as DatabaseField)
+              : field
+          );
+          draft.updatedAt = new Date().toISOString();
+        });
+      }
+    );
+  }
   scheduleOrphanAssetSweep();
   scheduleSnapshotPurge();
   getHotData().localCollectionsSyncStarted = true;
+  // Synced mode: the raw-localStorage fast reads (persist-page-metadata's
+  // seeded-check and friends) resolve against the live collection instead.
+  registerSyncedReader("site-local-pages", () => localPagesCollection.toArray);
   if (import.meta.env.DEV) {
     // Dev-only introspection handle (used by scripts/demo probes).
     (window as unknown as Record<string, unknown>).__collections = {

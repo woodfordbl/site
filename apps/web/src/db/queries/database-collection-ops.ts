@@ -22,6 +22,7 @@ import {
   localDatabasesCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
+import { pushWhenSynced } from "@/db/collections/synced-mutations.ts";
 import { clearDatabaseFieldHistory } from "@/db/history/field-history-store.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { ORDER_STEP } from "@/lib/blocks/order-constants.ts";
@@ -84,6 +85,9 @@ function createDatabaseTransaction(): DatabaseTransaction {
     // auto-commit would close the transaction on the first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localDatabasesCollection.utils.acceptMutations(transaction);
       localDatabaseRowsCollection.utils.acceptMutations(transaction);
       // Row/hub page icon mirrors write pages in the same tx.

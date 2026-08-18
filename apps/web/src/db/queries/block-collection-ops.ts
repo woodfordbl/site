@@ -20,6 +20,8 @@ import {
   localBlocksCollection,
   localPagesCollection,
 } from "@/db/collections/local-collections.ts";
+import { isSyncedMode } from "@/db/collections/sync-mode.ts";
+import { pushWhenSynced } from "@/db/collections/synced-mutations.ts";
 import { reportPersistenceError } from "@/db/persistence-errors.ts";
 import { markPageDirty } from "@/lib/local-draft/dirty-pages-cookie.ts";
 import { schedulePageSnapshotCapture } from "@/lib/pages/capture-page-snapshot.ts";
@@ -53,7 +55,11 @@ function commitAndMarkDirty(
   commit()
     .then(() => {
       if (pageId) {
-        markPageDirty(pageId);
+        // The dirty cookie is the anonymous-mode SSR hint; synced pages render
+        // from the server database, so only the snapshot timeline applies.
+        if (!isSyncedMode()) {
+          markPageDirty(pageId);
+        }
         schedulePageSnapshotCapture(pageId);
       }
     })
@@ -87,6 +93,11 @@ function createPageBlockTransactionInner(): PageBlockTransaction["inner"] {
     // auto-commit would close the transaction on the first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      // Synced mode: one POST /api/sync/mutate transaction, optimistic state
+      // held until the txid returns on the shape streams.
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localPagesCollection.utils.acceptMutations(transaction);
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
@@ -383,6 +394,9 @@ export function deletePageBlocks(blockIds: string[]): void {
     // Committed explicitly below; default auto-commit closes on first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },
@@ -419,6 +433,9 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
     // Committed explicitly below; default auto-commit closes on first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      if (await pushWhenSynced(transaction)) {
+        return;
+      }
       localPagesCollection.utils.acceptMutations(transaction);
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
