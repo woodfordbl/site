@@ -1,5 +1,8 @@
+import { useInlineFormulaPage } from "@/components/editor/inline-formula-page.tsx";
 import { InlinePageLink } from "@/components/editor/inline-page-link.tsx";
 import { InlineLink } from "@/components/editor/link-preview.tsx";
+import { useInlineFormulaValues } from "@/db/queries/use-inline-formula-values.ts";
+import { isFormulaTokenMark } from "@/lib/blocks/inline-formula.ts";
 import { segmentRichText } from "@/lib/blocks/rich-text.ts";
 import { inlineTokenBorderOffsetClassName } from "@/lib/editor/inline-token-rule.ts";
 import { pageLinkTitleMarks } from "@/lib/editor/rich-text-dom.ts";
@@ -55,14 +58,17 @@ export function classNameForMarks(marks: readonly InlineMarkType[]): string {
 }
 
 interface RichTextContentProps {
+  marks?: InlineMark[];
+  text: string;
+}
+
+interface RichTextSegmentsProps extends RichTextContentProps {
   /**
    * Rendered value per inline formula token, keyed by the token's offset (see
    * `useInlineFormulaValues`). A token with no entry shows a placeholder rather
    * than its sentinel — the value simply has not been computed yet.
    */
   formulaValues?: ReadonlyMap<number, string>;
-  marks?: InlineMark[];
-  text: string;
 }
 
 /** Shown for a token whose value has not resolved yet. */
@@ -73,12 +79,49 @@ const PENDING_TOKEN_LABEL = "…";
  * Plain link marks use {@link InlineLink} for hover OG previews; page-link marks
  * (`pageId`) use {@link InlinePageLink}. Newlines stay literal — parents render
  * with `whitespace-pre-wrap`.
+ *
+ * A field holding a formula token routes through {@link RichTextTokenContent},
+ * which subscribes to the token's live value against the surrounding
+ * {@link useInlineFormulaPage} model. Read-only surfaces — a row page rendering
+ * its database's template, a version preview — have no editable field to write
+ * values into, so this is the only place they ever resolve; without it a token
+ * shows its pending placeholder for as long as the page is open.
  */
-export function RichTextContent({
+export function RichTextContent({ marks, text }: RichTextContentProps) {
+  if (!marks || marks.length === 0) {
+    return text;
+  }
+  if (marks.some(isFormulaTokenMark)) {
+    return <RichTextTokenContent marks={marks} text={text} />;
+  }
+  return <RichTextSegments marks={marks} text={text} />;
+}
+
+/**
+ * The token-bearing variant. Split out so the value subscription — which reads
+ * every database in the workspace — mounts only for the fields that hold a
+ * token, never for a page of ordinary paragraphs.
+ */
+function RichTextTokenContent({
+  marks,
+  text,
+}: {
+  marks: InlineMark[];
+  text: string;
+}) {
+  const model = useInlineFormulaPage();
+  const formulaValues = useInlineFormulaValues(model, marks);
+
+  return (
+    <RichTextSegments formulaValues={formulaValues} marks={marks} text={text} />
+  );
+}
+
+function RichTextSegments({
   formulaValues,
   marks,
   text,
-}: RichTextContentProps) {
+}: RichTextSegmentsProps) {
   if (!marks || marks.length === 0) {
     return text;
   }
