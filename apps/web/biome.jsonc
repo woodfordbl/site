@@ -26,6 +26,14 @@
       "assist": { "enabled": false }
     },
     {
+      // drizzle-kit owns src/server/migrations/meta/ — it rewrites the journal
+      // and snapshots on every `generate`, so formatting them only churns.
+      "includes": ["src/server/migrations/meta/**"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
+    },
+    {
       // Vendored dither-kit canvas engine (MIT, Boring-Software-Inc/dither-kit)
       // — kept close to upstream so it stays updatable; not our house style.
       "includes": ["src/components/charts/dither-kit/**"],

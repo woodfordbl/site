@@ -23,6 +23,16 @@
  * site is oblivious. Cross-tab sync in local mode rides `storage` events on
  * the metadata key and block shard keys. Idle boot work (orphan-asset sweep,
  * snapshot purge) is scheduled here, off the critical path.
+ *
+ * Connection budget: synced mode holds five live shapes (pages, blocks,
+ * databases, database_rows, my_access), each parking one long-poll for as
+ * long as it is subscribed. A browser allows roughly six concurrent
+ * connections per origin over HTTP/1.1, so a dev server — which serves
+ * HTTP/1.1 and shares its origin with the app — has about one slot left for
+ * everything else, and anything additionally holding a connection open
+ * exhausts it (see the devtools note in routes/__root.tsx). Deployments serve
+ * HTTP/2, where the limit does not apply; giving shapes their own origin (a
+ * real Electric instance) removes it in dev too.
  */
 import { BTreeIndex } from "@tanstack/db";
 import { electricCollectionOptions } from "@tanstack/electric-db-collection";

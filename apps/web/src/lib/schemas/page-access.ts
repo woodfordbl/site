@@ -4,7 +4,7 @@ import { z } from "zod";
  * @fileoverview Page access levels (ReBAC). The level order is a strict
  * hierarchy — view < comment < edit < full_access — and every gate in the
  * client derives from that ranking, mirroring the server's `can_access`
- * (src/server/migrations/0003_rebac.sql). `MyAccessRow` is the wire shape of
+ * (src/server/migrations/0001_functions_and_triggers.sql). `MyAccessRow` is the wire shape of
  * the `my_access` pseudo-shape (routes/api/sync/shape.get.ts): the signed-in
  * user's own effective level per accessible page, keyed by page id.
  */

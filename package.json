@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
+    "db:migrate": "pnpm --filter web db:migrate",
     "test": "pnpm --filter web test",
     "lint": "pnpm --filter web lint",
     "check": "pnpm --filter web check",

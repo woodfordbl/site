@@ -57,6 +57,25 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    # The access-model suite runs against a real database: its subject is
+    # Postgres functions and triggers, which nothing else can exercise. Without
+    # DATABASE_URL those tests skip themselves, so this service is what keeps
+    # them from silently disappearing.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: site
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/site
     steps:
       - uses: actions/checkout@v4
       - run: corepack enable
@@ -65,4 +84,5 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
       - run: pnpm test

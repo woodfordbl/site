@@ -1,5 +1,8 @@
-import { defineHandler, HTTPError, readBody } from "nitro/h3";
-import { getSession } from "../../../src/server/auth.server.ts";
+import { defineHandler, getCookie, HTTPError, readBody } from "nitro/h3";
+import {
+  getSession,
+  isWorkspaceMember,
+} from "../../../src/server/auth.server.ts";
 import { getPool } from "../../../src/server/db.server.ts";
 
 /**
@@ -18,13 +21,21 @@ import { getPool } from "../../../src/server/db.server.ts";
  * - `setInherit`: true|false. Turning inheritance OFF first copies the
  *   currently-inherited grants onto the page and pins the caller at
  *   full_access (Restrict semantics — see the worked example in
- *   scripts/rebac-check.mjs): the chain truncates at this page afterwards,
- *   which also drops role baselines.
+ *   src/server/access-model.test.ts): the chain truncates at this page
+ *   afterwards, which also drops role baselines.
+ *
+ * A page id only names a page together with a workspace (`src/server/schema.ts`), and
+ * the body carries no workspace, so the request is scoped to the caller's
+ * active workspace — the `site-workspace` cookie the client's collections sync
+ * against (src/db/collections/sync-mode.ts). That cookie selects a scope, it
+ * never grants anything: the caller must be a member of the workspace it names
+ * and hold `full_access` on the page inside it, so pointing it at a stranger's
+ * workspace only produces a 403.
  *
  * Caller must hold `full_access` on the page (workspace owners/admins pass
  * via their baseline). Every action runs in one transaction; page_permissions
  * and pages changes fire the ReBAC projection triggers, whose
- * user_page_access transitions land in shape_log (migration 0004) — that is
+ * user_page_access transitions land in shape_log (`log_access_change`) — that is
  * what makes open shapes converge live (grant inserts / synthetic deletes)
  * without any extra signalling here.
  */
@@ -32,6 +43,9 @@ import { getPool } from "../../../src/server/db.server.ts";
 const LEVELS = new Set(["view", "comment", "edit", "full_access"]);
 const SUBJECT_TYPES = new Set(["user", "group", "workspace"]);
 const VISIBILITIES = new Set(["workspace", "private"]);
+
+/** Mirrors `WORKSPACE_COOKIE` in src/db/collections/sync-mode.ts. */
+const WORKSPACE_COOKIE = "site-workspace";
 
 interface PermissionsBody {
   action: "list" | "set" | "remove" | "setVisibility" | "setInherit";
@@ -43,13 +57,28 @@ interface PermissionsBody {
   visibility?: string;
 }
 
-/** The permission chain for a page, truncated like `effective_level`. */
+type Client = import("pg").PoolClient;
+
+/** The one page one caller acts on, in the one workspace that owns it. */
+interface Scope {
+  client: Client;
+  pageId: string;
+  userId: string;
+  workspaceId: string;
+}
+
+/**
+ * The permission chain for `$1 = workspace, $2 = page`, truncated like
+ * `effective_level`. Ancestors are always in the page's own workspace, so the
+ * closure and the pages join are both scoped by it.
+ */
 const CHAIN_CTE = `
   with chain_all as (
     select pa.ancestor_id, pa.depth, anc.inherit_permissions
     from page_ancestors pa
-    join pages anc on anc.id = pa.ancestor_id
-    where pa.page_id = $1
+    join pages anc
+      on anc.workspace_id = pa.workspace_id and anc.id = pa.ancestor_id
+    where pa.workspace_id = $1 and pa.page_id = $2
   ),
   cutoff as (
     select min(depth) as depth from chain_all where not inherit_permissions
@@ -58,8 +87,6 @@ const CHAIN_CTE = `
     select ancestor_id, depth from chain_all
     where depth <= coalesce((select depth from cutoff), 2147483647)
   )`;
-
-type Client = import("pg").PoolClient;
 
 function subjectOf(body: PermissionsBody): { type: string; id: string } {
   const type = body.subjectType ?? "";
@@ -74,15 +101,16 @@ function subjectOf(body: PermissionsBody): { type: string; id: string } {
   return { type, id };
 }
 
-async function listGrants(client: Client, pageId: string) {
-  const result = await client.query(
+async function listGrants(scope: Scope) {
+  const result = await scope.client.query(
     `${CHAIN_CTE}
      select pp.subject_type, pp.subject_id, pp.level,
             pp.page_id as source_page_id, c.depth
      from page_permissions pp
      join chain c on c.ancestor_id = pp.page_id
+     where pp.workspace_id = $1
      order by c.depth asc, pp.subject_type asc, pp.subject_id asc`,
-    [pageId]
+    [scope.workspaceId, scope.pageId]
   );
   return result.rows.map((row) => ({
     subjectType: row.subject_type,
@@ -93,119 +121,112 @@ async function listGrants(client: Client, pageId: string) {
   }));
 }
 
-async function setGrant(
-  client: Client,
-  pageId: string,
-  userId: string,
-  body: PermissionsBody
-): Promise<void> {
+async function setGrant(scope: Scope, body: PermissionsBody): Promise<void> {
   const subject = subjectOf(body);
   if (!(body.level && LEVELS.has(body.level))) {
     throw HTTPError.status(400, "Unknown level");
   }
-  await client.query(
-    `insert into page_permissions (page_id, subject_type, subject_id, level, granted_by)
-     values ($1, $2, $3, $4, $5)
-     on conflict (page_id, subject_type, subject_id)
+  await scope.client.query(
+    `insert into page_permissions
+       (workspace_id, page_id, subject_type, subject_id, level, granted_by)
+     values ($1, $2, $3, $4, $5, $6)
+     on conflict (workspace_id, page_id, subject_type, subject_id)
        do update set level = excluded.level, granted_by = excluded.granted_by`,
-    [pageId, subject.type, subject.id, body.level, userId]
+    [
+      scope.workspaceId,
+      scope.pageId,
+      subject.type,
+      subject.id,
+      body.level,
+      scope.userId,
+    ]
   );
 }
 
-async function removeGrant(
-  client: Client,
-  pageId: string,
-  body: PermissionsBody
-): Promise<void> {
+async function removeGrant(scope: Scope, body: PermissionsBody): Promise<void> {
   const subject = subjectOf(body);
-  await client.query(
+  await scope.client.query(
     `delete from page_permissions
-     where page_id = $1 and subject_type = $2 and subject_id = $3`,
-    [pageId, subject.type, subject.id]
+     where workspace_id = $1 and page_id = $2
+       and subject_type = $3 and subject_id = $4`,
+    [scope.workspaceId, scope.pageId, subject.type, subject.id]
   );
 }
 
 /** Pins the caller at full_access so the page stays manageable. */
-async function pinCallerFullAccess(
-  client: Client,
-  pageId: string,
-  userId: string
-): Promise<void> {
-  await client.query(
-    `insert into page_permissions (page_id, subject_type, subject_id, level, granted_by)
-     values ($1, 'user', $2, 'full_access', $2)
-     on conflict (page_id, subject_type, subject_id)
+async function pinCallerFullAccess(scope: Scope): Promise<void> {
+  await scope.client.query(
+    `insert into page_permissions
+       (workspace_id, page_id, subject_type, subject_id, level, granted_by)
+     values ($1, $2, 'user', $3, 'full_access', $3)
+     on conflict (workspace_id, page_id, subject_type, subject_id)
        do update set level = 'full_access'`,
-    [pageId, userId]
+    [scope.workspaceId, scope.pageId, scope.userId]
   );
 }
 
 async function setVisibility(
-  client: Client,
-  pageId: string,
-  userId: string,
+  scope: Scope,
   body: PermissionsBody
 ): Promise<void> {
   if (!(body.visibility && VISIBILITIES.has(body.visibility))) {
     throw HTTPError.status(400, "Unknown visibility");
   }
   if (body.visibility === "private") {
-    await pinCallerFullAccess(client, pageId, userId);
+    await pinCallerFullAccess(scope);
   }
-  await client.query(
-    "update pages set visibility = $2 where id = $1 and visibility is distinct from $2",
-    [pageId, body.visibility]
+  await scope.client.query(
+    `update pages set visibility = $3
+     where workspace_id = $1 and id = $2 and visibility is distinct from $3`,
+    [scope.workspaceId, scope.pageId, body.visibility]
   );
 }
 
-async function setInherit(
-  client: Client,
-  pageId: string,
-  userId: string,
-  body: PermissionsBody
-): Promise<void> {
+async function setInherit(scope: Scope, body: PermissionsBody): Promise<void> {
   if (typeof body.inherit !== "boolean") {
     throw HTTPError.status(400, "inherit must be a boolean");
   }
   if (!body.inherit) {
     // Restrict: freeze the currently-inherited grants onto the page before
     // the chain truncates here. Explicit grants already on the page win.
-    await client.query(
+    await scope.client.query(
       `${CHAIN_CTE}
-       insert into page_permissions (page_id, subject_type, subject_id, level, granted_by)
-       select $1, pp.subject_type, pp.subject_id, pp.level, $2
+       insert into page_permissions
+         (workspace_id, page_id, subject_type, subject_id, level, granted_by)
+       select $1, $2, pp.subject_type, pp.subject_id, pp.level, $3
        from page_permissions pp
        join chain c on c.ancestor_id = pp.page_id
-       where c.depth > 0
-       on conflict (page_id, subject_type, subject_id) do nothing`,
-      [pageId, userId]
+       where pp.workspace_id = $1 and c.depth > 0
+       on conflict (workspace_id, page_id, subject_type, subject_id)
+         do nothing`,
+      [scope.workspaceId, scope.pageId, scope.userId]
     );
-    await pinCallerFullAccess(client, pageId, userId);
+    await pinCallerFullAccess(scope);
   }
-  await client.query(
-    `update pages set inherit_permissions = $2
-     where id = $1 and inherit_permissions is distinct from $2`,
-    [pageId, body.inherit]
+  await scope.client.query(
+    `update pages set inherit_permissions = $3
+     where workspace_id = $1 and id = $2
+       and inherit_permissions is distinct from $3`,
+    [scope.workspaceId, scope.pageId, body.inherit]
   );
 }
 
 async function runAction(
-  client: Client,
-  body: PermissionsBody,
-  userId: string
+  scope: Scope,
+  body: PermissionsBody
 ): Promise<Record<string, unknown>> {
-  const { action, pageId } = body;
+  const { action } = body;
   if (action === "list") {
-    return { grants: await listGrants(client, pageId) };
+    return { grants: await listGrants(scope) };
   }
   if (action === "set") {
-    await setGrant(client, pageId, userId, body);
+    await setGrant(scope, body);
   } else if (action === "remove") {
-    await removeGrant(client, pageId, body);
+    await removeGrant(scope, body);
   } else if (action === "setVisibility") {
-    await setVisibility(client, pageId, userId, body);
+    await setVisibility(scope, body);
   } else {
-    await setInherit(client, pageId, userId, body);
+    await setInherit(scope, body);
   }
   return { ok: true };
 }
@@ -218,39 +239,59 @@ const ACTIONS = new Set([
   "setInherit",
 ]);
 
+/** The page's own flags; 404s when the workspace holds no such page. */
+async function readPage(scope: Scope) {
+  const page = await scope.client.query(
+    `select visibility, inherit_permissions from pages
+     where workspace_id = $1 and id = $2`,
+    [scope.workspaceId, scope.pageId]
+  );
+  if (page.rowCount === 0) {
+    throw HTTPError.status(404, "Page not found");
+  }
+  const allowed = await scope.client.query(
+    "select can_access($1, $2, $3, 'full_access') as ok",
+    [scope.userId, scope.workspaceId, scope.pageId]
+  );
+  if (allowed.rows[0]?.ok !== true) {
+    throw HTTPError.status(403, "full_access on the page is required");
+  }
+  return page.rows[0];
+}
+
 export default defineHandler(async (event) => {
   const session = await getSession(event.req.headers);
   if (!session) {
     throw HTTPError.status(401, "Not signed in");
+  }
+  const workspaceId = getCookie(event, WORKSPACE_COOKIE);
+  if (!workspaceId) {
+    throw HTTPError.status(400, "No active workspace");
+  }
+  if (!(await isWorkspaceMember(session.user.id, workspaceId))) {
+    throw HTTPError.status(403, "Not a member of this workspace");
   }
   const body = await readBody<PermissionsBody>(event);
   if (!(body && ACTIONS.has(body.action) && typeof body.pageId === "string")) {
     throw HTTPError.status(400, "action and pageId are required");
   }
   const client = await getPool().connect();
+  const scope: Scope = {
+    client,
+    pageId: body.pageId,
+    userId: session.user.id,
+    workspaceId,
+  };
   try {
     await client.query("begin");
-    const page = await client.query(
-      "select visibility, inherit_permissions from pages where id = $1",
-      [body.pageId]
-    );
-    if (page.rowCount === 0) {
-      throw HTTPError.status(404, "Page not found");
-    }
-    const allowed = await client.query(
-      "select can_access($1, $2, 'full_access') as ok",
-      [session.user.id, body.pageId]
-    );
-    if (allowed.rows[0]?.ok !== true) {
-      throw HTTPError.status(403, "full_access on the page is required");
-    }
-    const result = await runAction(client, body, session.user.id);
+    const page = await readPage(scope);
+    const result = await runAction(scope, body);
     await client.query("commit");
     if (body.action === "list") {
       return {
         ...result,
-        visibility: page.rows[0].visibility,
-        inheritPermissions: page.rows[0].inherit_permissions,
+        visibility: page.visibility,
+        inheritPermissions: page.inherit_permissions,
       };
     }
     return result;
