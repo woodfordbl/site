@@ -401,6 +401,17 @@ export function deleteAllBlocksForPage(existing: LocalBlock[]): void {
   deletePageBlocks(existing.map((block) => block.id));
 }
 
+/**
+ * Seed a page's initial blocks and the order they are in.
+ *
+ * The order write is not optional. `blocks` is the document order, and the
+ * block shard cannot carry it: reads enumerate the shard's own keys, which say
+ * nothing about sequence. A page seeded without `blockOrder` therefore opens in
+ * whatever order the shard happens to enumerate — which is how a page created
+ * from a template (a materialized row page, a duplicate) came back with its
+ * blocks shuffled. Both writes commit in one transaction, so order can never
+ * land without its rows or vice versa.
+ */
 export function seedPageBlocks(pageId: string, blocks: Block[]): void {
   const timestamp = nowIso();
 
@@ -408,6 +419,7 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
     // Committed explicitly below; default auto-commit closes on first mutate().
     autoCommit: false,
     mutationFn: async ({ transaction }) => {
+      localPagesCollection.utils.acceptMutations(transaction);
       localBlocksCollection.utils.acceptMutations(transaction);
       await Promise.resolve();
     },
@@ -423,6 +435,14 @@ export function seedPageBlocks(pageId: string, blocks: Block[]): void {
         continue;
       }
       localBlocksCollection.insert(toLocalBlock(block, pageId, timestamp));
+    }
+
+    // Every caller inserts the page row first; a missing one means the seed is
+    // for a page that does not exist, and blocks are all it can honestly write.
+    if (localPagesCollection.has(pageId)) {
+      localPagesCollection.update(pageId, (draft) => {
+        draft.blockOrder = blocks.map((block) => block.id);
+      });
     }
   });
 
