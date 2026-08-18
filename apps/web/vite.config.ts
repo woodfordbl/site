@@ -60,6 +60,10 @@ const yahooChartHandler = fileURLToPath(
   new URL("./routes/api/connectors/yahoo/chart.get.ts", import.meta.url)
 );
 
+const authHandler = fileURLToPath(
+  new URL("./routes/api/auth/all.ts", import.meta.url)
+);
+
 /**
  * Nitro module that re-adds `continue: true` to header-only routes in the
  * generated Vercel Build Output config once the preset has written it. Without
@@ -170,6 +174,8 @@ const config = defineConfig({
           method: "GET",
           handler: yahooChartHandler,
         },
+        // Better Auth's HTTP surface (all methods, catch-all).
+        { route: "/api/auth/**", handler: authHandler },
       ],
       // Workaround for a Nitro bug on the Vercel preset. Nitro's Vite plugin
       // auto-adds a `routeRules["/assets/**"]` cache-control header, but the
