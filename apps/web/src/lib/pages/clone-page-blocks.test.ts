@@ -4,6 +4,34 @@ import { clonePageBlocks } from "@/lib/pages/clone-page-blocks.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
 describe("clonePageBlocks", () => {
+  it("keeps document order and every presentational field", () => {
+    const blocks: Block[] = [
+      {
+        id: "a",
+        type: "heading",
+        color: "red",
+        props: { text: "Site", level: 2 },
+      },
+      {
+        id: "b",
+        type: "text",
+        backgroundColor: "blue",
+        props: { text: "body" },
+      },
+      { id: "c", type: "text", props: { text: "tail" } },
+    ];
+
+    const cloned = clonePageBlocks(blocks);
+
+    expect(cloned.map((block) => block.type)).toEqual([
+      "heading",
+      "text",
+      "text",
+    ]);
+    expect(cloned[0]?.color).toBe("red");
+    expect(cloned[1]?.backgroundColor).toBe("blue");
+  });
+
   it("remaps parentId within the cloned set", () => {
     const listParent: Block = {
       id: "list-1",

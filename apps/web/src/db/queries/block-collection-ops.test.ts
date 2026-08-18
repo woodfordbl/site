@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   createTransaction: vi.fn(),
   markPageDirty: vi.fn(),
   mutate: vi.fn(),
+  pageHas: vi.fn(),
   pageUpdate: vi.fn(),
   /** Ids the collection currently holds — deletes skip anything absent. */
   presentBlockIds: new Set<string>(),
@@ -36,6 +37,7 @@ vi.mock("@/db/collections/local-collections.ts", () => ({
     utils: { acceptMutations: mocks.acceptBlockMutations },
   },
   localPagesCollection: {
+    has: mocks.pageHas,
     update: mocks.pageUpdate,
     utils: { acceptMutations: mocks.acceptPageMutations },
   },
@@ -520,5 +522,75 @@ describe("block createdAt on update", () => {
     await flushAsync();
 
     expect(typeof captured[0]?.createdAt).toBe("string");
+  });
+});
+
+describe("seedPageBlocks", () => {
+  let ops: typeof import("@/db/queries/block-collection-ops.ts");
+
+  beforeAll(async () => {
+    ops = await import("@/db/queries/block-collection-ops.ts");
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.presentBlockIds.clear();
+    mocks.blockHas.mockImplementation((id: string) =>
+      mocks.presentBlockIds.has(id)
+    );
+    mocks.pageHas.mockReturnValue(true);
+    setupTransactionMock();
+    mocks.pageUpdate.mockImplementation(
+      (_pageId: string, update: (draft: { blockOrder?: string[] }) => void) => {
+        const draft: { blockOrder?: string[]; updatedAt?: string } = {};
+        update(draft);
+        return draft;
+      }
+    );
+  });
+
+  it("records the seeded order on the page", async () => {
+    const { seedPageBlocks } = ops;
+
+    seedPageBlocks(pageId, [textBlock("a"), textBlock("b"), textBlock("c")]);
+    await flushAsync();
+
+    // Without this the shard's enumeration order decides how the page opens,
+    // which is how a page seeded from a template came back shuffled.
+    expect(readBlockOrderFromUpdate()).toEqual(["a", "b", "c"]);
+  });
+
+  it("orders every seeded block, including ones already in the collection", async () => {
+    const { seedPageBlocks } = ops;
+    seedCollection("b");
+
+    seedPageBlocks(pageId, [textBlock("a"), textBlock("b"), textBlock("c")]);
+    await flushAsync();
+
+    expect(mocks.blockInsert).toHaveBeenCalledTimes(2);
+    expect(readBlockOrderFromUpdate()).toEqual(["a", "b", "c"]);
+  });
+
+  it("commits the order with the rows, in one transaction", async () => {
+    const { seedPageBlocks } = ops;
+
+    seedPageBlocks(pageId, [textBlock("a"), textBlock("b")]);
+    await flushAsync();
+
+    expect(mocks.createTransaction).toHaveBeenCalledTimes(1);
+    // Page mutations are only durable if the transaction accepts them too.
+    expect(mocks.acceptPageMutations).toHaveBeenCalled();
+    expect(mocks.acceptBlockMutations).toHaveBeenCalled();
+  });
+
+  it("still seeds blocks when the page row is missing", async () => {
+    const { seedPageBlocks } = ops;
+    mocks.pageHas.mockReturnValue(false);
+
+    seedPageBlocks(pageId, [textBlock("a")]);
+    await flushAsync();
+
+    expect(mocks.blockInsert).toHaveBeenCalledTimes(1);
+    expect(mocks.pageUpdate).not.toHaveBeenCalled();
   });
 });

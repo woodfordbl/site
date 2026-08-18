@@ -19,11 +19,19 @@ import {
  * row page that is still rendering the database's shared template.
  *
  * Two ways to want this, and they lead opposite ways. Editing *this* row's
- * page means giving it a body of its own — a copy of the template, stored
- * separately from then on, which is why the cost is stated rather than
- * implied. Editing every row's page means editing the template, which is a
- * different page entirely; offering it here is what keeps someone from
- * customizing fourteen rows one at a time to make the same change.
+ * page gives it a body of its own that stops following the template; editing
+ * every row's page means editing the template, which is a different page
+ * entirely. Offering the second here is what keeps someone from customizing
+ * fourteen rows one at a time to make the same change.
+ *
+ * One sentence and two buttons. A reader who clicked into the body has
+ * already decided to type; the dialog's whole job is to ask which page they
+ * mean, and the one consequence that changes what they get — the copy stops
+ * following the template — is the only one stated. Storage weight and the
+ * reset path are recoverable and belong where they can be acted on
+ * (`row-page/reset-row-page.tsx`), not in front of a caret. Backing out is the X, Esc
+ * and the backdrop, so the second button stays the alternative route rather
+ * than a third way to say no.
  */
 
 export interface CustomizeRowPageDialogProps {
@@ -52,28 +60,25 @@ export function CustomizeRowPageDialog({
           <DialogTitle>Give this row a page of its own?</DialogTitle>
           <DialogDescription>
             {hasTemplate
-              ? `This page renders the ${databaseName} template, so every change to the template reaches it. Editing copies the template once and stops following it — later template changes will skip this row until you reset it. Each customized row is stored as its own page, so a database with many of them gets heavier to load.`
-              : `Rows in ${databaseName} share one body, so nothing is stored for this page yet. Editing gives this row a page of its own, stored separately — a database with many of them gets heavier to load. Editing the template instead changes every row at once.`}
+              ? `It follows the ${databaseName} template today; its own copy stops updating when the template changes.`
+              : `Every row in ${databaseName} shares one body; this one would get a page of its own.`}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="sm:justify-between">
+        <DialogFooter>
           {onEditTemplate ? (
-            <Button onClick={onEditTemplate} variant="ghost">
+            <Button onClick={onEditTemplate} variant="outline">
               <IconFileText />
-              {hasTemplate ? "Edit template instead" : "Create a template"}
+              {hasTemplate ? "Edit template" : "Create a template"}
             </Button>
           ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
             <DialogClose render={<Button variant="outline" />}>
               Cancel
             </DialogClose>
-            <Button onClick={onCustomize}>
-              <IconPencil />
-              Edit this page
-            </Button>
-          </div>
+          )}
+          <Button onClick={onCustomize}>
+            <IconPencil />
+            Edit this page
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

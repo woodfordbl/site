@@ -9,7 +9,8 @@ import { CustomizeRowPageDialog } from "@/components/database/row-page/customize
  * page that is still rendering the shared template. Both ways out have to be
  * on offer — customizing this one row, or editing the template every row
  * follows — because taking the first when you meant the second is how someone
- * ends up editing fourteen pages to make one change.
+ * ends up editing fourteen pages to make one change. Exactly two buttons: with
+ * no template to send them to, the alternative is backing out.
  */
 
 beforeAll(() => {
@@ -26,8 +27,8 @@ beforeAll(() => {
 });
 
 /** Top level so the rule about regex literals in scopes stays satisfied. */
-const TEMPLATE_SENTENCE = /renders the Launch Sites template/;
-const NO_TEMPLATE_SENTENCE = /Rows in Launch Sites share one body/;
+const TEMPLATE_SENTENCE = /follows the Launch Sites template/;
+const NO_TEMPLATE_SENTENCE = /Every row in Launch Sites shares one body/;
 
 afterEach(() => {
   cleanup();
@@ -53,12 +54,11 @@ function renderDialog(overrides?: {
 }
 
 describe("CustomizeRowPageDialog", () => {
-  it("names the template and states what customizing costs", () => {
+  it("names the template and states the one thing customizing changes", () => {
     renderDialog();
 
     const description = screen.getByText(TEMPLATE_SENTENCE);
-    expect(description.textContent).toContain("stops following it");
-    expect(description.textContent).toContain("heavier to load");
+    expect(description.textContent).toContain("stops updating");
   });
 
   it("materializes the page on demand", () => {
@@ -73,19 +73,22 @@ describe("CustomizeRowPageDialog", () => {
     const onEditTemplate = vi.fn();
     renderDialog({ onEditTemplate });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Edit template instead" })
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit template" }));
 
     expect(onEditTemplate).toHaveBeenCalled();
   });
 
-  it("hides the template route when there is nowhere to send them", () => {
+  it("offers backing out instead when there is nowhere to send them", () => {
     renderDialog();
 
-    expect(
-      screen.queryByRole("button", { name: "Edit template instead" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit template" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+  });
+
+  it("never shows a third way out", () => {
+    renderDialog({ onEditTemplate: vi.fn() });
+
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("does not claim a template is being left behind when there is none", () => {
