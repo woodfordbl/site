@@ -37,16 +37,20 @@ export function PageCanvasAccessView({
     isReady || blocks.length > 0 ? blocks : serverPage.blocks;
 
   return (
-    <CanvasBlocksReadOnly
-      blocks={resolvedBlocks}
-      coverSlot={coverSlot}
-      fullWidth={fullWidth}
-      headerSlot={headerSlot}
-      isNarrowViewport={isNarrowViewport}
-      mode="view"
-      pageId={serverPage.id}
-      titleSlot={titleSlot}
-      topLevelBlockAlign={topLevelBlockAlign}
-    />
+    // display:contents wrapper: stable automation/testing marker for "this
+    // canvas is the read-only access view" without affecting flex layout.
+    <div className="contents" data-testid="canvas-readonly">
+      <CanvasBlocksReadOnly
+        blocks={resolvedBlocks}
+        coverSlot={coverSlot}
+        fullWidth={fullWidth}
+        headerSlot={headerSlot}
+        isNarrowViewport={isNarrowViewport}
+        mode="view"
+        pageId={serverPage.id}
+        titleSlot={titleSlot}
+        topLevelBlockAlign={topLevelBlockAlign}
+      />
+    </div>
   );
 }

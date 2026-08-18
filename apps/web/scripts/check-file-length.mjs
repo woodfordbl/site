@@ -6,7 +6,7 @@
  * after legitimately shrinking a grandfathered file to tighten its baseline.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const MAX_LINES = 600;
 const BASELINE_PATH = new URL("./file-length-baseline.json", import.meta.url)
@@ -41,7 +41,12 @@ const tracked = execFileSync(
 )
   .trim()
   .split("\n")
-  .filter((file) => !(file.endsWith(".gen.ts") || isVendored(file)));
+  // Skip generated and vendored files, plus index entries deleted in the
+  // working tree (git ls-files lists a deletion until it is committed).
+  .filter(
+    (file) =>
+      !(file.endsWith(".gen.ts") || isVendored(file)) && existsSync(file)
+  );
 
 let baseline = {};
 try {
