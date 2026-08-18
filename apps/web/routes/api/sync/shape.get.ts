@@ -4,6 +4,7 @@ import {
   isWorkspaceMember,
 } from "../../../src/server/auth.server.ts";
 import {
+  ACCESS_TABLE,
   handleShapeRequest,
   SYNCED_TABLES,
 } from "../../../src/server/shape-host.server.ts";
@@ -15,7 +16,9 @@ import {
  * This route plays the "auth proxy" role from the sync proposal: it validates
  * the session, checks workspace membership, and scopes the shape server-side —
  * the client picks a table and workspace but can never widen access beyond
- * the workspaces it belongs to.
+ * the workspaces it belongs to. The shape host additionally filters pages/
+ * blocks (and the `my_access` pseudo-shape) to the session user's ReBAC
+ * access set — see src/server/shape-host.server.ts.
  */
 
 function firstString(value: unknown): string | undefined {
@@ -33,7 +36,7 @@ export default defineHandler(async (event) => {
   const query = getQuery(event);
   const table = firstString(query.table);
   const workspaceId = firstString(query.ws);
-  if (!(table && SYNCED_TABLES.has(table))) {
+  if (!(table && (SYNCED_TABLES.has(table) || table === ACCESS_TABLE))) {
     throw HTTPError.status(400, "Unknown table");
   }
   if (!workspaceId) {
@@ -45,6 +48,7 @@ export default defineHandler(async (event) => {
   const response = await handleShapeRequest({
     table,
     workspaceId,
+    userId: session.user.id,
     offset: firstString(query.offset) ?? "-1",
     handle: firstString(query.handle),
     live: firstString(query.live) === "true",
