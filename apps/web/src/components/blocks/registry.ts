@@ -44,6 +44,7 @@ import { EmbedEdit } from "@/components/blocks/types/embed/embed-edit.tsx";
 import { EmbedView } from "@/components/blocks/types/embed/embed-view.tsx";
 import { HeadingEdit } from "@/components/blocks/types/heading/heading-edit.tsx";
 import { HeadingView } from "@/components/blocks/types/heading/heading-view.tsx";
+import { mapBlockSpec } from "@/components/blocks/types/map/map-spec.ts";
 import { MediaEdit } from "@/components/blocks/types/media/media-edit.tsx";
 import { MediaView } from "@/components/blocks/types/media/media-view.tsx";
 import { PageLinkEdit } from "@/components/blocks/types/page-link/page-link-edit.tsx";
@@ -60,16 +61,11 @@ import type {
   BlockSpec,
   SlashMenuItem,
 } from "@/lib/canvas/block-spec.types.ts";
-import { INLINE_TEXT_CAPABILITIES } from "@/lib/canvas/block-spec.types.ts";
+import {
+  INLINE_CUSTOM_CAPABILITIES,
+  INLINE_TEXT_CAPABILITIES,
+} from "@/lib/canvas/block-spec.types.ts";
 import type { Block, BlockType } from "@/lib/schemas/block.ts";
-
-const INLINE_CUSTOM_CAPABILITIES = {
-  slashMenu: true,
-  rowSplit: false,
-  blockIndent: false,
-  structuralKeys: true,
-  focusAdjacent: true,
-} as const;
 
 const CONTAINER_CAPABILITIES = {
   slashMenu: false,
@@ -327,6 +323,7 @@ export const BLOCK_SPECS: { [K in BlockType]: BlockSpec<K> } = {
     View: EmbedView,
     Edit: EmbedEdit,
   },
+  map: mapBlockSpec,
   database: {
     type: "database",
     label: "Database",

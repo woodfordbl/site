@@ -9,12 +9,9 @@ import {
 import { DatabaseFilterBar } from "@/components/database/database-filter-bar.tsx";
 import { filterHasRelativeOperator } from "@/components/database/database-filter-helpers.ts";
 import { DatabaseMobileToolbar } from "@/components/database/database-mobile-toolbar.tsx";
-import { DatabaseTableGrid } from "@/components/database/database-table-grid.tsx";
 import { DatabaseTitle } from "@/components/database/database-title.tsx";
+import { DatabaseViewBody } from "@/components/database/database-view-body.tsx";
 import { DatabaseViewSwitcher } from "@/components/database/database-view-switcher.tsx";
-import { DatabaseBoardView } from "@/components/database/views/database-board-view.tsx";
-import { DatabaseChartView } from "@/components/database/views/database-chart-view.tsx";
-import { DatabaseListView } from "@/components/database/views/database-list-view.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { useFormulaOverlay } from "@/db/formula-engine.ts";
 import { updateDatabaseView } from "@/db/queries/database-collection-ops.ts";
@@ -299,99 +296,12 @@ function resolveInlineFilterBarState(
   };
 }
 
-interface DatabaseViewBodyProps {
-  canvasRowId?: string;
-  clockNow: Date;
-  columns: DatabaseField[];
-  database: NonNullable<ReturnType<typeof useDatabase>>;
-  databaseId: string;
-  fillHeight: boolean;
-  groups: DatabaseRowGroup[] | null;
-  isLiveMarkets: boolean;
-  isSyncedDatabase: boolean;
-  mode: "view" | "edit";
-  pinnedFields: DatabaseField[];
-  rows: LocalDatabaseRow[];
-  view: DatabaseView;
-}
-
-/** Per-type view body below the title row and optional filter chip bar. */
-function DatabaseViewBody({
-  canvasRowId,
-  clockNow,
-  columns,
-  database,
-  databaseId,
-  fillHeight,
-  groups,
-  isLiveMarkets,
-  isSyncedDatabase,
-  mode,
-  pinnedFields,
-  rows,
-  view,
-}: DatabaseViewBodyProps): ReactNode {
-  if (view.type === "list") {
-    return (
-      <DatabaseListView
-        database={database}
-        fields={database.fields}
-        mode={mode}
-        rows={rows}
-        view={view}
-      />
-    );
-  }
-  if (view.type === "board") {
-    return (
-      <DatabaseBoardView
-        database={database}
-        fields={database.fields}
-        mode={mode}
-        rows={rows}
-        view={view}
-      />
-    );
-  }
-  if (view.type === "chart") {
-    return (
-      <DatabaseChartView
-        database={database}
-        fields={database.fields}
-        mode={mode}
-        rows={rows}
-        view={view}
-      />
-    );
-  }
-  return (
-    <DatabaseTableGrid
-      canvasRowId={canvasRowId}
-      columns={columns}
-      databaseId={databaseId}
-      fillHeight={fillHeight}
-      groups={groups}
-      isLiveMarkets={isLiveMarkets}
-      isSyncedDatabase={isSyncedDatabase}
-      // Remount clears session row-selection when the database or active
-      // view changes (selection is intentionally not persisted).
-      key={`${databaseId}:${view.id}`}
-      mode={mode}
-      now={clockNow}
-      pinnedFields={pinnedFields}
-      primaryFieldId={database.primaryFieldId}
-      rows={rows}
-      view={view}
-    />
-  );
-}
-
 /**
  * Entry for one workspace database surface: resolves the definition and rows
  * via live queries, resolves the ACTIVE view (`block.viewId`, falling back to
  * the first view for unset/stale ids), applies that view's filter/sorts, and
  * renders the per-type view body — the virtualized table grid, or the
- * list/board/chart renderers — under the shared title row + view switcher.
+ * list/board/chart/map renderers — under the shared title row + view switcher.
  */
 export function DatabaseTableView({
   canvasRowId,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MediaLightbox } from "@/components/blocks/types/media/media-lightbox.tsx";
-import { MediaMotionProvider } from "@/components/blocks/types/media/media-motion.tsx";
+import { MorphMotionProvider } from "@/components/ui/morph-motion.tsx";
 
 afterEach(cleanup);
 
@@ -16,7 +16,7 @@ function Harness({ initialOpen = false }: { initialOpen?: boolean }) {
   // Same provider MediaFrame supplies in production — m.* components need
   // LazyMotion features for exits to resolve (and thus for close to unmount).
   return (
-    <MediaMotionProvider>
+    <MorphMotionProvider>
       <button onClick={() => setOpen(true)} type="button">
         view
       </button>
@@ -28,7 +28,7 @@ function Harness({ initialOpen = false }: { initialOpen?: boolean }) {
         onOpenChange={setOpen}
         open={open}
       />
-    </MediaMotionProvider>
+    </MorphMotionProvider>
   );
 }
 

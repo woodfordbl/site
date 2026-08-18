@@ -12,7 +12,8 @@ import { useLocalPageById } from "./use-local-pages.ts";
 
 /**
  * Reactive read of a database's row-template snapshot: the sentinel page's
- * blocks in document order plus the settings row pages inherit (icon, font).
+ * blocks in document order plus the settings row pages inherit (icon, font,
+ * text size, full width).
  * Null when the database has no custom template — callers fall back to the
  * built-in blank default. Live: template edits re-render open row pages.
  */
@@ -37,7 +38,9 @@ export function useRowTemplate(databaseId: string): RowTemplateSnapshot | null {
         record.blockOrder
       ),
       font: record.font,
+      fullWidth: record.fullWidth,
       icon: record.icon,
+      textScale: record.textScale,
     };
   }, [record, localBlocks]);
 }

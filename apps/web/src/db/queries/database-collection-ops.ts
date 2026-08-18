@@ -41,6 +41,7 @@ import {
   planLiveMarketRowDelete,
   readLiveMarketInstruments,
 } from "@/lib/databases/live-markets-instruments.ts";
+import { guessMapConfig } from "@/lib/databases/map-data.ts";
 import { resolveRowDefaultValues } from "@/lib/databases/row-defaults.ts";
 import { deleteRowTemplate } from "@/lib/databases/row-template-store.ts";
 import { recordShippedDatabaseTombstone } from "@/lib/databases/shipped-database-tombstones.ts";
@@ -873,6 +874,7 @@ const VIEW_TYPE_DEFAULT_NAMES: Record<DatabaseViewType, string> = {
   list: "List",
   board: "Board",
   chart: "Chart",
+  map: "Map",
 };
 
 /**
@@ -911,6 +913,9 @@ function defaultViewConfig(
   if (type === "board") {
     const groupField = fields.find((field) => field.type === "select");
     return groupField ? { board: { groupFieldId: groupField.id } } : {};
+  }
+  if (type === "map") {
+    return { map: guessMapConfig(fields) };
   }
   if (type === "chart") {
     const timeField = fields.find(

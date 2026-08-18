@@ -10,6 +10,7 @@ dist-ssr
 .vercel
 public/emojibase
 public/tabler
+public/maplibre
 public/sitemap.xml
 src/generated
 scripts/demo/shots/

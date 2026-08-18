@@ -67,7 +67,11 @@ function isNestedRowShellTarget(
 function isShiftSelectIgnoredTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
-    target.closest("[data-canvas-shift-select-ignore]") !== null
+    // A pointer surface owns every gesture inside it, shift-drag included —
+    // that is MapLibre's box zoom, not a row selection.
+    target.closest(
+      "[data-canvas-shift-select-ignore], [data-canvas-pointer-surface]"
+    ) !== null
   );
 }
 

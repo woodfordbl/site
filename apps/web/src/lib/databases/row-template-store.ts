@@ -18,7 +18,7 @@ import {
   isLocallyDeletedPage,
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
-import type { PageFont } from "@/lib/schemas/page-settings.ts";
+import type { PageFont, PageTextScale } from "@/lib/schemas/page-settings.ts";
 
 /**
  * Storage for database row-page templates, mirroring the site page template
@@ -28,13 +28,37 @@ import type { PageFont } from "@/lib/schemas/page-settings.ts";
  * page pipeline (undo history, snapshots, dirty tracking all apply).
  */
 
-/** What row-page rendering inherits from the template. */
+/**
+ * What row-page rendering inherits from the template.
+ *
+ * The display settings are the ones the template page's ⋯ menu offers, and
+ * they carry for the same reason the blocks do: the template page IS the
+ * design of every row page, so a row template set in Serif at full width has
+ * to open that way. Each is inherited only when the template sets it
+ * explicitly, so an untouched template leaves rows on the page defaults.
+ */
 export interface RowTemplateSnapshot {
   blocks: Block[];
   /** Row pages inherit the template's body font only when explicitly set. */
   font?: PageFont;
+  /** Row pages inherit the template's full-width layout. */
+  fullWidth?: boolean;
   /** Row pages inherit the template's icon. */
   icon?: string;
+  /** Row pages inherit the template's text size only when explicitly set. */
+  textScale?: PageTextScale;
+}
+
+/** The display settings a row page copies from `record`. */
+function rowTemplateSettings(
+  record: LocalPage
+): Pick<RowTemplateSnapshot, "font" | "fullWidth" | "icon" | "textScale"> {
+  return {
+    font: record.font,
+    fullWidth: record.fullWidth,
+    icon: record.icon,
+    textScale: record.textScale,
+  };
 }
 
 /** The template's live page record, or null when absent/tombstoned. */
@@ -65,8 +89,7 @@ export function readRowTemplateSnapshot(
   }
   return {
     blocks: readBootstrapPageBlocks(record.id).blocks,
-    font: record.font,
-    icon: record.icon,
+    ...rowTemplateSettings(record),
   };
 }
 
@@ -87,6 +110,8 @@ export function createEmptyRowTemplate(databaseId: string): void {
       draft.parentId = null;
       draft.icon = undefined;
       draft.font = undefined;
+      draft.fullWidth = undefined;
+      draft.textScale = undefined;
       draft.blockOrder = undefined;
       draft.updatedAt = now;
     });

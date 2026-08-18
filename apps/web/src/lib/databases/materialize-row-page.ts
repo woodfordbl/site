@@ -132,10 +132,13 @@ export async function ensureDatabaseRowPage(options: {
       databaseRowSource: { databaseId: database.id, rowId: row.id },
       title,
       initialBlocks: blocks,
-      // The materialized page inherits the template's icon; font only when
-      // the template explicitly set one (page default otherwise).
+      // The materialized page inherits the template's icon and its display
+      // settings — font, text size and full width only when the template
+      // explicitly set them (page defaults otherwise).
       icon: row.icon ?? template?.icon,
       font: template?.font,
+      fullWidth: template?.fullWidth,
+      textScale: template?.textScale,
       navigate,
     });
   } catch (error) {

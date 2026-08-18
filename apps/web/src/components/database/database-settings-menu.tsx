@@ -1,5 +1,4 @@
 import {
-  IconChartBar,
   IconCheck,
   IconCheckbox,
   IconClock,
@@ -10,7 +9,6 @@ import {
   IconEyeOff,
   IconFileText,
   IconLayoutGrid,
-  IconLayoutKanban,
   IconLayoutList,
   IconListDetails,
   IconPencil,
@@ -41,14 +39,13 @@ import {
   DatabaseViewRenameField,
 } from "@/components/database/database-view-menu.tsx";
 import { AddDatabaseViewMenuItems } from "@/components/database/database-view-switcher.tsx";
+import { ViewTypeOptionsSubmenu } from "@/components/database/database-view-type-options.tsx";
 import { InstrumentListConfigEditor } from "@/components/database/instrument-list-config-editor.tsx";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import {
   type ListReorderHandleProps,
   useListReorder,
 } from "@/components/database/use-list-reorder.ts";
-import { BoardOptionsItems } from "@/components/database/views/database-board-config.tsx";
-import { ChartOptionsItems } from "@/components/database/views/database-chart-config.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -1174,13 +1171,6 @@ export interface DatabaseSettingsMenuProps {
  * `data-reveal-group`). Deleting removes the database entity and every linked
  * `database` block that referenced it.
  */
-/** Fallback when a chart view's dataset hasn't been threaded in. */
-const EMPTY_CHART_DATA: ChartData = {
-  categories: [],
-  categoryKeys: [],
-  series: [],
-};
-
 export function DatabaseSettingsMenu({
   activeView,
   chartData,
@@ -1312,33 +1302,11 @@ export function DatabaseSettingsMenu({
         {view && (view.type === "table" || view.type === "list") ? (
           <GroupSubmenu database={database} view={view} />
         ) : null}
-        {view && view.type === "board" ? (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <IconLayoutKanban />
-              Board options
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-64 min-w-64">
-              <BoardOptionsItems database={database} view={view} />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
-        {view && view.type === "chart" ? (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <IconChartBar />
-              Chart options
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-64 min-w-64">
-              <ChartOptionsItems
-                data={chartData ?? EMPTY_CHART_DATA}
-                database={database}
-                fields={database.fields}
-                view={view}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
+        <ViewTypeOptionsSubmenu
+          chartData={chartData}
+          database={database}
+          view={view}
+        />
         {onHideTitleChange ? (
           <DropdownMenuSwitchItem
             checked={hideTitle}

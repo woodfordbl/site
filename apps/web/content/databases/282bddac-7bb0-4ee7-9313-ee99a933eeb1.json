@@ -1,0 +1,124 @@
+{
+  "database": {
+    "id": "282bddac-7bb0-4ee7-9313-ee99a933eeb1",
+    "name": "Stocks and Crypto",
+    "slug": "markets",
+    "icon": "tabler:IconActivityHeartbeat",
+    "primaryFieldId": "symbol",
+    "source": {
+      "kind": "connector",
+      "connectorId": "live-markets",
+      "config": {
+        "instruments": [
+          { "symbol": "BTC", "assetClass": "crypto" },
+          { "symbol": "ETH", "assetClass": "crypto" },
+          { "symbol": "SOL", "assetClass": "crypto" },
+          { "symbol": "NVDA", "assetClass": "equity" },
+          { "symbol": "TSLA", "assetClass": "equity" },
+          { "symbol": "RKLB", "assetClass": "equity" }
+        ],
+        "currency": "USD"
+      }
+    },
+    "fields": [
+      {
+        "id": "symbol",
+        "name": "Symbol",
+        "type": "text",
+        "icon": "tabler:IconActivityHeartbeat",
+        "sourceKey": "symbol"
+      },
+      {
+        "id": "name",
+        "name": "Name",
+        "type": "text",
+        "icon": "tabler:IconTag",
+        "sourceKey": "name"
+      },
+      {
+        "id": "assetClass",
+        "name": "Asset class",
+        "type": "select",
+        "icon": "tabler:IconCategory",
+        "sourceKey": "assetClass",
+        "options": [
+          { "id": "crypto", "name": "Crypto", "color": "orange" },
+          { "id": "equity", "name": "Equity", "color": "blue" }
+        ]
+      },
+      {
+        "id": "price",
+        "name": "Price",
+        "type": "number",
+        "icon": "tabler:IconCash",
+        "sourceKey": "price",
+        "format": "currency",
+        "currencyCode": "USD",
+        "captureHistory": true
+      },
+      {
+        "id": "change",
+        "name": "Change",
+        "type": "number",
+        "icon": "tabler:IconTrendingUp",
+        "sourceKey": "change",
+        "format": "percent"
+      },
+      {
+        "id": "float",
+        "name": "Float",
+        "type": "number",
+        "icon": "tabler:IconStack2",
+        "sourceKey": "float",
+        "format": "integer"
+      },
+      {
+        "id": "marketCap",
+        "name": "Market cap",
+        "type": "number",
+        "icon": "tabler:IconChartPie",
+        "sourceKey": "marketCap",
+        "format": "integer"
+      },
+      {
+        "id": "updatedAt",
+        "name": "Updated",
+        "type": "date",
+        "icon": "tabler:IconClock",
+        "sourceKey": "updatedAt",
+        "format": "relative"
+      }
+    ],
+    "views": [
+      {
+        "id": "table",
+        "name": "Table",
+        "type": "table",
+        "groupBy": { "fieldId": "assetClass" },
+        "sorts": [{ "fieldId": "marketCap", "direction": "desc" }],
+        "config": {
+          "liveMarketsGrouping": "auto",
+          "calculations": { "marketCap": "sum", "change": "average" }
+        }
+      },
+      {
+        "id": "price-history",
+        "name": "Price history",
+        "type": "chart",
+        "icon": "tabler:IconChartLine",
+        "config": {
+          "chart": {
+            "mark": "line",
+            "xMode": "time",
+            "timeSeries": { "fieldId": "price", "scale": "percent" },
+            "yFormat": "percent",
+            "showLegend": true,
+            "legendPosition": "bottom",
+            "showGrid": true
+          }
+        }
+      }
+    ]
+  },
+  "rows": []
+}

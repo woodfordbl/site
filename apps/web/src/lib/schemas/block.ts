@@ -12,6 +12,7 @@ import {
   embedPropsSchema,
   headingPropsSchema,
   listPropsSchema,
+  mapPropsSchema,
   mediaPropsSchema,
   pageLinkPropsSchema,
   quotePropsSchema,
@@ -43,6 +44,7 @@ export const blockTypeSchema = z.enum([
   "tab",
   "media",
   "embed",
+  "map",
   "database",
   "table",
   "tableRow",
@@ -130,6 +132,10 @@ export const blockSchema = z.discriminatedUnion("type", [
   blockBaseSchema.extend({
     type: z.literal("embed"),
     props: embedPropsSchema,
+  }),
+  blockBaseSchema.extend({
+    type: z.literal("map"),
+    props: mapPropsSchema,
   }),
   blockBaseSchema.extend({
     type: z.literal("database"),

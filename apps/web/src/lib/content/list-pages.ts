@@ -1,7 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { hashPageBlocks } from "@/lib/content/block-hash.ts";
-import { getShippedPages } from "@/lib/content/page-store.server.ts";
-import type { Page } from "@/lib/schemas/page.ts";
+import { shippedPageSummaries } from "@/lib/content/page-summaries.server.ts";
 
 export interface PageSummary {
   /** `hashPageBlocks(page.blocks)` of the shipped page; absent for local-only rows. Drives global stale detection. */
@@ -37,37 +35,6 @@ export interface PageSummary {
   updatedAt?: string;
 }
 
-function shippedDatabaseIds(blocks: Page["blocks"]): string[] {
-  const ids = new Set<string>();
-  for (const block of blocks) {
-    if (block.type === "database" && block.props.databaseId !== "") {
-      ids.add(block.props.databaseId);
-    }
-  }
-  return [...ids];
-}
-
 export const listPages = createServerFn({ method: "GET" }).handler(
-  (): Promise<PageSummary[]> => {
-    const pages = getShippedPages().map((page) => ({
-      id: page.id,
-      slug: page.slug,
-      title: page.title,
-      parentId: page.parentId,
-      sidebarOrder: page.sidebarOrder,
-      icon: page.icon,
-      createdAt: page.createdAt,
-      updatedAt: page.updatedAt,
-      contentHash: hashPageBlocks(page.blocks),
-      databaseIds: shippedDatabaseIds(page.blocks),
-    }));
-
-    return Promise.resolve(
-      pages.sort((left, right) =>
-        left.title.localeCompare(right.title, undefined, {
-          sensitivity: "base",
-        })
-      )
-    );
-  }
+  (): Promise<PageSummary[]> => Promise.resolve(shippedPageSummaries())
 );

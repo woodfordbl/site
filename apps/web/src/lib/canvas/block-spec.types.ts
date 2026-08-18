@@ -35,6 +35,15 @@ export const INLINE_TEXT_CAPABILITIES: BlockCapabilities = {
   focusAdjacent: true,
 };
 
+/** Leaf blocks with their own edit surface (media, embed, database, map). */
+export const INLINE_CUSTOM_CAPABILITIES: BlockCapabilities = {
+  slashMenu: true,
+  rowSplit: false,
+  blockIndent: false,
+  structuralKeys: true,
+  focusAdjacent: true,
+};
+
 export interface ContainerDefinition {
   acceptEmptyMergeFromAfter: boolean;
   allowedChildTypes: BlockType[] | "*";

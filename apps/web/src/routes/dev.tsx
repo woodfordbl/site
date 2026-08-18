@@ -4,7 +4,7 @@ import { lazy, Suspense } from "react";
 
 import { buildNoIndexMeta } from "@/lib/content/page-head.ts";
 
-const ComponentShowcase = import.meta.env.DEV
+const ComponentShowcase = import.meta.env.VITE_DEV_ROUTES_ENABLED
   ? lazy(() =>
       import("@/components/dev/component-showcase.tsx").then((module) => ({
         default: module.ComponentShowcase,
@@ -26,7 +26,7 @@ function DevPage() {
 
 export const Route = createFileRoute("/dev")({
   beforeLoad: () => {
-    if (!import.meta.env.DEV) {
+    if (!import.meta.env.VITE_DEV_ROUTES_ENABLED) {
       throw notFound();
     }
   },

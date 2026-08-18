@@ -47,6 +47,7 @@ export type PageLinkPreviewLine =
       text: string;
     }
   | { id: string; kind: "embed"; text: string }
+  | { id: string; kind: "map"; text: string }
   | { columns: string[]; id: string; kind: "table" }
   | { databaseId: string; id: string; kind: "database" }
   | { id: string; kind: "pageLink"; pageId: string };
@@ -278,6 +279,19 @@ function collectRow(
         block.props.url.trim() ||
         "Embed";
       out.push({ id, kind: "embed", text: label });
+      return;
+    }
+    case "map": {
+      const [marker] = block.props.markers ?? [];
+      out.push({
+        id,
+        kind: "map",
+        text:
+          marker?.label?.trim() ||
+          (marker
+            ? `${marker.lat.toFixed(4)}, ${marker.lng.toFixed(4)}`
+            : "Map"),
+      });
       return;
     }
     case "table": {

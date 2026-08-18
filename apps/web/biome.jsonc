@@ -34,6 +34,23 @@
       "assist": { "enabled": false }
     },
     {
+      // mapcn consumers: its public component is named `Map`, which collides
+      // with the global. Importing it under another name would diverge from
+      // the upstream docs and every future `@mapcn/*` block.
+      "includes": [
+        "src/components/dev/map-preview.tsx",
+        "src/components/database/views/database-map-canvas.tsx",
+        "src/components/blocks/types/map/map-block-canvas.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noShadowRestrictedNames": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/components/ui/**"],
       "linter": {
         "rules": {
@@ -44,6 +61,14 @@
           }
         }
       }
+    },
+    {
+      // mapcn registry component (`npx shadcn@latest add @mapcn/map`) — kept
+      // byte-identical to upstream so re-running the CLI stays a clean diff.
+      "includes": ["src/components/ui/map.tsx"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
     },
     {
       "includes": ["src/components/ui/chart.tsx"],

@@ -2,13 +2,13 @@ import { m } from "motion/react";
 import { useId, useRef, useState } from "react";
 
 import { MediaHoverToolbar } from "@/components/blocks/types/media/media-hover-toolbar.tsx";
-import {
-  MediaLightbox,
-  mediaMorphTransition,
-} from "@/components/blocks/types/media/media-lightbox.tsx";
-import { MediaMotionProvider } from "@/components/blocks/types/media/media-motion.tsx";
+import { MediaLightbox } from "@/components/blocks/types/media/media-lightbox.tsx";
 import { MediaVideoPlayer } from "@/components/blocks/types/media/media-video-player.tsx";
 import { useMediaResize } from "@/components/blocks/types/media/use-media-resize.ts";
+import {
+  MORPH_TRANSITION,
+  MorphMotionProvider,
+} from "@/components/ui/morph-motion.tsx";
 import { ResizeHandle } from "@/components/ui/resize-handle.tsx";
 import { useObjectContainBounds } from "@/hooks/use-object-contain-bounds.ts";
 import {
@@ -68,7 +68,7 @@ export function MediaFrame({
   };
 
   return (
-    <MediaMotionProvider>
+    <MorphMotionProvider>
       <figure className={cn("w-full", className)}>
         <div
           className="group/media relative mx-auto"
@@ -110,7 +110,7 @@ export function MediaFrame({
                 }}
                 ref={setMediaElement}
                 src={displayUrl}
-                transition={mediaMorphTransition}
+                transition={MORPH_TRANSITION}
                 width={800}
               />
             )}
@@ -165,6 +165,6 @@ export function MediaFrame({
           open={lightboxOpen}
         />
       </figure>
-    </MediaMotionProvider>
+    </MorphMotionProvider>
   );
 }

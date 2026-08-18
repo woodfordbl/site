@@ -2,6 +2,7 @@ import {
   IconChartBar,
   IconLayoutKanban,
   IconList,
+  IconMapPin,
   IconTable,
 } from "@tabler/icons-react";
 import type { ComponentType, ReactNode } from "react";
@@ -18,19 +19,21 @@ export const DATABASE_VIEW_TYPE_ICONS: Record<
   list: IconList,
   board: IconLayoutKanban,
   chart: IconChartBar,
+  map: IconMapPin,
 };
 
-/** View-type display labels ("Table" / "List" / "Board" / "Chart"). */
+/** View-type display labels ("Table" / "List" / "Board" / "Chart" / "Map"). */
 export const DATABASE_VIEW_TYPE_LABELS: Record<DatabaseViewType, string> = {
   table: "Table",
   list: "List",
   board: "Board",
   chart: "Chart",
+  map: "Map",
 };
 
 /**
  * Resolved glyph for a saved view: custom `view.icon` when set, otherwise the
- * fixed type icon (Table / List / Board / Chart).
+ * fixed type icon (Table / List / Board / Chart / Map).
  */
 export function resolveViewIconDisplay(
   view: DatabaseView,

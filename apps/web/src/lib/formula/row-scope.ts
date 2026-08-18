@@ -165,6 +165,8 @@ function cellToFormulaValue(
     case "number":
       return typeof coerced === "number" ? coerced : null;
     case "select":
+    // Both project to their display text: an option name, an address label.
+    case "location":
       return cellToPlainText(field, coerced);
     case "date":
       return typeof coerced === "string"

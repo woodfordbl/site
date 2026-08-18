@@ -12,6 +12,7 @@ import {
   IconMarkdown,
   IconPhoto,
   IconRefresh,
+  IconRestore,
   IconStar,
   IconStarOff,
   IconTrash,
@@ -20,6 +21,11 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ActionMenuSearchSection } from "@/components/canvas/action-menu-search.tsx";
 import { PageCanvasConfirmDialog } from "@/components/canvas/page-canvas-confirm-dialog.tsx";
+import {
+  ResetRowPageDialog,
+  ResetRowPageMenuItem,
+  useResetRowPageTarget,
+} from "@/components/database/row-page/reset-row-page.tsx";
 import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { DeletePageConfirmDialog } from "@/components/pages/delete-page-confirm-dialog.tsx";
 import { PageActivityPanel } from "@/components/pages/page-activity-panel.tsx";
@@ -84,6 +90,7 @@ function buildPageHeaderMenuSearchEntries({
   runCopyLink,
   runExportMarkdown,
   runExportPage,
+  openResetRow,
   runImportMarkdown,
   setDeleteOpen,
   toggleFavorite,
@@ -95,6 +102,7 @@ function buildPageHeaderMenuSearchEntries({
   isFavorite: boolean;
   isNarrowViewport: boolean;
   isTemplatePage: boolean;
+  openResetRow: (() => void) | undefined;
   pageId: string;
   runCopyLink: () => void;
   runExportMarkdown: () => void;
@@ -114,6 +122,16 @@ function buildPageHeaderMenuSearchEntries({
       },
     },
   ];
+
+  if (openResetRow) {
+    entries.push({
+      id: "reset-row-page",
+      label: "Reset to template",
+      icon: <IconRestore />,
+      keywords: ["reset", "template", "row", "revert", "follow"],
+      onSelect: openResetRow,
+    });
+  }
 
   if (!isTemplatePage) {
     entries.push(
@@ -247,6 +265,8 @@ export function PageHeaderMenu({
   const isNarrowViewport = useIsNarrowViewport();
   const [open, setOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [resetRowOpen, setResetRowOpen] = useState(false);
+  const resetRowTarget = useResetRowPageTarget(pageId);
   // Site page template + per-database row templates sit outside the page tree —
   // duplicate / export / favorites / move / delete don't apply to them.
   const isTemplatePage =
@@ -339,6 +359,13 @@ export function PageHeaderMenu({
     [importMarkdownPage]
   );
 
+  // Declared above the search entries it feeds, and stable, so the memo below
+  // is not rebuilt on every render.
+  const openResetRow = useCallback(() => {
+    setOpen(false);
+    setResetRowOpen(true);
+  }, []);
+
   const searchableEntries = useMemo(
     () =>
       buildPageHeaderMenuSearchEntries({
@@ -349,6 +376,7 @@ export function PageHeaderMenu({
         isFavorite,
         isNarrowViewport,
         isTemplatePage,
+        openResetRow: resetRowTarget ? openResetRow : undefined,
         pageId,
         runCopyLink,
         runExportMarkdown,
@@ -365,7 +393,9 @@ export function PageHeaderMenu({
       isFavorite,
       isNarrowViewport,
       isTemplatePage,
+      openResetRow,
       pageId,
+      resetRowTarget,
       runCopyLink,
       runExportMarkdown,
       runExportPage,
@@ -446,6 +476,9 @@ export function PageHeaderMenu({
               <IconPhoto />
               {headerImage ? "Change cover" : "Add cover"}
             </DropdownMenuItem>
+            {resetRowTarget ? (
+              <ResetRowPageMenuItem onSelect={openResetRow} />
+            ) : null}
             {isTemplatePage ? null : (
               <PageHeaderMenuLifecycleSection
                 canDelete={canDelete}
@@ -474,6 +507,14 @@ export function PageHeaderMenu({
           </ActionMenuSearchSection>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {resetRowTarget ? (
+        <ResetRowPageDialog
+          onOpenChange={setResetRowOpen}
+          open={resetRowOpen}
+          target={resetRowTarget}
+        />
+      ) : null}
 
       {isTemplatePage ? null : (
         <DeletePageConfirmDialog

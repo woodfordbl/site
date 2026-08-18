@@ -1,5 +1,9 @@
 import { format } from "date-fns/format";
 import { formatDistance } from "date-fns/formatDistance";
+import {
+  isLocationValue,
+  normalizeLocationValue,
+} from "@/lib/databases/location-values.ts";
 import type {
   DatabaseCellValue,
   DatabaseDateFormat,
@@ -18,8 +22,9 @@ import type {
 const ISO_DATE_PART_RE = /^\d{4}-\d{2}-\d{2}/;
 
 /**
- * Whether a cell holds no value: `null`/missing, blank string, or empty
- * array. Numbers (including 0) and booleans (including false) are values.
+ * Whether a cell holds no value: `null`/missing, blank string, empty array, or
+ * a location carrying neither a label nor a point. Numbers (including 0) and
+ * booleans (including false) are values.
  */
 export function isCellEmpty(value: DatabaseCellValue | undefined): boolean {
   if (value === null || value === undefined) {
@@ -30,6 +35,9 @@ export function isCellEmpty(value: DatabaseCellValue | undefined): boolean {
   }
   if (Array.isArray(value)) {
     return value.length === 0;
+  }
+  if (typeof value === "object") {
+    return normalizeLocationValue(value) === null;
   }
   return false;
 }
@@ -112,6 +120,11 @@ export function coerceCellValue(
       const trimmed = value.trim();
       return toIsoDatePart(trimmed) === "" ? null : trimmed;
     }
+    case "location":
+      // A bare string normalizes into an unresolved label, so addresses pasted
+      // into the column (or left behind by a text→location type change) stay
+      // readable instead of collapsing to empty.
+      return normalizeLocationValue(value);
     case "formula":
       return coerceFormulaValue(value);
     default:
@@ -130,6 +143,27 @@ function optionName(
   }
   // Stale option id (option was deleted) — render nothing rather than the id.
   return "";
+}
+
+/**
+ * Multi-select option names in FIELD OPTION ORDER, not stored (click) order —
+ * mirroring `row-group.ts`'s normalizedOptionIds — so identical tag sets
+ * project to identical text and countUnique/sort agree with grouping. Stale ids
+ * (deleted options) drop out.
+ */
+function multiSelectPlainText(
+  field: DatabaseField & { type: "multiSelect" },
+  optionIds: readonly string[]
+): string {
+  const entries: { index: number; name: string }[] = [];
+  for (const optionId of optionIds) {
+    const index = field.options.findIndex((option) => option.id === optionId);
+    if (index !== -1) {
+      entries.push({ index, name: field.options[index].name });
+    }
+  }
+  entries.sort((a, b) => a.index - b.index);
+  return entries.map((entry) => entry.name).join(", ");
 }
 
 /**
@@ -157,28 +191,14 @@ export function cellToPlainText(
       return typeof coerced === "string"
         ? optionName(field.options, coerced)
         : "";
-    case "multiSelect": {
-      if (!Array.isArray(coerced)) {
-        return "";
-      }
-      // Join names in FIELD OPTION ORDER, not stored (click) order —
-      // mirroring `row-group.ts`'s normalizedOptionIds — so identical tag
-      // sets project to identical text and countUnique/sort agree with
-      // grouping. Stale ids (deleted options) drop out.
-      const entries: { index: number; name: string }[] = [];
-      for (const optionId of coerced) {
-        const index = field.options.findIndex(
-          (option) => option.id === optionId
-        );
-        if (index !== -1) {
-          entries.push({ index, name: field.options[index].name });
-        }
-      }
-      entries.sort((a, b) => a.index - b.index);
-      return entries.map((entry) => entry.name).join(", ");
-    }
+    case "multiSelect":
+      return Array.isArray(coerced) ? multiSelectPlainText(field, coerced) : "";
     case "date":
       return typeof coerced === "string" ? toIsoDatePart(coerced) : "";
+    case "location":
+      // The label, never the coordinates: it is what the cell shows, so search,
+      // countUnique and filters agree with what a reader sees.
+      return isLocationValue(coerced) ? coerced.label : "";
     case "formula":
       return formulaPlainText(coerced);
     case "relation":

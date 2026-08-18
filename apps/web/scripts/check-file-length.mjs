@@ -13,6 +13,20 @@ const BASELINE_PATH = new URL("./file-length-baseline.json", import.meta.url)
   .pathname;
 const update = process.argv.includes("--update");
 
+/**
+ * Third-party code kept close to upstream so it stays updatable: the mapcn
+ * registry component (`shadcn add @mapcn/map`) and the vendored dither-kit
+ * engine. The cap is a house-style rule for code we author; these files are
+ * not ours to split, and grandfathering them would be a lie — they may well
+ * grow when upstream does. Biome exempts the same paths.
+ */
+const VENDORED = [
+  "src/components/ui/map.tsx",
+  "src/components/charts/dither-kit/",
+];
+
+const isVendored = (file) => VENDORED.some((prefix) => file.startsWith(prefix));
+
 const tracked = execFileSync(
   "git",
   [
@@ -27,7 +41,7 @@ const tracked = execFileSync(
 )
   .trim()
   .split("\n")
-  .filter((file) => !file.endsWith(".gen.ts"));
+  .filter((file) => !(file.endsWith(".gen.ts") || isVendored(file)));
 
 let baseline = {};
 try {

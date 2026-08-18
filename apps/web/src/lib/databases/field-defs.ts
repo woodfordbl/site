@@ -18,7 +18,8 @@ export type DatabaseFieldValueKind =
   | "boolean"
   | "optionId"
   | "optionIds"
-  | "isoDate";
+  | "isoDate"
+  | "location";
 
 /** Static metadata for one database field type. */
 export interface DatabaseFieldTypeDef {
@@ -123,6 +124,15 @@ export const FIELD_TYPE_DEFS: {
     operators: STRING_OPERATORS,
     defaultOperator: "contains",
     valueKind: "string",
+  },
+  location: {
+    label: "Location",
+    // Filtering matches the label — the address text the cell shows. There is
+    // no geographic operator (within-radius, inside-region) until the filter
+    // bar can edit a geographic value.
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    valueKind: "location",
   },
   formula: {
     label: "Formula",

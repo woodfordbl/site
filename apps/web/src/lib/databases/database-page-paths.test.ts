@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDatabaseRowSlug,
   buildDatabaseTemplateSlug,
+  isDatabasePathPrefix,
   resolveDatabaseHubSlug,
   resolveDatabasePathFromSplat,
   resolveDatabaseSlug,
@@ -149,5 +150,50 @@ describe("database page paths", () => {
         }
       )
     ).toMatchObject({ kind: "row", row });
+  });
+});
+
+/**
+ * The question a server render can answer about a local-first database: not
+ * what exactly a slug points at — rows only exist in the visitor's browser — but
+ * whether it falls inside the path space some database owns. Answering it
+ * wrong in either direction is a bug someone sees: too strict and a deep link
+ * to a hub, row or template page 404s; too loose and every typo renders an
+ * empty shell instead of a real 404.
+ */
+describe("isDatabasePathPrefix", () => {
+  const options = { blocks, databases: [database], pages };
+
+  it("claims the hub, the template, and any row beneath them", () => {
+    for (const slug of [
+      "/work/projects/project-tracker",
+      "/work/projects/project-tracker/template",
+      "/work/projects/project-tracker/launch-site",
+      // A row the server has never heard of still belongs to the database.
+      "/work/projects/project-tracker/a-row-added-locally",
+    ]) {
+      expect(isDatabasePathPrefix(slug, options)).toBe(true);
+    }
+  });
+
+  it("leaves everything else to the page catalog", () => {
+    for (const slug of [
+      "/work/projects",
+      "/work/projects/something-else",
+      "/project-tracker",
+      "/",
+    ]) {
+      expect(isDatabasePathPrefix(slug, options)).toBe(false);
+    }
+  });
+
+  it("claims nothing for a database no page hosts", () => {
+    expect(
+      isDatabasePathPrefix("/work/projects/project-tracker", {
+        blocks: [],
+        databases: [database],
+        pages: [pages[0]],
+      })
+    ).toBe(false);
   });
 });

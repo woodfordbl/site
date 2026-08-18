@@ -1,11 +1,10 @@
 import { IconDatabase } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import {
   DatabaseBlockLoading,
   useDatabaseBlockReady,
 } from "@/components/blocks/types/database/database-block-gate.tsx";
-import { useCanvasEditorContext } from "@/components/canvas/canvas-editor-context.tsx";
 import { DatabaseCreatePanel } from "@/components/database/database-create-panel.tsx";
 import { DatabaseTableView } from "@/components/database/database-table-view.tsx";
 import { PlaceholderTrigger } from "@/components/ui/placeholder-trigger.tsx";
@@ -179,25 +178,22 @@ function LinkedDatabaseBlock({
   ref: React.RefObject<HTMLDivElement>;
   rowId: string | undefined;
 }) {
-  const canvas = useCanvasEditorContext();
   const database = useDatabase(props.databaseId);
-  const droppedRowRef = useRef<string | null>(null);
 
-  // Legacy orphan: a block whose database was deleted before cascade cleanup
-  // existed. Drop it once the gate is open so we never flash a dead shell.
-  // The row keeps rendering until the delete round-trips, so this effect can
-  // re-run first — dispatch at most once per row, or the second delete hits a
-  // block the first one already removed and throws.
-  useEffect(() => {
-    if (database !== undefined || !rowId || droppedRowRef.current === rowId) {
-      return;
-    }
-    droppedRowRef.current = rowId;
-    canvas.dispatch({ type: "row.delete", rowId });
-  }, [canvas, database, rowId]);
-
+  // No definition for the linked id: the database was deleted before the
+  // delete cascade existed, or a shipped page references a database whose
+  // document is missing. Say so; never repair it. This component renders on an
+  // ordinary page visit, so deleting the row here wrote a local overlay that
+  // silently dropped the block from the reader's copy of a pristine shipped
+  // page — measured on 6 of 6 loads of `/` before `content/databases/` was
+  // filled in. Removing a block is the reader's call, not a side effect of
+  // looking at the page.
   if (database === undefined) {
-    return null;
+    return (
+      <div className="rounded-lg border border-border border-dashed px-3 py-2 text-muted-foreground text-sm">
+        This database is unavailable.
+      </div>
+    );
   }
 
   return (

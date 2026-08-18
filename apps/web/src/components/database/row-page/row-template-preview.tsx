@@ -1,6 +1,6 @@
 import { IconExternalLink } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useMemo } from "react";
+import type { ReactNode } from "react";
 import { PageCanvas } from "@/components/canvas/page-canvas.tsx";
 import { RowPageTitleSection } from "@/components/database/row-page/row-page-title-section.tsx";
 import { RowPropertiesPanel } from "@/components/database/row-page/row-properties-panel.tsx";
@@ -9,6 +9,7 @@ import {
   useRowPageWorkspaceChrome,
 } from "@/components/database/row-page/row-properties-rail.tsx";
 import { RowTemplateBreadcrumb } from "@/components/database/row-page/row-template-breadcrumb.tsx";
+import { useRowFormulaModel } from "@/components/database/row-page/use-row-formula-model.ts";
 import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import {
@@ -21,14 +22,16 @@ import { Button } from "@/components/ui/button.tsx";
 import { useRowTemplate } from "@/hooks/use-row-template.ts";
 import { resolveDatabaseRowIcon } from "@/lib/databases/database-row-icon.ts";
 import { resolveDatabaseRowPageTitle } from "@/lib/databases/database-row-page-title.ts";
-import type { InlineFormulaPageModel } from "@/lib/databases/page-formula-fields.ts";
 import { pageContentTypographyProps } from "@/lib/pages/page-content-typography.ts";
 import type {
   LocalDatabase,
   LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
 import type { LocalPage } from "@/lib/schemas/local-page.ts";
-import { resolvePageFont } from "@/lib/schemas/page-settings.ts";
+import {
+  resolvePageFont,
+  resolvePageFullWidth,
+} from "@/lib/schemas/page-settings.ts";
 
 /**
  * Mixed editor for one template-backed row: icon, name, and properties write
@@ -57,37 +60,20 @@ export function RowTemplatePreviewBody({
   const displayTitle = resolveDatabaseRowPageTitle(database, row);
   const displayIcon = resolveDatabaseRowIcon(row, template?.icon);
 
-  const inlineFormulaModel = useMemo<InlineFormulaPageModel>(
-    () => ({
-      cellValues: row.values,
-      databaseFields: database.fields,
-      page: {
-        createdAt: row.createdAt,
-        title: displayTitle,
-        updatedAt: row.updatedAt,
-      },
-      primaryFieldId: database.primaryFieldId,
-    }),
-    [
-      database.fields,
-      database.primaryFieldId,
-      displayTitle,
-      row.createdAt,
-      row.updatedAt,
-      row.values,
-    ]
-  );
+  const inlineFormulaModel = useRowFormulaModel(database, row);
 
   const canvasRegion = (
     <div
       {...pageContentTypographyProps({
         font: resolvePageFont(template?.font),
-        textScale: undefined,
+        textScale: template?.textScale,
       })}
       className="flex min-h-0 min-w-0 flex-1 flex-col max-md:flex-none max-md:overflow-visible md:overflow-hidden"
     >
       <PageCanvas
-        fullWidth={false}
+        // A preview that ignored the template's layout would misreport what a
+        // row page opens as — these are the same settings the row inherits.
+        fullWidth={resolvePageFullWidth(template?.fullWidth)}
         inlineFormulaModel={inlineFormulaModel}
         isNarrowViewport={isNarrowViewport}
         pageHasLocalDraft={true}

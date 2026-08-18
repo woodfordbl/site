@@ -12,13 +12,13 @@ import {
   groupRowsForView,
   isGroupableField,
 } from "@/lib/databases/row-group.ts";
-import {
-  DATABASE_CHART_Y_AGGREGATES,
-  type DatabaseField,
-  type DatabaseTableViewConfig,
-  type DatabaseView,
-  type LocalDatabaseRow,
+import type {
+  DatabaseField,
+  DatabaseTableViewConfig,
+  DatabaseView,
+  LocalDatabaseRow,
 } from "@/lib/schemas/database.ts";
+import { DATABASE_CHART_Y_AGGREGATES } from "@/lib/schemas/database-chart-aggregates.ts";
 
 /**
  * Pure chart-view data transform: bucket already-filtered/sorted/formula-

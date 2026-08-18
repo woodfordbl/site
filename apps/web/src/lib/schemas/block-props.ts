@@ -150,6 +150,40 @@ export const databasePropsSchema = z.object({
   hideTitle: z.boolean().optional(),
 });
 
+/**
+ * `map` block props: one place on a page. Data maps come from a `database`
+ * block pointed at a map view instead; this is the "here is where that is"
+ * block.
+ *
+ * The place is either pinned into the block (`markers`) or read from the host
+ * page's row (`locationFieldId`) when that page is a database row or a row
+ * template — the same `thisPage` scope inline formulas resolve against. A
+ * bound block on a template renders each row's own location, so one block
+ * gives every row page its map.
+ */
+export const mapPropsSchema = z.object({
+  /** Camera center as [longitude, latitude]. */
+  center: z.tuple([z.number(), z.number()]),
+  zoom: z.number().min(0).max(22),
+  /** Pins drawn on the map. Empty/absent means the block is a placeholder. */
+  markers: z
+    .array(
+      z.object({
+        lng: z.number(),
+        lat: z.number(),
+        label: z.string().optional(),
+      })
+    )
+    .optional(),
+  /**
+   * `location` property of the host row this map follows. Set = the pin and
+   * the camera come from the row, and `markers` is ignored; the stored `zoom`
+   * still frames it, since the point differs per row but the framing should
+   * not.
+   */
+  locationFieldId: z.string().optional(),
+});
+
 /** `embed` block props: provider iframe, direct image, or OG bookmark preview. */
 export const embedPropsSchema = z.object({
   url: z.string(),
@@ -172,3 +206,4 @@ export type MediaKind = z.infer<typeof mediaKindSchema>;
 export type MediaProps = z.infer<typeof mediaPropsSchema>;
 export type DatabaseProps = z.infer<typeof databasePropsSchema>;
 export type EmbedProps = z.infer<typeof embedPropsSchema>;
+export type MapProps = z.infer<typeof mapPropsSchema>;

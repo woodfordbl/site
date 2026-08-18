@@ -1,10 +1,16 @@
 import { IconSlash } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
 import { type ReactNode, useMemo } from "react";
+import { useDatabasePathTargets } from "@/components/database/use-database-path-target.ts";
 import { useIsNarrowViewport } from "@/components/layout/device-layout-provider.tsx";
 import { PageBreadcrumbAncestorCrumb } from "@/components/pages/page-breadcrumb-ancestor-crumb.tsx";
+import { breadcrumbIconFallback } from "@/components/pages/page-breadcrumb-shared.tsx";
 import { PageIconDisplay } from "@/components/pages/page-icon-display.tsx";
 import { buttonVariants, iconSlotClassName } from "@/components/ui/button.tsx";
+import { localBlocksCollection } from "@/db/collections/local-collections.ts";
+import { useDatabase } from "@/db/queries/use-database.ts";
 import { useMergedPageListItems } from "@/hooks/use-page-list.ts";
+import { findDatabaseHostPageId } from "@/lib/databases/resolve-database-host-page.ts";
 import { getAncestorPageIds } from "@/lib/pages/build-page-tree.ts";
 import { DEFAULT_PAGE_TITLE } from "@/lib/pages/default-page-title.ts";
 import { cn } from "@/lib/utils.ts";
@@ -30,20 +36,37 @@ export function RowTemplateBreadcrumb({
 }): ReactNode {
   const isNarrowViewport = useIsNarrowViewport();
   const { pages } = useMergedPageListItems();
+  const database = useDatabase(databaseId);
+  const { hub: hubTarget } = useDatabasePathTargets(databaseId);
   const hubPage = pages.find(
     (page) => page.databaseSource?.databaseId === databaseId
   );
+  // Falls back to the host page when no hub page has been materialized. A
+  // database only gets one the first time something needs a real page under
+  // it, so a row rendered from the template — which creates nothing — would
+  // otherwise show a trail of just its own name.
+  const anchorId =
+    hubPage?.id ??
+    findDatabaseHostPageId({
+      blocks: localBlocksCollection.toArray,
+      databaseId,
+      pages,
+    });
 
   const ancestors = useMemo(() => {
-    if (!hubPage || isNarrowViewport) {
+    if (!anchorId || isNarrowViewport) {
       return [];
     }
-    const trail = getAncestorPageIds(hubPage.id, pages)
+    const anchor = pages.find((page) => page.id === anchorId);
+    if (!anchor) {
+      return [];
+    }
+    const trail = getAncestorPageIds(anchorId, pages)
       .map((id) => pages.find((page) => page.id === id))
       .filter((page): page is NonNullable<typeof page> => Boolean(page))
       .reverse();
-    return [...trail, hubPage];
-  }, [hubPage, isNarrowViewport, pages]);
+    return [...trail, anchor];
+  }, [anchorId, isNarrowViewport, pages]);
 
   return (
     <nav
@@ -53,7 +76,7 @@ export function RowTemplateBreadcrumb({
       {ancestors.map((ancestor) => (
         <span className="contents" key={ancestor.id}>
           <PageBreadcrumbAncestorCrumb
-            activePageId={hubPage?.id ?? ancestor.id}
+            activePageId={anchorId ?? ancestor.id}
             ancestor={ancestor}
             pages={pages}
           />
@@ -63,6 +86,26 @@ export function RowTemplateBreadcrumb({
           />
         </span>
       ))}
+      {!hubPage && database && hubTarget && !isNarrowViewport ? (
+        <span className="contents">
+          <Link
+            className={cn(buttonVariants({ variant: "ghost" }), "min-w-0")}
+            {...hubTarget}
+          >
+            <span className={iconSlotClassName("icon-sm")}>
+              <PageIconDisplay
+                fallback={breadcrumbIconFallback(true)}
+                icon={database.icon}
+              />
+            </span>
+            <span className="min-w-0 truncate">{database.name}</span>
+          </Link>
+          <IconSlash
+            aria-hidden
+            className="size-4 shrink-0 text-muted-foreground/40"
+          />
+        </span>
+      ) : null}
       {/* Ghost-button metrics on a plain span: the crumb is not interactive
         here, but it must occupy exactly the same box as a real current crumb. */}
       <span className={cn(buttonVariants({ variant: "ghost" }), "min-w-0")}>

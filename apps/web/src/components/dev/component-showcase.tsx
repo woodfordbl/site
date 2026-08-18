@@ -20,6 +20,8 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { ChartGallerySection } from "@/components/dev/charts/chart-gallery.tsx";
+import { MapsSection } from "@/components/dev/maps-section.tsx";
+import { Section } from "@/components/dev/showcase-section.tsx";
 import { editorFieldClassName } from "@/components/editor/editable-surface.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button, iconSlotClassName } from "@/components/ui/button.tsx";
@@ -229,30 +231,6 @@ function ColorSwatch({
         </span>
       </div>
     </div>
-  );
-}
-
-function Section({
-  description,
-  children,
-  title,
-}: {
-  description?: string;
-  children: React.ReactNode;
-  title: string;
-}) {
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="font-heading font-semibold text-foreground text-lg">
-          {title}
-        </h2>
-        {description ? (
-          <p className="text-muted-foreground text-sm">{description}</p>
-        ) : null}
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -1676,6 +1654,8 @@ export function ComponentShowcase() {
         <RadioGroupsSection />
         <Separator />
         <ChartGallerySection />
+        <Separator />
+        <MapsSection isDark={isDark} />
         <Separator />
         <OverlaysSection />
         <Separator />

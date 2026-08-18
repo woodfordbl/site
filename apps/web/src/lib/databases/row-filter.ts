@@ -10,6 +10,7 @@ import { subMonths } from "date-fns/subMonths";
 import { subYears } from "date-fns/subYears";
 
 import {
+  cellToPlainText,
   coerceCellValue,
   isCellEmpty,
   toIsoDatePart,
@@ -337,6 +338,10 @@ export function rowMatchesCondition(
       return matchOptionIds(cell, op, target);
     case "isoDate":
       return matchIsoDate(cell, op, target, opts?.now ?? (() => new Date()));
+    case "location":
+      // Location cells filter on their label (the address text the grid
+      // shows), so a chip reads the way the column does.
+      return matchString(cellToPlainText(field, cell), op, target);
     default:
       return true;
   }
