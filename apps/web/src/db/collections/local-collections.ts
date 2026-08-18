@@ -61,6 +61,7 @@ import { localFavoriteSchema } from "@/lib/schemas/local-favorite.ts";
 import { localFormulaFunctionSchema } from "@/lib/schemas/local-formula-function.ts";
 import { localKeybindingSchema } from "@/lib/schemas/local-keybinding.ts";
 import { localPageSchema } from "@/lib/schemas/local-page.ts";
+import { myAccessRowSchema } from "@/lib/schemas/page-access.ts";
 import { registerSyncedReader } from "./read-local-storage-sync.ts";
 import { isSyncedMode, syncContext } from "./sync-mode.ts";
 import { syncedWriteHandlers } from "./synced-mutations.ts";
@@ -322,6 +323,34 @@ export const localDatabaseRowsCollection = getOrCreateHotCollection(
   }
 );
 
+/**
+ * Synced mode only (null in local mode, where there is no server and every
+ * page belongs to the visitor): the signed-in user's own effective access
+ * level per page, streamed live from the `my_access` pseudo-shape (see
+ * src/server/shape-host.server.ts). Read-only — permission changes go through
+ * `POST /api/pages/permissions`; grants/revocations land here as inserts/
+ * deletes, which is what keeps the access-aware chrome and read-only gating
+ * live without polling.
+ */
+function createMyAccessCollection() {
+  return createCollection(
+    electricCollectionOptions({
+      id: "my-access",
+      schema: myAccessRowSchema,
+      getKey: (item) => item.pageId,
+      shapeOptions: {
+        url: `${window.location.origin}/api/sync/shape`,
+        params: { table: "my_access", ws: syncContext.workspaceId ?? "" },
+      },
+    })
+  );
+}
+type MyAccessCollection = ReturnType<typeof createMyAccessCollection>;
+
+export const myAccessCollection: MyAccessCollection | null = isSyncedMode()
+  ? getOrCreateHotCollection("myAccessCollection", createMyAccessCollection)
+  : null;
+
 /** Reclaim orphaned media blobs once per boot, off the critical path. */
 function scheduleOrphanAssetSweep(): void {
   const run = () => {
@@ -366,6 +395,7 @@ function startLocalCollectionsSync(): void {
   localFormulaFunctionsCollection.startSyncImmediate();
   localDatabasesCollection.startSyncImmediate();
   localDatabaseRowsCollection.startSyncImmediate();
+  myAccessCollection?.startSyncImmediate();
   if (!isSyncedMode()) {
     // Canonicalize stored formula references (name → field id) now that the
     // databases collection is live. The writer is injected to keep the module

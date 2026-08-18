@@ -28,10 +28,12 @@ import { PageStaleBanner } from "@/components/pages/page-stale-banner.tsx";
 import { PageTitleEditor } from "@/components/pages/page-title-editor.tsx";
 import { PageVersionPreview } from "@/components/pages/page-version-preview.tsx";
 import { ServerVersionPreview } from "@/components/pages/server-version-preview.tsx";
+import { SnapshotTitleDisplay } from "@/components/pages/snapshot-preview.tsx";
 import { VersionPreviewProvider } from "@/components/pages/version-preview-context.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useActivePageRef } from "@/hooks/use-active-page-ref.ts";
 import { useLocalPageById } from "@/hooks/use-local-pages.ts";
+import { usePageAccessLevel } from "@/hooks/use-page-access-level.ts";
 import { usePageSettings } from "@/hooks/use-page-settings.ts";
 import { useSyncPageUrl } from "@/hooks/use-sync-page-url.ts";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
@@ -54,6 +56,7 @@ import {
   type LocalPage,
 } from "@/lib/schemas/local-page.ts";
 import type { Page } from "@/lib/schemas/page.ts";
+import { isReadOnlyAccessLevel } from "@/lib/schemas/page-access.ts";
 import { cn } from "@/lib/utils.ts";
 
 type PageWorkspaceProps = {
@@ -229,6 +232,9 @@ function PageWorkspaceBody({
 }) {
   const isNarrowViewport = useIsNarrowViewport();
   const isCoarsePrimaryPointer = useIsCoarsePrimaryPointer();
+  // ReBAC: below `edit` the title renders read-only (the canvas gates itself —
+  // see page-canvas.tsx). Live, so a mid-session level change re-resolves.
+  const accessReadOnly = isReadOnlyAccessLevel(usePageAccessLevel(page.id));
   const { isCollapsed, isCollapsing } = usePageSidebarChrome();
   const showSidebarRail = !(isNarrowViewport || isCollapsed || isCollapsing);
   const { font, fullWidth, headerImage, setHeaderImage, textScale } =
@@ -314,6 +320,7 @@ function PageWorkspaceBody({
   ) : null;
 
   const resolvedTitleSlot = resolveWorkspaceTitleSlot({
+    accessReadOnly,
     bodySlot,
     page,
     pageHasLocalDraft,
@@ -469,6 +476,7 @@ function PageWorkspaceCustomBody({
 }
 
 function resolveWorkspaceTitleSlot(options: {
+  accessReadOnly: boolean;
   bodySlot?: ReactNode;
   page: Page | LocalPage;
   pageHasLocalDraft: boolean;
@@ -480,6 +488,14 @@ function resolveWorkspaceTitleSlot(options: {
   }
   if (options.bodySlot) {
     return null;
+  }
+  if (options.accessReadOnly) {
+    return (
+      <SnapshotTitleDisplay
+        icon={options.page.icon}
+        title={options.page.title}
+      />
+    );
   }
   return (
     <PageTitleEditor

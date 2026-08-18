@@ -15,12 +15,15 @@ import {
   useState,
 } from "react";
 
+import { PageCanvasAccessView } from "@/components/canvas/page-canvas-access-view.tsx";
 import { WarmInlineLinkPreviewsEffect } from "@/components/canvas/warm-inline-link-previews-effect.tsx";
 import { InlineFormulaPageProvider } from "@/components/editor/inline-formula-page.tsx";
 import type { ServerPageSource } from "@/db/queries/use-page-canvas.ts";
 import { useIsClient } from "@/hooks/use-is-client.ts";
+import { usePageAccessLevel } from "@/hooks/use-page-access-level.ts";
 import type { TopLevelBlockAlign } from "@/lib/canvas/top-level-row-align.ts";
 import type { InlineFormulaPageModel } from "@/lib/databases/page-formula-fields.ts";
+import { isReadOnlyAccessLevel } from "@/lib/schemas/page-access.ts";
 
 import { PageCanvasLocalView } from "./page-canvas-local-view.tsx";
 import { PageCanvasServer } from "./page-canvas-server.tsx";
@@ -58,6 +61,12 @@ function PageCanvasClient({
   ...props
 }: PageCanvasProps) {
   const [Editor, setEditor] = useState<PageCanvasEditorComponent | null>(null);
+  // ReBAC gate: below `edit` the page renders the live read-only view and the
+  // editor chunk is never imported. Live by construction — a mid-session grant
+  // upgrade swaps the editor in, a downgrade swaps it out.
+  const accessReadOnly = isReadOnlyAccessLevel(
+    usePageAccessLevel(props.serverPage.id)
+  );
   // Dirty pages render the synchronous local view on the first client render so
   // the stale server frame is never shown (SSR also skips server blocks for
   // these pages — see PageCanvas below).
@@ -70,6 +79,9 @@ function PageCanvasClient({
   }, [props.pageHasLocalDraft]);
 
   useEffect(() => {
+    if (accessReadOnly) {
+      return;
+    }
     import("./page-canvas-editor.tsx")
       .then((module) => {
         setEditor(() => module.PageCanvasEditor);
@@ -77,10 +89,22 @@ function PageCanvasClient({
       .catch(() => {
         /* client-only editor bundle */
       });
-  }, []);
+  }, [accessReadOnly]);
 
   let canvas: ReactNode;
-  if (Editor) {
+  if (accessReadOnly) {
+    canvas = (
+      <PageCanvasAccessView
+        coverSlot={props.coverSlot}
+        fullWidth={props.fullWidth}
+        headerSlot={props.headerSlot}
+        isNarrowViewport={props.isNarrowViewport}
+        serverPage={props.serverPage}
+        titleSlot={props.titleSlot}
+        topLevelBlockAlign={props.topLevelBlockAlign}
+      />
+    );
+  } else if (Editor) {
     canvas = <Editor {...props} />;
   } else if (showLocal) {
     canvas = (
