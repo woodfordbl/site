@@ -29,14 +29,40 @@ describe("matchMarkdownShortcut", () => {
     expect(matchMarkdownShortcut("[]")).toEqual({ kind: "checklist" });
   });
 
+  it("matches quote and code prefixes", () => {
+    expect(matchMarkdownShortcut(">")).toEqual({ kind: "quote" });
+    expect(matchMarkdownShortcut("```")).toEqual({ kind: "code" });
+  });
+
+  it("accepts the alternate markdown spellings", () => {
+    expect(matchMarkdownShortcut("*")).toEqual({
+      kind: "list",
+      variant: "bullet",
+    });
+    expect(matchMarkdownShortcut("+")).toEqual({
+      kind: "list",
+      variant: "bullet",
+    });
+    expect(matchMarkdownShortcut("1)")).toEqual({
+      kind: "list",
+      variant: "ordered",
+    });
+    expect(matchMarkdownShortcut("[ ]")).toEqual({ kind: "checklist" });
+    expect(matchMarkdownShortcut("***")).toEqual({ kind: "divider" });
+    expect(matchMarkdownShortcut("___")).toEqual({ kind: "divider" });
+  });
+
   it("returns null for non-matching text", () => {
     expect(matchMarkdownShortcut("")).toBeNull();
     expect(matchMarkdownShortcut("#hello")).toBeNull();
     expect(matchMarkdownShortcut("2.")).toBeNull();
     expect(matchMarkdownShortcut("--")).toBeNull();
     expect(matchMarkdownShortcut("----")).toBeNull();
-    expect(matchMarkdownShortcut("*")).toBeNull();
-    expect(matchMarkdownShortcut(">")).toBeNull();
+    expect(matchMarkdownShortcut("**")).toBeNull();
+    expect(matchMarkdownShortcut(">>")).toBeNull();
+    expect(matchMarkdownShortcut("``")).toBeNull();
+    // A prefix only converts the row it is the whole text of.
+    expect(matchMarkdownShortcut("> quoted")).toBeNull();
   });
 });
 
@@ -50,6 +76,8 @@ describe("markdownShortcutResultType", () => {
     ).toBe("list");
     expect(markdownShortcutResultType({ kind: "checklist" })).toBe("checklist");
     expect(markdownShortcutResultType({ kind: "divider" })).toBe("divider");
+    expect(markdownShortcutResultType({ kind: "quote" })).toBe("quote");
+    expect(markdownShortcutResultType({ kind: "code" })).toBe("code");
     expect(markdownShortcutResultType({ kind: "heading", level: 1 })).toBe(
       "heading"
     );
@@ -125,6 +153,26 @@ describe("getMarkdownShortcutHint", () => {
         keywords: [],
       })
     ).toBe("---");
+    expect(
+      getMarkdownShortcutHint({
+        key: "quote",
+        id: "quote",
+        label: "Quote",
+        aliases: [],
+        icon: () => null,
+        keywords: [],
+      })
+    ).toBe(">");
+    expect(
+      getMarkdownShortcutHint({
+        key: "code",
+        id: "code",
+        label: "Code",
+        aliases: [],
+        icon: () => null,
+        keywords: [],
+      })
+    ).toBe("```");
   });
 
   it("returns undefined for items without markdown shortcuts", () => {

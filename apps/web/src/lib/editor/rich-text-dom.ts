@@ -606,24 +606,15 @@ function textOffsetForPoint(
 
   let offset = 0;
   walkTextAndBreaks(root, (node, length) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      // comparePoint: -1 before range, 0 inside, 1 after.
-      if (range.comparePoint(node, 0) === 1) {
-        return true;
-      }
-      if (range.comparePoint(node, length) !== 1) {
-        offset += length;
-        return false;
-      }
-      for (let i = 0; i <= length; i += 1) {
-        if (range.comparePoint(node, i) === 1) {
-          offset += i;
-          return true;
-        }
-      }
-      offset += length;
-      return false;
+    // The point can only fall *inside* a text node, and only inside the one it
+    // names, so that node is the single place a partial length is added.
+    if (node === endNode) {
+      offset += Math.max(0, Math.min(endOffset, length));
+      return true;
     }
+    // comparePoint: -1 before the range, 0 inside, 1 after its end. A node
+    // starting after the end contributes nothing and ends the walk; any other
+    // node lies wholly before the point and contributes its full length.
     if (range.comparePoint(node, 0) === 1) {
       return true;
     }

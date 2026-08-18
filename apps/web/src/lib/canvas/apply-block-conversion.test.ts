@@ -8,8 +8,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { CanvasRow } from "@/lib/blocks/block-tree.ts";
 import { buildBlockTree } from "@/lib/blocks/block-tree.ts";
 import { createEmptyBlock } from "@/lib/blocks/create-block.ts";
-import { applyBlockConversion } from "@/lib/canvas/apply-block-conversion.ts";
+import {
+  applyBlockConversion,
+  markdownMatchToSlashItem,
+} from "@/lib/canvas/apply-block-conversion.ts";
 import { applyCanvasEffects } from "@/lib/canvas/apply-effects.ts";
+import { matchMarkdownShortcut } from "@/lib/canvas/markdown-shortcuts.ts";
 import { canvasReducer } from "@/lib/canvas/reducer.ts";
 import type { Block } from "@/lib/schemas/block.ts";
 
@@ -354,5 +358,81 @@ describe("applyCanvasEffects tabs.create", () => {
       placement: "start",
       offset: 0,
     });
+  });
+});
+
+describe("markdownMatchToSlashItem", () => {
+  const SPELLINGS = [
+    "#",
+    "##",
+    "###",
+    "####",
+    "-",
+    "*",
+    "+",
+    "1.",
+    "1)",
+    "[]",
+    "[ ]",
+    ">",
+    "```",
+    "---",
+    "***",
+    "___",
+  ];
+
+  it("resolves every accepted spelling to a slash menu item", () => {
+    for (const spelling of SPELLINGS) {
+      const match = matchMarkdownShortcut(spelling);
+      expect(match, spelling).not.toBeNull();
+      expect(() =>
+        markdownMatchToSlashItem(
+          match as NonNullable<ReturnType<typeof matchMarkdownShortcut>>
+        )
+      ).not.toThrow();
+    }
+  });
+
+  it("resolves the heading and list spellings to their own variant", () => {
+    expect(
+      markdownMatchToSlashItem({ kind: "heading", level: 3 })
+    ).toMatchObject({ id: "heading", headingLevel: 3 });
+    expect(
+      markdownMatchToSlashItem({ kind: "list", variant: "ordered" })
+    ).toMatchObject({ id: "list", listVariant: "ordered" });
+  });
+
+  it("converts a row in place for quote and code", () => {
+    for (const [spelling, blockType] of [
+      [">", "quote"],
+      ["```", "code"],
+    ] as const) {
+      const row: CanvasRow = {
+        rowId: "row-1",
+        effectiveBlock: textBlock("row-1", null, spelling),
+        children: [],
+      };
+      const commands: unknown[] = [];
+      const match = matchMarkdownShortcut(spelling);
+      applyBlockConversion(
+        row,
+        markdownMatchToSlashItem(
+          match as NonNullable<ReturnType<typeof matchMarkdownShortcut>>
+        ),
+        (command) => {
+          commands.push(command);
+        },
+        { text: "" }
+      );
+      expect(commands).toEqual([
+        {
+          type: "slash.convert",
+          rowId: "row-1",
+          to: blockType,
+          text: "",
+          headingLevel: undefined,
+        },
+      ]);
+    }
   });
 });
